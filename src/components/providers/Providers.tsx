@@ -61,7 +61,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       config={{
         appearance: {
           theme: 'dark',
-          accentColor: '#10B981',
+          accentColor: '#D32F2F',
           logo: '/logo.svg',
           showWalletLoginFirst: false,
         },

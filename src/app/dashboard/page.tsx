@@ -9,8 +9,8 @@ import { base } from 'wagmi/chains'
 import { USDC_ADDRESS, USDC_DECIMALS, ERC20_ABI } from '@/lib/wagmi'
 import { 
   ArrowUpRight, ArrowDownLeft, Copy, Check, LogOut, 
-  Send, QrCode, RefreshCw, Sparkles, X, ExternalLink,
-  User, Settings, ChevronRight
+  Send, RefreshCw, X, ExternalLink,
+  Home, CreditCard, PiggyBank, DollarSign
 } from 'lucide-react'
 
 export default function Dashboard() {
@@ -23,11 +23,11 @@ export default function Dashboard() {
   const [sendTo, setSendTo] = useState('')
   const [sendAmount, setSendAmount] = useState('')
   const [addressError, setAddressError] = useState('')
+  const [activeNav, setActiveNav] = useState('home')
 
   const embeddedWallet = wallets.find((w) => w.walletClientType === 'privy')
   const address = embeddedWallet?.address as `0x${string}` | undefined
 
-  // USDC Balance
   const { data: usdcBalance, refetch: refetchBalance, isLoading: balanceLoading } = useReadContract({
     address: USDC_ADDRESS,
     abi: ERC20_ABI,
@@ -40,7 +40,6 @@ export default function Dashboard() {
     },
   })
 
-  // Send USDC
   const { writeContract, data: hash, isPending, reset } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
 
@@ -113,94 +112,92 @@ export default function Dashboard() {
 
   if (!ready) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-dark-gradient flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <RefreshCw className="w-8 h-8 text-emerald-500 animate-spin" />
-          <p className="text-zinc-500">Loading your wallet...</p>
+          <div className="w-12 h-12 neu-card flex items-center justify-center">
+            <RefreshCw className="w-6 h-6 text-[#D32F2F] animate-spin" />
+          </div>
+          <p className="text-[#606060]">Loading your wallet...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <main className="min-h-screen px-6 py-8 max-w-lg mx-auto">
+    <main className="min-h-screen bg-dark-gradient pb-24">
       {/* Header */}
-      <header className="flex items-center justify-between mb-10">
+      <header className="px-6 py-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">
-            <span className="text-emerald-400">bands</span>
-            <span className="text-zinc-500">.cash</span>
+          <h1 className="text-2xl font-bold">
+            <span className="text-[#D32F2F]">bands</span>
           </h1>
           {user?.email?.address && (
-            <p className="text-sm text-zinc-500 mt-1 flex items-center gap-1">
-              <User className="w-3 h-3" />
+            <p className="text-xs text-[#606060] mt-1 font-mono">
               {user.email.address}
             </p>
           )}
         </div>
         <button
           onClick={logout}
-          className="p-3 rounded-xl glass hover:bg-zinc-800/50 transition-colors group"
+          className="neu-button p-3 group"
           title="Sign out"
         >
-          <LogOut className="w-5 h-5 text-zinc-400 group-hover:text-zinc-200 transition-colors" />
+          <LogOut className="w-5 h-5 text-[#606060] group-hover:text-white transition-colors" />
         </button>
       </header>
 
-      {/* Balance Card */}
-      <div className="gradient-border rounded-3xl p-8 mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-emerald-500" />
-            <span className="text-sm text-zinc-500">Total Balance</span>
-          </div>
-          <button 
-            onClick={() => refetchBalance()}
-            className="p-1.5 rounded-lg hover:bg-zinc-800/50 transition-colors"
-            title="Refresh balance"
-          >
-            <RefreshCw className={`w-4 h-4 text-zinc-500 ${balanceLoading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-        
-        <div className="flex items-baseline gap-2 mb-6">
-          {balanceLoading ? (
-            <div className="h-12 w-48 shimmer rounded-lg" />
-          ) : (
-            <>
-              <span className="text-5xl font-semibold font-mono balance-glow text-emerald-400">
+      {/* Balance Orb */}
+      <div className="px-6 py-8">
+        <div className="relative mx-auto w-64 h-64">
+          {/* Outer glow ring */}
+          <div className="absolute inset-0 rounded-full bg-[#D32F2F]/10 blur-xl" />
+          
+          {/* Main orb */}
+          <div className="balance-orb absolute inset-4 rounded-full flex flex-col items-center justify-center">
+            <span className="text-sm text-[#606060] mb-1">Total Balance</span>
+            {balanceLoading ? (
+              <div className="h-10 w-32 shimmer rounded-lg" />
+            ) : (
+              <span className="text-4xl font-bold font-mono text-white">
                 ${formattedBalance}
               </span>
-              <span className="text-xl text-zinc-500">USDC</span>
-            </>
-          )}
-        </div>
+            )}
+            <span className="text-sm text-[#D32F2F] mt-1 font-medium">USDC</span>
+          </div>
 
-        {/* Wallet Address */}
+          {/* Refresh button */}
+          <button 
+            onClick={() => refetchBalance()}
+            className="absolute top-4 right-4 p-2 neu-button rounded-full"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-4 h-4 text-[#606060] ${balanceLoading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* Wallet Address */}
+      <div className="px-6 mb-8">
         <button
           onClick={copyAddress}
-          className="flex items-center gap-2 px-4 py-3 rounded-xl bg-zinc-900/50 hover:bg-zinc-800/50 
-                     transition-colors group w-full border border-zinc-800/50"
+          className="w-full neu-pressed px-4 py-3 flex items-center justify-between group"
         >
-          <span className="text-sm text-zinc-400 font-mono truncate flex-1 text-left">
-            {address?.slice(0, 10)}...{address?.slice(-8)}
+          <span className="text-sm text-[#606060] font-mono truncate">
+            {address?.slice(0, 12)}...{address?.slice(-10)}
           </span>
           {copied ? (
-            <span className="flex items-center gap-1 text-emerald-500 text-sm">
+            <span className="flex items-center gap-1 text-[#69F0AE] text-sm">
               <Check className="w-4 h-4" />
-              Copied
             </span>
           ) : (
-            <Copy className="w-4 h-4 text-zinc-500 group-hover:text-zinc-300 transition-colors" />
+            <Copy className="w-4 h-4 text-[#606060] group-hover:text-white transition-colors" />
           )}
         </button>
-
-        {/* View on Explorer */}
         <a
           href={`https://basescan.org/address/${address}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center justify-center gap-2 mt-3 text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+          className="flex items-center justify-center gap-2 mt-3 text-xs text-[#606060] hover:text-[#D32F2F] transition-colors"
         >
           View on BaseScan
           <ExternalLink className="w-3 h-3" />
@@ -208,80 +205,92 @@ export default function Dashboard() {
       </div>
 
       {/* Action Buttons */}
-      <div className="grid grid-cols-2 gap-4 mb-8">
+      <div className="px-6 grid grid-cols-2 gap-4 mb-8">
         <button
           onClick={() => setShowSend(true)}
-          className="flex items-center justify-center gap-3 p-4 rounded-2xl bg-emerald-500 text-black 
-                     font-semibold hover:bg-emerald-400 transition-all duration-200
-                     hover:shadow-lg hover:shadow-emerald-500/20"
+          className="btn-bands-red py-4 flex items-center justify-center gap-3 font-semibold"
         >
           <ArrowUpRight className="w-5 h-5" />
           Send
         </button>
         <button
           onClick={() => setShowReceive(true)}
-          className="flex items-center justify-center gap-3 p-4 rounded-2xl glass 
-                     hover:bg-zinc-800/50 transition-all duration-200 border border-zinc-800/50
-                     hover:border-zinc-700/50"
+          className="neu-button py-4 flex items-center justify-center gap-3 font-semibold text-white"
         >
-          <ArrowDownLeft className="w-5 h-5 text-emerald-500" />
+          <ArrowDownLeft className="w-5 h-5 text-[#69F0AE]" />
           Receive
         </button>
       </div>
 
-      {/* Quick Actions */}
-      <div className="glass rounded-2xl mb-6 overflow-hidden">
-        <button className="w-full flex items-center justify-between p-4 hover:bg-zinc-800/30 transition-colors">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-              <Settings className="w-5 h-5 text-emerald-500" />
+      {/* Transaction History Placeholder */}
+      <div className="px-6">
+        <div className="neu-card p-6">
+          <h2 className="font-bold text-lg mb-4 text-white">Recent Activity</h2>
+          <div className="text-center py-8">
+            <div className="w-16 h-16 mx-auto mb-4 neu-pressed rounded-full flex items-center justify-center">
+              <DollarSign className="w-8 h-8 text-[#606060]" />
             </div>
-            <span className="font-medium">Settings</span>
+            <p className="text-[#606060] text-sm">No transactions yet</p>
+            <p className="text-[#404040] text-xs mt-1">Send or receive to get started</p>
           </div>
-          <ChevronRight className="w-5 h-5 text-zinc-500" />
-        </button>
-      </div>
-
-      {/* Recent Activity */}
-      <div className="glass rounded-2xl p-6">
-        <h2 className="font-semibold mb-4 flex items-center gap-2">
-          Recent Activity
-          <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">Coming soon</span>
-        </h2>
-        <div className="text-center py-8 text-zinc-500">
-          <QrCode className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p className="text-sm">No transactions yet</p>
-          <p className="text-xs mt-1 text-zinc-600">Send or receive USDC to get started</p>
         </div>
       </div>
+
+      {/* Bottom Navigation */}
+      <nav className="bottom-nav fixed bottom-0 left-0 right-0 px-6 py-4">
+        <div className="max-w-lg mx-auto flex items-center justify-around">
+          {[
+            { id: 'home', icon: Home, label: 'Home' },
+            { id: 'send', icon: Send, label: 'Send' },
+            { id: 'cards', icon: CreditCard, label: 'Cards' },
+            { id: 'savings', icon: PiggyBank, label: 'Savings' },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => {
+                setActiveNav(item.id)
+                if (item.id === 'send') setShowSend(true)
+              }}
+              className={`nav-item relative flex flex-col items-center gap-1 p-2 ${
+                activeNav === item.id ? 'active' : ''
+              }`}
+            >
+              <item.icon className="w-5 h-5" />
+              <span className="text-xs">{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
 
       {/* Send Modal */}
       {showSend && (
         <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4"
+          className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4"
           onClick={() => !isPending && !isConfirming && setShowSend(false)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md glass rounded-3xl p-6"
+            className="w-full max-w-md neu-card p-6 animate-slide-in"
           >
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold flex items-center gap-2">
-                <Send className="w-5 h-5 text-emerald-500" />
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-[#D32F2F]/20 flex items-center justify-center">
+                  <Send className="w-4 h-4 text-[#D32F2F]" />
+                </div>
                 Send USDC
               </h2>
               <button 
                 onClick={() => !isPending && !isConfirming && setShowSend(false)}
-                className="p-2 rounded-lg hover:bg-zinc-800/50 transition-colors"
+                className="neu-button p-2"
                 disabled={isPending || isConfirming}
               >
-                <X className="w-5 h-5 text-zinc-400" />
+                <X className="w-5 h-5 text-[#606060]" />
               </button>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="text-sm text-zinc-400 mb-2 block">Recipient Address</label>
+                <label className="text-sm text-[#606060] mb-2 block">Recipient Address</label>
                 <input
                   type="text"
                   value={sendTo}
@@ -291,24 +300,22 @@ export default function Dashboard() {
                   }}
                   placeholder="0x..."
                   disabled={isPending || isConfirming}
-                  className="w-full px-4 py-3 rounded-xl bg-zinc-900/50 border border-zinc-800 
-                             focus:border-emerald-500/50 focus:outline-none font-mono text-sm
-                             disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-3 neu-input font-mono text-sm"
                 />
                 {addressError && (
-                  <p className="text-red-400 text-xs mt-1">{addressError}</p>
+                  <p className="text-[#D32F2F] text-xs mt-1">{addressError}</p>
                 )}
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm text-zinc-400">Amount</label>
+                  <label className="text-sm text-[#606060]">Amount</label>
                   <button 
                     onClick={setMaxAmount}
-                    className="text-xs text-emerald-500 hover:text-emerald-400 transition-colors"
+                    className="text-xs text-[#D32F2F] hover:text-[#E53935] transition-colors font-semibold"
                     disabled={isPending || isConfirming}
                   >
-                    Max
+                    MAX
                   </button>
                 </div>
                 <div className="relative">
@@ -320,26 +327,22 @@ export default function Dashboard() {
                     step="0.01"
                     min="0"
                     disabled={isPending || isConfirming}
-                    className="w-full px-4 py-3 pr-20 rounded-xl bg-zinc-900/50 border border-zinc-800 
-                               focus:border-emerald-500/50 focus:outline-none font-mono text-lg
-                               disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full px-4 py-3 pr-20 neu-input font-mono text-lg"
                   />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 font-medium">
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[#606060] font-medium">
                     USDC
                   </span>
                 </div>
-                <p className="text-xs text-zinc-500 mt-2">
-                  Available: <span className="text-zinc-400">${formattedBalance} USDC</span>
+                <p className="text-xs text-[#606060] mt-2">
+                  Available: <span className="text-[#69F0AE]">${formattedBalance}</span>
                 </p>
               </div>
 
               <button
                 onClick={handleSend}
                 disabled={isPending || isConfirming || !sendTo || !sendAmount || !!addressError || parseFloat(sendAmount) > numericBalance}
-                className="w-full py-4 rounded-xl bg-emerald-500 text-black font-semibold
-                           hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed
-                           transition-all duration-200 flex items-center justify-center gap-2
-                           hover:shadow-lg hover:shadow-emerald-500/20"
+                className="w-full py-4 btn-bands-red font-semibold flex items-center justify-center gap-2
+                           disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isPending || isConfirming ? (
                   <>
@@ -355,7 +358,7 @@ export default function Dashboard() {
               </button>
 
               {parseFloat(sendAmount) > numericBalance && sendAmount && (
-                <p className="text-red-400 text-sm text-center">Insufficient balance</p>
+                <p className="text-[#D32F2F] text-sm text-center">Insufficient balance</p>
               )}
             </div>
           </div>
@@ -365,40 +368,42 @@ export default function Dashboard() {
       {/* Receive Modal */}
       {showReceive && (
         <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4"
+          className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4"
           onClick={() => setShowReceive(false)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md glass rounded-3xl p-6"
+            className="w-full max-w-md neu-card p-6 animate-slide-in"
           >
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold flex items-center gap-2">
-                <ArrowDownLeft className="w-5 h-5 text-emerald-500" />
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-[#69F0AE]/20 flex items-center justify-center">
+                  <ArrowDownLeft className="w-4 h-4 text-[#69F0AE]" />
+                </div>
                 Receive USDC
               </h2>
               <button 
                 onClick={() => setShowReceive(false)}
-                className="p-2 rounded-lg hover:bg-zinc-800/50 transition-colors"
+                className="neu-button p-2"
               >
-                <X className="w-5 h-5 text-zinc-400" />
+                <X className="w-5 h-5 text-[#606060]" />
               </button>
             </div>
 
             <div className="text-center">
-              {/* QR Code Placeholder */}
-              <div className="w-48 h-48 mx-auto mb-6 rounded-2xl bg-white p-4 flex items-center justify-center">
-                <div className="w-full h-full bg-zinc-100 rounded-xl flex items-center justify-center">
-                  <QrCode className="w-20 h-20 text-zinc-400" />
+              {/* QR Code Placeholder - Neumorphic */}
+              <div className="w-48 h-48 mx-auto mb-6 neu-pressed rounded-2xl flex items-center justify-center">
+                <div className="w-32 h-32 bg-white rounded-xl flex items-center justify-center">
+                  <DollarSign className="w-16 h-16 text-[#D32F2F]" />
                 </div>
               </div>
 
-              <p className="text-sm text-zinc-400 mb-4">
+              <p className="text-sm text-[#606060] mb-4">
                 Share your address to receive USDC on Base
               </p>
 
-              <div className="bg-zinc-900/50 rounded-xl p-4 mb-4">
-                <p className="font-mono text-sm text-zinc-300 break-all">
+              <div className="neu-pressed rounded-xl p-4 mb-4">
+                <p className="font-mono text-xs text-[#A0A0A0] break-all">
                   {address}
                 </p>
               </div>
@@ -408,15 +413,14 @@ export default function Dashboard() {
                   copyAddress()
                   setShowReceive(false)
                 }}
-                className="w-full py-4 rounded-xl bg-emerald-500 text-black font-semibold
-                           hover:bg-emerald-400 transition-all duration-200 flex items-center justify-center gap-2"
+                className="w-full py-4 btn-bands-red font-semibold flex items-center justify-center gap-2"
               >
                 <Copy className="w-4 h-4" />
                 Copy Address
               </button>
 
-              <p className="text-xs text-zinc-600 mt-4">
-                Only send USDC on the Base network to this address
+              <p className="text-xs text-[#404040] mt-4">
+                Only send USDC on the <span className="text-[#D32F2F]">Base</span> network
               </p>
             </div>
           </div>

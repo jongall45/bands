@@ -3,7 +3,7 @@
 import { usePrivy } from '@privy-io/react-auth'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
-import { ArrowRight, Shield, Zap, Wallet, Sparkles } from 'lucide-react'
+import { ArrowRight, Shield, Zap, Wallet, DollarSign } from 'lucide-react'
 
 export default function Home() {
   const { login, authenticated, ready } = usePrivy()
@@ -19,89 +19,86 @@ export default function Home() {
     { 
       icon: Shield, 
       title: 'Self-Custodial', 
-      desc: 'Your keys, your coins. Always in control.' 
+      desc: 'Your keys. Your coins. Always.' 
     },
     { 
       icon: Zap, 
-      title: 'Instant Transfers', 
-      desc: 'Send stablecoins anywhere in seconds.' 
+      title: 'Instant', 
+      desc: 'Transfers settle in seconds.' 
     },
     { 
       icon: Wallet, 
-      title: 'No Gas Worries', 
-      desc: 'We handle the fees, you enjoy simplicity.' 
+      title: 'Zero Gas', 
+      desc: 'We cover all fees.' 
     },
   ]
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
-      {/* Floating orbs background decoration */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-emerald-600/5 rounded-full blur-3xl" />
+    <main className="min-h-screen bg-dark-gradient flex flex-col items-center justify-center px-6 py-12 relative overflow-hidden">
+      {/* Ambient red glow effects */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-[#D32F2F]/5 rounded-full blur-[120px]" />
+        <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-[#D32F2F]/3 rounded-full blur-[100px]" />
       </div>
 
-      {/* Hero */}
-      <div className="text-center max-w-2xl relative z-10 animate-fade-in">
-        {/* Badge */}
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass mb-8">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-sm text-zinc-400">Powered by Base</span>
+      {/* Hero Section */}
+      <div className="text-center max-w-xl relative z-10 animate-slide-in">
+        {/* Logo Mark */}
+        <div className="inline-flex items-center justify-center w-20 h-20 neu-card mb-8">
+          <DollarSign className="w-10 h-10 text-[#D32F2F]" strokeWidth={2.5} />
         </div>
 
-        {/* Logo & Title */}
-        <h1 className="text-6xl md:text-8xl font-semibold tracking-tight mb-6">
-          <span className="text-emerald-400 balance-glow">bands</span>
-          <span className="text-zinc-500">.cash</span>
+        {/* Brand */}
+        <h1 className="text-6xl md:text-8xl font-bold tracking-tight mb-4">
+          <span className="text-[#D32F2F]">bands</span>
         </h1>
-
-        {/* Tagline */}
-        <p className="text-xl md:text-2xl text-zinc-400 mb-12 leading-relaxed">
-          The stablecoin bank that feels like magic.
-          <br />
-          <span className="text-zinc-500">Self-custodial. Gas-free. Instant.</span>
+        
+        <p className="text-lg md:text-xl text-[#A0A0A0] mb-4 font-medium">
+          Stablecoin Neobank
         </p>
 
-        {/* CTA Button */}
+        {/* Tagline */}
+        <p className="text-2xl md:text-3xl text-white mb-12 font-semibold leading-tight">
+          Move money like the internet
+          <br />
+          <span className="text-[#606060]">intended.</span>
+        </p>
+
+        {/* CTA Button - Neo-Brutalist Red */}
         <button
           onClick={login}
-          className="group relative px-10 py-5 rounded-2xl bg-emerald-500 text-black font-semibold text-lg 
-                     hover:bg-emerald-400 transition-all duration-300 shadow-lg shadow-emerald-500/25
-                     hover:shadow-emerald-500/40 hover:scale-[1.02] active:scale-[0.98]"
+          className="group btn-bands-red px-10 py-5 text-lg font-semibold inline-flex items-center gap-3"
         >
-          <span className="flex items-center gap-3">
-            <Sparkles className="w-5 h-5" />
-            Get Started
-            <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-          </span>
+          Create Account
+          <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
         </button>
 
         {/* Subtext */}
-        <p className="text-sm text-zinc-600 mt-4">
-          No wallet needed · Sign in with email or social
+        <p className="text-sm text-[#606060] mt-6">
+          No wallet needed · Sign in with email
         </p>
       </div>
 
-      {/* Features Grid */}
-      <div className="grid md:grid-cols-3 gap-6 mt-24 max-w-4xl w-full relative z-10">
-        {features.map((feature) => (
+      {/* Features - Neumorphic Cards */}
+      <div className="grid md:grid-cols-3 gap-6 mt-20 max-w-3xl w-full relative z-10">
+        {features.map((feature, i) => (
           <div
             key={feature.title}
-            className="glass rounded-2xl p-6 hover:border-emerald-500/20 transition-all duration-300
-                       hover:shadow-lg hover:shadow-emerald-500/5 hover:-translate-y-1"
+            className="neu-card p-6 text-center hover:-translate-y-1 transition-transform duration-300"
+            style={{ animationDelay: `${i * 100}ms` }}
           >
-            <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center mb-4">
-              <feature.icon className="w-6 h-6 text-emerald-500" />
+            <div className="w-14 h-14 mx-auto mb-4 neu-pressed flex items-center justify-center">
+              <feature.icon className="w-7 h-7 text-[#D32F2F]" />
             </div>
-            <h3 className="font-semibold text-lg mb-2">{feature.title}</h3>
-            <p className="text-zinc-500 text-sm leading-relaxed">{feature.desc}</p>
+            <h3 className="font-bold text-lg mb-2 text-white">{feature.title}</h3>
+            <p className="text-[#606060] text-sm">{feature.desc}</p>
           </div>
         ))}
       </div>
 
       {/* Footer */}
-      <footer className="absolute bottom-8 text-center text-sm text-zinc-600">
-        Built on Base · Secured by Privy
+      <footer className="absolute bottom-8 text-center text-sm text-[#606060] z-10">
+        Built on <span className="text-[#D32F2F]">Base</span> · Secured by Privy
       </footer>
     </main>
   )
