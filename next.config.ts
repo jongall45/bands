@@ -1,21 +1,17 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Disable Turbopack for build (use webpack)
   // Handle external packages that cause issues with SSR
   serverExternalPackages: [
     '@solana/web3.js',
     '@solana-program/system',
+    'pino-pretty',
+    'lokijs',
+    'encoding',
   ],
-  webpack: (config) => {
-    config.externals.push('pino-pretty', 'lokijs', 'encoding');
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      fs: false,
-      net: false,
-      tls: false,
-    };
-    return config;
-  },
+  // Empty turbopack config to allow webpack to be used
+  turbopack: {},
 };
 
 export default nextConfig;
