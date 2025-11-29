@@ -3,7 +3,6 @@
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { formatUnits, parseUnits, isAddress } from 'viem'
 import { base } from 'wagmi/chains'
@@ -37,7 +36,7 @@ export default function Dashboard() {
     chainId: base.id,
     query: {
       enabled: !!address,
-      refetchInterval: 10000, // Refresh every 10 seconds
+      refetchInterval: 10000,
     },
   })
 
@@ -126,11 +125,7 @@ export default function Dashboard() {
   return (
     <main className="min-h-screen px-6 py-8 max-w-lg mx-auto">
       {/* Header */}
-      <motion.header
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between mb-10"
-      >
+      <header className="flex items-center justify-between mb-10">
         <div>
           <h1 className="text-2xl font-semibold">
             <span className="text-emerald-400">bands</span>
@@ -150,15 +145,10 @@ export default function Dashboard() {
         >
           <LogOut className="w-5 h-5 text-zinc-400 group-hover:text-zinc-200 transition-colors" />
         </button>
-      </motion.header>
+      </header>
 
       {/* Balance Card */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.1 }}
-        className="gradient-border rounded-3xl p-8 mb-6"
-      >
+      <div className="gradient-border rounded-3xl p-8 mb-6">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-emerald-500" />
@@ -215,15 +205,10 @@ export default function Dashboard() {
           View on BaseScan
           <ExternalLink className="w-3 h-3" />
         </a>
-      </motion.div>
+      </div>
 
       {/* Action Buttons */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="grid grid-cols-2 gap-4 mb-8"
-      >
+      <div className="grid grid-cols-2 gap-4 mb-8">
         <button
           onClick={() => setShowSend(true)}
           className="flex items-center justify-center gap-3 p-4 rounded-2xl bg-emerald-500 text-black 
@@ -242,15 +227,10 @@ export default function Dashboard() {
           <ArrowDownLeft className="w-5 h-5 text-emerald-500" />
           Receive
         </button>
-      </motion.div>
+      </div>
 
       {/* Quick Actions */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.25 }}
-        className="glass rounded-2xl mb-6 overflow-hidden"
-      >
+      <div className="glass rounded-2xl mb-6 overflow-hidden">
         <button className="w-full flex items-center justify-between p-4 hover:bg-zinc-800/30 transition-colors">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
@@ -260,15 +240,10 @@ export default function Dashboard() {
           </div>
           <ChevronRight className="w-5 h-5 text-zinc-500" />
         </button>
-      </motion.div>
+      </div>
 
       {/* Recent Activity */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.3 }}
-        className="glass rounded-2xl p-6"
-      >
+      <div className="glass rounded-2xl p-6">
         <h2 className="font-semibold mb-4 flex items-center gap-2">
           Recent Activity
           <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">Coming soon</span>
@@ -278,194 +253,175 @@ export default function Dashboard() {
           <p className="text-sm">No transactions yet</p>
           <p className="text-xs mt-1 text-zinc-600">Send or receive USDC to get started</p>
         </div>
-      </motion.div>
+      </div>
 
       {/* Send Modal */}
-      <AnimatePresence>
-        {showSend && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4"
-            onClick={() => !isPending && !isConfirming && setShowSend(false)}
+      {showSend && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4"
+          onClick={() => !isPending && !isConfirming && setShowSend(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md glass rounded-3xl p-6"
           >
-            <motion.div
-              initial={{ y: 100, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 100, opacity: 0 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md glass rounded-3xl p-6"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
-                  <Send className="w-5 h-5 text-emerald-500" />
-                  Send USDC
-                </h2>
-                <button 
-                  onClick={() => !isPending && !isConfirming && setShowSend(false)}
-                  className="p-2 rounded-lg hover:bg-zinc-800/50 transition-colors"
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold flex items-center gap-2">
+                <Send className="w-5 h-5 text-emerald-500" />
+                Send USDC
+              </h2>
+              <button 
+                onClick={() => !isPending && !isConfirming && setShowSend(false)}
+                className="p-2 rounded-lg hover:bg-zinc-800/50 transition-colors"
+                disabled={isPending || isConfirming}
+              >
+                <X className="w-5 h-5 text-zinc-400" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm text-zinc-400 mb-2 block">Recipient Address</label>
+                <input
+                  type="text"
+                  value={sendTo}
+                  onChange={(e) => {
+                    setSendTo(e.target.value)
+                    validateAddress(e.target.value)
+                  }}
+                  placeholder="0x..."
                   disabled={isPending || isConfirming}
-                >
-                  <X className="w-5 h-5 text-zinc-400" />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm text-zinc-400 mb-2 block">Recipient Address</label>
-                  <input
-                    type="text"
-                    value={sendTo}
-                    onChange={(e) => {
-                      setSendTo(e.target.value)
-                      validateAddress(e.target.value)
-                    }}
-                    placeholder="0x..."
-                    disabled={isPending || isConfirming}
-                    className="w-full px-4 py-3 rounded-xl bg-zinc-900/50 border border-zinc-800 
-                               focus:border-emerald-500/50 focus:outline-none font-mono text-sm
-                               disabled:opacity-50 disabled:cursor-not-allowed"
-                  />
-                  {addressError && (
-                    <p className="text-red-400 text-xs mt-1">{addressError}</p>
-                  )}
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm text-zinc-400">Amount</label>
-                    <button 
-                      onClick={setMaxAmount}
-                      className="text-xs text-emerald-500 hover:text-emerald-400 transition-colors"
-                      disabled={isPending || isConfirming}
-                    >
-                      Max
-                    </button>
-                  </div>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      value={sendAmount}
-                      onChange={(e) => setSendAmount(e.target.value)}
-                      placeholder="0.00"
-                      step="0.01"
-                      min="0"
-                      disabled={isPending || isConfirming}
-                      className="w-full px-4 py-3 pr-20 rounded-xl bg-zinc-900/50 border border-zinc-800 
-                                 focus:border-emerald-500/50 focus:outline-none font-mono text-lg
-                                 disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 font-medium">
-                      USDC
-                    </span>
-                  </div>
-                  <p className="text-xs text-zinc-500 mt-2">
-                    Available: <span className="text-zinc-400">${formattedBalance} USDC</span>
-                  </p>
-                </div>
-
-                <button
-                  onClick={handleSend}
-                  disabled={isPending || isConfirming || !sendTo || !sendAmount || !!addressError || parseFloat(sendAmount) > numericBalance}
-                  className="w-full py-4 rounded-xl bg-emerald-500 text-black font-semibold
-                             hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed
-                             transition-all duration-200 flex items-center justify-center gap-2
-                             hover:shadow-lg hover:shadow-emerald-500/20"
-                >
-                  {isPending || isConfirming ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      {isPending ? 'Confirm in wallet...' : 'Sending...'}
-                    </>
-                  ) : (
-                    <>
-                      <Send className="w-4 h-4" />
-                      Send USDC
-                    </>
-                  )}
-                </button>
-
-                {parseFloat(sendAmount) > numericBalance && sendAmount && (
-                  <p className="text-red-400 text-sm text-center">Insufficient balance</p>
+                  className="w-full px-4 py-3 rounded-xl bg-zinc-900/50 border border-zinc-800 
+                             focus:border-emerald-500/50 focus:outline-none font-mono text-sm
+                             disabled:opacity-50 disabled:cursor-not-allowed"
+                />
+                {addressError && (
+                  <p className="text-red-400 text-xs mt-1">{addressError}</p>
                 )}
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm text-zinc-400">Amount</label>
+                  <button 
+                    onClick={setMaxAmount}
+                    className="text-xs text-emerald-500 hover:text-emerald-400 transition-colors"
+                    disabled={isPending || isConfirming}
+                  >
+                    Max
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={sendAmount}
+                    onChange={(e) => setSendAmount(e.target.value)}
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0"
+                    disabled={isPending || isConfirming}
+                    className="w-full px-4 py-3 pr-20 rounded-xl bg-zinc-900/50 border border-zinc-800 
+                               focus:border-emerald-500/50 focus:outline-none font-mono text-lg
+                               disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 font-medium">
+                    USDC
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-500 mt-2">
+                  Available: <span className="text-zinc-400">${formattedBalance} USDC</span>
+                </p>
+              </div>
+
+              <button
+                onClick={handleSend}
+                disabled={isPending || isConfirming || !sendTo || !sendAmount || !!addressError || parseFloat(sendAmount) > numericBalance}
+                className="w-full py-4 rounded-xl bg-emerald-500 text-black font-semibold
+                           hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed
+                           transition-all duration-200 flex items-center justify-center gap-2
+                           hover:shadow-lg hover:shadow-emerald-500/20"
+              >
+                {isPending || isConfirming ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    {isPending ? 'Confirm in wallet...' : 'Sending...'}
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    Send USDC
+                  </>
+                )}
+              </button>
+
+              {parseFloat(sendAmount) > numericBalance && sendAmount && (
+                <p className="text-red-400 text-sm text-center">Insufficient balance</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Receive Modal */}
-      <AnimatePresence>
-        {showReceive && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4"
-            onClick={() => setShowReceive(false)}
+      {showReceive && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4"
+          onClick={() => setShowReceive(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md glass rounded-3xl p-6"
           >
-            <motion.div
-              initial={{ y: 100, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 100, opacity: 0 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md glass rounded-3xl p-6"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
-                  <ArrowDownLeft className="w-5 h-5 text-emerald-500" />
-                  Receive USDC
-                </h2>
-                <button 
-                  onClick={() => setShowReceive(false)}
-                  className="p-2 rounded-lg hover:bg-zinc-800/50 transition-colors"
-                >
-                  <X className="w-5 h-5 text-zinc-400" />
-                </button>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold flex items-center gap-2">
+                <ArrowDownLeft className="w-5 h-5 text-emerald-500" />
+                Receive USDC
+              </h2>
+              <button 
+                onClick={() => setShowReceive(false)}
+                className="p-2 rounded-lg hover:bg-zinc-800/50 transition-colors"
+              >
+                <X className="w-5 h-5 text-zinc-400" />
+              </button>
+            </div>
+
+            <div className="text-center">
+              {/* QR Code Placeholder */}
+              <div className="w-48 h-48 mx-auto mb-6 rounded-2xl bg-white p-4 flex items-center justify-center">
+                <div className="w-full h-full bg-zinc-100 rounded-xl flex items-center justify-center">
+                  <QrCode className="w-20 h-20 text-zinc-400" />
+                </div>
               </div>
 
-              <div className="text-center">
-                {/* QR Code Placeholder */}
-                <div className="w-48 h-48 mx-auto mb-6 rounded-2xl bg-white p-4 flex items-center justify-center">
-                  <div className="w-full h-full bg-zinc-100 rounded-xl flex items-center justify-center">
-                    <QrCode className="w-20 h-20 text-zinc-400" />
-                  </div>
-                </div>
+              <p className="text-sm text-zinc-400 mb-4">
+                Share your address to receive USDC on Base
+              </p>
 
-                <p className="text-sm text-zinc-400 mb-4">
-                  Share your address to receive USDC on Base
-                </p>
-
-                <div className="bg-zinc-900/50 rounded-xl p-4 mb-4">
-                  <p className="font-mono text-sm text-zinc-300 break-all">
-                    {address}
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => {
-                    copyAddress()
-                    setShowReceive(false)
-                  }}
-                  className="w-full py-4 rounded-xl bg-emerald-500 text-black font-semibold
-                             hover:bg-emerald-400 transition-all duration-200 flex items-center justify-center gap-2"
-                >
-                  <Copy className="w-4 h-4" />
-                  Copy Address
-                </button>
-
-                <p className="text-xs text-zinc-600 mt-4">
-                  Only send USDC on the Base network to this address
+              <div className="bg-zinc-900/50 rounded-xl p-4 mb-4">
+                <p className="font-mono text-sm text-zinc-300 break-all">
+                  {address}
                 </p>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
+              <button
+                onClick={() => {
+                  copyAddress()
+                  setShowReceive(false)
+                }}
+                className="w-full py-4 rounded-xl bg-emerald-500 text-black font-semibold
+                           hover:bg-emerald-400 transition-all duration-200 flex items-center justify-center gap-2"
+              >
+                <Copy className="w-4 h-4" />
+                Copy Address
+              </button>
+
+              <p className="text-xs text-zinc-600 mt-4">
+                Only send USDC on the Base network to this address
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
-
