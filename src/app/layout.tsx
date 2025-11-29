@@ -1,6 +1,12 @@
 import type { Metadata } from 'next'
-import { Providers } from '@/components/providers/Providers'
+import dynamic from 'next/dynamic'
 import './globals.css'
+
+// Dynamic import to avoid SSR issues with Privy/WalletConnect
+const Providers = dynamic(
+  () => import('@/components/providers/Providers').then((mod) => mod.Providers),
+  { ssr: false }
+)
 
 export const metadata: Metadata = {
   title: 'bands.cash | Your Money, Your Keys',
