@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Webpack config for Privy/WalletConnect compatibility
+  // Empty turbopack config to silence the warning
+  turbopack: {},
+  // Webpack config for Privy/WalletConnect compatibility (used in production build)
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {
