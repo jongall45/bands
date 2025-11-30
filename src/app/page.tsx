@@ -14,14 +14,13 @@ export default function Home() {
     }
   }, [ready, authenticated, router])
 
-  // Generate 30 random particles
-  const particles = Array.from({ length: 30 }, (_, i) => ({
+  // Generate 50 random particles - all start from bottom
+  const particles = Array.from({ length: 50 }, (_, i) => ({
     id: i,
     size: Math.random() * 20 + 16, // 16-36px (smaller)
     left: Math.random() * 100,
-    delay: Math.random() * 8, // 0-8s stagger
-    duration: Math.random() * 6 + 4, // 4-10s to cross
-    rotation: Math.random() * 360,
+    delay: Math.random() * 10, // 0-10s stagger for more spread
+    duration: Math.random() * 6 + 5, // 5-11s to cross
   }))
 
   return (
