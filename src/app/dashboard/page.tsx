@@ -9,14 +9,15 @@ import { base } from 'wagmi/chains'
 import { USDC_ADDRESS, USDC_DECIMALS, ERC20_ABI } from '@/lib/wagmi'
 import { 
   ArrowUpRight, ArrowDownLeft, Copy, Check, LogOut, 
-  Send, RefreshCw, X, ExternalLink, Plus, ShoppingCart,
-  Home, QrCode, Settings, Wallet, TrendingUp
+  Send, RefreshCw, ExternalLink, Plus, ShoppingCart, QrCode
 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { CardInner } from '@/components/ui/Card'
+import { BottomNav } from '@/components/ui/BottomNav'
+import { Logo } from '@/components/ui/Logo'
 
 export default function Dashboard() {
-  const { ready, authenticated, user, logout } = usePrivy()
+  const { ready, authenticated, logout } = usePrivy()
   const { wallets } = useWallets()
   const router = useRouter()
   const [copied, setCopied] = useState(false)
@@ -137,12 +138,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-black flex flex-col">
       {/* Header - Centered */}
       <header className="flex items-center justify-between px-5 py-4 max-w-[430px] mx-auto w-full">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-[#ef4444] rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(239,68,68,0.3)]">
-            <span className="text-white font-bold text-sm">$</span>
-          </div>
-          <span className="text-white font-semibold">bands</span>
-        </div>
+        <Logo size="sm" />
         <button
           onClick={logout}
           className="p-2 text-white/40 hover:text-white transition-colors"
@@ -259,16 +255,8 @@ export default function Dashboard() {
 
       </main>
 
-      {/* Bottom Navigation - Floating Pill */}
-      <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-        <div className="flex items-center gap-1 p-2 bg-[#1a1a1a]/90 backdrop-blur-xl border border-white/[0.08] rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
-          <NavButton icon={Home} active />
-          <NavButton icon={Send} onClick={() => setShowSend(true)} />
-          <NavButton icon={TrendingUp} href="/speculate" />
-          <NavButton icon={Wallet} />
-          <NavButton icon={Settings} />
-        </div>
-      </nav>
+      {/* Bottom Navigation - Using shared component */}
+      <BottomNav />
 
       {/* Send Modal */}
       <Modal isOpen={showSend} onClose={() => !isPending && !isConfirming && setShowSend(false)} title="Send USDC">
@@ -369,25 +357,5 @@ export default function Dashboard() {
         </div>
       </Modal>
     </div>
-  )
-}
-
-// NavButton component
-function NavButton({ icon: Icon, active = false, onClick, href }: { icon: React.ElementType; active?: boolean; onClick?: () => void; href?: string }) {
-  const router = useRouter()
-  
-  const handleClick = () => {
-    if (onClick) onClick()
-    else if (href) router.push(href)
-  }
-
-  return (
-    <button 
-      onClick={handleClick}
-      className={`relative p-3 rounded-full transition-all ${active ? 'bg-white/[0.1] text-white' : 'text-white/40 hover:text-white/70 hover:bg-white/[0.05]'}`}
-    >
-      <Icon className="w-5 h-5" strokeWidth={active ? 2 : 1.5} />
-      {active && <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-white rounded-full" />}
-    </button>
   )
 }

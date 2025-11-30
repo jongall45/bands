@@ -3,9 +3,9 @@
 import { usePrivy } from '@privy-io/react-auth'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
-import { 
-  TrendingUp, Home, Send, Wallet, Settings, LogOut, RefreshCw
-} from 'lucide-react'
+import { TrendingUp, LogOut, RefreshCw } from 'lucide-react'
+import { BottomNav } from '@/components/ui/BottomNav'
+import { Logo } from '@/components/ui/Logo'
 
 export default function SpeculatePage() {
   const { ready, authenticated, logout } = usePrivy()
@@ -30,12 +30,11 @@ export default function SpeculatePage() {
         
         {/* Header */}
         <header className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
-          <div>
-            <h1 className="text-white font-semibold text-lg">Speculate</h1>
-          </div>
+          <Logo size="sm" />
           <button
             onClick={logout}
             className="p-2 text-white/40 hover:text-white transition-colors"
+            title="Sign out"
           >
             <LogOut className="w-5 h-5" strokeWidth={1.5} />
           </button>
@@ -54,34 +53,8 @@ export default function SpeculatePage() {
 
       </div>
 
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-        <div className="flex items-center gap-1 p-2 bg-[#1a1a1a]/90 backdrop-blur-xl border border-white/[0.08] rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
-          <NavButton icon={Home} href="/dashboard" />
-          <NavButton icon={Send} href="/dashboard" />
-          <NavButton icon={TrendingUp} active />
-          <NavButton icon={Wallet} href="/dashboard" />
-          <NavButton icon={Settings} href="/dashboard" />
-        </div>
-      </nav>
+      {/* Bottom Navigation - Using shared component */}
+      <BottomNav />
     </div>
-  )
-}
-
-function NavButton({ icon: Icon, active = false, href }: { icon: React.ElementType; active?: boolean; href?: string }) {
-  const router = useRouter()
-  
-  const handleClick = () => {
-    if (href) router.push(href)
-  }
-
-  return (
-    <button 
-      onClick={handleClick}
-      className={`relative p-3 rounded-full transition-all ${active ? 'bg-white/[0.1] text-white' : 'text-white/40 hover:text-white/70 hover:bg-white/[0.05]'}`}
-    >
-      <Icon className="w-5 h-5" strokeWidth={active ? 2 : 1.5} />
-      {active && <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-white rounded-full" />}
-    </button>
   )
 }
