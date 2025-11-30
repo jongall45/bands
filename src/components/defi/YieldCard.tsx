@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useWallets } from '@privy-io/react-auth'
 import { useYield } from '@/hooks/useYield'
 import { YieldVault, RISK_COLORS } from '@/lib/yield-vaults'
-import { Loader2, ArrowDownToLine, ArrowUpFromLine, Percent, Shield, AlertCircle } from 'lucide-react'
+import { RefreshCw, ArrowDownToLine, ArrowUpFromLine, TrendingUp, Shield, AlertCircle } from 'lucide-react'
 
 interface YieldCardProps {
   vault: YieldVault
@@ -62,49 +62,53 @@ export function YieldCard({ vault }: YieldCardProps) {
   }
 
   return (
-    <div className="bg-[#111111] border border-white/[0.06] rounded-2xl p-4 hover:border-white/[0.12] transition-all">
+    <div className="bg-[#111111] border border-white/[0.06] rounded-3xl p-5">
+      {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-xl flex items-center justify-center text-xl">
+          <div className="w-11 h-11 bg-white/[0.05] rounded-2xl flex items-center justify-center text-xl">
             {vault.protocolLogo}
           </div>
           <div>
-            <h3 className="text-white font-medium">{vault.name}</h3>
+            <h3 className="text-white font-semibold">{vault.name}</h3>
             <p className="text-white/40 text-sm">{vault.protocol}</p>
           </div>
         </div>
         <div className="text-right">
-          <div className="flex items-center gap-1 text-green-400 font-semibold">
-            <Percent className="w-3 h-3" />
+          <div className="flex items-center gap-1 text-[#22c55e] font-semibold">
+            <TrendingUp className="w-4 h-4" />
             {vault.apy}% APY
           </div>
           <p className="text-white/40 text-xs">{vault.tvl} TVL</p>
         </div>
       </div>
 
-      <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs ${riskColors.bg} ${riskColors.text} ${riskColors.border} border mb-4`}>
+      {/* Risk Badge */}
+      <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium ${riskColors.bg} ${riskColors.text} border ${riskColors.border} mb-4`}>
         <Shield className="w-3 h-3" />
         {vault.risk.charAt(0).toUpperCase() + vault.risk.slice(1)} Risk
       </div>
 
+      {/* Position Display */}
       {hasDeposit && (
-        <div className="bg-white/[0.03] rounded-xl p-3 mb-4">
+        <div className="bg-white/[0.02] rounded-2xl p-4 mb-4 border border-white/[0.04]">
           <div className="flex justify-between items-center">
             <span className="text-white/50 text-sm">Your Position</span>
-            <span className="text-white font-medium">
+            <span className="text-white font-semibold">
               {parseFloat(vaultBalance).toLocaleString(undefined, { maximumFractionDigits: 2 })} {vault.underlyingSymbol}
             </span>
           </div>
         </div>
       )}
 
+      {/* Mode Toggle */}
       <div className="flex gap-2 mb-4">
         <button
           onClick={() => setMode('deposit')}
-          className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+          className={`flex-1 py-3 rounded-2xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
             mode === 'deposit'
-              ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-              : 'bg-white/[0.03] text-white/50 hover:bg-white/[0.06]'
+              ? 'bg-[#ef4444] text-white shadow-[0_0_15px_rgba(239,68,68,0.2)]'
+              : 'bg-white/[0.03] text-white/50 hover:bg-white/[0.06] border border-white/[0.06]'
           }`}
         >
           <ArrowDownToLine className="w-4 h-4" />
@@ -113,10 +117,10 @@ export function YieldCard({ vault }: YieldCardProps) {
         <button
           onClick={() => setMode('withdraw')}
           disabled={!hasDeposit}
-          className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 disabled:opacity-30 ${
+          className={`flex-1 py-3 rounded-2xl text-sm font-medium transition-all flex items-center justify-center gap-2 disabled:opacity-30 ${
             mode === 'withdraw'
-              ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-              : 'bg-white/[0.03] text-white/50 hover:bg-white/[0.06]'
+              ? 'bg-white/[0.1] text-white border border-white/[0.1]'
+              : 'bg-white/[0.03] text-white/50 hover:bg-white/[0.06] border border-white/[0.06]'
           }`}
         >
           <ArrowUpFromLine className="w-4 h-4" />
@@ -124,12 +128,13 @@ export function YieldCard({ vault }: YieldCardProps) {
         </button>
       </div>
 
-      <div className="bg-white/[0.03] rounded-xl p-3 mb-4">
+      {/* Amount Input */}
+      <div className="bg-white/[0.02] rounded-2xl p-4 mb-4 border border-white/[0.04]">
         <div className="flex justify-between items-center mb-2">
           <span className="text-white/40 text-sm">Amount</span>
           <button
             onClick={() => setAmount(maxAmount)}
-            className="text-[#ef4444] text-xs hover:text-[#dc2626] transition-colors"
+            className="text-[#ef4444] text-xs hover:text-[#dc2626] transition-colors font-medium"
           >
             Max: {parseFloat(maxAmount).toLocaleString(undefined, { maximumFractionDigits: 2 })}
           </button>
@@ -140,39 +145,38 @@ export function YieldCard({ vault }: YieldCardProps) {
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="0.00"
-            className="flex-1 bg-transparent text-white text-xl font-semibold outline-none"
+            className="flex-1 bg-transparent text-white text-2xl font-semibold outline-none"
           />
           <span className="text-white/50 font-medium">{vault.underlyingSymbol}</span>
         </div>
       </div>
 
+      {/* Error */}
       {error && (
-        <div className="flex items-center gap-2 text-red-400 text-sm mb-4 bg-red-500/10 rounded-xl p-3">
+        <div className="flex items-center gap-2 text-red-400 text-sm mb-4 bg-red-500/10 rounded-2xl p-4 border border-red-500/20">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
           {error}
         </div>
       )}
 
+      {/* Success */}
       {txSuccess && (
-        <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 mb-4">
-          <p className="text-green-400 text-sm">
+        <div className="bg-[#22c55e]/10 border border-[#22c55e]/20 rounded-2xl p-4 mb-4">
+          <p className="text-[#22c55e] text-sm font-medium">
             {mode === 'deposit' ? 'Deposited' : 'Withdrawn'} successfully! ✓
           </p>
         </div>
       )}
 
+      {/* Action Button */}
       <button
         onClick={handleAction}
         disabled={isLoading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > parseFloat(maxAmount)}
-        className={`w-full py-3 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 ${
-          mode === 'deposit'
-            ? 'bg-green-500 hover:bg-green-600 text-white'
-            : 'bg-red-500 hover:bg-red-600 text-white'
-        }`}
+        className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-white/10 disabled:text-white/30 text-white font-semibold rounded-2xl transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(239,68,68,0.2)]"
       >
         {isLoading ? (
           <>
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <RefreshCw className="w-4 h-4 animate-spin" />
             {getButtonText()}
           </>
         ) : (

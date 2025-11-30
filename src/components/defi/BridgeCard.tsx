@@ -69,21 +69,23 @@ export function BridgeCard() {
 
   return (
     <div className="bg-[#111111] border border-white/[0.06] rounded-3xl p-5">
-      <div className="flex items-center justify-between mb-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
         <h3 className="text-white font-semibold text-lg">Bridge</h3>
-        <div className="flex items-center gap-1 text-yellow-400/70 text-xs bg-yellow-500/10 px-2 py-1 rounded-full">
+        <div className="flex items-center gap-1.5 text-yellow-400/80 text-xs bg-yellow-500/10 px-3 py-1.5 rounded-xl border border-yellow-500/20">
           <Clock className="w-3 h-3" />
           Coming Soon
         </div>
       </div>
 
-      <div className="bg-white/[0.03] rounded-2xl p-4 mb-2">
+      {/* From Chain */}
+      <div className="bg-white/[0.02] rounded-2xl p-4 mb-2 border border-white/[0.04]">
         <div className="flex justify-between items-center mb-3">
           <span className="text-white/40 text-sm">From</span>
           <select
             value={fromChain.id}
             onChange={(e) => setFromChain(SUPPORTED_CHAINS.find(c => c.id === Number(e.target.value))!)}
-            className="bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-1.5 text-white text-sm"
+            className="bg-white/[0.05] border border-white/[0.08] rounded-xl px-3 py-1.5 text-white text-sm font-medium"
           >
             {SUPPORTED_CHAINS.map((chain) => (
               <option key={chain.id} value={chain.id}>
@@ -104,7 +106,7 @@ export function BridgeCard() {
           <select
             value={fromToken.symbol}
             onChange={(e) => setFromToken(BRIDGE_TOKENS[fromChain.id].find(t => t.symbol === e.target.value)!)}
-            className="bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-white text-sm"
+            className="bg-white/[0.05] border border-white/[0.08] rounded-xl px-3 py-2 text-white text-sm font-medium"
           >
             {BRIDGE_TOKENS[fromChain.id]?.map((token) => (
               <option key={token.symbol} value={token.symbol}>
@@ -115,22 +117,24 @@ export function BridgeCard() {
         </div>
       </div>
 
-      <div className="flex justify-center -my-2 relative z-10">
+      {/* Flip Button */}
+      <div className="flex justify-center -my-3 relative z-10">
         <button
           onClick={flipChains}
-          className="w-10 h-10 bg-[#1a1a1a] border border-white/[0.08] rounded-xl flex items-center justify-center hover:bg-white/[0.05] transition-colors"
+          className="w-11 h-11 bg-[#1a1a1a] border border-white/[0.08] rounded-2xl flex items-center justify-center hover:bg-white/[0.05] transition-colors"
         >
           <ArrowDownUp className="w-4 h-4 text-white/60" />
         </button>
       </div>
 
-      <div className="bg-white/[0.03] rounded-2xl p-4 mt-2 mb-4">
+      {/* To Chain */}
+      <div className="bg-white/[0.02] rounded-2xl p-4 mt-2 mb-4 border border-white/[0.04]">
         <div className="flex justify-between items-center mb-3">
           <span className="text-white/40 text-sm">To</span>
           <select
             value={toChain.id}
             onChange={(e) => setToChain(SUPPORTED_CHAINS.find(c => c.id === Number(e.target.value))!)}
-            className="bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-1.5 text-white text-sm"
+            className="bg-white/[0.05] border border-white/[0.08] rounded-xl px-3 py-1.5 text-white text-sm font-medium"
           >
             {SUPPORTED_CHAINS.filter(c => c.id !== fromChain.id).map((chain) => (
               <option key={chain.id} value={chain.id}>
@@ -151,7 +155,7 @@ export function BridgeCard() {
           <select
             value={toToken.symbol}
             onChange={(e) => setToToken(BRIDGE_TOKENS[toChain.id].find(t => t.symbol === e.target.value)!)}
-            className="bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-white text-sm"
+            className="bg-white/[0.05] border border-white/[0.08] rounded-xl px-3 py-2 text-white text-sm font-medium"
           >
             {BRIDGE_TOKENS[toChain.id]?.map((token) => (
               <option key={token.symbol} value={token.symbol}>
@@ -162,31 +166,33 @@ export function BridgeCard() {
         </div>
       </div>
 
+      {/* Route Info */}
       {quote && (
-        <div className="bg-white/[0.02] rounded-xl p-3 mb-4 space-y-2">
+        <div className="bg-white/[0.02] rounded-2xl p-4 mb-4 border border-white/[0.04] space-y-3">
           <div className="flex justify-between text-sm">
             <span className="text-white/40">Bridge</span>
-            <span className="text-white">{quote.tool}</span>
+            <span className="text-white font-medium">{quote.tool}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-white/40 flex items-center gap-1">
               <Clock className="w-3 h-3" />
               Est. Time
             </span>
-            <span className="text-white">{formatDuration(quote.executionDuration)}</span>
+            <span className="text-white font-medium">{formatDuration(quote.executionDuration)}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-white/40">Route</span>
-            <span className="text-white flex items-center gap-1">
-              {fromChain.logo} <ArrowRight className="w-3 h-3" /> {toChain.logo}
+            <span className="text-white flex items-center gap-1.5 font-medium">
+              {fromChain.logo} <ArrowRight className="w-3 h-3 text-white/40" /> {toChain.logo}
             </span>
           </div>
         </div>
       )}
 
+      {/* Bridge Button */}
       <button
         disabled={true}
-        className="w-full py-4 bg-white/10 text-white/30 font-semibold rounded-2xl cursor-not-allowed flex items-center justify-center gap-2"
+        className="w-full py-4 bg-white/[0.06] text-white/30 font-semibold rounded-2xl cursor-not-allowed flex items-center justify-center gap-2 border border-white/[0.06]"
       >
         Bridge Coming Soon
       </button>

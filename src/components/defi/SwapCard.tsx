@@ -48,21 +48,23 @@ export function SwapCard() {
 
   return (
     <div className="bg-[#111111] border border-white/[0.06] rounded-3xl p-5">
-      <div className="flex items-center justify-between mb-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
         <h3 className="text-white font-semibold text-lg">Swap</h3>
-        <div className="flex items-center gap-1 text-yellow-400/70 text-xs bg-yellow-500/10 px-2 py-1 rounded-full">
+        <div className="flex items-center gap-1.5 text-yellow-400/80 text-xs bg-yellow-500/10 px-3 py-1.5 rounded-xl border border-yellow-500/20">
           <Clock className="w-3 h-3" />
           Coming Soon
         </div>
       </div>
 
-      <div className="bg-white/[0.03] rounded-2xl p-4 mb-2">
-        <div className="flex justify-between items-center mb-2">
+      {/* You Pay */}
+      <div className="bg-white/[0.02] rounded-2xl p-4 mb-2 border border-white/[0.04]">
+        <div className="flex justify-between items-center mb-3">
           <span className="text-white/40 text-sm">You pay</span>
           <select
             value={sellToken.symbol}
             onChange={(e) => setSellToken(TOKENS.find(t => t.symbol === e.target.value)!)}
-            className="bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-1 text-white text-sm"
+            className="bg-white/[0.05] border border-white/[0.08] rounded-xl px-3 py-1.5 text-white text-sm font-medium"
           >
             {TOKENS.map((token) => (
               <option key={token.symbol} value={token.symbol}>
@@ -80,22 +82,24 @@ export function SwapCard() {
         />
       </div>
 
-      <div className="flex justify-center -my-2 relative z-10">
+      {/* Flip Button */}
+      <div className="flex justify-center -my-3 relative z-10">
         <button
           onClick={flipTokens}
-          className="w-10 h-10 bg-[#1a1a1a] border border-white/[0.08] rounded-xl flex items-center justify-center hover:bg-white/[0.05] transition-colors"
+          className="w-11 h-11 bg-[#1a1a1a] border border-white/[0.08] rounded-2xl flex items-center justify-center hover:bg-white/[0.05] transition-colors"
         >
           <ArrowDownUp className="w-4 h-4 text-white/60" />
         </button>
       </div>
 
-      <div className="bg-white/[0.03] rounded-2xl p-4 mt-2 mb-4">
-        <div className="flex justify-between items-center mb-2">
+      {/* You Receive */}
+      <div className="bg-white/[0.02] rounded-2xl p-4 mt-2 mb-5 border border-white/[0.04]">
+        <div className="flex justify-between items-center mb-3">
           <span className="text-white/40 text-sm">You receive</span>
           <select
             value={buyToken.symbol}
             onChange={(e) => setBuyToken(TOKENS.find(t => t.symbol === e.target.value)!)}
-            className="bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-1 text-white text-sm"
+            className="bg-white/[0.05] border border-white/[0.08] rounded-xl px-3 py-1.5 text-white text-sm font-medium"
           >
             {TOKENS.map((token) => (
               <option key={token.symbol} value={token.symbol}>
@@ -113,9 +117,10 @@ export function SwapCard() {
         </div>
       </div>
 
+      {/* Swap Button */}
       <button
         disabled={true}
-        className="w-full py-4 bg-white/10 text-white/30 font-semibold rounded-2xl cursor-not-allowed flex items-center justify-center gap-2"
+        className="w-full py-4 bg-white/[0.06] text-white/30 font-semibold rounded-2xl cursor-not-allowed flex items-center justify-center gap-2 border border-white/[0.06]"
       >
         Swap Coming Soon
       </button>

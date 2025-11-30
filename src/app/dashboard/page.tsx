@@ -9,8 +9,7 @@ import { base } from 'wagmi/chains'
 import { USDC_ADDRESS, USDC_DECIMALS, ERC20_ABI } from '@/lib/wagmi'
 import { 
   ArrowUpRight, ArrowDownLeft, Copy, Check, LogOut, 
-  Send, RefreshCw, ExternalLink, Plus, ShoppingCart, QrCode,
-  Zap, Wallet
+  Send, RefreshCw, ExternalLink, Plus, ShoppingCart, QrCode
 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { CardInner } from '@/components/ui/Card'
@@ -28,15 +27,8 @@ export default function Dashboard() {
   const [sendAmount, setSendAmount] = useState('')
   const [addressError, setAddressError] = useState('')
 
-  // Find the active wallet - prioritize Coinbase Smart Wallet, then embedded
-  const coinbaseWallet = wallets.find((w) => w.walletClientType === 'coinbase_wallet' || w.walletClientType === 'coinbase_smart_wallet')
   const embeddedWallet = wallets.find((w) => w.walletClientType === 'privy')
-  const activeWallet = coinbaseWallet || embeddedWallet
-  const address = activeWallet?.address as `0x${string}` | undefined
-  
-  // Determine wallet type for UI
-  const isCoinbaseSmartWallet = !!coinbaseWallet
-  const walletType = isCoinbaseSmartWallet ? 'Coinbase Smart Wallet' : 'Privy Wallet'
+  const address = embeddedWallet?.address as `0x${string}` | undefined
 
   const { fundWallet } = useFundWallet()
 
@@ -162,16 +154,6 @@ export default function Dashboard() {
         {/* Balance Card */}
         <div className="bg-[#111111] border border-white/[0.06] rounded-3xl p-6 mt-4">
           
-          {/* Wallet Type Badge */}
-          {isCoinbaseSmartWallet && (
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0052FF]/10 border border-[#0052FF]/30 rounded-full">
-                <Zap className="w-3 h-3 text-[#0052FF]" />
-                <span className="text-[#0052FF] text-xs font-medium">Free Gas</span>
-              </div>
-            </div>
-          )}
-          
           {/* Balance Display */}
           <div className="text-center py-6">
             <p className="text-white/40 text-sm mb-1">Total Balance</p>
@@ -196,11 +178,7 @@ export default function Dashboard() {
           {/* Wallet Address Row */}
           <div className="flex items-center justify-between py-3 px-4 bg-white/[0.02] rounded-2xl mb-4">
             <div className="flex items-center gap-2">
-              {isCoinbaseSmartWallet ? (
-                <Wallet className="w-4 h-4 text-[#0052FF]" />
-              ) : (
-                <div className="w-4 h-4 bg-[#ef4444] rounded" />
-              )}
+              <div className="w-4 h-4 bg-[#ef4444] rounded" />
               <span className="text-white/40 text-sm font-mono">
                 {address?.slice(0, 6)}...{address?.slice(-4)}
               </span>
@@ -264,35 +242,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Wallet Info Card */}
-        <div className="bg-[#111111] border border-white/[0.06] rounded-3xl p-5 mt-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {isCoinbaseSmartWallet ? (
-                <div className="w-10 h-10 bg-[#0052FF] rounded-xl flex items-center justify-center">
-                  <Wallet className="w-5 h-5 text-white" />
-                </div>
-              ) : (
-                <div className="w-10 h-10 bg-[#ef4444] rounded-xl flex items-center justify-center">
-                  <span className="text-white font-bold">$</span>
-                </div>
-              )}
-              <div>
-                <p className="text-white font-medium">{walletType}</p>
-                <p className="text-white/40 text-sm">
-                  {isCoinbaseSmartWallet ? 'Gas sponsored by Coinbase' : 'Self-custody wallet'}
-                </p>
-              </div>
-            </div>
-            {isCoinbaseSmartWallet && (
-              <div className="flex items-center gap-1 text-[#0052FF] text-xs">
-                <Zap className="w-3 h-3" />
-                <span>Free Gas</span>
-              </div>
-            )}
-          </div>
-        </div>
-
         {/* Recent Activity Card */}
         <div className="bg-[#111111] border border-white/[0.06] rounded-3xl p-5 mt-4">
           <h2 className="text-white font-semibold mb-4">Recent Activity</h2>
@@ -315,13 +264,6 @@ export default function Dashboard() {
       {/* Send Modal */}
       <Modal isOpen={showSend} onClose={() => !isPending && !isConfirming && setShowSend(false)} title="Send USDC">
         <div className="space-y-5">
-          {isCoinbaseSmartWallet && (
-            <div className="flex items-center gap-2 p-3 bg-[#0052FF]/10 border border-[#0052FF]/20 rounded-xl">
-              <Zap className="w-4 h-4 text-[#0052FF]" />
-              <span className="text-[#0052FF] text-sm">Gas is free with Coinbase Smart Wallet</span>
-            </div>
-          )}
-          
           <div>
             <label className="block text-white/40 text-sm mb-2 font-medium">Recipient Address</label>
             <div className={`bg-white/[0.03] rounded-2xl border transition-all ${addressError ? 'border-red-500/50' : 'border-white/[0.06] focus-within:border-white/20'}`}>
