@@ -344,18 +344,92 @@ body {
   100% { background-position: 200% 0; }
 }
 
-/* Marquee animation for money background */
-@keyframes marquee {
-  0% {
-    transform: translateX(0);
+/* Flying money animations - multiple layers */
+@keyframes fly-right {
+  0%, 100% {
+    transform: translateX(-30%) translateY(0) rotate(0deg);
   }
-  100% {
-    transform: translateX(-33.333%);
+  50% {
+    transform: translateX(10%) translateY(-5%) rotate(3deg);
   }
 }
 
-.animate-marquee {
-  animation: marquee 20s linear infinite;
+@keyframes fly-left {
+  0%, 100% {
+    transform: translateX(20%) translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateX(-15%) translateY(8%) rotate(-5deg);
+  }
+}
+
+@keyframes fly-up {
+  0%, 100% {
+    transform: translateY(20%) translateX(0) rotate(12deg);
+  }
+  50% {
+    transform: translateY(-10%) translateX(5%) rotate(15deg);
+  }
+}
+
+@keyframes fly-diagonal {
+  0%, 100% {
+    transform: translate(0, 0) rotate(-6deg) scale(1);
+  }
+  33% {
+    transform: translate(15%, -10%) rotate(0deg) scale(1.05);
+  }
+  66% {
+    transform: translate(-10%, 5%) rotate(-10deg) scale(0.95);
+  }
+}
+
+@keyframes fly-spin {
+  0%, 100% {
+    transform: translateX(0) translateY(0) rotate(0deg);
+  }
+  25% {
+    transform: translateX(-10%) translateY(5%) rotate(5deg);
+  }
+  50% {
+    transform: translateX(5%) translateY(-8%) rotate(-3deg);
+  }
+  75% {
+    transform: translateX(10%) translateY(3%) rotate(8deg);
+  }
+}
+
+@keyframes fly-fast {
+  0%, 100% {
+    transform: translate(0, 0) rotate(45deg);
+  }
+  50% {
+    transform: translate(-20%, -15%) rotate(50deg);
+  }
+}
+
+.animate-fly-right {
+  animation: fly-right 25s ease-in-out infinite;
+}
+
+.animate-fly-left {
+  animation: fly-left 20s ease-in-out infinite;
+}
+
+.animate-fly-up {
+  animation: fly-up 18s ease-in-out infinite;
+}
+
+.animate-fly-diagonal {
+  animation: fly-diagonal 30s ease-in-out infinite;
+}
+
+.animate-fly-spin {
+  animation: fly-spin 22s ease-in-out infinite;
+}
+
+.animate-fly-fast {
+  animation: fly-fast 12s ease-in-out infinite;
 }
 
 /* Scrollbar */
