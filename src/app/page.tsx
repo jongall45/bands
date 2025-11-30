@@ -73,19 +73,19 @@ export default function Home() {
               </span>
             </h1>
 
-            {/* JOIN Button */}
+            {/* JOIN Button - 50% smaller */}
             <Button
               variant="primary"
-              size="lg"
+              size="md"
               onClick={login}
-              className="text-xl px-12 py-5 font-bold uppercase tracking-wide"
+              className="font-bold uppercase tracking-wide"
             >
               JOIN
             </Button>
 
             {/* Subtext */}
-            <p className="text-white/40 text-sm mt-6 font-mono">
-              No wallet needed · Sign in with email
+            <p className="text-white/50 text-sm mt-6 tracking-wide">
+              Spend. Save. Speculate.
             </p>
           </div>
         </div>
