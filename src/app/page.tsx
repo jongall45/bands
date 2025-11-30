@@ -25,96 +25,99 @@ export default function Home() {
   })), [])
 
   return (
-    <main className="min-h-screen bg-black text-white relative overflow-hidden">
-      {/* Flying Money Particles */}
-      <div className="absolute inset-0 pointer-events-none">
-        {particles.map((particle) => (
-          <div
-            key={particle.id}
-            className="absolute money-particle"
-            style={{
-              left: `${particle.left}%`,
-              width: `${particle.size}px`,
-              height: `${particle.size * 0.6}px`,
-              animationDelay: `${particle.delay}s`,
-              animationDuration: `${particle.duration}s`,
-            }}
-          >
-            <span 
-              className="text-2xl"
-              style={{ 
-                transform: `rotate(${particle.rotation}deg)`,
-                display: 'block',
+    <div className="min-h-screen bg-[#ef4444] flex items-center justify-center p-4 md:p-8">
+      {/* Centered Black Card */}
+      <main className="w-full max-w-[1400px] h-[90vh] bg-black rounded-3xl relative overflow-hidden">
+        {/* Flying Money Particles */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          {particles.map((particle) => (
+            <div
+              key={particle.id}
+              className="absolute money-particle"
+              style={{
+                left: `${particle.left}%`,
+                width: `${particle.size}px`,
+                height: `${particle.size * 0.6}px`,
+                animationDelay: `${particle.delay}s`,
+                animationDuration: `${particle.duration}s`,
               }}
             >
-              💵
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Content */}
-      <div className="relative z-10 min-h-screen flex flex-col">
-        {/* Header */}
-        <header className="p-6 md:p-10">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-[#ef4444] rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(239,68,68,0.4)]">
-              <span className="text-white font-bold text-xl">$</span>
-            </div>
-            <span className="text-white font-semibold text-xl">bands</span>
-          </div>
-        </header>
-
-        {/* Hero */}
-        <div className="flex-1 flex items-center px-6 md:px-10 pb-20">
-          <div className="max-w-2xl">
-            <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6">
-              <span className="text-white">Stablecoin Neobank</span>
-              <br />
-              <span className="text-white">for </span>
-              <span className="text-[#ef4444] relative inline-block">
-                Degens
-                <span className="absolute inset-0 bg-[#ef4444]/30 blur-2xl -z-10" />
+              <span 
+                className="text-2xl"
+                style={{ 
+                  transform: `rotate(${particle.rotation}deg)`,
+                  display: 'block',
+                }}
+              >
+                💵
               </span>
-            </h1>
+            </div>
+          ))}
+        </div>
 
-            <button
-              onClick={login}
-              className="px-8 py-4 bg-[#ef4444] hover:bg-[#dc2626] text-white font-bold text-lg rounded-xl transition-all shadow-[0_0_30px_rgba(239,68,68,0.4)] hover:shadow-[0_0_40px_rgba(239,68,68,0.5)] mb-6"
-            >
-              JOIN
-            </button>
+        {/* Content */}
+        <div className="relative z-10 h-full flex flex-col">
+          {/* Header */}
+          <header className="p-6 md:p-10">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-[#ef4444] rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(239,68,68,0.4)]">
+                <span className="text-white font-bold text-xl">$</span>
+              </div>
+              <span className="text-white font-semibold text-xl">bands</span>
+            </div>
+          </header>
 
-            <p className="text-white/50 text-lg tracking-wide">
-              Spend. Save. Speculate.
-            </p>
+          {/* Hero */}
+          <div className="flex-1 flex items-center px-6 md:px-10 pb-20">
+            <div className="max-w-2xl">
+              <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6">
+                <span className="text-white">Stablecoin Neobank</span>
+                <br />
+                <span className="text-white">for </span>
+                <span className="text-[#ef4444] relative inline-block">
+                  Degens
+                  <span className="absolute inset-0 bg-[#ef4444]/30 blur-2xl -z-10" />
+                </span>
+              </h1>
+
+              <button
+                onClick={login}
+                className="px-8 py-4 bg-[#ef4444] hover:bg-[#dc2626] text-white font-bold text-lg rounded-xl transition-all shadow-[0_0_30px_rgba(239,68,68,0.4)] hover:shadow-[0_0_40px_rgba(239,68,68,0.5)] mb-6"
+              >
+                JOIN
+              </button>
+
+              <p className="text-white/50 text-lg tracking-wide">
+                Spend. Save. Speculate.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
 
-      <style jsx>{`
-        @keyframes fly-up {
-          0% {
-            transform: translateY(100vh) rotate(0deg);
-            opacity: 0;
+        <style jsx>{`
+          @keyframes fly-up {
+            0% {
+              transform: translateY(calc(90vh + 50px)) rotate(0deg);
+              opacity: 0;
+            }
+            5% {
+              opacity: 1;
+            }
+            95% {
+              opacity: 1;
+            }
+            100% {
+              transform: translateY(-50px) rotate(360deg);
+              opacity: 0;
+            }
           }
-          5% {
-            opacity: 1;
+          .money-particle {
+            animation: fly-up linear infinite;
+            position: absolute;
+            bottom: 0;
           }
-          95% {
-            opacity: 1;
-          }
-          100% {
-            transform: translateY(-100px) rotate(360deg);
-            opacity: 0;
-          }
-        }
-        .money-particle {
-          animation: fly-up linear infinite;
-          position: absolute;
-          bottom: 0;
-        }
-      `}</style>
-    </main>
+        `}</style>
+      </main>
+    </div>
   )
 }
