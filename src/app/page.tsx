@@ -82,7 +82,7 @@ export default function Home() {
 
               <button
                 onClick={login}
-                className="px-8 py-4 bg-[#ef4444] hover:bg-[#dc2626] text-white font-bold text-lg rounded-xl transition-all shadow-[0_0_30px_rgba(239,68,68,0.4)] hover:shadow-[0_0_40px_rgba(239,68,68,0.5)] mb-6"
+                className="px-5 py-2.5 bg-[#ef4444] hover:bg-[#dc2626] text-white font-bold text-sm rounded-lg transition-all shadow-[0_0_20px_rgba(239,68,68,0.4)] hover:shadow-[0_0_30px_rgba(239,68,68,0.5)] mb-6"
               >
                 JOIN
               </button>
@@ -97,8 +97,9 @@ export default function Home() {
         <style jsx>{`
           @keyframes fly-up {
             0% {
-              transform: translateY(calc(90vh + 50px)) rotate(0deg);
+              bottom: -50px;
               opacity: 0;
+              transform: rotate(0deg);
             }
             5% {
               opacity: 1;
@@ -107,14 +108,14 @@ export default function Home() {
               opacity: 1;
             }
             100% {
-              transform: translateY(-50px) rotate(360deg);
+              bottom: 100%;
               opacity: 0;
+              transform: rotate(360deg);
             }
           }
           .money-particle {
             animation: fly-up linear infinite;
             position: absolute;
-            bottom: 0;
           }
         `}</style>
       </main>
