@@ -64,23 +64,26 @@ export default function Home() {
           </div>
         </header>
 
+        {/* Full page dark overlay for readability */}
+        <div className="absolute inset-0 bg-black/50 z-[1]" />
+
         {/* Hero Content */}
         <div className="relative z-20 flex flex-col items-start justify-center h-[70%] px-10 md:px-16">
-          {/* Content backdrop for readability */}
-          <div className="absolute inset-0 bg-gradient-to-r from-[#202020] via-[#202020]/80 to-transparent w-[60%]" />
-          
           <div className="relative z-10">
             {/* Main Tagline */}
             <h1 
-              className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-8 max-w-lg"
+              className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-8 max-w-lg text-outline"
               style={{ 
                 fontFamily: "'Space Grotesk', sans-serif",
+                textShadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 0 0 20px rgba(0,0,0,0.8)'
               }}
             >
               Stablecoin Neobank for{' '}
               <span 
                 className="text-[#D32F2F]"
-                style={{ textShadow: '0 0 20px rgba(211, 47, 47, 0.6)' }}
+                style={{ 
+                  textShadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 0 0 30px rgba(211, 47, 47, 0.8)' 
+                }}
               >
                 Degens
               </span>
@@ -102,7 +105,10 @@ export default function Home() {
             </button>
 
             {/* Small subtext */}
-            <p className="text-white/50 text-sm mt-6 font-mono">
+            <p 
+              className="text-white/70 text-sm mt-6 font-mono"
+              style={{ textShadow: '1px 1px 2px #000' }}
+            >
               No wallet needed · Sign in with email
             </p>
           </div>
