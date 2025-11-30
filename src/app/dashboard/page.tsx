@@ -1,6 +1,6 @@
 'use client'
 
-import { usePrivy, useWallets } from '@privy-io/react-auth'
+import { usePrivy, useWallets, useFundWallet } from '@privy-io/react-auth'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useCallback } from 'react'
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
@@ -10,7 +10,7 @@ import { USDC_ADDRESS, USDC_DECIMALS, ERC20_ABI } from '@/lib/wagmi'
 import { 
   ArrowUpRight, ArrowDownLeft, Copy, Check, LogOut, 
   Send, RefreshCw, X, ExternalLink,
-  Home, CreditCard, PiggyBank, DollarSign
+  Home, CreditCard, PiggyBank, DollarSign, Plus, Wallet
 } from 'lucide-react'
 
 export default function Dashboard() {
@@ -27,6 +27,21 @@ export default function Dashboard() {
 
   const embeddedWallet = wallets.find((w) => w.walletClientType === 'privy')
   const address = embeddedWallet?.address as `0x${string}` | undefined
+
+  // Privy fiat onramp - supports Apple Pay, Google Pay, cards via MoonPay
+  const { fundWallet } = useFundWallet()
+
+  const handleAddFunds = async () => {
+    if (!address) return
+    try {
+      await fundWallet(address, {
+        chain: base,
+        asset: 'USDC', // Fund with USDC directly
+      })
+    } catch (error) {
+      console.error('Funding error:', error)
+    }
+  }
 
   const { data: usdcBalance, refetch: refetchBalance, isLoading: balanceLoading } = useReadContract({
     address: USDC_ADDRESS,
@@ -205,20 +220,39 @@ export default function Dashboard() {
       </div>
 
       {/* Action Buttons */}
-      <div className="px-6 grid grid-cols-2 gap-4 mb-8">
+      <div className="px-6 grid grid-cols-3 gap-3 mb-8">
+        {/* Add Funds - Primary CTA */}
+        <button
+          onClick={handleAddFunds}
+          className="btn-bands-red py-4 flex flex-col items-center justify-center gap-2 font-semibold col-span-3"
+        >
+          <div className="flex items-center gap-2">
+            <Plus className="w-5 h-5" />
+            Add Funds
+          </div>
+          <span className="text-xs opacity-80 font-normal">Apple Pay • Card • Crypto</span>
+        </button>
+        
         <button
           onClick={() => setShowSend(true)}
-          className="btn-bands-red py-4 flex items-center justify-center gap-3 font-semibold"
+          className="neu-button py-4 flex flex-col items-center justify-center gap-1 font-semibold text-white"
         >
-          <ArrowUpRight className="w-5 h-5" />
-          Send
+          <ArrowUpRight className="w-5 h-5 text-[#D32F2F]" />
+          <span className="text-sm">Send</span>
         </button>
         <button
           onClick={() => setShowReceive(true)}
-          className="neu-button py-4 flex items-center justify-center gap-3 font-semibold text-white"
+          className="neu-button py-4 flex flex-col items-center justify-center gap-1 font-semibold text-white"
         >
           <ArrowDownLeft className="w-5 h-5 text-[#69F0AE]" />
-          Receive
+          <span className="text-sm">Receive</span>
+        </button>
+        <button
+          onClick={handleAddFunds}
+          className="neu-button py-4 flex flex-col items-center justify-center gap-1 font-semibold text-white"
+        >
+          <Wallet className="w-5 h-5 text-[#D32F2F]" />
+          <span className="text-sm">Buy</span>
         </button>
       </div>
 
