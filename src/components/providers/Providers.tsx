@@ -65,12 +65,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
           logo: '/logo.svg',
           showWalletLoginFirst: false,
         },
-        loginMethods: ['email', 'google', 'apple', 'twitter'],
+        // Login methods - social + Coinbase Smart Wallet
+        loginMethods: ['email', 'google', 'apple', 'twitter', 'wallet'],
+        // Embedded wallet config
         embeddedWallets: {
           ethereum: {
             createOnLogin: 'users-without-wallets',
           },
         },
+        // External wallets - enable Coinbase Smart Wallet
+        externalWallets: {
+          coinbaseWallet: {
+            connectionOptions: 'smartWalletOnly', // Force smart wallet (gas sponsored)
+          },
+        },
+        // Chain config
         defaultChain: base,
         supportedChains: [base, baseSepolia],
       }}

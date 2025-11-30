@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@coinbase/wallet-sdk": "^4.3.7",
     "@privy-io/react-auth": "^3.8.0",
     "@privy-io/wagmi": "^2.0.3",
     "@solana-program/system": "^0.10.0",
