@@ -23,7 +23,7 @@ export default function Home() {
         {/* Money Background Visual */}
         <div className="absolute inset-0 z-0 overflow-hidden">
           <img 
-            src="/money-bg.jpg" 
+            src="/money-bg.png" 
             alt="Money flying"
             className="absolute bottom-[-15%] left-1/2 -translate-x-1/2 w-[120%] h-auto max-h-full
                        object-contain opacity-50 mix-blend-screen
