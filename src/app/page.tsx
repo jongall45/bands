@@ -97,25 +97,28 @@ export default function Home() {
         <style jsx>{`
           @keyframes fly-up {
             0% {
-              bottom: -50px;
+              bottom: -60px;
               opacity: 0;
               transform: rotate(0deg);
             }
-            5% {
+            3% {
               opacity: 1;
             }
-            95% {
+            97% {
               opacity: 1;
             }
             100% {
-              bottom: 100%;
+              bottom: calc(100% + 60px);
               opacity: 0;
               transform: rotate(360deg);
             }
           }
           .money-particle {
             animation: fly-up linear infinite;
+            animation-fill-mode: backwards;
             position: absolute;
+            bottom: -60px;
+            opacity: 0;
           }
         `}</style>
       </main>
