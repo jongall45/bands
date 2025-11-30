@@ -2,16 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import { useWallets } from '@privy-io/react-auth'
-import { usePorto } from '@/providers/PortoProvider'
 import { useBridge } from '@/hooks/useBridge'
 import { SUPPORTED_CHAINS, BRIDGE_TOKENS, Chain, Token } from '@/lib/bridge-api'
-import { ArrowRight, Loader2, AlertCircle, Clock, Zap, ArrowDownUp } from 'lucide-react'
+import { ArrowRight, AlertCircle, Clock, Zap, ArrowDownUp } from 'lucide-react'
 import { formatUnits } from 'viem'
 
 export function BridgeCard() {
   const { wallets } = useWallets()
-  const { isUpgraded } = usePorto()
-  const { getQuote, executeBridge, quote, isLoading, isQuoting, error, formatDuration } = useBridge()
+  const { getQuote, quote, isQuoting, error, formatDuration } = useBridge()
 
   const privyWallet = wallets.find((w) => w.walletClientType === 'privy')
 
@@ -21,7 +19,6 @@ export function BridgeCard() {
   const [fromToken, setFromToken] = useState<Token>(BRIDGE_TOKENS[8453][0]) // USDC on Base
   const [toToken, setToToken] = useState<Token>(BRIDGE_TOKENS[1][0]) // USDC on Ethereum
   const [amount, setAmount] = useState('')
-  const [txId, setTxId] = useState<string | null>(null)
 
   // Update tokens when chain changes
   useEffect(() => {
@@ -59,22 +56,6 @@ export function BridgeCard() {
     return () => clearTimeout(timer)
   }, [amount, fromChain, toChain, fromToken, toToken, privyWallet?.address, getQuote])
 
-  const handleBridge = async () => {
-    if (!quote) return
-
-    try {
-      const id = await executeBridge({
-        fromToken: fromToken.address,
-        fromDecimals: fromToken.decimals,
-        fromAmount: amount,
-      })
-      setTxId(id)
-      setAmount('')
-    } catch (err) {
-      console.error('Bridge failed:', err)
-    }
-  }
-
   const flipChains = () => {
     const tempChain = fromChain
     const tempToken = fromToken
@@ -93,9 +74,12 @@ export function BridgeCard() {
     <div className="bg-[#111111] border border-white/[0.06] rounded-3xl p-5">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-white font-semibold text-lg">Bridge</h3>
-        <div className="flex items-center gap-1 text-white/40 text-sm">
-          <Zap className="w-3 h-3" />
-          Powered by LI.FI
+        <div className="flex items-center gap-2">
+          <span className="text-white/40 text-xs">Powered by LI.FI</span>
+          <div className="flex items-center gap-1 text-yellow-400/70 text-xs bg-yellow-500/10 px-2 py-1 rounded-full">
+            <Clock className="w-3 h-3" />
+            Coming Soon
+          </div>
         </div>
       </div>
 
@@ -218,42 +202,17 @@ export function BridgeCard() {
         </div>
       )}
 
-      {/* Success Display */}
-      {txId && (
-        <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 mb-4">
-          <p className="text-green-400 text-sm">Bridge initiated! TX: {txId.slice(0, 10)}...</p>
-        </div>
-      )}
-
-      {/* Bridge Button */}
-      {!isUpgraded ? (
-        <div className="text-center py-4">
-          <p className="text-white/50 text-sm">Upgrade your wallet to bridge assets</p>
-        </div>
-      ) : (
-        <button
-          onClick={handleBridge}
-          disabled={isLoading || isQuoting || !amount || parseFloat(amount) <= 0 || !quote}
-          className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-white/10 disabled:text-white/30 text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2"
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Bridging...
-            </>
-          ) : (
-            <>
-              <ArrowRight className="w-5 h-5" />
-              Bridge to {toChain.name}
-            </>
-          )}
-        </button>
-      )}
+      {/* Bridge Button - Disabled for now */}
+      <button
+        disabled={true}
+        className="w-full py-4 bg-white/10 text-white/30 font-semibold rounded-2xl cursor-not-allowed flex items-center justify-center gap-2"
+      >
+        Bridge Coming Soon
+      </button>
 
       <p className="text-white/30 text-xs text-center mt-3">
-        1-click approve + bridge • Gas paid in USDC
+        Cross-chain bridging will be enabled in the next release
       </p>
     </div>
   )
 }
-

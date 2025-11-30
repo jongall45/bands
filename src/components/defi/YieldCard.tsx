@@ -2,10 +2,9 @@
 
 import { useState } from 'react'
 import { useWallets } from '@privy-io/react-auth'
-import { usePorto } from '@/providers/PortoProvider'
 import { useYield } from '@/hooks/useYield'
 import { YieldVault, RISK_COLORS } from '@/lib/yield-vaults'
-import { Loader2, TrendingUp, ArrowDownToLine, ArrowUpFromLine, Percent, Shield, AlertCircle } from 'lucide-react'
+import { Loader2, ArrowDownToLine, ArrowUpFromLine, Percent, Shield, AlertCircle } from 'lucide-react'
 
 interface YieldCardProps {
   vault: YieldVault
@@ -13,7 +12,6 @@ interface YieldCardProps {
 
 export function YieldCard({ vault }: YieldCardProps) {
   const { wallets } = useWallets()
-  const { isUpgraded } = usePorto()
   const privyWallet = wallets.find((w) => w.walletClientType === 'privy')
   
   const {
@@ -23,11 +21,12 @@ export function YieldCard({ vault }: YieldCardProps) {
     tokenBalance,
     isLoading,
     error,
+    step,
   } = useYield(vault, privyWallet?.address as `0x${string}` | undefined)
 
   const [amount, setAmount] = useState('')
   const [mode, setMode] = useState<'deposit' | 'withdraw'>('deposit')
-  const [txId, setTxId] = useState<string | null>(null)
+  const [txSuccess, setTxSuccess] = useState(false)
 
   const riskColors = RISK_COLORS[vault.risk]
   const hasDeposit = parseFloat(vaultBalance) > 0
@@ -36,17 +35,31 @@ export function YieldCard({ vault }: YieldCardProps) {
     if (!amount || parseFloat(amount) <= 0) return
 
     try {
-      const id = mode === 'deposit' 
-        ? await deposit(amount)
-        : await withdraw(amount)
-      setTxId(id)
+      setTxSuccess(false)
+      if (mode === 'deposit') {
+        await deposit(amount)
+      } else {
+        await withdraw(amount)
+      }
+      setTxSuccess(true)
       setAmount('')
+      setTimeout(() => setTxSuccess(false), 3000)
     } catch (err) {
       console.error(`${mode} failed:`, err)
     }
   }
 
   const maxAmount = mode === 'deposit' ? tokenBalance : vaultBalance
+
+  const getButtonText = () => {
+    if (isLoading) {
+      if (step === 'approving') return 'Approving...'
+      if (step === 'depositing') return 'Depositing...'
+      if (step === 'withdrawing') return 'Withdrawing...'
+      return 'Processing...'
+    }
+    return mode === 'deposit' ? `Deposit ${vault.underlyingSymbol}` : `Withdraw ${vault.underlyingSymbol}`
+  }
 
   return (
     <div className="bg-[#111111] border border-white/[0.06] rounded-2xl p-4 hover:border-white/[0.12] transition-all">
@@ -147,47 +160,40 @@ export function YieldCard({ vault }: YieldCardProps) {
       )}
 
       {/* Success Display */}
-      {txId && (
+      {txSuccess && (
         <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 mb-4">
           <p className="text-green-400 text-sm">
-            {mode === 'deposit' ? 'Deposited' : 'Withdrawn'}! TX: {txId.slice(0, 10)}...
+            {mode === 'deposit' ? 'Deposited' : 'Withdrawn'} successfully! ✓
           </p>
         </div>
       )}
 
       {/* Action Button */}
-      {!isUpgraded ? (
-        <div className="text-center py-3">
-          <p className="text-white/50 text-sm">Upgrade wallet to earn yield</p>
-        </div>
-      ) : (
-        <button
-          onClick={handleAction}
-          disabled={isLoading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > parseFloat(maxAmount)}
-          className={`w-full py-3 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 ${
-            mode === 'deposit'
-              ? 'bg-green-500 hover:bg-green-600 text-white'
-              : 'bg-red-500 hover:bg-red-600 text-white'
-          }`}
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Processing...
-            </>
-          ) : (
-            <>
-              {mode === 'deposit' ? <ArrowDownToLine className="w-4 h-4" /> : <ArrowUpFromLine className="w-4 h-4" />}
-              {mode === 'deposit' ? 'Deposit' : 'Withdraw'} {vault.underlyingSymbol}
-            </>
-          )}
-        </button>
-      )}
+      <button
+        onClick={handleAction}
+        disabled={isLoading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > parseFloat(maxAmount)}
+        className={`w-full py-3 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 ${
+          mode === 'deposit'
+            ? 'bg-green-500 hover:bg-green-600 text-white'
+            : 'bg-red-500 hover:bg-red-600 text-white'
+        }`}
+      >
+        {isLoading ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            {getButtonText()}
+          </>
+        ) : (
+          <>
+            {mode === 'deposit' ? <ArrowDownToLine className="w-4 h-4" /> : <ArrowUpFromLine className="w-4 h-4" />}
+            {getButtonText()}
+          </>
+        )}
+      </button>
 
       <p className="text-white/30 text-xs text-center mt-3">
-        1-click • Gas paid in USDC
+        {step === 'approving' ? 'Step 1/2: Approving token...' : 'Requires ETH for gas'}
       </p>
     </div>
   )
 }
-

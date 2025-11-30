@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { useWallets } from '@privy-io/react-auth'
-import { usePorto } from '@/providers/PortoProvider'
 import { useSwap } from '@/hooks/useSwap'
 import { CONTRACTS } from '@/lib/contracts'
-import { ArrowDownUp, Loader2, AlertCircle } from 'lucide-react'
+import { ArrowDownUp, Loader2, AlertCircle, Clock } from 'lucide-react'
 import { formatUnits } from 'viem'
 
 const TOKENS = [
@@ -16,13 +15,11 @@ const TOKENS = [
 
 export function SwapCard() {
   const { wallets } = useWallets()
-  const { isUpgraded } = usePorto()
-  const { getQuote, executeSwap, quote, isLoading, error } = useSwap()
+  const { getQuote, quote, isLoading, error, step } = useSwap()
 
   const [sellToken, setSellToken] = useState(TOKENS[0])
   const [buyToken, setBuyToken] = useState(TOKENS[1])
   const [sellAmount, setSellAmount] = useState('')
-  const [txId, setTxId] = useState<string | null>(null)
 
   const privyWallet = wallets.find((w) => w.walletClientType === 'privy')
 
@@ -34,8 +31,8 @@ export function SwapCard() {
 
     const timer = setTimeout(() => {
       getQuote({
-        sellToken: sellToken.address as `0x${string}`,
-        buyToken: buyToken.address as `0x${string}`,
+        sellToken: sellToken.address,
+        buyToken: buyToken.address,
         sellAmount,
         sellDecimals: sellToken.decimals,
       }).catch(console.error)
@@ -44,33 +41,25 @@ export function SwapCard() {
     return () => clearTimeout(timer)
   }, [sellAmount, sellToken, buyToken, getQuote])
 
-  const handleSwap = async () => {
-    if (!privyWallet?.address) return
-
-    try {
-      const id = await executeSwap({
-        sellToken: sellToken.address as `0x${string}`,
-        buyToken: buyToken.address as `0x${string}`,
-        sellAmount,
-        sellDecimals: sellToken.decimals,
-        takerAddress: privyWallet.address,
-      })
-      setTxId(id)
-      setSellAmount('')
-    } catch (err) {
-      console.error('Swap failed:', err)
-    }
-  }
-
   const flipTokens = () => {
     setSellToken(buyToken)
     setBuyToken(sellToken)
     setSellAmount('')
   }
 
+  const formattedReceiveAmount = quote 
+    ? parseFloat(formatUnits(BigInt(quote.buyAmount), buyToken.decimals)).toLocaleString(undefined, { maximumFractionDigits: 6 })
+    : '0.00'
+
   return (
     <div className="bg-[#111111] border border-white/[0.06] rounded-3xl p-5">
-      <h3 className="text-white font-semibold text-lg mb-4">Swap</h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-white font-semibold text-lg">Swap</h3>
+        <div className="flex items-center gap-1 text-yellow-400/70 text-xs bg-yellow-500/10 px-2 py-1 rounded-full">
+          <Clock className="w-3 h-3" />
+          Coming Soon
+        </div>
+      </div>
 
       {/* Sell Input */}
       <div className="bg-white/[0.03] rounded-2xl p-4 mb-2">
@@ -124,7 +113,11 @@ export function SwapCard() {
           </select>
         </div>
         <div className="text-white text-3xl font-semibold">
-          {quote ? formatUnits(BigInt(quote.buyAmount), buyToken.decimals).slice(0, 10) : '0.00'}
+          {isLoading ? (
+            <span className="text-white/30">Loading...</span>
+          ) : (
+            formattedReceiveAmount
+          )}
         </div>
       </div>
 
@@ -136,39 +129,17 @@ export function SwapCard() {
         </div>
       )}
 
-      {/* Success Display */}
-      {txId && (
-        <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 mb-4">
-          <p className="text-green-400 text-sm">Swap submitted! ID: {txId.slice(0, 10)}...</p>
-        </div>
-      )}
-
-      {/* Swap Button */}
-      {!isUpgraded ? (
-        <div className="text-center py-4">
-          <p className="text-white/50 text-sm">Upgrade your wallet to enable swaps</p>
-        </div>
-      ) : (
-        <button
-          onClick={handleSwap}
-          disabled={isLoading || !sellAmount || parseFloat(sellAmount) <= 0}
-          className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-white/10 disabled:text-white/30 text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2"
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Processing...
-            </>
-          ) : (
-            'Swap'
-          )}
-        </button>
-      )}
+      {/* Swap Button - Disabled for now */}
+      <button
+        disabled={true}
+        className="w-full py-4 bg-white/10 text-white/30 font-semibold rounded-2xl cursor-not-allowed flex items-center justify-center gap-2"
+      >
+        Swap Coming Soon
+      </button>
 
       <p className="text-white/30 text-xs text-center mt-3">
-        Gas paid in USDC • 1-click swap via Porto
+        Swaps will be enabled in the next release
       </p>
     </div>
   )
 }
-

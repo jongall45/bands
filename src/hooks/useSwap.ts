@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { encodeFunctionData, parseUnits } from 'viem'
-import { usePorto } from '@/providers/PortoProvider'
+import { parseUnits } from 'viem'
+import { useWriteContract } from 'wagmi'
 import { ERC20_ABI } from '@/lib/contracts'
 import { getSwapQuote, getSwapPrice } from '@/lib/swap-api'
+import { base } from 'wagmi/chains'
 
 interface SwapParams {
   sellToken: `0x${string}`
@@ -14,9 +15,10 @@ interface SwapParams {
 }
 
 export function useSwap() {
-  const { sendCalls, isUpgraded } = usePorto()
+  const { writeContractAsync, writeContract } = useWriteContract()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [step, setStep] = useState<'idle' | 'approving' | 'swapping'>('idle')
   const [quote, setQuote] = useState<{
     buyAmount: string
     price: string
@@ -60,10 +62,6 @@ export function useSwap() {
     sellDecimals,
     takerAddress,
   }: SwapParams & { takerAddress: string }) => {
-    if (!isUpgraded) {
-      throw new Error('Please upgrade your wallet first')
-    }
-
     setIsLoading(true)
     setError(null)
 
@@ -78,35 +76,50 @@ export function useSwap() {
         takerAddress,
       })
 
-      // Build batched transaction: Approve + Swap
-      const calls = [
-        // Call 1: Approve swap router to spend tokens
-        {
-          to: sellToken,
-          data: encodeFunctionData({
-            abi: ERC20_ABI,
-            functionName: 'approve',
-            args: [swapQuote.to, sellAmountWei],
-          }),
-        },
-        // Call 2: Execute swap
-        {
-          to: swapQuote.to,
-          data: swapQuote.data as `0x${string}`,
-          value: BigInt(swapQuote.value || '0'),
-        },
-      ]
+      // Step 1: Approve (if not native token)
+      const isNativeToken = sellToken === '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'
+      
+      if (!isNativeToken) {
+        setStep('approving')
+        await writeContractAsync({
+          address: sellToken,
+          abi: ERC20_ABI,
+          functionName: 'approve',
+          args: [swapQuote.to as `0x${string}`, sellAmountWei],
+          chainId: base.id,
+        })
+      }
 
-      // Execute via Porto (batched, pays gas in USDC)
-      const txId = await sendCalls(calls)
-      return txId
+      // Step 2: Execute swap
+      setStep('swapping')
+      
+      // For the swap, we need to send a raw transaction
+      // This requires using the wallet client directly
+      const response = await fetch('/api/swap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: swapQuote.to,
+          data: swapQuote.data,
+          value: swapQuote.value,
+          from: takerAddress,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Swap execution failed')
+      }
+
+      setStep('idle')
+      return 'success'
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Swap failed')
+      setStep('idle')
       throw err
     } finally {
       setIsLoading(false)
     }
-  }, [sendCalls, isUpgraded])
+  }, [writeContractAsync])
 
   return {
     getQuote,
@@ -114,6 +127,6 @@ export function useSwap() {
     quote,
     isLoading,
     error,
+    step,
   }
 }
-
