@@ -6,7 +6,6 @@ import { WagmiProvider } from '@privy-io/wagmi'
 import { wagmiConfig } from '@/lib/wagmi'
 import { base, baseSepolia } from 'wagmi/chains'
 import { useState } from 'react'
-import { PortoProvider } from '@/providers/PortoProvider'
 
 function SetupRequired() {
   return (
@@ -78,9 +77,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     >
       <QueryClientProvider client={queryClient}>
         <WagmiProvider config={wagmiConfig}>
-          <PortoProvider>
-            {children}
-          </PortoProvider>
+          {children}
         </WagmiProvider>
       </QueryClientProvider>
     </PrivyProvider>

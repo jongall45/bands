@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
-import { UpgradeWalletCard } from '@/components/defi/UpgradeWalletCard'
 import { SwapCard } from '@/components/defi/SwapCard'
 import { YieldCard } from '@/components/defi/YieldCard'
 import { BridgeCard } from '@/components/defi/BridgeCard'
@@ -72,9 +71,6 @@ export default function DeFiPage() {
         </div>
 
         <div className="px-5 space-y-5">
-          {/* Upgrade Card - Always show at top */}
-          <UpgradeWalletCard />
-
           {/* Tab Content */}
           {activeTab === 'yield' && (
             <div className="space-y-4">
