@@ -50,7 +50,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient())
   const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID
 
-  // Show setup screen if Privy App ID is not configured
   if (!privyAppId || privyAppId === 'your-privy-app-id-here') {
     return <SetupRequired />
   }
@@ -65,21 +64,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
           logo: '/logo.svg',
           showWalletLoginFirst: false,
         },
-        // Login methods - social + Coinbase Smart Wallet
-        loginMethods: ['email', 'google', 'apple', 'twitter', 'wallet'],
-        // Embedded wallet config
+        loginMethods: ['email', 'google', 'apple', 'twitter'],
         embeddedWallets: {
           ethereum: {
             createOnLogin: 'users-without-wallets',
           },
         },
-        // External wallets - enable Coinbase Smart Wallet
-        externalWallets: {
-          coinbaseWallet: {
-            connectionOptions: 'smartWalletOnly', // Force smart wallet (gas sponsored)
-          },
-        },
-        // Chain config
         defaultChain: base,
         supportedChains: [base, baseSepolia],
       }}
