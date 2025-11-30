@@ -3,7 +3,6 @@
 import { usePrivy } from '@privy-io/react-auth'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
-import { ArrowRight, Shield, Zap, Wallet, DollarSign } from 'lucide-react'
 
 export default function Home() {
   const { login, authenticated, ready } = usePrivy()
@@ -15,91 +14,78 @@ export default function Home() {
     }
   }, [ready, authenticated, router])
 
-  const features = [
-    { 
-      icon: Shield, 
-      title: 'Self-Custodial', 
-      desc: 'Your keys. Your coins. Always.' 
-    },
-    { 
-      icon: Zap, 
-      title: 'Instant', 
-      desc: 'Transfers settle in seconds.' 
-    },
-    { 
-      icon: Wallet, 
-      title: 'Zero Gas', 
-      desc: 'We cover all fees.' 
-    },
-  ]
-
   return (
-    <main className="min-h-screen bg-dark-gradient flex flex-col items-center justify-center px-6 py-12 relative overflow-hidden">
-      {/* Ambient red glow effects */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-[#D32F2F]/5 rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-[#D32F2F]/3 rounded-full blur-[100px]" />
-      </div>
-
-      {/* Hero Section */}
-      <div className="text-center max-w-xl relative z-10 animate-slide-in">
-        {/* Logo Mark */}
-        <div className="inline-flex items-center justify-center w-20 h-20 neu-card mb-8">
-          <DollarSign className="w-10 h-10 text-[#D32F2F]" strokeWidth={2.5} />
+    <main className="min-h-screen bg-[#121212] flex items-center justify-center p-6 overflow-hidden">
+      {/* Hero Container - Neumorphic Card */}
+      <div className="relative w-full max-w-[1200px] h-[80vh] rounded-[20px] bg-[#202020] overflow-hidden
+                      shadow-[10px_10px_30px_rgba(0,0,0,0.5),-10px_-10px_30px_rgba(50,50,50,0.1)]">
+        
+        {/* Money Background Visual */}
+        <div className="absolute inset-0 z-0 overflow-hidden">
+          <img 
+            src="/money-bg.jpg" 
+            alt="Money flying"
+            className="absolute bottom-[-15%] left-1/2 -translate-x-1/2 w-[120%] h-auto max-h-full
+                       object-contain opacity-50 mix-blend-screen
+                       grayscale brightness-150 saturate-150"
+          />
         </div>
 
-        {/* Brand */}
-        <h1 className="text-6xl md:text-8xl font-bold tracking-tight mb-4">
-          <span className="text-[#D32F2F]">bands</span>
-        </h1>
-        
-        <p className="text-lg md:text-xl text-[#A0A0A0] mb-4 font-medium">
-          Stablecoin Neobank
-        </p>
-
-        {/* Tagline */}
-        <p className="text-2xl md:text-3xl text-white mb-12 font-semibold leading-tight">
-          Move money like the internet
-          <br />
-          <span className="text-[#606060]">intended.</span>
-        </p>
-
-        {/* CTA Button - Neo-Brutalist Red */}
-        <button
-          onClick={login}
-          className="group btn-bands-red px-10 py-5 text-lg font-semibold inline-flex items-center gap-3"
-        >
-          Create Account
-          <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-        </button>
-
-        {/* Subtext */}
-        <p className="text-sm text-[#606060] mt-6">
-          No wallet needed · Sign in with email
-        </p>
-      </div>
-
-      {/* Features - Neumorphic Cards */}
-      <div className="grid md:grid-cols-3 gap-6 mt-20 max-w-3xl w-full relative z-10">
-        {features.map((feature, i) => (
-          <div
-            key={feature.title}
-            className="neu-card p-6 text-center hover:-translate-y-1 transition-transform duration-300"
-            style={{ animationDelay: `${i * 100}ms` }}
-          >
-            <div className="w-14 h-14 mx-auto mb-4 neu-pressed flex items-center justify-center">
-              <feature.icon className="w-7 h-7 text-[#D32F2F]" />
+        {/* Navbar */}
+        <header className="relative z-10 p-10 pb-0">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-[#D32F2F] flex items-center justify-center
+                            shadow-[0_0_20px_rgba(211,47,47,0.5)]">
+              <span className="text-white font-bold text-2xl">$</span>
             </div>
-            <h3 className="font-bold text-lg mb-2 text-white">{feature.title}</h3>
-            <p className="text-[#606060] text-sm">{feature.desc}</p>
+            <span className="text-white font-bold text-2xl tracking-tight" style={{ fontFamily: "'Archivo Black', sans-serif" }}>
+              bands
+            </span>
           </div>
-        ))}
-      </div>
+        </header>
 
-      {/* Footer */}
-      <footer className="absolute bottom-8 text-center text-sm text-[#606060] z-10">
-        Built on <span className="text-[#D32F2F]">Base</span> · Secured by Privy
-      </footer>
+        {/* Hero Content */}
+        <div className="relative z-10 flex flex-col items-start justify-center h-[60%] px-10 md:px-16">
+          {/* MAKE IT RAIN Headline */}
+          <h1 
+            className="text-5xl md:text-7xl lg:text-[5.5rem] font-black text-white uppercase leading-tight mb-5"
+            style={{ 
+              fontFamily: "'Archivo Black', sans-serif",
+              textShadow: '0 0 15px #D32F2F, 0 0 30px rgba(211, 47, 47, 0.5)'
+            }}
+          >
+            MAKE IT<br />RAIN
+          </h1>
+
+          {/* Subtext */}
+          <p className="text-white/80 text-lg md:text-xl mb-12 font-mono max-w-md">
+            The Stablecoin Neobank for the New Economy
+          </p>
+
+          {/* JOIN Button */}
+          <button
+            onClick={login}
+            className="relative px-12 py-4 text-xl font-black text-white uppercase rounded-xl
+                       bg-[#D32F2F] cursor-pointer z-10 transition-all duration-200
+                       shadow-[0_0_15px_rgba(211,47,47,0.5),inset_0_0_5px_rgba(255,255,255,0.2)]
+                       hover:shadow-[0_0_25px_#D32F2F,0_0_50px_rgba(211,47,47,0.5)]
+                       hover:-translate-y-0.5
+                       active:shadow-[inset_5px_5px_10px_rgba(0,0,0,0.4),inset_-5px_-5px_10px_rgba(50,50,50,0.1)]
+                       active:translate-y-0"
+            style={{ fontFamily: "'Archivo Black', sans-serif" }}
+          >
+            JOIN
+          </button>
+
+          {/* Small subtext */}
+          <p className="text-white/40 text-sm mt-6 font-mono">
+            No wallet needed · Sign in with email
+          </p>
+        </div>
+
+        {/* Bottom gradient fade */}
+        <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#202020] to-transparent z-[2]" />
+      </div>
     </main>
   )
 }
