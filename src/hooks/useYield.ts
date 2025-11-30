@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { parseUnits, formatUnits } from 'viem'
-import { useReadContracts, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { useReadContracts, useWriteContract } from 'wagmi'
 import { ERC20_ABI, VAULT_ABI, AAVE_POOL_ABI } from '@/lib/contracts'
 import { YieldVault } from '@/lib/yield-vaults'
 import { base } from 'wagmi/chains'
@@ -12,13 +12,10 @@ export function useYield(vault: YieldVault, userAddress?: `0x${string}`) {
   const [error, setError] = useState<string | null>(null)
   const [step, setStep] = useState<'idle' | 'approving' | 'depositing' | 'withdrawing'>('idle')
 
-  // Write contract hooks
   const { writeContractAsync } = useWriteContract()
 
-  // Read user's balance in the vault and underlying token
   const { data: balances, refetch: refetchBalances } = useReadContracts({
     contracts: [
-      // User's vault balance (shares)
       {
         address: vault.address,
         abi: VAULT_ABI,
@@ -26,7 +23,6 @@ export function useYield(vault: YieldVault, userAddress?: `0x${string}`) {
         args: userAddress ? [userAddress] : undefined,
         chainId: base.id,
       },
-      // User's underlying token balance
       {
         address: vault.underlyingToken,
         abi: ERC20_ABI,
@@ -34,7 +30,6 @@ export function useYield(vault: YieldVault, userAddress?: `0x${string}`) {
         args: userAddress ? [userAddress] : undefined,
         chainId: base.id,
       },
-      // Current allowance
       {
         address: vault.underlyingToken,
         abi: ERC20_ABI,
@@ -60,7 +55,6 @@ export function useYield(vault: YieldVault, userAddress?: `0x${string}`) {
     ? formatUnits(tokenBalance, vault.underlyingDecimals)
     : '0'
 
-  // Deposit into vault (2 transactions: approve + deposit)
   const deposit = useCallback(async (amount: string) => {
     if (!userAddress) {
       throw new Error('Wallet not connected')
@@ -71,13 +65,10 @@ export function useYield(vault: YieldVault, userAddress?: `0x${string}`) {
 
     try {
       const amountWei = parseUnits(amount, vault.underlyingDecimals)
-
-      // Check if we need to approve
       const needsApproval = !currentAllowance || currentAllowance < amountWei
 
       if (needsApproval) {
         setStep('approving')
-        // Approve vault to spend tokens
         await writeContractAsync({
           address: vault.underlyingToken,
           abi: ERC20_ABI,
@@ -88,8 +79,6 @@ export function useYield(vault: YieldVault, userAddress?: `0x${string}`) {
       }
 
       setStep('depositing')
-      
-      // Check if this is Aave (different interface)
       const isAave = vault.protocol === 'Aave'
 
       if (isAave) {
@@ -123,7 +112,6 @@ export function useYield(vault: YieldVault, userAddress?: `0x${string}`) {
     }
   }, [writeContractAsync, userAddress, vault, refetchBalances, currentAllowance])
 
-  // Withdraw from vault
   const withdraw = useCallback(async (amount: string) => {
     if (!userAddress) {
       throw new Error('Wallet not connected')

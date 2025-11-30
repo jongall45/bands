@@ -63,7 +63,6 @@ export function YieldCard({ vault }: YieldCardProps) {
 
   return (
     <div className="bg-[#111111] border border-white/[0.06] rounded-2xl p-4 hover:border-white/[0.12] transition-all">
-      {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-xl flex items-center justify-center text-xl">
@@ -83,13 +82,11 @@ export function YieldCard({ vault }: YieldCardProps) {
         </div>
       </div>
 
-      {/* Risk Badge */}
       <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs ${riskColors.bg} ${riskColors.text} ${riskColors.border} border mb-4`}>
         <Shield className="w-3 h-3" />
         {vault.risk.charAt(0).toUpperCase() + vault.risk.slice(1)} Risk
       </div>
 
-      {/* User Position */}
       {hasDeposit && (
         <div className="bg-white/[0.03] rounded-xl p-3 mb-4">
           <div className="flex justify-between items-center">
@@ -101,7 +98,6 @@ export function YieldCard({ vault }: YieldCardProps) {
         </div>
       )}
 
-      {/* Mode Toggle */}
       <div className="flex gap-2 mb-4">
         <button
           onClick={() => setMode('deposit')}
@@ -128,7 +124,6 @@ export function YieldCard({ vault }: YieldCardProps) {
         </button>
       </div>
 
-      {/* Amount Input */}
       <div className="bg-white/[0.03] rounded-xl p-3 mb-4">
         <div className="flex justify-between items-center mb-2">
           <span className="text-white/40 text-sm">Amount</span>
@@ -151,7 +146,6 @@ export function YieldCard({ vault }: YieldCardProps) {
         </div>
       </div>
 
-      {/* Error Display */}
       {error && (
         <div className="flex items-center gap-2 text-red-400 text-sm mb-4 bg-red-500/10 rounded-xl p-3">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -159,7 +153,6 @@ export function YieldCard({ vault }: YieldCardProps) {
         </div>
       )}
 
-      {/* Success Display */}
       {txSuccess && (
         <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 mb-4">
           <p className="text-green-400 text-sm">
@@ -168,7 +161,6 @@ export function YieldCard({ vault }: YieldCardProps) {
         </div>
       )}
 
-      {/* Action Button */}
       <button
         onClick={handleAction}
         disabled={isLoading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > parseFloat(maxAmount)}
@@ -192,7 +184,7 @@ export function YieldCard({ vault }: YieldCardProps) {
       </button>
 
       <p className="text-white/30 text-xs text-center mt-3">
-        {step === 'approving' ? 'Step 1/2: Approving token...' : 'Requires ETH for gas'}
+        Requires ETH for gas
       </p>
     </div>
   )

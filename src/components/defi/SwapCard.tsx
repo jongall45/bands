@@ -1,10 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useWallets } from '@privy-io/react-auth'
 import { useSwap } from '@/hooks/useSwap'
 import { CONTRACTS } from '@/lib/contracts'
-import { ArrowDownUp, Loader2, AlertCircle, Clock } from 'lucide-react'
+import { ArrowDownUp, Clock } from 'lucide-react'
 import { formatUnits } from 'viem'
 
 const TOKENS = [
@@ -14,16 +13,12 @@ const TOKENS = [
 ]
 
 export function SwapCard() {
-  const { wallets } = useWallets()
-  const { getQuote, quote, isLoading, error, step } = useSwap()
+  const { getQuote, quote, isLoading } = useSwap()
 
   const [sellToken, setSellToken] = useState(TOKENS[0])
   const [buyToken, setBuyToken] = useState(TOKENS[1])
   const [sellAmount, setSellAmount] = useState('')
 
-  const privyWallet = wallets.find((w) => w.walletClientType === 'privy')
-
-  // Get quote when amount changes
   useEffect(() => {
     if (!sellAmount || parseFloat(sellAmount) <= 0) {
       return
@@ -61,7 +56,6 @@ export function SwapCard() {
         </div>
       </div>
 
-      {/* Sell Input */}
       <div className="bg-white/[0.03] rounded-2xl p-4 mb-2">
         <div className="flex justify-between items-center mb-2">
           <span className="text-white/40 text-sm">You pay</span>
@@ -86,7 +80,6 @@ export function SwapCard() {
         />
       </div>
 
-      {/* Flip Button */}
       <div className="flex justify-center -my-2 relative z-10">
         <button
           onClick={flipTokens}
@@ -96,7 +89,6 @@ export function SwapCard() {
         </button>
       </div>
 
-      {/* Buy Output */}
       <div className="bg-white/[0.03] rounded-2xl p-4 mt-2 mb-4">
         <div className="flex justify-between items-center mb-2">
           <span className="text-white/40 text-sm">You receive</span>
@@ -121,15 +113,6 @@ export function SwapCard() {
         </div>
       </div>
 
-      {/* Error Display */}
-      {error && (
-        <div className="flex items-center gap-2 text-red-400 text-sm mb-4 bg-red-500/10 rounded-xl p-3">
-          <AlertCircle className="w-4 h-4" />
-          {error}
-        </div>
-      )}
-
-      {/* Swap Button - Disabled for now */}
       <button
         disabled={true}
         className="w-full py-4 bg-white/10 text-white/30 font-semibold rounded-2xl cursor-not-allowed flex items-center justify-center gap-2"
@@ -138,7 +121,7 @@ export function SwapCard() {
       </button>
 
       <p className="text-white/30 text-xs text-center mt-3">
-        Swaps will be enabled in the next release
+        Swaps will be enabled in a future release
       </p>
     </div>
   )

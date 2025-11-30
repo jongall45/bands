@@ -4,23 +4,21 @@ import { useState, useEffect } from 'react'
 import { useWallets } from '@privy-io/react-auth'
 import { useBridge } from '@/hooks/useBridge'
 import { SUPPORTED_CHAINS, BRIDGE_TOKENS, Chain, Token } from '@/lib/bridge-api'
-import { ArrowRight, AlertCircle, Clock, Zap, ArrowDownUp } from 'lucide-react'
+import { ArrowRight, Clock, ArrowDownUp } from 'lucide-react'
 import { formatUnits } from 'viem'
 
 export function BridgeCard() {
   const { wallets } = useWallets()
-  const { getQuote, quote, isQuoting, error, formatDuration } = useBridge()
+  const { getQuote, quote, isQuoting, formatDuration } = useBridge()
 
   const privyWallet = wallets.find((w) => w.walletClientType === 'privy')
 
-  // State
-  const [fromChain, setFromChain] = useState<Chain>(SUPPORTED_CHAINS[0]) // Base
-  const [toChain, setToChain] = useState<Chain>(SUPPORTED_CHAINS[1]) // Ethereum
-  const [fromToken, setFromToken] = useState<Token>(BRIDGE_TOKENS[8453][0]) // USDC on Base
-  const [toToken, setToToken] = useState<Token>(BRIDGE_TOKENS[1][0]) // USDC on Ethereum
+  const [fromChain, setFromChain] = useState<Chain>(SUPPORTED_CHAINS[0])
+  const [toChain, setToChain] = useState<Chain>(SUPPORTED_CHAINS[1])
+  const [fromToken, setFromToken] = useState<Token>(BRIDGE_TOKENS[8453][0])
+  const [toToken, setToToken] = useState<Token>(BRIDGE_TOKENS[1][0])
   const [amount, setAmount] = useState('')
 
-  // Update tokens when chain changes
   useEffect(() => {
     const tokens = BRIDGE_TOKENS[fromChain.id]
     if (tokens) {
@@ -35,7 +33,6 @@ export function BridgeCard() {
     }
   }, [toChain])
 
-  // Get quote when amount changes
   useEffect(() => {
     if (!amount || parseFloat(amount) <= 0 || !privyWallet?.address) {
       return
@@ -74,16 +71,12 @@ export function BridgeCard() {
     <div className="bg-[#111111] border border-white/[0.06] rounded-3xl p-5">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-white font-semibold text-lg">Bridge</h3>
-        <div className="flex items-center gap-2">
-          <span className="text-white/40 text-xs">Powered by LI.FI</span>
-          <div className="flex items-center gap-1 text-yellow-400/70 text-xs bg-yellow-500/10 px-2 py-1 rounded-full">
-            <Clock className="w-3 h-3" />
-            Coming Soon
-          </div>
+        <div className="flex items-center gap-1 text-yellow-400/70 text-xs bg-yellow-500/10 px-2 py-1 rounded-full">
+          <Clock className="w-3 h-3" />
+          Coming Soon
         </div>
       </div>
 
-      {/* From Section */}
       <div className="bg-white/[0.03] rounded-2xl p-4 mb-2">
         <div className="flex justify-between items-center mb-3">
           <span className="text-white/40 text-sm">From</span>
@@ -122,7 +115,6 @@ export function BridgeCard() {
         </div>
       </div>
 
-      {/* Flip Button */}
       <div className="flex justify-center -my-2 relative z-10">
         <button
           onClick={flipChains}
@@ -132,7 +124,6 @@ export function BridgeCard() {
         </button>
       </div>
 
-      {/* To Section */}
       <div className="bg-white/[0.03] rounded-2xl p-4 mt-2 mb-4">
         <div className="flex justify-between items-center mb-3">
           <span className="text-white/40 text-sm">To</span>
@@ -171,7 +162,6 @@ export function BridgeCard() {
         </div>
       </div>
 
-      {/* Quote Details */}
       {quote && (
         <div className="bg-white/[0.02] rounded-xl p-3 mb-4 space-y-2">
           <div className="flex justify-between text-sm">
@@ -194,15 +184,6 @@ export function BridgeCard() {
         </div>
       )}
 
-      {/* Error Display */}
-      {error && (
-        <div className="flex items-center gap-2 text-red-400 text-sm mb-4 bg-red-500/10 rounded-xl p-3">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
-          {error}
-        </div>
-      )}
-
-      {/* Bridge Button - Disabled for now */}
       <button
         disabled={true}
         className="w-full py-4 bg-white/10 text-white/30 font-semibold rounded-2xl cursor-not-allowed flex items-center justify-center gap-2"
@@ -211,7 +192,7 @@ export function BridgeCard() {
       </button>
 
       <p className="text-white/30 text-xs text-center mt-3">
-        Cross-chain bridging will be enabled in the next release
+        Cross-chain bridging will be enabled in a future release
       </p>
     </div>
   )
