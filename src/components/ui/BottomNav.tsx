@@ -1,15 +1,13 @@
 'use client'
 
-import { Home, Send, QrCode, Wallet, Settings } from 'lucide-react'
+import { Home, TrendingUp, Wallet } from 'lucide-react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 
 const navItems = [
   { href: '/dashboard', icon: Home, label: 'Home' },
-  { href: '/send', icon: Send, label: 'Send' },
-  { href: '/receive', icon: QrCode, label: 'Receive' },
-  { href: '/wallet', icon: Wallet, label: 'Wallet' },
-  { href: '/settings', icon: Settings, label: 'Settings' },
+  { href: '/defi', icon: TrendingUp, label: 'DeFi' },
+  { href: '/speculate', icon: Wallet, label: 'Speculate' },
 ]
 
 export function BottomNav() {
@@ -50,4 +48,3 @@ export function BottomNav() {
     </div>
   )
 }
-
