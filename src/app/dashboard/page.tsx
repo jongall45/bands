@@ -9,9 +9,13 @@ import { base } from 'wagmi/chains'
 import { USDC_ADDRESS, USDC_DECIMALS, ERC20_ABI } from '@/lib/wagmi'
 import { 
   ArrowUpRight, ArrowDownLeft, Copy, Check, LogOut, 
-  Send, RefreshCw, X, ExternalLink,
-  Home, CreditCard, PiggyBank, DollarSign, Plus, Wallet
+  Send, RefreshCw, X, ExternalLink, Plus, Wallet,
+  Home, QrCode, Settings
 } from 'lucide-react'
+import { Logo } from '@/components/ui/Logo'
+import { Button } from '@/components/ui/Button'
+import { Card, CardInner } from '@/components/ui/Card'
+import { Modal } from '@/components/ui/Modal'
 
 export default function Dashboard() {
   const { ready, authenticated, user, logout } = usePrivy()
@@ -23,12 +27,11 @@ export default function Dashboard() {
   const [sendTo, setSendTo] = useState('')
   const [sendAmount, setSendAmount] = useState('')
   const [addressError, setAddressError] = useState('')
-  const [activeNav, setActiveNav] = useState('home')
 
   const embeddedWallet = wallets.find((w) => w.walletClientType === 'privy')
   const address = embeddedWallet?.address as `0x${string}` | undefined
 
-  // Privy fiat onramp - supports Apple Pay, Google Pay, cards via MoonPay
+  // Privy fiat onramp
   const { fundWallet } = useFundWallet()
 
   const handleAddFunds = async () => {
@@ -124,66 +127,51 @@ export default function Dashboard() {
 
   if (!ready) {
     return (
-      <div className="min-h-screen bg-dark-gradient flex items-center justify-center">
+      <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 neu-card flex items-center justify-center">
-            <RefreshCw className="w-6 h-6 text-[#D32F2F] animate-spin" />
+          <div className="w-12 h-12 rounded-2xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center">
+            <RefreshCw className="w-6 h-6 text-[#ef4444] animate-spin" />
           </div>
-          <p className="text-[#606060]">Loading your wallet...</p>
+          <p className="text-white/40">Loading your wallet...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <main className="min-h-screen bg-dark-gradient pb-24">
+    <main className="min-h-screen bg-black pb-32">
       {/* Header */}
       <header className="px-6 py-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">
-            <span className="text-[#D32F2F]">bands</span>
-          </h1>
-          {user?.email?.address && (
-            <p className="text-xs text-[#606060] mt-1 font-mono">
-              {user.email.address}
-            </p>
-          )}
-        </div>
+        <Logo size="md" />
         <button
           onClick={logout}
-          className="neu-button p-3 group"
+          className="p-3 rounded-full bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-white/[0.1] transition-all"
           title="Sign out"
         >
-          <LogOut className="w-5 h-5 text-[#606060] group-hover:text-white transition-colors" />
+          <LogOut className="w-5 h-5 text-white/40 hover:text-white transition-colors" strokeWidth={1.5} />
         </button>
       </header>
 
-      {/* Balance Orb */}
-      <div className="px-6 py-8">
-        <div className="relative mx-auto w-64 h-64">
-          {/* Outer glow ring */}
-          <div className="absolute inset-0 rounded-full bg-[#D32F2F]/10 blur-xl" />
+      {/* Balance Display */}
+      <div className="px-6 py-12">
+        <div className="text-center">
+          <p className="text-white/40 text-sm mb-3">Total Balance</p>
+          {balanceLoading ? (
+            <div className="h-16 w-48 mx-auto shimmer rounded-2xl" />
+          ) : (
+            <h1 className="text-6xl md:text-7xl font-semibold text-white tracking-tight font-mono">
+              ${formattedBalance}
+            </h1>
+          )}
+          <p className="text-[#ef4444] text-sm mt-3 font-medium">USDC on Base</p>
           
-          {/* Main orb */}
-          <div className="balance-orb absolute inset-4 rounded-full flex flex-col items-center justify-center">
-            <span className="text-sm text-[#606060] mb-1">Total Balance</span>
-            {balanceLoading ? (
-              <div className="h-10 w-32 shimmer rounded-lg" />
-            ) : (
-              <span className="text-4xl font-bold font-mono text-white">
-                ${formattedBalance}
-              </span>
-            )}
-            <span className="text-sm text-[#D32F2F] mt-1 font-medium">USDC</span>
-          </div>
-
-          {/* Refresh button */}
+          {/* Refresh */}
           <button 
             onClick={() => refetchBalance()}
-            className="absolute top-4 right-4 p-2 neu-button rounded-full"
+            className="mt-4 p-2 rounded-full hover:bg-white/[0.05] transition-colors inline-flex"
             title="Refresh"
           >
-            <RefreshCw className={`w-4 h-4 text-[#606060] ${balanceLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 text-white/40 ${balanceLoading ? 'animate-spin' : ''}`} strokeWidth={1.5} />
           </button>
         </div>
       </div>
@@ -192,24 +180,25 @@ export default function Dashboard() {
       <div className="px-6 mb-8">
         <button
           onClick={copyAddress}
-          className="w-full neu-pressed px-4 py-3 flex items-center justify-between group"
+          className="w-full bg-white/[0.02] border border-white/[0.06] rounded-2xl px-5 py-4 flex items-center justify-between hover:bg-white/[0.04] hover:border-white/[0.1] transition-all group"
         >
-          <span className="text-sm text-[#606060] font-mono truncate">
+          <span className="text-white/50 font-mono text-sm">
             {address?.slice(0, 12)}...{address?.slice(-10)}
           </span>
           {copied ? (
-            <span className="flex items-center gap-1 text-[#69F0AE] text-sm">
+            <span className="flex items-center gap-2 text-[#22c55e] text-sm">
               <Check className="w-4 h-4" />
+              Copied
             </span>
           ) : (
-            <Copy className="w-4 h-4 text-[#606060] group-hover:text-white transition-colors" />
+            <Copy className="w-4 h-4 text-white/30 group-hover:text-white/60 transition-colors" strokeWidth={1.5} />
           )}
         </button>
         <a
           href={`https://basescan.org/address/${address}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center justify-center gap-2 mt-3 text-xs text-[#606060] hover:text-[#D32F2F] transition-colors"
+          className="flex items-center justify-center gap-2 mt-3 text-xs text-white/30 hover:text-white/60 transition-colors"
         >
           View on BaseScan
           <ExternalLink className="w-3 h-3" />
@@ -217,246 +206,210 @@ export default function Dashboard() {
       </div>
 
       {/* Action Buttons */}
-      <div className="px-6 grid grid-cols-3 gap-3 mb-8">
+      <div className="px-6 space-y-3 mb-8">
         {/* Add Funds - Primary CTA */}
-        <button
+        <Button
+          variant="primary"
+          size="lg"
           onClick={handleAddFunds}
-          className="btn-bands-red py-4 flex flex-col items-center justify-center gap-2 font-semibold col-span-3"
+          className="w-full flex-col gap-1 py-5"
         >
-          <div className="flex items-center gap-2">
+          <span className="flex items-center gap-2">
             <Plus className="w-5 h-5" />
             Add Funds
-          </div>
-          <span className="text-xs opacity-80 font-normal">Apple Pay • Card • Crypto</span>
-        </button>
+          </span>
+          <span className="text-xs opacity-70 font-normal">Apple Pay • Card • Crypto</span>
+        </Button>
         
-        <button
-          onClick={() => setShowSend(true)}
-          className="neu-button py-4 flex flex-col items-center justify-center gap-1 font-semibold text-white"
-        >
-          <ArrowUpRight className="w-5 h-5 text-[#D32F2F]" />
-          <span className="text-sm">Send</span>
-        </button>
-        <button
-          onClick={() => setShowReceive(true)}
-          className="neu-button py-4 flex flex-col items-center justify-center gap-1 font-semibold text-white"
-        >
-          <ArrowDownLeft className="w-5 h-5 text-[#69F0AE]" />
-          <span className="text-sm">Receive</span>
-        </button>
-        <button
-          onClick={handleAddFunds}
-          className="neu-button py-4 flex flex-col items-center justify-center gap-1 font-semibold text-white"
-        >
-          <Wallet className="w-5 h-5 text-[#D32F2F]" />
-          <span className="text-sm">Buy</span>
-        </button>
-      </div>
-
-      {/* Transaction History Placeholder */}
-      <div className="px-6">
-        <div className="neu-card p-6">
-          <h2 className="font-bold text-lg mb-4 text-white">Recent Activity</h2>
-          <div className="text-center py-8">
-            <div className="w-16 h-16 mx-auto mb-4 neu-pressed rounded-full flex items-center justify-center">
-              <DollarSign className="w-8 h-8 text-[#606060]" />
-            </div>
-            <p className="text-[#606060] text-sm">No transactions yet</p>
-            <p className="text-[#404040] text-xs mt-1">Send or receive to get started</p>
-          </div>
+        {/* Secondary Actions */}
+        <div className="grid grid-cols-3 gap-3">
+          <Button
+            variant="secondary"
+            onClick={() => setShowSend(true)}
+            className="flex-col gap-2 py-4"
+          >
+            <ArrowUpRight className="w-5 h-5 text-[#ef4444]" strokeWidth={1.5} />
+            <span className="text-sm">Send</span>
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => setShowReceive(true)}
+            className="flex-col gap-2 py-4"
+          >
+            <ArrowDownLeft className="w-5 h-5 text-[#22c55e]" strokeWidth={1.5} />
+            <span className="text-sm">Receive</span>
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={handleAddFunds}
+            className="flex-col gap-2 py-4"
+          >
+            <Wallet className="w-5 h-5 text-[#ef4444]" strokeWidth={1.5} />
+            <span className="text-sm">Buy</span>
+          </Button>
         </div>
       </div>
 
-      {/* Bottom Navigation */}
-      <nav className="bottom-nav fixed bottom-0 left-0 right-0 px-6 py-4">
-        <div className="max-w-lg mx-auto flex items-center justify-around">
+      {/* Recent Activity */}
+      <div className="px-6">
+        <Card variant="default" className="p-6">
+          <h2 className="font-semibold text-lg mb-4 text-white">Recent Activity</h2>
+          <div className="text-center py-12">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/[0.03] border border-white/[0.06] flex items-center justify-center">
+              <Send className="w-7 h-7 text-white/20" strokeWidth={1.5} />
+            </div>
+            <p className="text-white/40 text-sm">No transactions yet</p>
+            <p className="text-white/20 text-xs mt-1">Send or receive to get started</p>
+          </div>
+        </Card>
+      </div>
+
+      {/* Bottom Navigation - Floating Pill */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+        <nav className="flex items-center gap-1 p-2 bg-[#111]/90 backdrop-blur-xl border border-white/[0.08] rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
           {[
-            { id: 'home', icon: Home, label: 'Home' },
-            { id: 'send', icon: Send, label: 'Send' },
-            { id: 'cards', icon: CreditCard, label: 'Cards' },
-            { id: 'savings', icon: PiggyBank, label: 'Savings' },
-          ].map((item) => (
+            { icon: Home, label: 'Home', active: true },
+            { icon: Send, label: 'Send', onClick: () => setShowSend(true) },
+            { icon: QrCode, label: 'Receive', onClick: () => setShowReceive(true) },
+            { icon: Wallet, label: 'Wallet' },
+            { icon: Settings, label: 'Settings' },
+          ].map((item, i) => (
             <button
-              key={item.id}
-              onClick={() => {
-                setActiveNav(item.id)
-                if (item.id === 'send') setShowSend(true)
-              }}
-              className={`nav-item relative flex flex-col items-center gap-1 p-2 ${
-                activeNav === item.id ? 'active' : ''
+              key={i}
+              onClick={item.onClick}
+              className={`relative p-3 rounded-full transition-all duration-200 ${
+                item.active 
+                  ? 'bg-white/[0.1] text-white' 
+                  : 'text-white/40 hover:text-white/70 hover:bg-white/[0.05]'
               }`}
+              title={item.label}
             >
-              <item.icon className="w-5 h-5" />
-              <span className="text-xs">{item.label}</span>
+              <item.icon className="w-5 h-5" strokeWidth={item.active ? 2 : 1.5} />
+              {item.active && (
+                <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-white rounded-full" />
+              )}
             </button>
           ))}
-        </div>
-      </nav>
+        </nav>
+      </div>
 
       {/* Send Modal */}
-      {showSend && (
-        <div
-          className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4"
-          onClick={() => !isPending && !isConfirming && setShowSend(false)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md neu-card p-6 animate-slide-in"
-          >
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-[#D32F2F]/20 flex items-center justify-center">
-                  <Send className="w-4 h-4 text-[#D32F2F]" />
-                </div>
-                Send USDC
-              </h2>
+      <Modal isOpen={showSend} onClose={() => !isPending && !isConfirming && setShowSend(false)} title="Send USDC">
+        <div className="space-y-5">
+          {/* Recipient */}
+          <div>
+            <label className="block text-white/40 text-sm mb-2 font-medium">Recipient Address</label>
+            <div className={`
+              bg-white/[0.03] rounded-2xl border transition-all duration-200
+              ${addressError ? 'border-red-500/50' : 'border-white/[0.06] focus-within:border-white/20'}
+            `}>
+              <input
+                type="text"
+                value={sendTo}
+                onChange={(e) => {
+                  setSendTo(e.target.value)
+                  validateAddress(e.target.value)
+                }}
+                placeholder="0x..."
+                disabled={isPending || isConfirming}
+                className="w-full bg-transparent px-5 py-4 text-white font-mono text-sm placeholder:text-white/30 focus:outline-none"
+              />
+            </div>
+            {addressError && <p className="mt-2 text-sm text-red-400">{addressError}</p>}
+          </div>
+
+          {/* Amount */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-white/40 text-sm font-medium">Amount</label>
               <button 
-                onClick={() => !isPending && !isConfirming && setShowSend(false)}
-                className="neu-button p-2"
+                onClick={setMaxAmount}
+                className="text-xs text-[#ef4444] hover:text-[#dc2626] font-semibold transition-colors"
                 disabled={isPending || isConfirming}
               >
-                <X className="w-5 h-5 text-[#606060]" />
+                MAX
               </button>
             </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm text-[#606060] mb-2 block">Recipient Address</label>
+            <CardInner className="p-5">
+              <div className="flex items-center gap-4">
                 <input
                   type="text"
-                  value={sendTo}
-                  onChange={(e) => {
-                    setSendTo(e.target.value)
-                    validateAddress(e.target.value)
-                  }}
-                  placeholder="0x..."
+                  inputMode="decimal"
+                  value={sendAmount}
+                  onChange={(e) => setSendAmount(e.target.value)}
+                  placeholder="0.00"
                   disabled={isPending || isConfirming}
-                  className="w-full px-4 py-3 neu-input font-mono text-sm"
+                  className="flex-1 bg-transparent text-4xl font-semibold text-white placeholder:text-white/20 focus:outline-none"
                 />
-                {addressError && (
-                  <p className="text-[#D32F2F] text-xs mt-1">{addressError}</p>
-                )}
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm text-[#606060]">Amount</label>
-                  <button 
-                    onClick={setMaxAmount}
-                    className="text-xs text-[#D32F2F] hover:text-[#E53935] transition-colors font-semibold"
-                    disabled={isPending || isConfirming}
-                  >
-                    MAX
-                  </button>
+                <div className="flex items-center gap-2 bg-white/[0.06] rounded-full px-4 py-2">
+                  <div className="w-6 h-6 rounded-full bg-[#2775ca] flex items-center justify-center">
+                    <span className="text-white text-xs font-bold">$</span>
+                  </div>
+                  <span className="text-white font-medium">USDC</span>
                 </div>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={sendAmount}
-                    onChange={(e) => setSendAmount(e.target.value)}
-                    placeholder="0.00"
-                    step="0.01"
-                    min="0"
-                    disabled={isPending || isConfirming}
-                    className="w-full px-4 py-3 pr-20 neu-input font-mono text-lg"
-                  />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[#606060] font-medium">
-                    USDC
-                  </span>
-                </div>
-                <p className="text-xs text-[#606060] mt-2">
-                  Available: <span className="text-[#69F0AE]">${formattedBalance}</span>
-                </p>
               </div>
-
-              <button
-                onClick={handleSend}
-                disabled={isPending || isConfirming || !sendTo || !sendAmount || !!addressError || parseFloat(sendAmount) > numericBalance}
-                className="w-full py-4 btn-bands-red font-semibold flex items-center justify-center gap-2
-                           disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isPending || isConfirming ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    {isPending ? 'Confirm in wallet...' : 'Sending...'}
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    Send USDC
-                  </>
-                )}
-              </button>
-
-              {parseFloat(sendAmount) > numericBalance && sendAmount && (
-                <p className="text-[#D32F2F] text-sm text-center">Insufficient balance</p>
-              )}
-            </div>
+              <p className="text-white/40 text-sm mt-3">
+                Balance: <span className="text-white/60">${formattedBalance}</span>
+              </p>
+            </CardInner>
           </div>
+
+          {/* Send Button */}
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={handleSend}
+            disabled={isPending || isConfirming || !sendTo || !sendAmount || !!addressError || parseFloat(sendAmount) > numericBalance}
+            isLoading={isPending || isConfirming}
+            className="w-full"
+          >
+            {isPending ? 'Confirm in wallet...' : isConfirming ? 'Sending...' : 'Send USDC'}
+          </Button>
+
+          {parseFloat(sendAmount) > numericBalance && sendAmount && (
+            <p className="text-red-400 text-sm text-center">Insufficient balance</p>
+          )}
         </div>
-      )}
+      </Modal>
 
       {/* Receive Modal */}
-      {showReceive && (
-        <div
-          className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4"
-          onClick={() => setShowReceive(false)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md neu-card p-6 animate-slide-in"
-          >
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-[#69F0AE]/20 flex items-center justify-center">
-                  <ArrowDownLeft className="w-4 h-4 text-[#69F0AE]" />
-                </div>
-                Receive USDC
-              </h2>
-              <button 
-                onClick={() => setShowReceive(false)}
-                className="neu-button p-2"
-              >
-                <X className="w-5 h-5 text-[#606060]" />
-              </button>
-            </div>
-
-            <div className="text-center">
-              {/* QR Code Placeholder - Neumorphic */}
-              <div className="w-48 h-48 mx-auto mb-6 neu-pressed rounded-2xl flex items-center justify-center">
-                <div className="w-32 h-32 bg-white rounded-xl flex items-center justify-center">
-                  <DollarSign className="w-16 h-16 text-[#D32F2F]" />
-                </div>
-              </div>
-
-              <p className="text-sm text-[#606060] mb-4">
-                Share your address to receive USDC on Base
-              </p>
-
-              <div className="neu-pressed rounded-xl p-4 mb-4">
-                <p className="font-mono text-xs text-[#A0A0A0] break-all">
-                  {address}
-                </p>
-              </div>
-
-              <button
-                onClick={() => {
-                  copyAddress()
-                  setShowReceive(false)
-                }}
-                className="w-full py-4 btn-bands-red font-semibold flex items-center justify-center gap-2"
-              >
-                <Copy className="w-4 h-4" />
-                Copy Address
-              </button>
-
-              <p className="text-xs text-[#404040] mt-4">
-                Only send USDC on the <span className="text-[#D32F2F]">Base</span> network
-              </p>
+      <Modal isOpen={showReceive} onClose={() => setShowReceive(false)} title="Receive USDC">
+        <div className="text-center">
+          {/* QR Placeholder */}
+          <div className="w-48 h-48 mx-auto mb-6 rounded-2xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-center">
+            <div className="w-32 h-32 bg-white rounded-xl flex items-center justify-center">
+              <QrCode className="w-16 h-16 text-[#111]" />
             </div>
           </div>
+
+          <p className="text-white/40 text-sm mb-4">
+            Share your address to receive USDC on Base
+          </p>
+
+          <CardInner className="p-4 mb-4">
+            <p className="font-mono text-xs text-white/60 break-all">
+              {address}
+            </p>
+          </CardInner>
+
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={() => {
+              copyAddress()
+              setShowReceive(false)
+            }}
+            className="w-full"
+          >
+            <Copy className="w-4 h-4" />
+            Copy Address
+          </Button>
+
+          <p className="text-white/30 text-xs mt-4">
+            Only send USDC on the <span className="text-[#ef4444]">Base</span> network
+          </p>
         </div>
-      )}
+      </Modal>
     </main>
   )
 }
