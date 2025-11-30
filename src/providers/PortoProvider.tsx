@@ -150,9 +150,7 @@ export function PortoProvider({ children }: { children: ReactNode }) {
         chainId: `0x${base.id.toString(16)}`,
         calls: formattedCalls,
         capabilities: {
-          paymasterService: {
-            url: 'https://paymaster.porto.sh', // Porto's paymaster for USDC gas
-          },
+          feeToken: 'USDC', // Pay gas in USDC - Porto handles this natively
         },
       }],
     })
