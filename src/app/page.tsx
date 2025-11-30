@@ -14,13 +14,13 @@ export default function Home() {
     }
   }, [ready, authenticated, router])
 
-  // Generate random particles
-  const particles = Array.from({ length: 20 }, (_, i) => ({
+  // Generate 30 random particles
+  const particles = Array.from({ length: 30 }, (_, i) => ({
     id: i,
-    size: Math.random() * 60 + 30,
+    size: Math.random() * 20 + 16, // 16-36px (smaller)
     left: Math.random() * 100,
-    delay: Math.random() * 8,
-    duration: Math.random() * 6 + 4,
+    delay: Math.random() * 8, // 0-8s stagger
+    duration: Math.random() * 6 + 4, // 4-10s to cross
     rotation: Math.random() * 360,
   }))
 
@@ -30,86 +30,31 @@ export default function Home() {
       <div className="relative w-full max-w-[1200px] h-[80vh] rounded-[20px] bg-[#101010] overflow-hidden
                       shadow-[10px_10px_30px_rgba(0,0,0,0.5),-10px_-10px_30px_rgba(50,50,50,0.1)]">
         
-        {/* Animated Flying Money Layers - FASTER + TUMBLING */}
-        <div className="absolute inset-0 z-0 overflow-hidden">
-          {/* Layer 1 - Fast tumble right */}
-          <div className="absolute inset-0 animate-fly-tumble-1">
-            <img 
-              src="/money-bg.png" 
-              alt=""
-              className="absolute top-[-10%] left-[-20%] w-[80%] h-auto opacity-35"
-            />
-          </div>
-          
-          {/* Layer 2 - Spin left */}
-          <div className="absolute inset-0 animate-fly-tumble-2">
-            <img 
-              src="/money-bg.png" 
-              alt=""
-              className="absolute top-[20%] right-[-30%] w-[90%] h-auto opacity-25 scale-x-[-1]"
-            />
-          </div>
-          
-          {/* Layer 3 - Chaotic float */}
-          <div className="absolute inset-0 animate-fly-tumble-3">
-            <img 
-              src="/money-bg.png" 
-              alt=""
-              className="absolute bottom-[-20%] left-[10%] w-[70%] h-auto opacity-30"
-            />
-          </div>
-          
-          {/* Layer 4 - Wild diagonal */}
-          <div className="absolute inset-0 animate-fly-tumble-4">
-            <img 
-              src="/money-bg.png" 
-              alt=""
-              className="absolute top-[30%] left-[20%] w-[60%] h-auto opacity-20"
-            />
-          </div>
-          
-          {/* Layer 5 - Fast spin */}
-          <div className="absolute inset-0 animate-fly-tumble-5">
-            <img 
-              src="/money-bg.png" 
-              alt=""
-              className="absolute top-[-5%] right-[0%] w-[50%] h-auto opacity-25"
-            />
-          </div>
-
-          {/* Layer 6 - Ultra fast */}
-          <div className="absolute inset-0 animate-fly-tumble-6">
-            <img 
-              src="/money-bg.png" 
-              alt=""
-              className="absolute bottom-[10%] right-[-10%] w-[40%] h-auto opacity-15"
-            />
-          </div>
-        </div>
-
-        {/* PARTICLE BILLS - Individual flying bills */}
-        <div className="absolute inset-0 z-[1] overflow-hidden pointer-events-none">
+        {/* PARTICLE BILLS - 30 flying bills */}
+        <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
           {particles.map((p) => (
             <div
               key={p.id}
               className="absolute animate-bill-fly"
               style={{
                 left: `${p.left}%`,
-                width: `${p.size}px`,
+                fontSize: `${p.size}px`,
                 animationDelay: `${p.delay}s`,
                 animationDuration: `${p.duration}s`,
-                '--rotation': `${p.rotation}deg`,
               } as React.CSSProperties}
             >
-              <div className="animate-bill-tumble" style={{ animationDuration: `${p.duration * 0.3}s` }}>
+              <div 
+                className="animate-bill-tumble" 
+                style={{ animationDuration: `${p.duration * 0.25}s` }}
+              >
                 💵
               </div>
             </div>
           ))}
         </div>
 
-        {/* Dark overlay for readability */}
-        <div className="absolute inset-0 bg-black/55 z-[2]" />
+        {/* Subtle dark gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#101010] via-transparent to-[#101010]/50 z-[1]" />
 
         {/* Navbar */}
         <header className="relative z-20 p-10 pb-0">
@@ -127,20 +72,15 @@ export default function Home() {
         {/* Hero Content */}
         <div className="relative z-20 flex flex-col items-start justify-center h-[70%] px-10 md:px-16">
           <div className="relative z-10">
-            {/* Main Tagline */}
+            {/* Main Tagline - Clean, no outlines */}
             <h1 
               className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-8 max-w-lg"
-              style={{ 
-                fontFamily: "'Space Grotesk', sans-serif",
-                textShadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 0 0 20px rgba(0,0,0,0.8)'
-              }}
+              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
             >
               Stablecoin Neobank for{' '}
               <span 
                 className="text-[#D32F2F]"
-                style={{ 
-                  textShadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 0 0 30px rgba(211, 47, 47, 0.8)' 
-                }}
+                style={{ textShadow: '0 0 30px rgba(211, 47, 47, 0.6)' }}
               >
                 Degens
               </span>
@@ -162,19 +102,16 @@ export default function Home() {
             </button>
 
             {/* Small subtext */}
-            <p 
-              className="text-white/70 text-sm mt-6 font-mono"
-              style={{ textShadow: '1px 1px 2px #000' }}
-            >
+            <p className="text-white/60 text-sm mt-6 font-mono">
               No wallet needed · Sign in with email
             </p>
           </div>
         </div>
 
         {/* Vignette edges */}
-        <div className="absolute inset-0 pointer-events-none z-[3]"
+        <div className="absolute inset-0 pointer-events-none z-[2]"
              style={{
-               background: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.7) 100%)'
+               background: 'radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.5) 100%)'
              }}
         />
       </div>
