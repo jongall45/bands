@@ -34,10 +34,7 @@ export default function Dashboard() {
   const handleAddFunds = async () => {
     if (!address) return
     try {
-      await fundWallet(address, {
-        chain: base,
-        asset: 'USDC', // Fund with USDC directly
-      })
+      await fundWallet(address)
     } catch (error) {
       console.error('Funding error:', error)
     }
