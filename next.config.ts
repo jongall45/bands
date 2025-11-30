@@ -11,8 +11,15 @@ const nextConfig: NextConfig = {
         fs: false,
         net: false,
         tls: false,
+        // Fix MetaMask SDK / Coinbase Wallet SDK dependency
+        '@react-native-async-storage/async-storage': false,
       };
     }
+    // Ignore the async-storage module entirely
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@react-native-async-storage/async-storage': false,
+    };
     return config;
   },
   transpilePackages: [
