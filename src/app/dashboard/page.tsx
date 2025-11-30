@@ -10,7 +10,7 @@ import { USDC_ADDRESS, USDC_DECIMALS, ERC20_ABI } from '@/lib/wagmi'
 import { 
   ArrowUpRight, ArrowDownLeft, Copy, Check, LogOut, 
   Send, RefreshCw, X, ExternalLink, Plus, ShoppingCart,
-  Home, QrCode, Settings, Wallet, LayoutGrid
+  Home, QrCode, Settings, Wallet, TrendingUp
 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { CardInner } from '@/components/ui/Card'
@@ -264,7 +264,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-1 p-2 bg-[#1a1a1a]/90 backdrop-blur-xl border border-white/[0.08] rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
           <NavButton icon={Home} active />
           <NavButton icon={Send} onClick={() => setShowSend(true)} />
-          <NavButton icon={LayoutGrid} />
+          <NavButton icon={TrendingUp} href="/speculate" />
           <NavButton icon={Wallet} />
           <NavButton icon={Settings} />
         </div>
@@ -373,10 +373,17 @@ export default function Dashboard() {
 }
 
 // NavButton component
-function NavButton({ icon: Icon, active = false, onClick }: { icon: React.ElementType; active?: boolean; onClick?: () => void }) {
+function NavButton({ icon: Icon, active = false, onClick, href }: { icon: React.ElementType; active?: boolean; onClick?: () => void; href?: string }) {
+  const router = useRouter()
+  
+  const handleClick = () => {
+    if (onClick) onClick()
+    else if (href) router.push(href)
+  }
+
   return (
     <button 
-      onClick={onClick}
+      onClick={handleClick}
       className={`relative p-3 rounded-full transition-all ${active ? 'bg-white/[0.1] text-white' : 'text-white/40 hover:text-white/70 hover:bg-white/[0.05]'}`}
     >
       <Icon className="w-5 h-5" strokeWidth={active ? 2 : 1.5} />
