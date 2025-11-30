@@ -14,71 +14,102 @@ export default function Home() {
     }
   }, [ready, authenticated, router])
 
+  // Generate random particles
+  const particles = Array.from({ length: 20 }, (_, i) => ({
+    id: i,
+    size: Math.random() * 60 + 30,
+    left: Math.random() * 100,
+    delay: Math.random() * 8,
+    duration: Math.random() * 6 + 4,
+    rotation: Math.random() * 360,
+  }))
+
   return (
     <main className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-6 overflow-hidden">
       {/* Hero Container */}
       <div className="relative w-full max-w-[1200px] h-[80vh] rounded-[20px] bg-[#101010] overflow-hidden
                       shadow-[10px_10px_30px_rgba(0,0,0,0.5),-10px_-10px_30px_rgba(50,50,50,0.1)]">
         
-        {/* Animated Flying Money Layers */}
+        {/* Animated Flying Money Layers - FASTER + TUMBLING */}
         <div className="absolute inset-0 z-0 overflow-hidden">
-          {/* Layer 1 - Slow drift right */}
-          <div className="absolute inset-0 animate-fly-right">
+          {/* Layer 1 - Fast tumble right */}
+          <div className="absolute inset-0 animate-fly-tumble-1">
             <img 
               src="/money-bg.png" 
               alt=""
-              className="absolute top-[-10%] left-[-20%] w-[80%] h-auto opacity-40"
+              className="absolute top-[-10%] left-[-20%] w-[80%] h-auto opacity-35"
             />
           </div>
           
-          {/* Layer 2 - Medium drift left */}
-          <div className="absolute inset-0 animate-fly-left">
+          {/* Layer 2 - Spin left */}
+          <div className="absolute inset-0 animate-fly-tumble-2">
             <img 
               src="/money-bg.png" 
               alt=""
-              className="absolute top-[20%] right-[-30%] w-[90%] h-auto opacity-30 scale-x-[-1]"
+              className="absolute top-[20%] right-[-30%] w-[90%] h-auto opacity-25 scale-x-[-1]"
             />
           </div>
           
-          {/* Layer 3 - Float up */}
-          <div className="absolute inset-0 animate-fly-up">
+          {/* Layer 3 - Chaotic float */}
+          <div className="absolute inset-0 animate-fly-tumble-3">
             <img 
               src="/money-bg.png" 
               alt=""
-              className="absolute bottom-[-20%] left-[10%] w-[70%] h-auto opacity-35 rotate-12"
+              className="absolute bottom-[-20%] left-[10%] w-[70%] h-auto opacity-30"
             />
           </div>
           
-          {/* Layer 4 - Diagonal drift */}
-          <div className="absolute inset-0 animate-fly-diagonal">
+          {/* Layer 4 - Wild diagonal */}
+          <div className="absolute inset-0 animate-fly-tumble-4">
             <img 
               src="/money-bg.png" 
               alt=""
-              className="absolute top-[30%] left-[20%] w-[60%] h-auto opacity-25 -rotate-6"
+              className="absolute top-[30%] left-[20%] w-[60%] h-auto opacity-20"
             />
           </div>
           
-          {/* Layer 5 - Slow rotate and drift */}
-          <div className="absolute inset-0 animate-fly-spin">
+          {/* Layer 5 - Fast spin */}
+          <div className="absolute inset-0 animate-fly-tumble-5">
             <img 
               src="/money-bg.png" 
               alt=""
-              className="absolute top-[-5%] right-[0%] w-[50%] h-auto opacity-30"
+              className="absolute top-[-5%] right-[0%] w-[50%] h-auto opacity-25"
             />
           </div>
 
-          {/* Layer 6 - Fast particles */}
-          <div className="absolute inset-0 animate-fly-fast">
+          {/* Layer 6 - Ultra fast */}
+          <div className="absolute inset-0 animate-fly-tumble-6">
             <img 
               src="/money-bg.png" 
               alt=""
-              className="absolute bottom-[10%] right-[-10%] w-[40%] h-auto opacity-20 rotate-45"
+              className="absolute bottom-[10%] right-[-10%] w-[40%] h-auto opacity-15"
             />
           </div>
         </div>
 
+        {/* PARTICLE BILLS - Individual flying bills */}
+        <div className="absolute inset-0 z-[1] overflow-hidden pointer-events-none">
+          {particles.map((p) => (
+            <div
+              key={p.id}
+              className="absolute animate-bill-fly"
+              style={{
+                left: `${p.left}%`,
+                width: `${p.size}px`,
+                animationDelay: `${p.delay}s`,
+                animationDuration: `${p.duration}s`,
+                '--rotation': `${p.rotation}deg`,
+              } as React.CSSProperties}
+            >
+              <div className="animate-bill-tumble" style={{ animationDuration: `${p.duration * 0.3}s` }}>
+                💵
+              </div>
+            </div>
+          ))}
+        </div>
+
         {/* Dark overlay for readability */}
-        <div className="absolute inset-0 bg-black/60 z-[1]" />
+        <div className="absolute inset-0 bg-black/55 z-[2]" />
 
         {/* Navbar */}
         <header className="relative z-20 p-10 pb-0">
@@ -141,9 +172,9 @@ export default function Home() {
         </div>
 
         {/* Vignette edges */}
-        <div className="absolute inset-0 pointer-events-none z-[2]"
+        <div className="absolute inset-0 pointer-events-none z-[3]"
              style={{
-               background: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.6) 100%)'
+               background: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.7) 100%)'
              }}
         />
       </div>

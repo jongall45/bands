@@ -344,92 +344,188 @@ body {
   100% { background-position: 200% 0; }
 }
 
-/* Flying money animations - multiple layers */
-@keyframes fly-right {
-  0%, 100% {
-    transform: translateX(-30%) translateY(0) rotate(0deg);
-  }
-  50% {
-    transform: translateX(10%) translateY(-5%) rotate(3deg);
-  }
-}
-
-@keyframes fly-left {
-  0%, 100% {
-    transform: translateX(20%) translateY(0) rotate(0deg);
-  }
-  50% {
-    transform: translateX(-15%) translateY(8%) rotate(-5deg);
-  }
-}
-
-@keyframes fly-up {
-  0%, 100% {
-    transform: translateY(20%) translateX(0) rotate(12deg);
-  }
-  50% {
-    transform: translateY(-10%) translateX(5%) rotate(15deg);
-  }
-}
-
-@keyframes fly-diagonal {
-  0%, 100% {
-    transform: translate(0, 0) rotate(-6deg) scale(1);
-  }
-  33% {
-    transform: translate(15%, -10%) rotate(0deg) scale(1.05);
-  }
-  66% {
-    transform: translate(-10%, 5%) rotate(-10deg) scale(0.95);
-  }
-}
-
-@keyframes fly-spin {
-  0%, 100% {
-    transform: translateX(0) translateY(0) rotate(0deg);
+/* FAST TUMBLING money animations */
+@keyframes fly-tumble-1 {
+  0% {
+    transform: translateX(-20%) translateY(0) rotate(0deg);
   }
   25% {
-    transform: translateX(-10%) translateY(5%) rotate(5deg);
+    transform: translateX(5%) translateY(-8%) rotate(15deg);
   }
   50% {
-    transform: translateX(5%) translateY(-8%) rotate(-3deg);
+    transform: translateX(15%) translateY(5%) rotate(-10deg);
   }
   75% {
-    transform: translateX(10%) translateY(3%) rotate(8deg);
+    transform: translateX(-5%) translateY(-3%) rotate(20deg);
+  }
+  100% {
+    transform: translateX(-20%) translateY(0) rotate(0deg);
   }
 }
 
-@keyframes fly-fast {
+@keyframes fly-tumble-2 {
+  0% {
+    transform: translateX(10%) translateY(0) rotate(0deg) scale(1);
+  }
+  20% {
+    transform: translateX(-15%) translateY(10%) rotate(-25deg) scale(1.05);
+  }
+  40% {
+    transform: translateX(-5%) translateY(-5%) rotate(15deg) scale(0.95);
+  }
+  60% {
+    transform: translateX(20%) translateY(8%) rotate(-20deg) scale(1.02);
+  }
+  80% {
+    transform: translateX(5%) translateY(-10%) rotate(30deg) scale(0.98);
+  }
+  100% {
+    transform: translateX(10%) translateY(0) rotate(0deg) scale(1);
+  }
+}
+
+@keyframes fly-tumble-3 {
   0%, 100% {
-    transform: translate(0, 0) rotate(45deg);
+    transform: translateY(10%) translateX(0) rotate(0deg);
+  }
+  33% {
+    transform: translateY(-15%) translateX(10%) rotate(25deg);
+  }
+  66% {
+    transform: translateY(5%) translateX(-8%) rotate(-15deg);
+  }
+}
+
+@keyframes fly-tumble-4 {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+  20% {
+    transform: translate(20%, -15%) rotate(30deg) scale(1.1);
+  }
+  40% {
+    transform: translate(-10%, 10%) rotate(-20deg) scale(0.9);
+  }
+  60% {
+    transform: translate(15%, 5%) rotate(45deg) scale(1.05);
+  }
+  80% {
+    transform: translate(-5%, -10%) rotate(-10deg) scale(0.95);
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+}
+
+@keyframes fly-tumble-5 {
+  0% {
+    transform: translateX(0) translateY(0) rotate(0deg);
+  }
+  16% {
+    transform: translateX(-12%) translateY(8%) rotate(40deg);
+  }
+  33% {
+    transform: translateX(8%) translateY(-12%) rotate(-30deg);
   }
   50% {
-    transform: translate(-20%, -15%) rotate(50deg);
+    transform: translateX(15%) translateY(5%) rotate(60deg);
+  }
+  66% {
+    transform: translateX(-8%) translateY(10%) rotate(-45deg);
+  }
+  83% {
+    transform: translateX(5%) translateY(-8%) rotate(20deg);
+  }
+  100% {
+    transform: translateX(0) translateY(0) rotate(0deg);
   }
 }
 
-.animate-fly-right {
-  animation: fly-right 25s ease-in-out infinite;
+@keyframes fly-tumble-6 {
+  0%, 100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  25% {
+    transform: translate(-25%, -20%) rotate(50deg);
+  }
+  50% {
+    transform: translate(10%, 15%) rotate(-40deg);
+  }
+  75% {
+    transform: translate(20%, -10%) rotate(30deg);
+  }
 }
 
-.animate-fly-left {
-  animation: fly-left 20s ease-in-out infinite;
+/* Animation classes - FASTER speeds */
+.animate-fly-tumble-1 {
+  animation: fly-tumble-1 8s ease-in-out infinite;
 }
 
-.animate-fly-up {
-  animation: fly-up 18s ease-in-out infinite;
+.animate-fly-tumble-2 {
+  animation: fly-tumble-2 6s ease-in-out infinite;
 }
 
-.animate-fly-diagonal {
-  animation: fly-diagonal 30s ease-in-out infinite;
+.animate-fly-tumble-3 {
+  animation: fly-tumble-3 7s ease-in-out infinite;
 }
 
-.animate-fly-spin {
-  animation: fly-spin 22s ease-in-out infinite;
+.animate-fly-tumble-4 {
+  animation: fly-tumble-4 5s ease-in-out infinite;
 }
 
-.animate-fly-fast {
-  animation: fly-fast 12s ease-in-out infinite;
+.animate-fly-tumble-5 {
+  animation: fly-tumble-5 4s ease-in-out infinite;
+}
+
+.animate-fly-tumble-6 {
+  animation: fly-tumble-6 3s ease-in-out infinite;
+}
+
+/* PARTICLE BILLS - flying across screen */
+@keyframes bill-fly {
+  0% {
+    transform: translateY(100vh) translateX(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-100vh) translateX(var(--drift, 100px));
+    opacity: 0;
+  }
+}
+
+@keyframes bill-tumble {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  25% {
+    transform: rotate(90deg) scale(1.2);
+  }
+  50% {
+    transform: rotate(180deg) scale(0.8);
+  }
+  75% {
+    transform: rotate(270deg) scale(1.1);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+.animate-bill-fly {
+  animation: bill-fly linear infinite;
+  font-size: 2rem;
+  filter: drop-shadow(0 0 10px rgba(0,255,0,0.3));
+}
+
+.animate-bill-tumble {
+  animation: bill-tumble linear infinite;
+  display: inline-block;
 }
 
 /* Scrollbar */
@@ -462,3 +558,4 @@ input[type="number"]::-webkit-outer-spin-button {
 input[type="number"] {
   -moz-appearance: textfield;
 }
+
