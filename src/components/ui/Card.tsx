@@ -1,53 +1,50 @@
 'use client'
 
-import { HTMLAttributes, forwardRef } from 'react'
-
-interface CardProps extends HTMLAttributes<HTMLDivElement> {
-  variant?: 'glass' | 'gradient' | 'solid'
-  hoverable?: boolean
+interface CardProps {
+  children: React.ReactNode
+  className?: string
+  variant?: 'default' | 'elevated' | 'interactive'
 }
 
-const variantStyles = {
-  glass: 'glass',
-  gradient: 'gradient-border',
-  solid: 'bg-zinc-900/80 border border-zinc-800',
-}
-
-export const Card = forwardRef<HTMLDivElement, CardProps>(
-  ({ className = '', variant = 'glass', hoverable = false, children, ...props }, ref) => {
-    return (
-      <div
-        ref={ref}
-        className={`rounded-2xl p-6 ${variantStyles[variant]} ${
-          hoverable ? 'hover:border-emerald-500/20 hover:shadow-lg hover:shadow-emerald-500/5 hover:-translate-y-1 transition-all duration-300' : ''
-        } ${className}`}
-        {...props}
-      >
-        {children}
-      </div>
-    )
+export function Card({ children, className = '', variant = 'default' }: CardProps) {
+  const variants = {
+    // Standard card
+    default: `
+      bg-[#111111] 
+      border border-white/[0.06] 
+      rounded-3xl
+    `,
+    // Elevated with subtle shadow
+    elevated: `
+      bg-[#111111] 
+      border border-white/[0.06] 
+      rounded-3xl
+      shadow-[0_4px_24px_rgba(0,0,0,0.4)]
+    `,
+    // Interactive with hover state
+    interactive: `
+      bg-[#111111] 
+      border border-white/[0.06] 
+      rounded-3xl
+      transition-all duration-200
+      hover:bg-[#161616] hover:border-white/[0.1]
+      hover:shadow-[0_4px_24px_rgba(0,0,0,0.5)]
+      cursor-pointer
+    `,
   }
-)
 
-Card.displayName = 'Card'
-
-export const CardHeader = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
-  ({ className = '', ...props }, ref) => (
-    <div ref={ref} className={`mb-4 ${className}`} {...props} />
+  return (
+    <div className={`${variants[variant]} ${className}`}>
+      {children}
+    </div>
   )
-)
-CardHeader.displayName = 'CardHeader'
+}
 
-export const CardTitle = forwardRef<HTMLHeadingElement, HTMLAttributes<HTMLHeadingElement>>(
-  ({ className = '', ...props }, ref) => (
-    <h3 ref={ref} className={`text-lg font-semibold ${className}`} {...props} />
+// Inner card section (for nested depth like swap interface)
+export function CardInner({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`bg-white/[0.02] rounded-2xl border border-white/[0.04] ${className}`}>
+      {children}
+    </div>
   )
-)
-CardTitle.displayName = 'CardTitle'
-
-export const CardContent = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
-  ({ className = '', ...props }, ref) => (
-    <div ref={ref} className={className} {...props} />
-  )
-)
-CardContent.displayName = 'CardContent'
+}

@@ -9,29 +9,43 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        emerald: {
-          400: '#34D399',
-          500: '#10B981',
-          600: '#059669',
-          700: '#047857',
+        brand: {
+          red: '#ef4444',
+          'red-hover': '#dc2626',
         },
+        bg: {
+          primary: '#000000',
+          secondary: '#0a0a0a',
+          card: '#111111',
+          'card-hover': '#1a1a1a',
+        },
+      },
+      borderRadius: {
+        '4xl': '2rem',
+      },
+      backdropBlur: {
+        xs: '2px',
       },
       fontFamily: {
-        sans: ['Outfit', 'system-ui', 'sans-serif'],
-        mono: ['Space Mono', 'monospace'],
+        sans: ['Space Grotesk', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
+        headline: ['Archivo Black', 'sans-serif'],
       },
       animation: {
+        'fade-in': 'fadeIn 0.2s ease-out',
+        'slide-up': 'slideUp 0.3s ease-out',
         'spin-slow': 'spin 3s linear infinite',
-        'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
+        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
       },
       keyframes: {
-        'pulse-glow': {
-          '0%, 100%': { opacity: '1' },
-          '50%': { opacity: '0.5' },
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
         },
-      },
-      backgroundImage: {
-        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+        slideUp: {
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
       },
     },
   },
@@ -39,4 +53,3 @@ const config: Config = {
 }
 
 export default config
-

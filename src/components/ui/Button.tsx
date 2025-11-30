@@ -3,53 +3,67 @@
 import { forwardRef } from 'react'
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost'
+  variant?: 'primary' | 'secondary' | 'ghost' | 'glass'
   size?: 'sm' | 'md' | 'lg'
   isLoading?: boolean
-  leftIcon?: React.ReactNode
-  rightIcon?: React.ReactNode
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ 
-    children, 
-    variant = 'primary', 
-    size = 'md', 
-    isLoading, 
-    leftIcon, 
-    rightIcon, 
-    className = '', 
-    disabled,
-    ...props 
-  }, ref) => {
-    const baseStyles = 'inline-flex items-center justify-center font-medium rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed'
+  ({ children, variant = 'primary', size = 'md', isLoading, className = '', disabled, ...props }, ref) => {
+    const base = 'relative inline-flex items-center justify-center font-medium transition-all duration-200 ease-out disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden'
     
     const variants = {
-      primary: 'bg-emerald-500 hover:bg-emerald-400 text-black',
-      secondary: 'bg-white/10 hover:bg-white/20 text-white border border-white/10',
-      ghost: 'bg-transparent hover:bg-white/10 text-white',
+      // Solid red - main CTA like "JOIN" button
+      primary: `
+        bg-[#ef4444] text-white rounded-2xl
+        shadow-[0_0_20px_rgba(239,68,68,0.3)]
+        hover:bg-[#dc2626] hover:shadow-[0_0_30px_rgba(239,68,68,0.4)]
+        active:scale-[0.98]
+      `,
+      // Glass/outline style for secondary actions
+      secondary: `
+        bg-white/[0.03] text-white rounded-2xl
+        border border-white/[0.08]
+        backdrop-blur-sm
+        hover:bg-white/[0.06] hover:border-white/[0.15]
+        active:scale-[0.98]
+      `,
+      // Minimal ghost
+      ghost: `
+        bg-transparent text-white/70 rounded-xl
+        hover:text-white hover:bg-white/[0.05]
+        active:scale-[0.98]
+      `,
+      // Frosted glass pill (like EigenExplorer nav buttons)
+      glass: `
+        bg-white/[0.05] text-white rounded-full
+        border border-white/[0.08]
+        backdrop-blur-md
+        hover:bg-white/[0.08] hover:border-white/[0.12]
+        active:scale-[0.98]
+      `,
     }
     
     const sizes = {
-      sm: 'px-3 py-1.5 text-sm',
-      md: 'px-4 py-2 text-base',
-      lg: 'px-6 py-3 text-lg',
+      sm: 'px-4 py-2 text-sm gap-2',
+      md: 'px-6 py-3 text-base gap-2',
+      lg: 'px-8 py-4 text-lg gap-3',
     }
 
     return (
       <button
         ref={ref}
-        className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`}
+        className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
         disabled={disabled || isLoading}
         {...props}
       >
-        {isLoading ? (
-          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
-        ) : leftIcon ? (
-          <span className="mr-2">{leftIcon}</span>
-        ) : null}
+        {isLoading && (
+          <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+        )}
         {children}
-        {rightIcon && <span className="ml-2">{rightIcon}</span>}
       </button>
     )
   }
