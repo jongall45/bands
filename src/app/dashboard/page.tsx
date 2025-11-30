@@ -34,7 +34,7 @@ export default function Dashboard() {
   const handleAddFunds = async () => {
     if (!address) return
     try {
-      await fundWallet(address)
+      await fundWallet({ address })
     } catch (error) {
       console.error('Funding error:', error)
     }
