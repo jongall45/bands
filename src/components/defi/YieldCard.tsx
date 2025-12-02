@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useWallets } from '@privy-io/react-auth'
+import { useWallet } from '@/components/providers/Providers'
 import { useYield } from '@/hooks/useYield'
 import { YieldVault, RISK_COLORS } from '@/lib/yield-vaults'
 import { RefreshCw, ArrowDownToLine, ArrowUpFromLine, TrendingUp, Shield, AlertCircle } from 'lucide-react'
@@ -11,8 +11,7 @@ interface YieldCardProps {
 }
 
 export function YieldCard({ vault }: YieldCardProps) {
-  const { wallets } = useWallets()
-  const privyWallet = wallets.find((w) => w.walletClientType === 'privy')
+  const { address } = useWallet()
   
   const {
     deposit,
@@ -22,7 +21,7 @@ export function YieldCard({ vault }: YieldCardProps) {
     isLoading,
     error,
     step,
-  } = useYield(vault, privyWallet?.address as `0x${string}` | undefined)
+  } = useYield(vault, address)
 
   const [amount, setAmount] = useState('')
   const [mode, setMode] = useState<'deposit' | 'withdraw'>('deposit')
@@ -193,7 +192,7 @@ export function YieldCard({ vault }: YieldCardProps) {
       </button>
 
       <p className="text-white/30 text-xs text-center mt-3">
-        Requires ETH for gas
+        Gas paid in USDC • No ETH needed
       </p>
       </div>
     </div>

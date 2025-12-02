@@ -1,10 +1,11 @@
 'use client'
 
-import { usePrivy, useWallets, useFundWallet } from '@privy-io/react-auth'
-import { useRouter } from 'next/navigation'
 import { useEffect, useState, useCallback } from 'react'
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
-import { formatUnits, parseUnits, isAddress } from 'viem'
+import { useRouter } from 'next/navigation'
+import { usePorto, useWallet } from '@/components/providers/Providers'
+import { useTransfer } from '@/hooks/useTransfer'
+import { useReadContract } from 'wagmi'
+import { formatUnits, isAddress } from 'viem'
 import { base } from 'wagmi/chains'
 import { USDC_ADDRESS, USDC_DECIMALS, ERC20_ABI } from '@/lib/wagmi'
 import { 
@@ -17,8 +18,8 @@ import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
 
 export default function Dashboard() {
-  const { ready, authenticated, logout } = usePrivy()
-  const { wallets } = useWallets()
+  const { ready, isConnected, disconnect } = usePorto()
+  const { address } = useWallet()
   const router = useRouter()
   const [copied, setCopied] = useState(false)
   const [showSend, setShowSend] = useState(false)
@@ -27,19 +28,7 @@ export default function Dashboard() {
   const [sendAmount, setSendAmount] = useState('')
   const [addressError, setAddressError] = useState('')
 
-  const embeddedWallet = wallets.find((w) => w.walletClientType === 'privy')
-  const address = embeddedWallet?.address as `0x${string}` | undefined
-
-  const { fundWallet } = useFundWallet()
-
-  const handleAddFunds = async () => {
-    if (!address) return
-    try {
-      await fundWallet({ address: address as string })
-    } catch (error) {
-      console.error('Funding error:', error)
-    }
-  }
+  const { transfer, isLoading: isSending, error: sendError } = useTransfer()
 
   const { data: usdcBalance, refetch: refetchBalance, isLoading: balanceLoading } = useReadContract({
     address: USDC_ADDRESS,
@@ -53,23 +42,10 @@ export default function Dashboard() {
     },
   })
 
-  const { writeContract, data: hash, isPending, reset } = useWriteContract()
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
-
   useEffect(() => {
     if (!ready) return
-    if (!authenticated) router.push('/')
-  }, [ready, authenticated, router])
-
-  useEffect(() => {
-    if (isSuccess) {
-      setShowSend(false)
-      setSendTo('')
-      setSendAmount('')
-      refetchBalance()
-      reset()
-    }
-  }, [isSuccess, refetchBalance, reset])
+    if (!isConnected) router.push('/')
+  }, [ready, isConnected, router])
 
   const formattedBalance = usdcBalance 
     ? parseFloat(formatUnits(usdcBalance, USDC_DECIMALS)).toLocaleString('en-US', {
@@ -102,21 +78,22 @@ export default function Dashboard() {
     }
   }
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!sendTo || !sendAmount || addressError) return
     if (!isAddress(sendTo)) {
       setAddressError('Invalid address format')
       return
     }
     
-    const amount = parseUnits(sendAmount, USDC_DECIMALS)
-    writeContract({
-      address: USDC_ADDRESS,
-      abi: ERC20_ABI,
-      functionName: 'transfer',
-      args: [sendTo as `0x${string}`, amount],
-      chainId: base.id,
-    })
+    try {
+      await transfer(sendTo as `0x${string}`, sendAmount)
+      setShowSend(false)
+      setSendTo('')
+      setSendAmount('')
+      refetchBalance()
+    } catch (err) {
+      console.error('Send failed:', err)
+    }
   }
 
   const setMaxAmount = () => {
@@ -154,7 +131,7 @@ export default function Dashboard() {
       <header className="dashboard-header">
         <LogoInline size="sm" />
         <button
-          onClick={logout}
+          onClick={disconnect}
           className="logout-btn"
           title="Sign out"
         >
@@ -220,16 +197,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Add Funds Button */}
-          <button 
-            onClick={handleAddFunds}
-            className="add-funds-btn"
-          >
-            <Plus className="w-5 h-5" />
-            Add Funds
-            <span className="text-white/60 text-sm ml-1">Apple Pay · Card</span>
-          </button>
-
           {/* Action Buttons Row */}
           <div className="grid grid-cols-3 gap-2">
             <button 
@@ -247,12 +214,39 @@ export default function Dashboard() {
               <span className="text-gray-300 text-sm">Receive</span>
             </button>
             <button 
-              onClick={handleAddFunds}
               className="action-btn"
+              onClick={() => window.open('https://app.moonpay.com/buy', '_blank')}
             >
               <ShoppingCart className="w-5 h-5 text-gray-300" strokeWidth={1.5} />
               <span className="text-gray-300 text-sm">Buy</span>
             </button>
+          </div>
+        </div>
+
+        {/* Speculate Card */}
+        <div className="card mt-4">
+          <h2 className="text-white font-semibold mb-4">Speculate</h2>
+          <div className="space-y-3">
+            <a
+              href="/speculate/vest"
+              className="flex items-center justify-between bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] rounded-2xl p-4 transition-colors"
+            >
+              <div>
+                <p className="text-white font-medium">Stock Perps</p>
+                <p className="text-gray-500 text-sm">Trade AAPL, TSLA & more</p>
+              </div>
+              <ArrowUpRight className="w-5 h-5 text-gray-500" />
+            </a>
+            <a
+              href="/speculate/avantis"
+              className="flex items-center justify-between bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] rounded-2xl p-4 transition-colors"
+            >
+              <div>
+                <p className="text-white font-medium">Forex & Crypto</p>
+                <p className="text-gray-500 text-sm">EUR/USD, BTC & more</p>
+              </div>
+              <ArrowUpRight className="w-5 h-5 text-gray-500" />
+            </a>
           </div>
         </div>
 
@@ -276,7 +270,7 @@ export default function Dashboard() {
       <BottomNav />
 
       {/* Send Modal */}
-      <Modal isOpen={showSend} onClose={() => !isPending && !isConfirming && setShowSend(false)} title="Send USDC">
+      <Modal isOpen={showSend} onClose={() => !isSending && setShowSend(false)} title="Send USDC">
         <div className="space-y-5">
           <div>
             <label className="block text-white/40 text-sm mb-2 font-medium">Recipient Address</label>
@@ -289,7 +283,7 @@ export default function Dashboard() {
                   validateAddress(e.target.value)
                 }}
                 placeholder="0x..."
-                disabled={isPending || isConfirming}
+                disabled={isSending}
                 className="w-full bg-transparent px-5 py-4 text-white font-mono text-sm placeholder:text-white/30 focus:outline-none"
               />
             </div>
@@ -309,7 +303,7 @@ export default function Dashboard() {
                   value={sendAmount}
                   onChange={(e) => setSendAmount(e.target.value)}
                   placeholder="0.00"
-                  disabled={isPending || isConfirming}
+                  disabled={isSending}
                   className="flex-1 bg-transparent text-4xl font-semibold text-white placeholder:text-white/20 focus:outline-none"
                 />
                 <div className="flex items-center gap-2 bg-white/[0.06] rounded-full px-4 py-2">
@@ -323,15 +317,21 @@ export default function Dashboard() {
             </CardInner>
           </div>
 
+          {sendError && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4">
+              <p className="text-red-400 text-sm">{sendError}</p>
+            </div>
+          )}
+
           <button
             onClick={handleSend}
-            disabled={isPending || isConfirming || !sendTo || !sendAmount || !!addressError || parseFloat(sendAmount) > numericBalance}
+            disabled={isSending || !sendTo || !sendAmount || !!addressError || parseFloat(sendAmount) > numericBalance}
             className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-all flex items-center justify-center gap-2"
           >
-            {isPending || isConfirming ? (
+            {isSending ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                {isPending ? 'Confirm in wallet...' : 'Sending...'}
+                Sending...
               </>
             ) : (
               <>
@@ -340,6 +340,10 @@ export default function Dashboard() {
               </>
             )}
           </button>
+
+          <p className="text-white/30 text-xs text-center">
+            Gas paid in USDC • No ETH needed
+          </p>
 
           {parseFloat(sendAmount) > numericBalance && sendAmount && (
             <p className="text-red-400 text-sm text-center">Insufficient balance</p>
@@ -519,29 +523,6 @@ const dashboardStyles = `
   .dashboard-page .card > * {
     position: relative;
     z-index: 1;
-  }
-
-  /* Add Funds Button */
-  .dashboard-page .add-funds-btn {
-    width: 100%;
-    padding: 16px;
-    background: #ef4444;
-    color: white;
-    font-weight: 600;
-    border-radius: 16px;
-    border: none;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    margin-bottom: 12px;
-    box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
-    transition: all 0.2s;
-  }
-
-  .dashboard-page .add-funds-btn:hover {
-    background: #dc2626;
   }
 
   /* Action Buttons */

@@ -1,19 +1,21 @@
 'use client'
 
-import { usePrivy } from '@privy-io/react-auth'
-import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { usePorto } from '@/components/providers/Providers'
+import { ConnectButton } from '@/components/auth/ConnectButton'
 import { LogoInline } from '@/components/ui/Logo'
+import { Fingerprint, Shield, Zap, Globe } from 'lucide-react'
 
 export default function Home() {
-  const { login, authenticated, ready } = usePrivy()
+  const { isConnected, ready } = usePorto()
   const router = useRouter()
 
   useEffect(() => {
-    if (ready && authenticated) {
+    if (ready && isConnected) {
       router.push('/dashboard')
     }
-  }, [ready, authenticated, router])
+  }, [ready, isConnected, router])
 
   return (
     <div className="landing-page">
@@ -27,11 +29,11 @@ export default function Home() {
 
       {/* Navigation */}
       <header className="navbar">
-        <LogoInline size="md" neumorphic={true} />
+        <LogoInline size="md" />
         <nav className="nav-links">
           <a href="#features" className="nav-link">Features</a>
           <a href="#transparency" className="nav-link">Transparency</a>
-          <button onClick={login} className="btn-connect">Connect</button>
+          <ConnectButton />
         </nav>
       </header>
 
@@ -54,48 +56,31 @@ export default function Home() {
           </p>
           
           <div className="cta-group">
-            <button onClick={login} className="btn-primary">
-              Join
-            </button>
+            <ConnectButton variant="large" />
           </div>
-        </div>
 
-        {/* Phone Mockup */}
-        <div className="phone-container">
-          <div className="phone-frame">
-            <div className="phone-notch" />
-            <div className="phone-screen">
-              <div className="app-header">
-                <div className="app-logo">
-                  <span className="app-logo-icon">$</span>
-                  <span>bands</span>
-                </div>
-              </div>
-              <div className="app-balance">
-                <span className="balance-label">Total Balance</span>
-                <span className="balance-value">$2,847.32</span>
-                <span className="balance-token">USDC on Base</span>
-              </div>
-              <div className="app-actions">
-                <button className="app-add-funds">+ Add Funds</button>
-                <div className="action-row">
-                  <div className="action-item">↑ Send</div>
-                  <div className="action-item">↓ Receive</div>
-                  <div className="action-item">🛒 Buy</div>
-                </div>
-              </div>
+          {/* Features Grid */}
+          <div className="features-grid" id="features">
+            <div className="feature-card">
+              <Fingerprint className="w-6 h-6 text-[#ef4444]" />
+              <h3>Passkey Login</h3>
+              <p>Face ID or Touch ID</p>
             </div>
-          </div>
-        </div>
-
-        {/* Floating Yield Card */}
-        <div className="yield-card">
-          <div className="yield-row">
-            <span>Yield</span>
-            <span className="yield-value">+12.5%</span>
-          </div>
-          <div className="yield-bar-bg">
-            <div className="yield-bar" />
+            <div className="feature-card">
+              <Shield className="w-6 h-6 text-[#ef4444]" />
+              <h3>Self-Custody</h3>
+              <p>You own your keys</p>
+            </div>
+            <div className="feature-card">
+              <Zap className="w-6 h-6 text-[#ef4444]" />
+              <h3>USDC Gas</h3>
+              <p>No ETH needed</p>
+            </div>
+            <div className="feature-card">
+              <Globe className="w-6 h-6 text-[#ef4444]" />
+              <h3>Use Anywhere</h3>
+              <p>Connect to any dApp</p>
+            </div>
           </div>
         </div>
       </main>
@@ -212,22 +197,6 @@ export default function Home() {
           color: var(--text-main);
         }
 
-        .landing-page .btn-connect {
-          background: white;
-          border: 1px solid rgba(0, 0, 0, 0.1);
-          padding: 10px 20px;
-          border-radius: 50px;
-          font-weight: 600;
-          font-size: 0.9rem;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .landing-page .btn-connect:hover {
-          background: #f5f5f5;
-          transform: translateY(-1px);
-        }
-
         /* === HERO === */
         .landing-page .hero {
           min-height: 100vh;
@@ -242,7 +211,6 @@ export default function Home() {
 
         .landing-page .hero-content {
           max-width: 700px;
-          margin-bottom: 50px;
         }
 
         .landing-page .status-pill {
@@ -293,191 +261,43 @@ export default function Home() {
           display: flex;
           gap: 16px;
           justify-content: center;
+          margin-bottom: 60px;
         }
 
-        .landing-page .btn-primary {
-          background: white;
-          border: 1px solid rgba(0, 0, 0, 0.1);
-          padding: 16px 40px;
-          border-radius: 50px;
-          font-size: 1rem;
-          font-weight: 600;
-          color: var(--bands-red);
-          cursor: pointer;
-          transition: all 0.2s;
-          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+        /* === FEATURES GRID === */
+        .landing-page .features-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 16px;
+          max-width: 500px;
+          margin: 0 auto;
         }
 
-        .landing-page .btn-primary:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 24px rgba(255, 59, 48, 0.15);
-        }
-
-        /* === PHONE MOCKUP === */
-        .landing-page .phone-container {
-          position: relative;
-          z-index: 10;
-        }
-
-        .landing-page .phone-frame {
-          width: 280px;
-          height: 580px;
-          background: linear-gradient(145deg, #2a2a2a, #1a1a1a);
-          border-radius: 44px;
-          padding: 12px;
-          box-shadow: 
-            0 50px 100px rgba(0, 0, 0, 0.2),
-            0 0 0 1px rgba(255, 255, 255, 0.1);
-          transform: perspective(1000px) rotateX(5deg);
-        }
-
-        .landing-page .phone-notch {
-          width: 100px;
-          height: 28px;
-          background: #000;
-          border-radius: 20px;
-          position: absolute;
-          top: 16px;
-          left: 50%;
-          transform: translateX(-50%);
-          z-index: 10;
-        }
-
-        .landing-page .phone-screen {
-          width: 100%;
-          height: 100%;
-          background: #000;
-          border-radius: 36px;
-          overflow: hidden;
-          padding: 48px 16px 24px;
-        }
-
-        .landing-page .app-header {
-          margin-bottom: 28px;
-        }
-
-        .landing-page .app-logo {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-weight: 600;
-          font-size: 0.9rem;
-          color: white;
-        }
-
-        .landing-page .app-logo-icon {
-          width: 24px;
-          height: 24px;
-          background: var(--bands-red);
-          border-radius: 6px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: 700;
-          font-size: 0.8rem;
-          color: white;
-        }
-
-        .landing-page .app-balance {
-          text-align: center;
-          margin-bottom: 20px;
-        }
-
-        .landing-page .balance-label {
-          display: block;
-          font-size: 0.7rem;
-          color: #888;
-          margin-bottom: 4px;
-        }
-
-        .landing-page .balance-value {
-          display: block;
-          font-size: 2.2rem;
-          font-weight: 700;
-          color: white;
-          letter-spacing: -0.02em;
-          margin-bottom: 4px;
-        }
-
-        .landing-page .balance-token {
-          display: block;
-          font-size: 0.7rem;
-          color: var(--bands-red);
-          font-weight: 500;
-        }
-
-        .landing-page .app-actions {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-
-        .landing-page .app-add-funds {
-          width: 100%;
-          padding: 14px;
-          background: var(--bands-red);
-          color: white;
-          border: none;
-          border-radius: 14px;
-          font-weight: 600;
-          font-size: 0.85rem;
-        }
-
-        .landing-page .action-row {
-          display: flex;
-          gap: 8px;
-        }
-
-        .landing-page .action-item {
-          flex: 1;
-          padding: 14px 8px;
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 12px;
-          font-size: 0.65rem;
-          color: #888;
-          text-align: center;
-        }
-
-        /* === YIELD CARD === */
-        .landing-page .yield-card {
-          position: absolute;
-          right: 10%;
-          bottom: 15%;
-          width: 180px;
+        .landing-page .feature-card {
           background: white;
           border: 1px solid rgba(0, 0, 0, 0.08);
-          border-radius: 16px;
-          padding: 16px;
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
-          z-index: 10;
+          border-radius: 20px;
+          padding: 20px;
+          text-align: left;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+          transition: all 0.2s;
         }
 
-        .landing-page .yield-row {
-          display: flex;
-          justify-content: space-between;
+        .landing-page .feature-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        }
+
+        .landing-page .feature-card h3 {
+          font-size: 0.95rem;
           font-weight: 600;
-          font-size: 0.9rem;
-          margin-bottom: 10px;
+          color: var(--text-main);
+          margin: 12px 0 4px;
         }
 
-        .landing-page .yield-value {
-          color: #34C759;
-        }
-
-        .landing-page .yield-bar-bg {
-          width: 100%;
-          height: 6px;
-          background: rgba(0, 0, 0, 0.06);
-          border-radius: 10px;
-          overflow: hidden;
-        }
-
-        .landing-page .yield-bar {
-          width: 60%;
-          height: 100%;
-          background: var(--bands-red);
-          border-radius: 10px;
+        .landing-page .feature-card p {
+          font-size: 0.85rem;
+          color: var(--text-muted);
         }
 
         /* === RESPONSIVE === */
@@ -494,23 +314,9 @@ export default function Home() {
             font-size: 3rem;
           }
 
-          .landing-page .cta-group {
-            flex-direction: column;
-            width: 100%;
+          .landing-page .features-grid {
+            grid-template-columns: 1fr;
             padding: 0 20px;
-          }
-
-          .landing-page .btn-primary {
-            width: 100%;
-          }
-
-          .landing-page .phone-frame {
-            width: 240px;
-            height: 500px;
-          }
-
-          .landing-page .yield-card {
-            display: none;
           }
         }
       `}</style>

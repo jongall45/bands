@@ -1,17 +1,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useWallets } from '@privy-io/react-auth'
+import { useWallet } from '@/components/providers/Providers'
 import { useBridge } from '@/hooks/useBridge'
 import { SUPPORTED_CHAINS, BRIDGE_TOKENS, Chain, Token } from '@/lib/bridge-api'
 import { ArrowRight, Clock, ArrowDownUp } from 'lucide-react'
 import { formatUnits } from 'viem'
 
 export function BridgeCard() {
-  const { wallets } = useWallets()
+  const { address } = useWallet()
   const { getQuote, quote, isQuoting, formatDuration } = useBridge()
-
-  const privyWallet = wallets.find((w) => w.walletClientType === 'privy')
 
   const [fromChain, setFromChain] = useState<Chain>(SUPPORTED_CHAINS[0])
   const [toChain, setToChain] = useState<Chain>(SUPPORTED_CHAINS[1])
@@ -34,7 +32,7 @@ export function BridgeCard() {
   }, [toChain])
 
   useEffect(() => {
-    if (!amount || parseFloat(amount) <= 0 || !privyWallet?.address) {
+    if (!amount || parseFloat(amount) <= 0 || !address) {
       return
     }
 
@@ -46,12 +44,12 @@ export function BridgeCard() {
         toToken: toToken.address,
         fromAmount: amount,
         fromDecimals: fromToken.decimals,
-        fromAddress: privyWallet.address,
+        fromAddress: address,
       }).catch(console.error)
     }, 500)
 
     return () => clearTimeout(timer)
-  }, [amount, fromChain, toChain, fromToken, toToken, privyWallet?.address, getQuote])
+  }, [amount, fromChain, toChain, fromToken, toToken, address, getQuote])
 
   const flipChains = () => {
     const tempChain = fromChain

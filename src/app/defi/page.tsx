@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { usePrivy } from '@privy-io/react-auth'
+import { usePorto } from '@/components/providers/Providers'
 import { SwapCard } from '@/components/defi/SwapCard'
 import { YieldCard } from '@/components/defi/YieldCard'
 import { BridgeCard } from '@/components/defi/BridgeCard'
@@ -13,7 +13,7 @@ import { LogoInline } from '@/components/ui/Logo'
 type Tab = 'earn' | 'swap' | 'bridge'
 
 export default function DeFiPage() {
-  const { authenticated, ready } = usePrivy()
+  const { isConnected, ready } = usePorto()
   const [activeTab, setActiveTab] = useState<Tab>('earn')
 
   if (!ready) {
@@ -30,7 +30,7 @@ export default function DeFiPage() {
     )
   }
 
-  if (!authenticated) {
+  if (!isConnected) {
     return (
       <div className="defi-page">
         <div className="noise-overlay" />

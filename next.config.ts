@@ -14,8 +14,7 @@ const nextConfig: NextConfig = {
     return config;
   },
   transpilePackages: [
-    '@privy-io/react-auth',
-    '@privy-io/wagmi',
+    'porto',
   ],
 };
 
