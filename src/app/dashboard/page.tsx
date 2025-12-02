@@ -132,7 +132,7 @@ export default function Dashboard() {
         <div className="min-h-screen flex items-center justify-center">
           <div className="flex flex-col items-center gap-4">
             <RefreshCw className="w-8 h-8 text-[#ef4444] animate-spin" />
-            <p className="text-gray-500">Loading your wallet...</p>
+            <p className="text-white/40">Loading your wallet...</p>
           </div>
         </div>
         <style jsx global>{dashboardStyles}</style>
@@ -152,7 +152,7 @@ export default function Dashboard() {
 
       {/* Header */}
       <header className="dashboard-header">
-        <LogoInline size="sm" neumorphic={true} />
+        <LogoInline size="sm" />
         <button
           onClick={logout}
           className="logout-btn"
@@ -383,13 +383,13 @@ const dashboardStyles = `
   .dashboard-page {
     min-height: 100vh;
     width: 100%;
-    background: #F4F4F5;
+    background: #000000;
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
     overflow-x: hidden;
     position: relative;
   }
 
-  /* Grain Texture */
+  /* Subtle grain texture */
   .dashboard-page .noise-overlay {
     position: fixed;
     top: 0;
@@ -398,55 +398,37 @@ const dashboardStyles = `
     height: 100%;
     pointer-events: none;
     z-index: 10000;
-    opacity: 0.08;
+    opacity: 0.03;
     mix-blend-mode: overlay;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
   }
 
-  /* Red Auras */
+  /* Red gradient fade from top-left corner */
   .dashboard-page .aura {
     position: fixed;
-    border-radius: 50%;
     z-index: 0;
-    animation: aura-float 20s ease-in-out infinite;
   }
 
   .dashboard-page .aura-1 {
-    width: 600px;
-    height: 600px;
-    top: -200px;
-    left: -150px;
-    background: #FF3B30;
-    filter: blur(150px);
-    opacity: 0.5;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 60%;
+    background: radial-gradient(
+      ellipse at 0% 0%,
+      rgba(255, 59, 48, 0.35) 0%,
+      rgba(255, 59, 48, 0.15) 25%,
+      rgba(255, 59, 48, 0.05) 50%,
+      transparent 70%
+    );
   }
 
   .dashboard-page .aura-2 {
-    width: 500px;
-    height: 500px;
-    bottom: -150px;
-    right: -100px;
-    background: #D70015;
-    filter: blur(140px);
-    opacity: 0.45;
-    animation-delay: 7s;
+    display: none;
   }
 
   .dashboard-page .aura-3 {
-    width: 300px;
-    height: 300px;
-    top: 50%;
-    right: 20%;
-    background: #FF6B35;
-    filter: blur(120px);
-    opacity: 0.25;
-    animation-delay: 14s;
-  }
-
-  @keyframes aura-float {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    33% { transform: translate(50px, -40px) scale(1.05); }
-    66% { transform: translate(-30px, 40px) scale(0.95); }
+    display: none;
   }
 
   /* Header */
@@ -464,7 +446,7 @@ const dashboardStyles = `
 
   .dashboard-page .logout-btn {
     padding: 8px;
-    color: #6B7280;
+    color: rgba(255, 255, 255, 0.4);
     transition: color 0.2s;
     background: none;
     border: none;
@@ -472,7 +454,7 @@ const dashboardStyles = `
   }
 
   .dashboard-page .logout-btn:hover {
-    color: #374151;
+    color: rgba(255, 255, 255, 0.7);
   }
 
   /* Main Content */
