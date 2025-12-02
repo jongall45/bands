@@ -254,8 +254,8 @@ export default function Dashboard() {
               className="flex items-center justify-between bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] rounded-2xl p-4 transition-colors"
             >
               <div>
-                <p className="text-white font-medium">Forex & Crypto</p>
-                <p className="text-gray-500 text-sm">EUR/USD, BTC & more</p>
+                <p className="text-white font-medium">Forex & RWA Perps</p>
+                <p className="text-gray-500 text-sm">Ostium on Arbitrum</p>
               </div>
               <ArrowUpRight className="w-5 h-5 text-gray-500" />
             </a>

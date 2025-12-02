@@ -75,7 +75,7 @@ export default function SpeculatePage() {
             <ArrowUpRight className="w-5 h-5 text-white/20 group-hover:text-white/40 transition-colors relative z-10" />
           </Link>
 
-          {/* Avantis */}
+          {/* Ostium */}
           <Link
             href="/speculate/avantis"
             className="card flex items-center justify-between group"
@@ -86,12 +86,12 @@ export default function SpeculatePage() {
                   <TrendingUp className="w-6 h-6 text-[#ef4444]" />
                 </div>
                 <div>
-                  <h3 className="text-white font-semibold">Avantis</h3>
-                  <p className="text-white/40 text-sm">Forex & Crypto</p>
+                  <h3 className="text-white font-semibold">Ostium</h3>
+                  <p className="text-white/40 text-sm">Forex & RWA Perps</p>
                 </div>
               </div>
               <p className="text-white/30 text-xs">
-                Trade EUR/USD, BTC, ETH and more • Deep liquidity
+                Trade EUR/USD, Oil, Gold and more • On Arbitrum
               </p>
             </div>
             <ArrowUpRight className="w-5 h-5 text-white/20 group-hover:text-white/40 transition-colors relative z-10" />

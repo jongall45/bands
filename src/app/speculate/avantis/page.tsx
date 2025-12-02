@@ -2,14 +2,13 @@
 
 import { EmbeddedDApp } from '@/components/embed/EmbeddedDApp'
 
-export default function AvantisPage() {
+export default function OstiumPage() {
   return (
     <EmbeddedDApp
-      url="https://app.avantis.xyz"
-      name="Avantis"
-      description="Forex & crypto perps"
-      backHref="/dashboard"
+      url="https://app.ostium.io/trade"
+      name="Ostium"
+      description="Forex & RWA perps on Arbitrum"
+      backHref="/speculate"
     />
   )
 }
-
