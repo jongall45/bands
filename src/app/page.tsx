@@ -1,41 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { useAccount, useConnect } from 'wagmi'
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAccount } from 'wagmi'
 import { ConnectButton } from '@/components/auth/ConnectButton'
 import { InstallPrompt } from '@/components/pwa/InstallPrompt'
 import { LogoInline } from '@/components/ui/Logo'
-import { Fingerprint, Shield, Zap, Globe, Loader2 } from 'lucide-react'
+import { Fingerprint, Shield, Zap, Globe } from 'lucide-react'
 
 export default function Home() {
   const { isConnected, address } = useAccount()
-  const { connect, connectors, isPending } = useConnect()
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const [autoCreating, setAutoCreating] = useState(false)
-
-  // Check if we came from PWA to create wallet
-  const action = searchParams.get('action')
-
-  // Auto-trigger wallet creation when coming from PWA
-  useEffect(() => {
-    if (action === 'create' && !isConnected && !autoCreating) {
-      console.log('[Home] Auto-creating wallet from PWA redirect...')
-      setAutoCreating(true)
-      
-      const portoConnector = connectors.find(
-        (c) => c.id === 'xyz.ithaca.porto'
-      )
-      
-      if (portoConnector) {
-        // Small delay to ensure everything is loaded
-        setTimeout(() => {
-          connect({ connector: portoConnector })
-        }, 500)
-      }
-    }
-  }, [action, isConnected, autoCreating, connect, connectors])
 
   // Redirect to dashboard when connected
   useEffect(() => {
@@ -44,19 +19,6 @@ export default function Home() {
       router.replace('/dashboard')
     }
   }, [isConnected, address, router])
-
-  // Show loading state when auto-creating
-  if (autoCreating && isPending) {
-    return (
-      <div className="min-h-screen bg-[#F4F4F5] flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 text-[#ef4444] animate-spin mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-800">Creating Your Wallet...</h2>
-          <p className="text-gray-500 mt-2">Complete the passkey setup</p>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="landing-page">

@@ -3,21 +3,21 @@
 import { useEffect, useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAccount, useConnect, useDisconnect } from 'wagmi'
-import { Loader2, Fingerprint, LogOut, Plus, UserPlus } from 'lucide-react'
+import { Loader2, Fingerprint, LogOut, UserPlus, Copy, Check, ExternalLink } from 'lucide-react'
 import { usePWA } from '@/hooks/usePWA'
 
 interface ConnectButtonProps {
   variant?: 'default' | 'large'
-  mode?: 'auto' | 'create' | 'signin'  // auto = show both, create = new wallet, signin = existing
 }
 
-export function ConnectButton({ variant = 'default', mode = 'auto' }: ConnectButtonProps) {
+export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
   const router = useRouter()
   const { address, isConnected } = useAccount()
   const { connect, connectors, isPending, error } = useConnect()
   const { disconnect } = useDisconnect()
   const { isStandalone, isIOS } = usePWA()
-  const [showOptions, setShowOptions] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   // Find the Porto connector
   const portoConnector = connectors.find(
@@ -44,7 +44,7 @@ export function ConnectButton({ variant = 'default', mode = 'auto' }: ConnectBut
     }
   }, [isConnected, address, router])
 
-  // Handle sign in (existing wallet)
+  // Handle sign in (existing wallet) - just triggers passkey auth
   const handleSignIn = useCallback(() => {
     console.log('[ConnectButton] Sign in with existing passkey...')
     if (portoConnector) {
@@ -54,27 +54,26 @@ export function ConnectButton({ variant = 'default', mode = 'auto' }: ConnectBut
 
   // Handle create wallet (new user)
   const handleCreateWallet = useCallback(() => {
-    console.log('[ConnectButton] Creating new wallet...', { isStandalone, isIOS })
+    console.log('[ConnectButton] Create new wallet...', { isStandalone, isIOS })
     
-    // In iOS PWA, we need to open Safari to create the wallet
-    // because passkey creation doesn't work in PWA iframe/popup
+    // In iOS PWA, show modal with instructions to open Safari
     if (isStandalone && isIOS) {
-      // Create a link element and click it - this opens in Safari
-      const link = document.createElement('a')
-      link.href = `${window.location.origin}?action=create`
-      link.target = '_blank'
-      link.rel = 'noopener noreferrer'
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
+      setShowCreateModal(true)
       return
     }
     
-    // Not in PWA or not iOS - proceed normally
+    // Not in PWA - proceed normally
     if (portoConnector) {
       connect({ connector: portoConnector })
     }
   }, [connect, portoConnector, isStandalone, isIOS])
+
+  // Copy URL to clipboard
+  const copyUrl = useCallback(() => {
+    navigator.clipboard.writeText('https://bands.cash')
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }, [])
 
   if (isConnected && address) {
     return (
@@ -94,6 +93,96 @@ export function ConnectButton({ variant = 'default', mode = 'auto' }: ConnectBut
     )
   }
 
+  // PWA Create Wallet Modal
+  if (showCreateModal) {
+    return (
+      <>
+        <div 
+          className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setShowCreateModal(false)}
+        >
+          <div 
+            className="bg-white rounded-t-3xl p-6 w-full max-w-lg animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center gap-4 mb-5">
+              <div className="w-14 h-14 bg-gradient-to-br from-[#ef4444] to-[#dc2626] rounded-2xl flex items-center justify-center shadow-lg">
+                <span className="text-white font-bold text-2xl">$</span>
+              </div>
+              <div>
+                <h3 className="text-gray-900 font-semibold text-lg">Create Wallet in Safari</h3>
+                <p className="text-gray-500 text-sm">One-time setup required</p>
+              </div>
+            </div>
+
+            {/* Instructions */}
+            <div className="bg-gray-50 rounded-2xl p-4 mb-5">
+              <ol className="space-y-3 text-sm">
+                <li className="flex gap-3">
+                  <span className="w-6 h-6 bg-[#ef4444] text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">1</span>
+                  <span className="text-gray-700">Copy the link below</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="w-6 h-6 bg-[#ef4444] text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">2</span>
+                  <span className="text-gray-700">Open <strong>Safari</strong> and paste the link</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="w-6 h-6 bg-[#ef4444] text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">3</span>
+                  <span className="text-gray-700">Tap "Create New Wallet" and set up Face ID</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="w-6 h-6 bg-[#ef4444] text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">4</span>
+                  <span className="text-gray-700">Return here and tap "Sign In with Passkey"</span>
+                </li>
+              </ol>
+            </div>
+
+            {/* Copy URL Button */}
+            <button
+              onClick={copyUrl}
+              className="w-full flex items-center justify-center gap-2 py-4 bg-[#ef4444] hover:bg-[#dc2626] rounded-xl text-white font-semibold transition-colors mb-3"
+            >
+              {copied ? (
+                <>
+                  <Check className="w-5 h-5" />
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <Copy className="w-5 h-5" />
+                  Copy Link: bands.cash
+                </>
+              )}
+            </button>
+
+            {/* Cancel */}
+            <button
+              onClick={() => setShowCreateModal(false)}
+              className="w-full py-3 text-gray-500 text-sm hover:text-gray-700 transition-colors"
+            >
+              Cancel
+            </button>
+
+            <p className="text-gray-400 text-xs text-center mt-3">
+              This is required because iOS doesn't allow wallet creation inside apps
+            </p>
+          </div>
+        </div>
+
+        <style jsx>{`
+          @keyframes slide-up {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+          }
+          .animate-slide-up {
+            animation: slide-up 0.3s ease-out;
+          }
+        `}</style>
+      </>
+    )
+  }
+
   // Large variant with both options
   if (variant === 'large') {
     return (
@@ -107,7 +196,7 @@ export function ConnectButton({ variant = 'default', mode = 'auto' }: ConnectBut
           {isPending ? (
             <>
               <Loader2 className="w-6 h-6 animate-spin" />
-              Signing In...
+              Connecting...
             </>
           ) : (
             <>
@@ -127,16 +216,13 @@ export function ConnectButton({ variant = 'default', mode = 'auto' }: ConnectBut
           Create New Wallet
         </button>
 
-        {/* PWA hint for iOS */}
-        {isStandalone && isIOS && (
-          <p className="text-gray-500 text-xs text-center mt-1">
-            New wallet? Opens Safari for one-time setup
-          </p>
-        )}
-
         {error && (
           <p className="text-red-500 text-sm text-center">
-            {error.message.includes('rejected') ? 'Cancelled' : 'Try again'}
+            {error.message.includes('rejected') 
+              ? 'Cancelled' 
+              : error.message.includes('No credentials')
+                ? 'No wallet found. Create one first!'
+                : 'Connection failed'}
           </p>
         )}
       </div>
