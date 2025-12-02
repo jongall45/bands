@@ -68,7 +68,11 @@ export function BridgeCard() {
     : '0.00'
 
   return (
-    <div className="bg-[#111111] border border-white/[0.06] rounded-3xl p-5">
+    <div className="bg-[#111111] border border-white/[0.06] rounded-3xl p-5 relative overflow-hidden">
+      {/* Red gradient fade from top-left */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[#FF3B30]/20 via-[#FF3B30]/5 to-transparent pointer-events-none" />
+      
+      <div className="relative z-10">
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <h3 className="text-white font-semibold text-lg">Bridge</h3>
@@ -200,6 +204,7 @@ export function BridgeCard() {
       <p className="text-white/30 text-xs text-center mt-3">
         Cross-chain bridging will be enabled in a future release
       </p>
+      </div>
     </div>
   )
 }

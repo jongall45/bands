@@ -62,7 +62,12 @@ export function YieldCard({ vault }: YieldCardProps) {
   }
 
   return (
-    <div className="bg-[#111111] border border-white/[0.06] rounded-3xl p-5">
+    <div className="defi-card bg-[#111111] border border-white/[0.06] rounded-3xl p-5 relative overflow-hidden">
+      {/* Red gradient fade from top-left */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[#FF3B30]/20 via-[#FF3B30]/5 to-transparent pointer-events-none" />
+      
+      {/* Content wrapper with z-index */}
+      <div className="relative z-10">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
@@ -190,6 +195,7 @@ export function YieldCard({ vault }: YieldCardProps) {
       <p className="text-white/30 text-xs text-center mt-3">
         Requires ETH for gas
       </p>
+      </div>
     </div>
   )
 }
