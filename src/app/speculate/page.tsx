@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAccount } from 'wagmi'
-import { TrendingUp, RefreshCw, ArrowUpRight, BarChart3, DollarSign, Zap } from 'lucide-react'
+import { RefreshCw, ArrowUpRight, BarChart3, DollarSign } from 'lucide-react'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
 
@@ -12,7 +12,7 @@ const protocols = [
     name: 'Vest Exchange',
     description: 'Stock Perpetuals',
     detail: 'Trade AAPL, TSLA, NVDA • Up to 100x leverage',
-    url: 'https://app.vest.exchange',
+    url: 'https://trade.vestmarkets.com/',
     icon: BarChart3,
     chain: 'Base',
     note: 'May be geo-restricted in US',
@@ -23,24 +23,6 @@ const protocols = [
     detail: 'Trade EUR/USD, Gold, Oil • On Arbitrum',
     url: 'https://app.ostium.com/trade',
     icon: DollarSign,
-    chain: 'Arbitrum',
-    note: null,
-  },
-  {
-    name: 'Hyperliquid',
-    description: 'Crypto Perps',
-    detail: 'BTC, ETH, SOL • Up to 50x leverage',
-    url: 'https://app.hyperliquid.xyz',
-    icon: Zap,
-    chain: 'Hyperliquid L1',
-    note: 'Uses own chain - deposit required',
-  },
-  {
-    name: 'GMX',
-    description: 'Decentralized Perps',
-    detail: 'BTC, ETH perps • Deep liquidity',
-    url: 'https://app.gmx.io/#/trade',
-    icon: TrendingUp,
     chain: 'Arbitrum',
     note: null,
   },
