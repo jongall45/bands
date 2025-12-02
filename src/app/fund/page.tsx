@@ -97,27 +97,39 @@ export default function FundPage() {
         </header>
 
         <div className="px-5 space-y-4">
-          {/* Your Wallet Address - Show prominently */}
+          {/* Your Wallet Address - Show prominently with easy copy */}
           <div className="card">
-            <div className="flex items-center gap-2 mb-2">
-              <CheckCircle className="w-4 h-4 text-green-400" />
-              <p className="text-green-400 text-sm font-medium">Sending to YOUR wallet</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 bg-white/[0.05] rounded-xl p-3 font-mono text-xs text-white break-all">
-                {address}
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-400" />
+                <p className="text-green-400 text-sm font-medium">Your Delivery Address</p>
               </div>
               <button
                 onClick={copyAddress}
-                className="p-3 bg-white/[0.05] rounded-xl hover:bg-white/[0.1] transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white/[0.08] hover:bg-white/[0.12] rounded-lg transition-colors"
               >
                 {copied ? (
-                  <Check className="w-4 h-4 text-green-400" />
+                  <>
+                    <Check className="w-3.5 h-3.5 text-green-400" />
+                    <span className="text-green-400 text-xs font-medium">Copied!</span>
+                  </>
                 ) : (
-                  <Copy className="w-4 h-4 text-white/60" />
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-white/60" />
+                    <span className="text-white/60 text-xs font-medium">Copy</span>
+                  </>
                 )}
               </button>
             </div>
+            <button
+              onClick={copyAddress}
+              className="w-full bg-white/[0.05] hover:bg-white/[0.08] rounded-xl p-3 font-mono text-xs text-white break-all text-left transition-colors active:scale-[0.99]"
+            >
+              {address}
+            </button>
+            <p className="text-white/30 text-xs mt-2 text-center">
+              Tap address or Copy button to copy
+            </p>
           </div>
 
           {/* Amount Card */}
