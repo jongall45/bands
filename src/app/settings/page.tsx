@@ -48,8 +48,11 @@ export default function SettingsPage() {
       <div className="fixed w-[700px] h-[700px] -bottom-[200px] -right-[150px] bg-[#D70015] rounded-full blur-[140px] opacity-45 z-0" />
 
       <div className="max-w-[430px] mx-auto relative z-10">
-        {/* Header */}
-        <header className="px-5 py-4">
+        {/* Header with safe area */}
+        <header 
+          className="px-5 py-4"
+          style={{ paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))' }}
+        >
           <h1 className="text-gray-900 font-semibold text-xl">Settings</h1>
           <p className="text-gray-500 text-sm">Manage your wallet</p>
         </header>

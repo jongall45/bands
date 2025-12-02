@@ -442,12 +442,13 @@ const dashboardStyles = `
     66% { transform: translate(-30px, 40px) scale(0.95); }
   }
 
-  /* Header */
+  /* Header - with safe area for notch */
   .dashboard-page .dashboard-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 16px 20px;
+    padding-top: calc(16px + env(safe-area-inset-top, 0px));
     max-width: 430px;
     margin: 0 auto;
     width: 100%;

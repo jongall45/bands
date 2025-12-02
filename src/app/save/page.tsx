@@ -46,8 +46,11 @@ export default function SavePage() {
       <div className="aura aura-3" />
 
       <div className="max-w-[430px] mx-auto relative z-10 pb-24">
-        {/* Header */}
-        <header className="flex items-center justify-between px-5 py-4">
+        {/* Header with safe area */}
+        <header 
+          className="flex items-center justify-between px-5 py-4"
+          style={{ paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))' }}
+        >
           <div>
             <h1 className="text-gray-900 font-semibold text-xl">Save</h1>
             <p className="text-gray-500 text-sm">Earn yield on your USDC</p>

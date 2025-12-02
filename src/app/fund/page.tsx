@@ -68,10 +68,13 @@ export default function FundPage() {
       <div className="aura aura-3" />
 
       <div className="max-w-[430px] mx-auto relative z-10 pb-24">
-        {/* Header */}
-        <header className="px-5 py-4 flex items-center gap-4">
-          <Link href="/dashboard" className="text-gray-600 hover:text-gray-900">
-            <ArrowLeft className="w-5 h-5" />
+        {/* Header with safe area */}
+        <header 
+          className="px-5 py-4 flex items-center gap-4"
+          style={{ paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))' }}
+        >
+          <Link href="/dashboard" className="text-gray-600 hover:text-gray-900 p-1 -ml-1">
+            <ArrowLeft className="w-6 h-6" />
           </Link>
           <h1 className="text-gray-900 font-semibold text-lg">Deposit</h1>
         </header>
