@@ -1,13 +1,13 @@
 'use client'
 
-import { Home, TrendingUp, Wallet } from 'lucide-react'
+import { Home, TrendingUp, Wallet, Settings } from 'lucide-react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 
 const navItems = [
   { href: '/dashboard', icon: Home, label: 'Home' },
-  { href: '/defi', icon: TrendingUp, label: 'DeFi' },
-  { href: '/speculate', icon: Wallet, label: 'Speculate' },
+  { href: '/speculate', icon: TrendingUp, label: 'Speculate' },
+  { href: '/settings', icon: Settings, label: 'Settings' },
 ]
 
 export function BottomNav() {
