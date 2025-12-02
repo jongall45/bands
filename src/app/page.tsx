@@ -3,7 +3,7 @@
 import { usePrivy } from '@privy-io/react-auth'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
-import { Logo, LogoInline, NeumorphicIcon } from '@/components/ui/Logo'
+import { LogoInline } from '@/components/ui/Logo'
 
 export default function Home() {
   const { login, authenticated, ready } = usePrivy()
@@ -45,30 +45,19 @@ export default function Home() {
           </div>
           
           <h1 className="hero-title">
-            YOUR MONEY,<br />
-            <span className="text-gradient">UPGRADED</span>
+            Spend. Save.<br />
+            <span className="text-gradient">Speculate.</span>
           </h1>
           
           <p className="subtitle">
             The stablecoin neobank for degens.
           </p>
-          <p className="subtitle-bold">
-            Spend. Save. Speculate.
-          </p>
           
           <div className="cta-group">
             <button onClick={login} className="btn-primary">
-              Join the Band
-            </button>
-            <button className="btn-secondary">
-              Read Whitepaper
+              Join
             </button>
           </div>
-        </div>
-
-        {/* Neumorphic Logo Showcase */}
-        <div className="logo-showcase">
-          <NeumorphicIcon size={80} />
         </div>
 
         {/* Phone Mockup */}
@@ -297,13 +286,6 @@ export default function Home() {
         .landing-page .subtitle {
           font-size: 1.25rem;
           color: var(--text-muted);
-          margin-bottom: 8px;
-        }
-
-        .landing-page .subtitle-bold {
-          font-size: 1.25rem;
-          color: var(--text-main);
-          font-weight: 500;
           margin-bottom: 36px;
         }
 
@@ -311,20 +293,6 @@ export default function Home() {
           display: flex;
           gap: 16px;
           justify-content: center;
-        }
-
-        /* === LOGO SHOWCASE === */
-        .landing-page .logo-showcase {
-          margin: 40px 0;
-          padding: 40px;
-          background: #E0E5EC;
-          border-radius: 24px;
-          box-shadow: 
-            12px 12px 24px rgba(163, 177, 198, 0.5),
-            -12px -12px 24px rgba(255, 255, 255, 0.8);
-          display: flex;
-          justify-content: center;
-          align-items: center;
         }
 
         .landing-page .btn-primary {
@@ -343,20 +311,6 @@ export default function Home() {
         .landing-page .btn-primary:hover {
           transform: translateY(-2px);
           box-shadow: 0 8px 24px rgba(255, 59, 48, 0.15);
-        }
-
-        .landing-page .btn-secondary {
-          background: transparent;
-          border: none;
-          padding: 16px 24px;
-          font-size: 1rem;
-          font-weight: 500;
-          color: var(--text-muted);
-          cursor: pointer;
-        }
-
-        .landing-page .btn-secondary:hover {
-          color: var(--text-main);
         }
 
         /* === PHONE MOCKUP === */
