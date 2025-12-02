@@ -1,6 +1,6 @@
 import { createConfig, http, createStorage, cookieStorage } from 'wagmi'
 import { base, optimism, arbitrum } from 'wagmi/chains'
-import { porto } from 'wagmi/connectors'
+import { porto } from 'porto/wagmi'
 
 export const wagmiConfig = createConfig({
   chains: [base, optimism, arbitrum],
