@@ -3,19 +3,21 @@
 import { useState, ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { WagmiProvider, createConfig, http } from 'wagmi'
-import { base, optimism, arbitrum } from 'wagmi/chains'
+import { base, baseSepolia, optimism, arbitrum } from 'wagmi/chains'
 import { porto } from 'porto/wagmi'
 
 // Create wagmi config with Porto connector
 const wagmiConfig = createConfig({
-  chains: [base, optimism, arbitrum],
+  chains: [base, baseSepolia, optimism, arbitrum],
   connectors: [
     porto({
-      // Porto config options
+      // Configure Porto with Base mainnet
+      chains: [base, baseSepolia, optimism, arbitrum],
     }),
   ],
   transports: {
     [base.id]: http(),
+    [baseSepolia.id]: http(),
     [optimism.id]: http(),
     [arbitrum.id]: http(),
   },

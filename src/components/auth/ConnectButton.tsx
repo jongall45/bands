@@ -1,6 +1,7 @@
 'use client'
 
 import { useAccount, useConnect, useDisconnect } from 'wagmi'
+import { Hooks } from 'porto/wagmi'
 import { Loader2, Fingerprint, LogOut } from 'lucide-react'
 
 interface ConnectButtonProps {
@@ -9,13 +10,33 @@ interface ConnectButtonProps {
 
 export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
   const { address, isConnected } = useAccount()
-  const { connect, connectors, isPending } = useConnect()
+  const { connect, connectors, isPending: isWagmiPending } = useConnect()
   const { disconnect } = useDisconnect()
+  
+  // Porto-specific hooks for account creation
+  const { mutate: portoConnect, isPending: isPortoConnecting } = Hooks.useConnect()
+  const { mutate: createAccount, isPending: isCreating } = Hooks.useCreateAccount()
 
-  const portoConnector = connectors[0] // Porto is the first connector
+  const portoConnector = connectors.find(c => c.id === 'xyz.ithaca.porto') || connectors[0]
+  const isPending = isWagmiPending || isPortoConnecting || isCreating
 
-  const handleConnect = () => {
-    if (portoConnector) {
+  const handleConnect = async () => {
+    if (!portoConnector) {
+      console.error('Porto connector not found')
+      return
+    }
+    
+    try {
+      // Use Porto's connect with createAccount capability
+      portoConnect({ 
+        connector: portoConnector,
+        capabilities: {
+          createAccount: true, // Allow account creation if user doesn't have one
+        }
+      })
+    } catch (error) {
+      console.error('Porto connect failed:', error)
+      // Fallback to wagmi connect
       connect({ connector: portoConnector })
     }
   }
