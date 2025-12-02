@@ -1,16 +1,27 @@
 {
   "name": "bands",
   "short_name": "bands",
-  "description": "Stablecoin Neobank for Degens",
-  "start_url": "/dashboard",
+  "description": "The stablecoin neobank for degens",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#000000",
   "theme_color": "#ef4444",
+  "orientation": "portrait",
+  "scope": "/",
   "icons": [
     {
-      "src": "/logo.svg",
+      "src": "/icons/icon.svg",
       "sizes": "any",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
     }
-  ]
+  ],
+  "categories": ["finance", "crypto"],
+  "prefer_related_applications": false
 }

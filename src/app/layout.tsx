@@ -4,17 +4,23 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'bands',
-  description: 'Stablecoin Neobank for Degens',
+  description: 'The stablecoin neobank for degens. Spend. Save. Speculate.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
     title: 'bands',
   },
+  formatDetection: {
+    telephone: false,
+  },
   openGraph: {
     title: 'bands',
-    description: 'Stablecoin Neobank for Degens',
+    description: 'The stablecoin neobank for degens',
     type: 'website',
+  },
+  other: {
+    'mobile-web-app-capable': 'yes',
   },
 }
 
@@ -24,7 +30,10 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
-  themeColor: '#000000',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f4f4f5' },
+    { media: '(prefers-color-scheme: dark)', color: '#000000' },
+  ],
 }
 
 export default function RootLayout({
@@ -35,11 +44,21 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <head>
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        {/* PWA Meta Tags */}
+        <meta name="application-name" content="bands" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="bands" />
+        <meta name="format-detection" content="telephone=no" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        
+        {/* Apple Touch Icons */}
+        <link rel="apple-touch-icon" href="/icons/icon.svg" />
+        
+        {/* Favicon */}
+        <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
       </head>
-      <body className="min-h-screen bg-black antialiased">
+      <body className="min-h-screen bg-black antialiased overscroll-none">
         <ClientProviders>{children}</ClientProviders>
       </body>
     </html>

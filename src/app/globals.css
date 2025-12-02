@@ -1,8 +1,15 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Archivo+Black&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap');
 @import "tailwindcss";
 
-/* === PREMIUM FINTECH COLOR PALETTE === */
+/* === PWA SAFE AREA VARIABLES === */
 :root {
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --vh: 1vh;
+  
+  /* Premium Fintech Palette */
   --bg-primary: #000000;
   --bg-secondary: #0a0a0a;
   --bg-card: #111111;
@@ -17,8 +24,15 @@
   --accent-green: #22c55e;
 }
 
+html {
+  /* Prevent pull-to-refresh on mobile */
+  overscroll-behavior-y: contain;
+}
+
 * {
   box-sizing: border-box;
+  /* Disable tap highlight */
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -27,6 +41,47 @@ body {
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  
+  /* Account for safe areas (notch, home indicator) */
+  padding-top: var(--safe-area-inset-top);
+  padding-left: var(--safe-area-inset-left);
+  padding-right: var(--safe-area-inset-right);
+  
+  /* Prevent text selection on touch */
+  -webkit-user-select: none;
+  user-select: none;
+  
+  /* Smooth scrolling */
+  -webkit-overflow-scrolling: touch;
+  
+  /* Prevent overscroll bounce */
+  overscroll-behavior: none;
+  
+  /* Full height for standalone mode */
+  min-height: 100vh;
+  min-height: 100dvh;
+  min-height: calc(var(--vh, 1vh) * 100);
+}
+
+/* Allow text selection in input fields */
+input, textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Fix for iOS standalone mode viewport */
+@supports (padding: max(0px)) {
+  body {
+    padding-top: max(var(--safe-area-inset-top), 0px);
+  }
+}
+
+/* Standalone PWA specific styles */
+@media all and (display-mode: standalone) {
+  body {
+    /* Ensure proper height in standalone */
+    min-height: 100dvh;
+  }
 }
 
 .font-mono {

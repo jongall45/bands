@@ -17,6 +17,7 @@ import { CardInner } from '@/components/ui/Card'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
 import { TransactionList } from '@/components/ui/TransactionList'
+import { InstallPrompt } from '@/components/pwa/InstallPrompt'
 
 export default function Dashboard() {
   const { address, isConnected } = useAccount()
@@ -259,6 +260,9 @@ export default function Dashboard() {
 
       {/* Bottom Navigation */}
       <BottomNav />
+
+      {/* PWA Install Prompt */}
+      <InstallPrompt />
 
       {/* Send Modal */}
       <Modal isOpen={showSend} onClose={() => !isSending && !isConfirming && setShowSend(false)} title="Send USDC">
