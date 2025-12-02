@@ -9,8 +9,9 @@ import { base } from 'wagmi/chains'
 import { USDC_ADDRESS, USDC_DECIMALS, ERC20_ABI } from '@/lib/wagmi'
 import { 
   ArrowUpRight, ArrowDownLeft, Copy, Check, LogOut, 
-  Send, RefreshCw, ExternalLink, ShoppingCart, QrCode
+  Send, RefreshCw, ExternalLink, Plus, QrCode
 } from 'lucide-react'
+import Link from 'next/link'
 import { Modal } from '@/components/ui/Modal'
 import { CardInner } from '@/components/ui/Card'
 import { BottomNav } from '@/components/ui/BottomNav'
@@ -226,13 +227,13 @@ export default function Dashboard() {
               <ArrowDownLeft className="w-5 h-5 text-gray-300" strokeWidth={1.5} />
               <span className="text-gray-300 text-sm">Receive</span>
             </button>
-            <button 
-              className="action-btn"
-              onClick={() => window.open('https://app.moonpay.com/buy', '_blank')}
+            <Link 
+              href="/fund"
+              className="action-btn buy-btn"
             >
-              <ShoppingCart className="w-5 h-5 text-gray-300" strokeWidth={1.5} />
-              <span className="text-gray-300 text-sm">Buy</span>
-            </button>
+              <Plus className="w-5 h-5 text-[#ef4444]" strokeWidth={2} />
+              <span className="text-[#ef4444] text-sm font-medium">Buy</span>
+            </Link>
           </div>
         </div>
 
@@ -525,5 +526,14 @@ const dashboardStyles = `
 
   .dashboard-page .action-btn:hover {
     background: rgba(255, 255, 255, 0.06);
+  }
+
+  .dashboard-page .buy-btn {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.2);
+  }
+
+  .dashboard-page .buy-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
   }
 `
