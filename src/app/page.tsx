@@ -3,6 +3,7 @@
 import { usePrivy } from '@privy-io/react-auth'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
+import { Logo, LogoInline } from '@/components/ui/Logo'
 
 export default function Home() {
   const { login, authenticated, ready } = usePrivy()
@@ -26,10 +27,7 @@ export default function Home() {
 
       {/* Navigation */}
       <header className="navbar">
-        <div className="logo">
-          <div className="logo-icon">$</div>
-          <span>bands</span>
-        </div>
+        <LogoInline size="md" />
         <nav className="nav-links">
           <a href="#features" className="nav-link">Features</a>
           <a href="#transparency" className="nav-link">Transparency</a>
@@ -66,6 +64,11 @@ export default function Home() {
               Read Whitepaper
             </button>
           </div>
+        </div>
+
+        {/* Neumorphic Logo Showcase */}
+        <div className="logo-showcase">
+          <Logo size="lg" variant="full" />
         </div>
 
         {/* Phone Mockup */}
@@ -202,27 +205,6 @@ export default function Home() {
           border-bottom: 1px solid rgba(0, 0, 0, 0.05);
         }
 
-        .landing-page .logo {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          font-weight: 700;
-          font-size: 1.3rem;
-          letter-spacing: -0.02em;
-        }
-
-        .landing-page .logo-icon {
-          width: 36px;
-          height: 36px;
-          background: var(--bands-red);
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-          font-weight: 800;
-        }
-
         .landing-page .nav-links {
           display: flex;
           align-items: center;
@@ -329,6 +311,20 @@ export default function Home() {
           display: flex;
           gap: 16px;
           justify-content: center;
+        }
+
+        /* === LOGO SHOWCASE === */
+        .landing-page .logo-showcase {
+          margin: 40px 0;
+          padding: 40px;
+          background: #E0E5EC;
+          border-radius: 24px;
+          box-shadow: 
+            12px 12px 24px rgba(163, 177, 198, 0.5),
+            -12px -12px 24px rgba(255, 255, 255, 0.8);
+          display: flex;
+          justify-content: center;
+          align-items: center;
         }
 
         .landing-page .btn-primary {
