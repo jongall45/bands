@@ -3,30 +3,10 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAccount } from 'wagmi'
-import { RefreshCw, ArrowUpRight, BarChart3, DollarSign } from 'lucide-react'
+import { RefreshCw, ArrowRight, Building2, TrendingUp, ExternalLink } from 'lucide-react'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
-
-const protocols = [
-  {
-    name: 'Vest Exchange',
-    description: 'Stock Perpetuals',
-    detail: 'Trade AAPL, TSLA, NVDA • Up to 100x leverage',
-    url: 'https://trade.vestmarkets.com/',
-    icon: BarChart3,
-    chain: 'Base',
-    note: 'May be geo-restricted in US',
-  },
-  {
-    name: 'Ostium',
-    description: 'Forex & RWA Perps',
-    detail: 'Trade EUR/USD, Gold, Oil • On Arbitrum',
-    url: 'https://app.ostium.com/trade',
-    icon: DollarSign,
-    chain: 'Arbitrum',
-    note: null,
-  },
-]
+import Link from 'next/link'
 
 export default function SpeculatePage() {
   const { isConnected } = useAccount()
@@ -65,53 +45,100 @@ export default function SpeculatePage() {
         <header className="flex items-center justify-between px-5 py-4">
           <div>
             <h1 className="text-gray-900 font-semibold text-xl">Speculate</h1>
-            <p className="text-gray-500 text-sm">Trade perps with Porto wallet</p>
+            <p className="text-gray-500 text-sm">Trade perps with your wallet</p>
           </div>
           <LogoInline size="sm" />
         </header>
 
-        {/* Info Banner */}
-        <div className="px-5 mb-4">
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4">
-            <p className="text-blue-600 text-sm">
-              <strong>Porto wallet</strong> connects automatically to these dApps via EIP-6963. They'll open in a new tab.
-            </p>
-          </div>
-        </div>
-
         {/* Protocol Cards */}
         <div className="px-5 space-y-4">
-          {protocols.map((protocol) => (
-            <a
-              key={protocol.name}
-              href={protocol.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="card flex items-center justify-between group"
-            >
-              <div className="relative z-10 flex-1">
+          {/* Ostium - Native Integration */}
+          <Link
+            href="/speculate/ostium"
+            className="card group"
+          >
+            <div className="relative z-10 flex items-center justify-between w-full">
+              <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
-                  <div className="w-12 h-12 bg-white/[0.05] rounded-2xl flex items-center justify-center">
-                    <protocol.icon className="w-6 h-6 text-[#ef4444]" />
+                  <div className="w-12 h-12 bg-gradient-to-br from-orange-500/20 to-red-500/20 rounded-2xl flex items-center justify-center">
+                    <Building2 className="w-6 h-6 text-orange-400" />
                   </div>
                   <div>
-                    <h3 className="text-white font-semibold">{protocol.name}</h3>
-                    <p className="text-white/40 text-sm">{protocol.description}</p>
+                    <h3 className="text-white font-semibold flex items-center gap-2">
+                      Ostium
+                      <span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-medium">
+                        NATIVE
+                      </span>
+                    </h3>
+                    <p className="text-white/40 text-sm">Stocks, Forex & RWA Perps</p>
                   </div>
                 </div>
-                <p className="text-white/30 text-xs">{protocol.detail}</p>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="text-xs bg-white/[0.05] text-white/50 px-2 py-1 rounded-full">
-                    {protocol.chain}
+                <p className="text-white/30 text-xs">
+                  Trade TSLA, AAPL, EUR/USD, Gold, Oil and more
+                </p>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <span className="text-xs bg-white/[0.05] text-white/50 px-2 py-1 rounded-full">TSLA</span>
+                  <span className="text-xs bg-white/[0.05] text-white/50 px-2 py-1 rounded-full">AAPL</span>
+                  <span className="text-xs bg-white/[0.05] text-white/50 px-2 py-1 rounded-full">EUR/USD</span>
+                  <span className="text-xs bg-white/[0.05] text-white/50 px-2 py-1 rounded-full">Gold</span>
+                  <span className="text-xs bg-white/[0.05] text-white/50 px-2 py-1 rounded-full">+20</span>
+                </div>
+                <div className="flex items-center gap-2 mt-3">
+                  <span className="text-xs bg-orange-500/20 text-orange-400 px-2 py-1 rounded-full">
+                    Arbitrum
                   </span>
-                  {protocol.note && (
-                    <span className="text-xs text-yellow-500/70">{protocol.note}</span>
-                  )}
+                  <span className="text-xs text-white/30">Up to 100x leverage</span>
                 </div>
               </div>
-              <ArrowUpRight className="w-5 h-5 text-white/20 group-hover:text-white/40 transition-colors relative z-10" />
-            </a>
-          ))}
+              <ArrowRight className="w-5 h-5 text-white/20 group-hover:text-white/40 transition-colors" />
+            </div>
+          </Link>
+
+          {/* Vest - External Link (geo-restricted) */}
+          <a
+            href="https://trade.vestmarkets.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="card group opacity-70"
+          >
+            <div className="relative z-10 flex items-center justify-between w-full">
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-12 h-12 bg-white/[0.05] rounded-2xl flex items-center justify-center">
+                    <TrendingUp className="w-6 h-6 text-blue-400/50" />
+                  </div>
+                  <div>
+                    <h3 className="text-white/70 font-semibold flex items-center gap-2">
+                      Vest Exchange
+                      <span className="text-[10px] bg-white/[0.05] text-white/40 px-2 py-0.5 rounded-full">
+                        EXTERNAL
+                      </span>
+                    </h3>
+                    <p className="text-white/30 text-sm">Stock Perpetuals</p>
+                  </div>
+                </div>
+                <p className="text-white/20 text-xs">
+                  Opens in new tab • May be geo-restricted in US
+                </p>
+                <div className="flex items-center gap-2 mt-3">
+                  <span className="text-xs bg-white/[0.03] text-white/30 px-2 py-1 rounded-full">
+                    Base
+                  </span>
+                </div>
+              </div>
+              <ExternalLink className="w-5 h-5 text-white/20 group-hover:text-white/30 transition-colors" />
+            </div>
+          </a>
+        </div>
+
+        {/* Info Section */}
+        <div className="px-5 mt-6">
+          <div className="bg-white/[0.5] backdrop-blur-lg border border-white/[0.1] rounded-2xl p-4">
+            <h4 className="text-gray-800 font-medium text-sm mb-2">Native Trading</h4>
+            <p className="text-gray-600 text-sm">
+              Trade directly from bands.cash with your Porto wallet. Native integrations sign transactions locally without redirecting to external sites.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -229,3 +256,4 @@ const speculateStyles = `
     border-color: rgba(255, 255, 255, 0.1);
   }
 `
+
