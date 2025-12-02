@@ -58,7 +58,14 @@ export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
   const handleConnect = useCallback(() => {
     console.log('[ConnectButton] Attempting to connect with Porto...', portoConnector?.id)
     if (portoConnector) {
-      connect({ connector: portoConnector })
+      // Pass capabilities to enable account creation
+      connect({ 
+        connector: portoConnector,
+        // @ts-ignore - Porto-specific capability
+        capabilities: {
+          createAccount: true,
+        }
+      })
     }
   }, [connect, portoConnector])
 

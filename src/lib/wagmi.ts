@@ -1,13 +1,10 @@
-import { createConfig, http, createStorage } from 'wagmi'
+import { createConfig, http } from 'wagmi'
 import { base, optimism, arbitrum } from 'wagmi/chains'
 import { porto } from 'wagmi/connectors'
 
 export const wagmiConfig = createConfig({
   chains: [base, optimism, arbitrum],
-  connectors: [porto()],  // <-- This is the key fix - use wagmi's built-in porto connector
-  storage: typeof window !== 'undefined' 
-    ? createStorage({ storage: window.localStorage })
-    : undefined,
+  connectors: [porto()],
   transports: {
     [base.id]: http(),
     [optimism.id]: http(),
