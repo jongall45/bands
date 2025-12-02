@@ -2,8 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { encodeFunctionData, parseUnits, formatUnits } from 'viem'
-import { useReadContracts } from 'wagmi'
-import { usePorto } from '@/components/providers/Providers'
+import { useReadContracts, useSendTransaction, useWaitForTransactionReceipt } from 'wagmi'
 import { ERC20_ABI, VAULT_ABI } from '@/lib/wagmi'
 import { YieldVault } from '@/lib/yield-vaults'
 import { base } from 'wagmi/chains'
@@ -40,7 +39,7 @@ export function useYield(vault: YieldVault, userAddress?: `0x${string}`) {
   const [error, setError] = useState<string | null>(null)
   const [step, setStep] = useState<'idle' | 'approving' | 'depositing' | 'withdrawing'>('idle')
 
-  const { sendCalls } = usePorto()
+  const { sendTransactionAsync } = useSendTransaction()
 
   const { data: balances, refetch: refetchBalances } = useReadContracts({
     contracts: [
@@ -83,7 +82,7 @@ export function useYield(vault: YieldVault, userAddress?: `0x${string}`) {
     ? formatUnits(tokenBalance, vault.underlyingDecimals)
     : '0'
 
-  // Deposit using Porto batch transactions
+  // Deposit using wagmi
   const deposit = useCallback(async (amount: string) => {
     if (!userAddress) {
       throw new Error('Wallet not connected')
@@ -97,13 +96,10 @@ export function useYield(vault: YieldVault, userAddress?: `0x${string}`) {
       const needsApproval = !currentAllowance || currentAllowance < amountWei
       const isAave = vault.protocol === 'Aave'
 
-      // Build batch calls
-      const calls: { to: `0x${string}`; data: `0x${string}` }[] = []
-
-      // Add approval if needed
+      // First approve if needed
       if (needsApproval) {
         setStep('approving')
-        calls.push({
+        await sendTransactionAsync({
           to: vault.underlyingToken,
           data: encodeFunctionData({
             abi: ERC20_ABI,
@@ -113,10 +109,10 @@ export function useYield(vault: YieldVault, userAddress?: `0x${string}`) {
         })
       }
 
-      // Add deposit call
+      // Then deposit
       setStep('depositing')
       if (isAave) {
-        calls.push({
+        await sendTransactionAsync({
           to: vault.address,
           data: encodeFunctionData({
             abi: AAVE_POOL_ABI,
@@ -125,7 +121,7 @@ export function useYield(vault: YieldVault, userAddress?: `0x${string}`) {
           }),
         })
       } else {
-        calls.push({
+        await sendTransactionAsync({
           to: vault.address,
           data: encodeFunctionData({
             abi: VAULT_ABI,
@@ -134,9 +130,6 @@ export function useYield(vault: YieldVault, userAddress?: `0x${string}`) {
           }),
         })
       }
-
-      // Send batch with USDC gas
-      await sendCalls(calls)
 
       await refetchBalances()
       setStep('idle')
@@ -149,9 +142,9 @@ export function useYield(vault: YieldVault, userAddress?: `0x${string}`) {
     } finally {
       setIsLoading(false)
     }
-  }, [sendCalls, userAddress, vault, refetchBalances, currentAllowance])
+  }, [sendTransactionAsync, userAddress, vault, refetchBalances, currentAllowance])
 
-  // Withdraw using Porto
+  // Withdraw using wagmi
   const withdraw = useCallback(async (amount: string) => {
     if (!userAddress) {
       throw new Error('Wallet not connected')
@@ -165,29 +158,25 @@ export function useYield(vault: YieldVault, userAddress?: `0x${string}`) {
       const amountWei = parseUnits(amount, vault.underlyingDecimals)
       const isAave = vault.protocol === 'Aave'
 
-      let withdrawCall: { to: `0x${string}`; data: `0x${string}` }
-
       if (isAave) {
-        withdrawCall = {
+        await sendTransactionAsync({
           to: vault.address,
           data: encodeFunctionData({
             abi: AAVE_POOL_ABI,
             functionName: 'withdraw',
             args: [vault.underlyingToken, amountWei, userAddress],
           }),
-        }
+        })
       } else {
-        withdrawCall = {
+        await sendTransactionAsync({
           to: vault.address,
           data: encodeFunctionData({
             abi: VAULT_ABI,
             functionName: 'withdraw',
             args: [amountWei, userAddress, userAddress],
           }),
-        }
+        })
       }
-
-      await sendCalls([withdrawCall])
 
       await refetchBalances()
       setStep('idle')
@@ -200,7 +189,7 @@ export function useYield(vault: YieldVault, userAddress?: `0x${string}`) {
     } finally {
       setIsLoading(false)
     }
-  }, [sendCalls, userAddress, vault, refetchBalances])
+  }, [sendTransactionAsync, userAddress, vault, refetchBalances])
 
   return {
     deposit,

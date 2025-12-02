@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useWallet } from '@/components/providers/Providers'
+import { useAccount } from 'wagmi'
 import { useYield } from '@/hooks/useYield'
 import { YieldVault, RISK_COLORS } from '@/lib/yield-vaults'
 import { RefreshCw, ArrowDownToLine, ArrowUpFromLine, TrendingUp, Shield, AlertCircle } from 'lucide-react'
@@ -11,7 +11,7 @@ interface YieldCardProps {
 }
 
 export function YieldCard({ vault }: YieldCardProps) {
-  const { address } = useWallet()
+  const { address } = useAccount()
   
   const {
     deposit,

@@ -1,14 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useWallet } from '@/components/providers/Providers'
+import { useAccount } from 'wagmi'
 import { useBridge } from '@/hooks/useBridge'
 import { SUPPORTED_CHAINS, BRIDGE_TOKENS, Chain, Token } from '@/lib/bridge-api'
 import { ArrowRight, Clock, ArrowDownUp } from 'lucide-react'
 import { formatUnits } from 'viem'
 
 export function BridgeCard() {
-  const { address } = useWallet()
+  const { address } = useAccount()
   const { getQuote, quote, isQuoting, formatDuration } = useBridge()
 
   const [fromChain, setFromChain] = useState<Chain>(SUPPORTED_CHAINS[0])

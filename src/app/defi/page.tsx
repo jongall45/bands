@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { usePorto } from '@/components/providers/Providers'
+import { useAccount } from 'wagmi'
 import { SwapCard } from '@/components/defi/SwapCard'
 import { YieldCard } from '@/components/defi/YieldCard'
 import { BridgeCard } from '@/components/defi/BridgeCard'
@@ -13,22 +13,8 @@ import { LogoInline } from '@/components/ui/Logo'
 type Tab = 'earn' | 'swap' | 'bridge'
 
 export default function DeFiPage() {
-  const { isConnected, ready } = usePorto()
+  const { isConnected } = useAccount()
   const [activeTab, setActiveTab] = useState<Tab>('earn')
-
-  if (!ready) {
-    return (
-      <div className="defi-page">
-        <div className="noise-overlay" />
-        <div className="aura aura-1" />
-        <div className="aura aura-2" />
-        <div className="min-h-screen flex items-center justify-center">
-          <RefreshCw className="w-8 h-8 text-[#ef4444] animate-spin" />
-        </div>
-        <style jsx global>{defiStyles}</style>
-      </div>
-    )
-  }
 
   if (!isConnected) {
     return (

@@ -2,22 +2,22 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { usePorto } from '@/components/providers/Providers'
+import { useAccount, useDisconnect } from 'wagmi'
 import { TrendingUp, LogOut, RefreshCw, ArrowUpRight, BarChart3 } from 'lucide-react'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
 import Link from 'next/link'
 
 export default function SpeculatePage() {
-  const { ready, isConnected, disconnect } = usePorto()
+  const { isConnected } = useAccount()
+  const { disconnect } = useDisconnect()
   const router = useRouter()
 
   useEffect(() => {
-    if (!ready) return
     if (!isConnected) router.push('/')
-  }, [ready, isConnected, router])
+  }, [isConnected, router])
 
-  if (!ready) {
+  if (!isConnected) {
     return (
       <div className="speculate-page">
         <div className="noise-overlay" />

@@ -2,10 +2,9 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { usePorto, useWallet } from '@/components/providers/Providers'
-import { useTransfer } from '@/hooks/useTransfer'
+import { useAccount, useDisconnect, useSendTransaction, useWaitForTransactionReceipt } from 'wagmi'
 import { useReadContract } from 'wagmi'
-import { formatUnits, isAddress } from 'viem'
+import { formatUnits, parseUnits, isAddress, encodeFunctionData } from 'viem'
 import { base } from 'wagmi/chains'
 import { USDC_ADDRESS, USDC_DECIMALS, ERC20_ABI } from '@/lib/wagmi'
 import { 
@@ -18,8 +17,8 @@ import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
 
 export default function Dashboard() {
-  const { ready, isConnected, disconnect } = usePorto()
-  const { address } = useWallet()
+  const { address, isConnected } = useAccount()
+  const { disconnect } = useDisconnect()
   const router = useRouter()
   const [copied, setCopied] = useState(false)
   const [showSend, setShowSend] = useState(false)
@@ -28,7 +27,8 @@ export default function Dashboard() {
   const [sendAmount, setSendAmount] = useState('')
   const [addressError, setAddressError] = useState('')
 
-  const { transfer, isLoading: isSending, error: sendError } = useTransfer()
+  const { sendTransaction, data: txHash, isPending: isSending } = useSendTransaction()
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash: txHash })
 
   const { data: usdcBalance, refetch: refetchBalance, isLoading: balanceLoading } = useReadContract({
     address: USDC_ADDRESS,
@@ -43,9 +43,17 @@ export default function Dashboard() {
   })
 
   useEffect(() => {
-    if (!ready) return
     if (!isConnected) router.push('/')
-  }, [ready, isConnected, router])
+  }, [isConnected, router])
+
+  useEffect(() => {
+    if (isSuccess) {
+      setShowSend(false)
+      setSendTo('')
+      setSendAmount('')
+      refetchBalance()
+    }
+  }, [isSuccess, refetchBalance])
 
   const formattedBalance = usdcBalance 
     ? parseFloat(formatUnits(usdcBalance, USDC_DECIMALS)).toLocaleString('en-US', {
@@ -79,28 +87,32 @@ export default function Dashboard() {
   }
 
   const handleSend = async () => {
-    if (!sendTo || !sendAmount || addressError) return
+    if (!sendTo || !sendAmount || addressError || !address) return
     if (!isAddress(sendTo)) {
       setAddressError('Invalid address format')
       return
     }
     
-    try {
-      await transfer(sendTo as `0x${string}`, sendAmount)
-      setShowSend(false)
-      setSendTo('')
-      setSendAmount('')
-      refetchBalance()
-    } catch (err) {
-      console.error('Send failed:', err)
-    }
+    const amount = parseUnits(sendAmount, USDC_DECIMALS)
+    
+    // Encode the transfer call
+    const data = encodeFunctionData({
+      abi: ERC20_ABI,
+      functionName: 'transfer',
+      args: [sendTo as `0x${string}`, amount],
+    })
+
+    sendTransaction({
+      to: USDC_ADDRESS,
+      data,
+    })
   }
 
   const setMaxAmount = () => {
     setSendAmount(numericBalance.toString())
   }
 
-  if (!ready) {
+  if (!isConnected) {
     return (
       <div className="dashboard-page">
         <div className="noise-overlay" />
@@ -131,7 +143,7 @@ export default function Dashboard() {
       <header className="dashboard-header">
         <LogoInline size="sm" />
         <button
-          onClick={disconnect}
+          onClick={() => disconnect()}
           className="logout-btn"
           title="Sign out"
         >
@@ -270,7 +282,7 @@ export default function Dashboard() {
       <BottomNav />
 
       {/* Send Modal */}
-      <Modal isOpen={showSend} onClose={() => !isSending && setShowSend(false)} title="Send USDC">
+      <Modal isOpen={showSend} onClose={() => !isSending && !isConfirming && setShowSend(false)} title="Send USDC">
         <div className="space-y-5">
           <div>
             <label className="block text-white/40 text-sm mb-2 font-medium">Recipient Address</label>
@@ -283,7 +295,7 @@ export default function Dashboard() {
                   validateAddress(e.target.value)
                 }}
                 placeholder="0x..."
-                disabled={isSending}
+                disabled={isSending || isConfirming}
                 className="w-full bg-transparent px-5 py-4 text-white font-mono text-sm placeholder:text-white/30 focus:outline-none"
               />
             </div>
@@ -303,7 +315,7 @@ export default function Dashboard() {
                   value={sendAmount}
                   onChange={(e) => setSendAmount(e.target.value)}
                   placeholder="0.00"
-                  disabled={isSending}
+                  disabled={isSending || isConfirming}
                   className="flex-1 bg-transparent text-4xl font-semibold text-white placeholder:text-white/20 focus:outline-none"
                 />
                 <div className="flex items-center gap-2 bg-white/[0.06] rounded-full px-4 py-2">
@@ -317,21 +329,15 @@ export default function Dashboard() {
             </CardInner>
           </div>
 
-          {sendError && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4">
-              <p className="text-red-400 text-sm">{sendError}</p>
-            </div>
-          )}
-
           <button
             onClick={handleSend}
-            disabled={isSending || !sendTo || !sendAmount || !!addressError || parseFloat(sendAmount) > numericBalance}
+            disabled={isSending || isConfirming || !sendTo || !sendAmount || !!addressError || parseFloat(sendAmount) > numericBalance}
             className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-all flex items-center justify-center gap-2"
           >
-            {isSending ? (
+            {isSending || isConfirming ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                Sending...
+                {isSending ? 'Confirm in wallet...' : 'Sending...'}
               </>
             ) : (
               <>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { usePorto, useWallet } from '@/components/providers/Providers'
+import { useAccount } from 'wagmi'
 import { ExternalLink, Loader2, AlertCircle, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
@@ -13,18 +13,17 @@ interface EmbeddedDAppProps {
 }
 
 export function EmbeddedDApp({ url, name, description, backHref = '/dashboard' }: EmbeddedDAppProps) {
-  const { isConnected, porto } = usePorto()
-  const { address } = useWallet()
+  const { isConnected, address } = useAccount()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     // Porto announces itself via EIP-6963
     // The embedded dApp should detect it automatically
-    if (porto && isConnected) {
+    if (isConnected) {
       setIsLoading(false)
     }
-  }, [porto, isConnected])
+  }, [isConnected])
 
   if (!isConnected) {
     return (
@@ -117,4 +116,3 @@ export function EmbeddedDApp({ url, name, description, backHref = '/dashboard' }
     </div>
   )
 }
-

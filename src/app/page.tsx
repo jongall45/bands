@@ -2,20 +2,20 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { usePorto } from '@/components/providers/Providers'
+import { useAccount, useConnect } from 'wagmi'
 import { ConnectButton } from '@/components/auth/ConnectButton'
 import { LogoInline } from '@/components/ui/Logo'
 import { Fingerprint, Shield, Zap, Globe } from 'lucide-react'
 
 export default function Home() {
-  const { isConnected, ready } = usePorto()
+  const { isConnected } = useAccount()
   const router = useRouter()
 
   useEffect(() => {
-    if (ready && isConnected) {
+    if (isConnected) {
       router.push('/dashboard')
     }
-  }, [ready, isConnected, router])
+  }, [isConnected, router])
 
   return (
     <div className="landing-page">
