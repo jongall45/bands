@@ -3,7 +3,7 @@
 import { usePrivy } from '@privy-io/react-auth'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
-import { Logo, LogoInline } from '@/components/ui/Logo'
+import { Logo, LogoInline, NeumorphicIcon } from '@/components/ui/Logo'
 
 export default function Home() {
   const { login, authenticated, ready } = usePrivy()
@@ -27,7 +27,7 @@ export default function Home() {
 
       {/* Navigation */}
       <header className="navbar">
-        <LogoInline size="md" />
+        <LogoInline size="md" neumorphic={true} />
         <nav className="nav-links">
           <a href="#features" className="nav-link">Features</a>
           <a href="#transparency" className="nav-link">Transparency</a>
@@ -68,7 +68,7 @@ export default function Home() {
 
         {/* Neumorphic Logo Showcase */}
         <div className="logo-showcase">
-          <Logo size="lg" variant="full" />
+          <NeumorphicIcon size={80} />
         </div>
 
         {/* Phone Mockup */}

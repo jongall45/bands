@@ -1,19 +1,75 @@
 'use client'
 
 interface LogoProps {
-  size?: 'sm' | 'md' | 'lg'
-  variant?: 'full' | 'icon'
+  size?: 'sm' | 'md' | 'lg' | 'xl'
+  variant?: 'full' | 'icon' | 'neumorphic-icon'
 }
 
 export function Logo({ size = 'md', variant = 'full' }: LogoProps) {
   const sizes = {
-    sm: { container: 80, stack: { w: 56, h: 88 }, wrapper: { w: 76, h: 32 }, dollar: 14, text: 12 },
-    md: { container: 120, stack: { w: 90, h: 140 }, wrapper: { w: 120, h: 50 }, dollar: 20, text: 18 },
-    lg: { container: 160, stack: { w: 120, h: 186 }, wrapper: { w: 160, h: 66 }, dollar: 26, text: 24 },
+    sm: { container: 80, stack: { w: 56, h: 88 }, wrapper: { w: 76, h: 32 }, dollar: 14, text: 12, icon: 32 },
+    md: { container: 120, stack: { w: 90, h: 140 }, wrapper: { w: 120, h: 50 }, dollar: 20, text: 18, icon: 48 },
+    lg: { container: 160, stack: { w: 120, h: 186 }, wrapper: { w: 160, h: 66 }, dollar: 26, text: 24, icon: 64 },
+    xl: { container: 200, stack: { w: 150, h: 232 }, wrapper: { w: 200, h: 82 }, dollar: 32, text: 30, icon: 80 },
   }
 
   const s = sizes[size]
 
+  // Neumorphic Red Icon - Soft 3D lifted effect
+  if (variant === 'neumorphic-icon') {
+    return (
+      <div className="bands-icon-neumorphic">
+        <span className="dollar-sign">$</span>
+        <style jsx>{`
+          .bands-icon-neumorphic {
+            --bands-red-base: #FF3B30;
+            --bands-red-light: #ff645c;
+            --bands-red-dark: #c41e14;
+            
+            width: ${s.icon}px;
+            height: ${s.icon}px;
+            border-radius: ${s.icon * 0.25}px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            
+            /* Soft gradient background */
+            background: linear-gradient(145deg, var(--bands-red-light), var(--bands-red-base));
+            
+            /* THE NEUMORPHIC MAGIC - Red-tinted shadows only */
+            box-shadow: 
+              -4px -4px 10px var(--bands-red-light),
+              4px 4px 10px var(--bands-red-dark),
+              inset 1px 1px 2px rgba(255, 255, 255, 0.2),
+              inset -1px -1px 2px rgba(150, 0, 0, 0.1);
+            
+            transition: all 0.3s ease;
+          }
+          
+          .bands-icon-neumorphic:hover {
+            box-shadow: 
+              -6px -6px 14px var(--bands-red-light),
+              6px 6px 14px var(--bands-red-dark),
+              inset 1px 1px 2px rgba(255, 255, 255, 0.3),
+              inset -1px -1px 2px rgba(150, 0, 0, 0.15);
+            transform: translateY(-2px);
+          }
+          
+          .dollar-sign {
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: ${s.icon * 0.5}px;
+            font-weight: 800;
+            color: white;
+            text-shadow: 
+              1px 1px 2px rgba(150, 0, 0, 0.3),
+              0 0 10px rgba(255, 255, 255, 0.2);
+          }
+        `}</style>
+      </div>
+    )
+  }
+
+  // Simple icon variant
   if (variant === 'icon') {
     return (
       <div className="logo-icon-only">
@@ -50,6 +106,7 @@ export function Logo({ size = 'md', variant = 'full' }: LogoProps) {
     )
   }
 
+  // Full money stack logo
   return (
     <div className="logo-container">
       {/* Money Stack Base */}
@@ -172,10 +229,89 @@ export function Logo({ size = 'md', variant = 'full' }: LogoProps) {
   )
 }
 
-// Simple inline logo for nav (keeps existing style)
-export function LogoInline({ size = 'md' }: { size?: 'sm' | 'md' }) {
+// Neumorphic Red Icon - Standalone export for nav/header use
+export function NeumorphicIcon({ size = 48 }: { size?: number }) {
+  return (
+    <div className="bands-icon-neumorphic">
+      <span className="dollar-sign">$</span>
+      <style jsx>{`
+        .bands-icon-neumorphic {
+          --bands-red-base: #FF3B30;
+          --bands-red-light: #ff645c;
+          --bands-red-dark: #c41e14;
+          
+          width: ${size}px;
+          height: ${size}px;
+          border-radius: ${size * 0.25}px;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          cursor: pointer;
+          
+          /* Soft gradient background */
+          background: linear-gradient(145deg, var(--bands-red-light), var(--bands-red-base));
+          
+          /* Neumorphic red-tinted shadows */
+          box-shadow: 
+            -4px -4px 10px var(--bands-red-light),
+            4px 4px 10px var(--bands-red-dark),
+            inset 1px 1px 2px rgba(255, 255, 255, 0.2),
+            inset -1px -1px 2px rgba(150, 0, 0, 0.1);
+          
+          transition: all 0.3s ease;
+        }
+        
+        .bands-icon-neumorphic:hover {
+          box-shadow: 
+            -6px -6px 14px var(--bands-red-light),
+            6px 6px 14px var(--bands-red-dark),
+            inset 1px 1px 2px rgba(255, 255, 255, 0.3),
+            inset -1px -1px 2px rgba(150, 0, 0, 0.15);
+          transform: translateY(-2px) scale(1.02);
+        }
+        
+        .bands-icon-neumorphic:active {
+          /* Pressed state - invert the shadow for "pressed in" feel */
+          box-shadow: 
+            inset 4px 4px 10px var(--bands-red-dark),
+            inset -4px -4px 10px var(--bands-red-light);
+          transform: translateY(0) scale(0.98);
+        }
+        
+        .dollar-sign {
+          font-family: 'Inter', -apple-system, sans-serif;
+          font-size: ${size * 0.5}px;
+          font-weight: 800;
+          color: white;
+          text-shadow: 
+            1px 1px 2px rgba(150, 0, 0, 0.3),
+            0 0 10px rgba(255, 255, 255, 0.2);
+          user-select: none;
+        }
+      `}</style>
+    </div>
+  )
+}
+
+// Simple inline logo for nav (keeps existing style but with neumorphic option)
+export function LogoInline({ size = 'md', neumorphic = false }: { size?: 'sm' | 'md', neumorphic?: boolean }) {
   const iconSize = size === 'sm' ? 28 : 36
   const fontSize = size === 'sm' ? '1.1rem' : '1.3rem'
+  
+  if (neumorphic) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <NeumorphicIcon size={iconSize} />
+        <span style={{
+          fontWeight: 700,
+          fontSize: fontSize,
+          letterSpacing: '-0.02em',
+        }}>
+          bands
+        </span>
+      </div>
+    )
+  }
   
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
