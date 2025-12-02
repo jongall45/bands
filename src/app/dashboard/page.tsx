@@ -15,6 +15,7 @@ import { Modal } from '@/components/ui/Modal'
 import { CardInner } from '@/components/ui/Card'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
+import { TransactionList } from '@/components/ui/TransactionList'
 
 export default function Dashboard() {
   const { address, isConnected } = useAccount()
@@ -237,16 +238,20 @@ export default function Dashboard() {
 
         {/* Recent Activity Card */}
         <div className="card mt-4">
-          <h2 className="text-white font-semibold mb-4">Recent Activity</h2>
-          
-          {/* Empty State */}
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="w-12 h-12 bg-white/[0.03] rounded-full flex items-center justify-center mb-4">
-              <Send className="w-6 h-6 text-gray-600" strokeWidth={1.5} />
-            </div>
-            <p className="text-gray-400 text-sm">No transactions yet</p>
-            <p className="text-gray-600 text-xs mt-1">Send or receive to get started</p>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-white font-semibold">Recent Activity</h2>
+            <a 
+              href={`https://basescan.org/address/${address}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-white/40 text-xs hover:text-white/60 transition-colors flex items-center gap-1"
+            >
+              View all
+              <ExternalLink className="w-3 h-3" />
+            </a>
           </div>
+          
+          <TransactionList address={address} limit={5} />
         </div>
 
       </main>
