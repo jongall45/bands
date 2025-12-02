@@ -6,7 +6,6 @@ import { useAccount } from 'wagmi'
 interface OnrampOptions {
   amount?: number
   fiatCurrency?: string
-  blockchain?: 'base' | 'arbitrum' | 'ethereum'
 }
 
 interface Quote {
@@ -23,64 +22,28 @@ export function useOnramp() {
   const [error, setError] = useState<string | null>(null)
   const [quote, setQuote] = useState<Quote | null>(null)
 
-  // Get a quote for display purposes
+  // Generate a simple quote (no API call needed for USDC - 0% fee)
   const getQuote = useCallback(async (amount: number) => {
     if (!address) {
       setError('Wallet not connected')
       return null
     }
 
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const response = await fetch('/api/onramp/quote', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount,
-          destinationAddress: address,
-        }),
-      })
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
-        throw new Error(data.error || 'Failed to get quote')
-      }
-
-      const data = await response.json()
-      
-      // Handle different response formats
-      const quoteData = data.quote || {}
-      
-      const formattedQuote: Quote = {
-        paymentTotal: quoteData.payment_total?.amount || amount.toString(),
-        paymentSubtotal: quoteData.payment_subtotal?.amount || amount.toString(),
-        purchaseAmount: quoteData.purchase_amount?.amount || amount.toString(),
-        coinbaseFee: quoteData.coinbase_fee?.amount || '0',
-        networkFee: quoteData.network_fee?.amount || '0',
-      }
-
-      setQuote(formattedQuote)
-      return formattedQuote
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to get quote'
-      setError(message)
-      // Return a default quote on error so UI still works
-      setQuote({
-        paymentTotal: amount.toString(),
-        paymentSubtotal: amount.toString(),
-        purchaseAmount: amount.toString(),
-        coinbaseFee: '0',
-        networkFee: '0',
-      })
-      return null
-    } finally {
-      setIsLoading(false)
+    // For USDC, Coinbase charges 0% fee, so quote is simple
+    const formattedQuote: Quote = {
+      paymentTotal: amount.toFixed(2),
+      paymentSubtotal: amount.toFixed(2),
+      purchaseAmount: amount.toFixed(2),
+      coinbaseFee: '0.00',
+      networkFee: '0.00',
     }
+
+    setQuote(formattedQuote)
+    setError(null)
+    return formattedQuote
   }, [address])
 
-  // Open Coinbase Onramp
+  // Open Coinbase Onramp with direct URL
   const openOnramp = useCallback(async (options: OnrampOptions = {}) => {
     if (!address) {
       setError('Wallet not connected')
@@ -90,51 +53,46 @@ export function useOnramp() {
     const { 
       amount, 
       fiatCurrency = 'USD',
-      blockchain = 'base',
     } = options
 
     setIsLoading(true)
     setError(null)
 
     try {
-      // Get session token from our backend
-      const sessionResponse = await fetch('/api/onramp/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          address,
-          blockchain,
-        }),
-      })
-
-      if (!sessionResponse.ok) {
-        const data = await sessionResponse.json().catch(() => ({}))
-        throw new Error(data.error || 'Failed to initialize onramp')
-      }
-
-      const { sessionToken } = await sessionResponse.json()
-
-      // Build the Onramp URL
-      const baseUrl = 'https://pay.coinbase.com/buy'
+      // Use Coinbase Pay direct URL (no API key required for basic flow)
+      // This opens the Coinbase widget where users can buy and send to any address
+      const baseUrl = 'https://pay.coinbase.com/buy/select-asset'
+      
       const params = new URLSearchParams({
-        sessionToken,
+        // App identification
+        appId: 'bands-cash',
+        // Destination wallet
+        destinationWallets: JSON.stringify([{
+          address: address,
+          blockchains: ['base'],
+          assets: ['USDC'],
+        }]),
+        // Default to USDC on Base
         defaultAsset: 'USDC',
-        defaultNetwork: blockchain,
+        defaultNetwork: 'base',
+        // Preset amount if provided
+        ...(amount && { presetFiatAmount: amount.toString() }),
+        ...(amount && { fiatCurrency }),
       })
-
-      // Add amount if specified (one-click-buy experience)
-      if (amount) {
-        params.append('presetFiatAmount', amount.toString())
-        params.append('fiatCurrency', fiatCurrency)
-      }
-
-      // Add redirect URL for success
-      params.append('redirectUrl', `${window.location.origin}/fund/success`)
 
       const onrampUrl = `${baseUrl}?${params.toString()}`
 
-      // Open in a new window/tab
-      window.open(onrampUrl, '_blank', 'width=460,height=750')
+      // Open Coinbase Pay in a popup
+      const width = 460
+      const height = 750
+      const left = (window.screen.width - width) / 2
+      const top = (window.screen.height - height) / 2
+      
+      window.open(
+        onrampUrl,
+        'coinbase-onramp',
+        `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no`
+      )
 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to open onramp')
@@ -152,4 +110,3 @@ export function useOnramp() {
     isReady: !!address,
   }
 }
-

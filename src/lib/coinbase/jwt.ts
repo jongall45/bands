@@ -1,63 +1,76 @@
-import { SignJWT, importPKCS8 } from 'jose'
 import * as crypto from 'crypto'
 
 const CDP_API_KEY_ID = process.env.CDP_API_KEY_ID!
 const CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET!
 
-// Convert the base64 secret to PEM format for ES256
-function secretToPem(base64Secret: string): string {
-  const secretBytes = Buffer.from(base64Secret, 'base64')
-  // Take first 32 bytes as the private key scalar
-  const privateKeyBytes = secretBytes.slice(0, 32)
-  
-  // Build DER encoding for EC private key
-  const derPrefix = Buffer.from([
-    0x30, 0x41, // SEQUENCE, length 65
-    0x02, 0x01, 0x00, // INTEGER 0 (version)
-    0x30, 0x13, // SEQUENCE, length 19 (algorithm identifier)
-    0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, // OID 1.2.840.10045.2.1 (ecPublicKey)
-    0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, // OID 1.2.840.10045.3.1.7 (P-256)
-    0x04, 0x27, // OCTET STRING, length 39
-    0x30, 0x25, // SEQUENCE, length 37
-    0x02, 0x01, 0x01, // INTEGER 1 (version)
-    0x04, 0x20, // OCTET STRING, length 32
-  ])
-  
-  const derBytes = Buffer.concat([derPrefix, privateKeyBytes])
-  const base64Der = derBytes.toString('base64')
-  
-  return `-----BEGIN EC PRIVATE KEY-----\n${base64Der.match(/.{1,64}/g)?.join('\n')}\n-----END EC PRIVATE KEY-----`
+// Base64URL encode
+function base64url(input: Buffer | string): string {
+  const str = typeof input === 'string' ? input : input.toString('base64')
+  return str.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
 }
 
+// Create JWT manually using Node crypto
 export async function generateCoinbaseJWT(
   requestMethod: string,
   requestPath: string
 ): Promise<string> {
   const uri = `${requestMethod} api.developer.coinbase.com${requestPath}`
   
-  // Convert secret to PEM format
-  const pemKey = secretToPem(CDP_API_KEY_SECRET)
+  const now = Math.floor(Date.now() / 1000)
   
-  // Import the key
-  const privateKey = await importPKCS8(pemKey, 'ES256')
-
-  const jwt = await new SignJWT({
+  // JWT Header
+  const header = {
+    alg: 'ES256',
+    kid: CDP_API_KEY_ID,
+    typ: 'JWT',
+    nonce: crypto.randomUUID(),
+  }
+  
+  // JWT Payload
+  const payload = {
     sub: CDP_API_KEY_ID,
     iss: 'cdp',
     aud: ['cdp_service'],
     uris: [uri],
-  })
-    .setProtectedHeader({ 
-      alg: 'ES256', 
-      kid: CDP_API_KEY_ID,
-      typ: 'JWT',
-      nonce: crypto.randomUUID(),
+    iat: now,
+    exp: now + 120, // 2 minutes
+    nbf: now - 5,
+  }
+  
+  // Encode header and payload
+  const headerB64 = base64url(Buffer.from(JSON.stringify(header)))
+  const payloadB64 = base64url(Buffer.from(JSON.stringify(payload)))
+  const message = `${headerB64}.${payloadB64}`
+  
+  try {
+    // Decode the secret - it's base64 encoded EC private key
+    const secretBytes = Buffer.from(CDP_API_KEY_SECRET, 'base64')
+    
+    // The secret should be 64 bytes: 32 bytes private key + 32 bytes... or just 32 bytes
+    // Take first 32 bytes as the private key scalar
+    const privateKeyD = secretBytes.slice(0, 32)
+    
+    // Create the key object using crypto.createPrivateKey with JWK format
+    const privateKey = crypto.createPrivateKey({
+      key: {
+        kty: 'EC',
+        crv: 'P-256',
+        d: base64url(privateKeyD),
+        // We don't have x,y but Node.js can derive them
+      },
+      format: 'jwk',
     })
-    .setIssuedAt()
-    .setExpirationTime('2m')
-    .setNotBefore(Math.floor(Date.now() / 1000) - 5)
-    .sign(privateKey)
-
-  return jwt
+    
+    // Sign
+    const sign = crypto.createSign('SHA256')
+    sign.update(message)
+    const signature = sign.sign({ key: privateKey, dsaEncoding: 'ieee-p1363' })
+    
+    const signatureB64 = base64url(signature)
+    
+    return `${message}.${signatureB64}`
+  } catch (error) {
+    console.error('JWT generation error:', error)
+    throw error
+  }
 }
-

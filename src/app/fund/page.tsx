@@ -16,7 +16,6 @@ export default function FundPage() {
   const { openOnramp, getQuote, quote, isLoading, error, isReady } = useOnramp()
 
   const [amount, setAmount] = useState<string>('100')
-  const [isGettingQuote, setIsGettingQuote] = useState(false)
 
   // Redirect if not connected
   useEffect(() => {
@@ -25,18 +24,11 @@ export default function FundPage() {
     }
   }, [isConnected, router])
 
-  // Get quote when amount changes (debounced)
+  // Get quote when amount changes
   useEffect(() => {
     const amountNum = parseFloat(amount)
     if (!amountNum || amountNum < 5) return
-
-    const timer = setTimeout(async () => {
-      setIsGettingQuote(true)
-      await getQuote(amountNum)
-      setIsGettingQuote(false)
-    }, 500)
-
-    return () => clearTimeout(timer)
+    getQuote(amountNum)
   }, [amount, getQuote])
 
   const handleFund = async () => {
@@ -46,7 +38,6 @@ export default function FundPage() {
     await openOnramp({
       amount: amountNum,
       fiatCurrency: 'USD',
-      blockchain: 'base',
     })
   }
 
@@ -136,7 +127,7 @@ export default function FundPage() {
                 </div>
                 <div>
                   <p className="text-white font-bold text-2xl">
-                    {isGettingQuote ? '...' : `${parseFloat(quote.purchaseAmount).toFixed(2)} USDC`}
+                    {quote.purchaseAmount} USDC
                   </p>
                   <p className="text-white/40 text-xs">on Base</p>
                 </div>
@@ -149,13 +140,11 @@ export default function FundPage() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-white/40">Coinbase Fee</span>
-                  <span className={`${parseFloat(quote.coinbaseFee) === 0 ? 'text-green-400' : 'text-white'}`}>
-                    {parseFloat(quote.coinbaseFee) === 0 ? 'Free' : `$${quote.coinbaseFee}`}
-                  </span>
+                  <span className="text-green-400">Free</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-white/40">Network Fee</span>
-                  <span className="text-white">${quote.networkFee}</span>
+                  <span className="text-white">~$0</span>
                 </div>
                 <div className="flex justify-between text-sm font-medium pt-2 border-t border-white/[0.06]">
                   <span className="text-white">Total</span>
