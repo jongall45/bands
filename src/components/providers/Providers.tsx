@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { WagmiProvider, useReconnect } from 'wagmi'
+import { OnchainKitProvider } from '@coinbase/onchainkit'
+import { base } from 'wagmi/chains'
 import { wagmiConfig } from '@/lib/wagmi'
 
 // Component to handle auto-reconnect
@@ -33,9 +35,20 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
-        <AutoReconnect>
-          {children}
-        </AutoReconnect>
+        <OnchainKitProvider
+          apiKey={process.env.NEXT_PUBLIC_CDP_API_KEY}
+          chain={base}
+          config={{
+            appearance: {
+              mode: 'dark',
+              theme: 'default',
+            },
+          }}
+        >
+          <AutoReconnect>
+            {children}
+          </AutoReconnect>
+        </OnchainKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
   )

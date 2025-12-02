@@ -3,19 +3,20 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAccount } from 'wagmi'
-import { useOnramp } from '@/hooks/useOnramp'
-import { ArrowLeft, CreditCard, Loader2, DollarSign, Info, ExternalLink, Smartphone } from 'lucide-react'
+import { 
+  FundCard,
+  FundCardAmountInput,
+  FundCardPaymentMethodDropdown,
+  FundCardSubmitButton,
+} from '@coinbase/onchainkit/fund'
+import { ArrowLeft, Info } from 'lucide-react'
 import Link from 'next/link'
 import { BottomNav } from '@/components/ui/BottomNav'
-
-const PRESET_AMOUNTS = [25, 50, 100, 250, 500]
+import '@coinbase/onchainkit/styles.css'
 
 export default function FundPage() {
   const router = useRouter()
   const { address, isConnected } = useAccount()
-  const { openOnramp, getQuote, quote, isLoading, error, isReady } = useOnramp()
-
-  const [amount, setAmount] = useState<string>('100')
 
   // Redirect if not connected
   useEffect(() => {
@@ -24,27 +25,7 @@ export default function FundPage() {
     }
   }, [isConnected, router])
 
-  // Get quote when amount changes
-  useEffect(() => {
-    const amountNum = parseFloat(amount)
-    if (!amountNum || amountNum < 20) return
-    getQuote(amountNum)
-  }, [amount, getQuote])
-
-  const handleFund = async () => {
-    const amountNum = parseFloat(amount)
-    if (!amountNum || amountNum < 20) return
-
-    await openOnramp({
-      amount: amountNum,
-      fiatCurrency: 'USD',
-    })
-  }
-
-  if (!isConnected) return null
-
-  const amountNum = parseFloat(amount) || 0
-  const isValidAmount = amountNum >= 20
+  if (!isConnected || !address) return null
 
   return (
     <div className="fund-page">
@@ -62,7 +43,7 @@ export default function FundPage() {
           <Link href="/dashboard" className="text-gray-600 hover:text-gray-900">
             <ArrowLeft className="w-5 h-5" />
           </Link>
-          <h1 className="text-gray-900 font-semibold text-lg">Add Funds</h1>
+          <h1 className="text-gray-900 font-semibold text-lg">Deposit</h1>
         </header>
 
         <div className="px-5 space-y-5">
@@ -71,129 +52,36 @@ export default function FundPage() {
             <div className="flex items-start gap-3">
               <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
               <div>
-                <p className="text-blue-700 text-sm font-medium">Buy USDC instantly</p>
+                <p className="text-blue-700 text-sm font-medium">Instant deposits with Apple Pay</p>
                 <p className="text-blue-600/70 text-xs mt-1">
-                  Use Apple Pay or debit card. Funds arrive on Base in ~2 minutes.
+                  Buy USDC and it arrives in your wallet in ~1 minute.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Amount Card */}
-          <div className="card">
-            <div className="space-y-4">
-              <label className="text-white/40 text-sm">Amount (USD)</label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 text-3xl">$</span>
-                <input
-                  type="number"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
-                  min="20"
-                  className="w-full pl-12 pr-4 py-4 bg-white/[0.03] border border-white/[0.08] rounded-2xl text-white text-4xl font-bold outline-none focus:border-[#ef4444]/50 text-center"
-                />
-              </div>
-
-              {/* Quick Amount Buttons */}
-              <div className="flex gap-2">
-                {PRESET_AMOUNTS.map((preset) => (
-                  <button
-                    key={preset}
-                    onClick={() => setAmount(preset.toString())}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                      amount === preset.toString()
-                        ? 'bg-[#ef4444] text-white'
-                        : 'bg-white/[0.03] border border-white/[0.06] text-white/60 hover:text-white hover:bg-white/[0.06]'
-                    }`}
-                  >
-                    ${preset}
-                  </button>
-                ))}
-              </div>
-
-              <p className="text-white/30 text-xs text-center">
-                Min $20 • Instant delivery
-              </p>
-            </div>
+          {/* Coinbase FundCard */}
+          <div className="fund-card-wrapper">
+            <FundCard
+              assetSymbol="USDC"
+              country="US"
+              currency="USD"
+              headerText="Buy USDC"
+              buttonText="Continue"
+              presetAmountInputs={['50', '100', '250']}
+              onSuccess={(data) => {
+                console.log('Purchase successful:', data)
+                router.push('/fund/success')
+              }}
+              onError={(error) => {
+                console.error('Purchase error:', error)
+              }}
+            >
+              <FundCardAmountInput />
+              <FundCardPaymentMethodDropdown />
+              <FundCardSubmitButton />
+            </FundCard>
           </div>
-
-          {/* Quote Summary */}
-          {quote && isValidAmount && (
-            <div className="card">
-              <h3 className="text-white/40 text-sm mb-3">You'll receive</h3>
-              
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center">
-                  <DollarSign className="w-6 h-6 text-blue-400" />
-                </div>
-                <div>
-                  <p className="text-white font-bold text-2xl">
-                    ~{quote.purchaseAmount} USDC
-                  </p>
-                  <p className="text-white/40 text-xs">on Base</p>
-                </div>
-              </div>
-
-              <div className="border-t border-white/[0.06] pt-3 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-white/40">You pay</span>
-                  <span className="text-white">${quote.paymentTotal}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-white/40">Processing fee (~4.5%)</span>
-                  <span className="text-white/60">~${quote.fee}</span>
-                </div>
-                <div className="flex justify-between text-sm font-medium pt-2 border-t border-white/[0.06]">
-                  <span className="text-white">You receive</span>
-                  <span className="text-green-400">~{quote.purchaseAmount} USDC</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Error Message */}
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4">
-              <p className="text-red-400 text-sm">{error}</p>
-            </div>
-          )}
-
-          {/* Payment Methods */}
-          <div className="space-y-3">
-            <p className="text-gray-600 text-sm">Supported payment methods</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-white/80 backdrop-blur border border-white/50 rounded-xl p-3 flex items-center gap-3 shadow-sm">
-                <Smartphone className="w-5 h-5 text-gray-800" />
-                <span className="text-gray-800 text-sm font-medium">Apple Pay</span>
-              </div>
-              <div className="bg-white/80 backdrop-blur border border-white/50 rounded-xl p-3 flex items-center gap-3 shadow-sm">
-                <CreditCard className="w-5 h-5 text-gray-600" />
-                <span className="text-gray-800 text-sm font-medium">Debit Card</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Continue Button */}
-          <button
-            onClick={handleFund}
-            disabled={isLoading || !isReady || !isValidAmount}
-            className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-gray-300 disabled:text-gray-500 text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-[#ef4444]/20"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Opening...
-              </>
-            ) : !isValidAmount ? (
-              'Enter $20 or more'
-            ) : (
-              <>
-                Buy with Apple Pay
-                <ExternalLink className="w-4 h-4" />
-              </>
-            )}
-          </button>
 
           {/* Destination Info */}
           <div className="bg-white/50 backdrop-blur rounded-xl p-4">
@@ -207,7 +95,7 @@ export default function FundPage() {
 
           {/* Powered by */}
           <p className="text-gray-400 text-xs text-center">
-            Powered by MoonPay
+            Powered by Coinbase
           </p>
         </div>
       </div>
@@ -283,16 +171,17 @@ export default function FundPage() {
           66% { transform: translate(-30px, 40px) scale(0.95); }
         }
 
-        .fund-page .card {
+        /* OnchainKit FundCard Styling */
+        .fund-card-wrapper {
           background: #111111;
           border: 1px solid rgba(255, 255, 255, 0.06);
           border-radius: 24px;
-          padding: 20px;
+          padding: 24px;
           position: relative;
           overflow: hidden;
         }
 
-        .fund-page .card::before {
+        .fund-card-wrapper::before {
           content: '';
           position: absolute;
           top: 0;
@@ -310,9 +199,36 @@ export default function FundPage() {
           z-index: 0;
         }
 
-        .fund-page .card > * {
-          position: relative;
-          z-index: 1;
+        /* Override OnchainKit default styles */
+        .fund-card-wrapper [data-testid="ockFundCard"] {
+          background: transparent !important;
+          border: none !important;
+          padding: 0 !important;
+        }
+
+        .fund-card-wrapper input {
+          background: rgba(255, 255, 255, 0.03) !important;
+          border: 1px solid rgba(255, 255, 255, 0.08) !important;
+          border-radius: 16px !important;
+          color: white !important;
+          font-size: 32px !important;
+          font-weight: 700 !important;
+          text-align: center !important;
+        }
+
+        .fund-card-wrapper button[type="submit"] {
+          background: linear-gradient(135deg, #0052FF, #0066FF) !important;
+          border-radius: 16px !important;
+          padding: 16px !important;
+          font-weight: 600 !important;
+          font-size: 16px !important;
+          width: 100% !important;
+          margin-top: 16px !important;
+        }
+
+        .fund-card-wrapper button[type="submit"]:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 8px 24px rgba(0, 82, 255, 0.3);
         }
       `}</style>
     </div>
