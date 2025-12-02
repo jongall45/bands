@@ -1,28 +1,20 @@
-import { http, createConfig, createStorage } from 'wagmi'
-import { base, baseSepolia, optimism, arbitrum } from 'wagmi/chains'
-import { porto } from 'porto/wagmi'
+import { createConfig, http, createStorage } from 'wagmi'
+import { base, optimism, arbitrum } from 'wagmi/chains'
+import { porto } from 'wagmi/connectors'
 
-// Create wagmi config with Porto connector
 export const wagmiConfig = createConfig({
-  chains: [base, baseSepolia, optimism, arbitrum],
-  connectors: [
-    porto({
-      // Porto config - use Base as default chain
-      chains: [base, baseSepolia, optimism, arbitrum],
-    }),
-  ],
+  chains: [base, optimism, arbitrum],
+  connectors: [porto()],  // <-- This is the key fix - use wagmi's built-in porto connector
   storage: typeof window !== 'undefined' 
     ? createStorage({ storage: window.localStorage })
     : undefined,
   transports: {
     [base.id]: http(),
-    [baseSepolia.id]: http(),
     [optimism.id]: http(),
     [arbitrum.id]: http(),
   },
 })
 
-// Stablecoin addresses on Base
 export const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
 export const USDC_DECIMALS = 6
 

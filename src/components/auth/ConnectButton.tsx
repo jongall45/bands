@@ -9,31 +9,13 @@ interface ConnectButtonProps {
 
 export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
   const { address, isConnected } = useAccount()
-  const { connect, connectors, isPending, error } = useConnect()
+  const { connect, connectors, isPending } = useConnect()
   const { disconnect } = useDisconnect()
 
-  // Find the Porto connector - it should be the first/only one
-  const portoConnector = connectors.find(c => c.id === 'xyz.ithaca.porto') || connectors[0]
-
-  const handleConnect = () => {
-    console.log('Connect clicked')
-    console.log('Available connectors:', connectors.map(c => ({ id: c.id, name: c.name })))
-    console.log('Porto connector:', portoConnector)
-    
-    if (!portoConnector) {
-      console.error('No Porto connector found!')
-      return
-    }
-    
-    // Simply call connect with the Porto connector
-    // Porto handles the dialog/passkey flow internally
-    connect({ connector: portoConnector })
-  }
-
-  // Log any connection errors
-  if (error) {
-    console.error('Connection error:', error)
-  }
+  // Find the Porto connector
+  const portoConnector = connectors.find(
+    (connector) => connector.id === 'xyz.ithaca.porto'
+  )
 
   if (isConnected && address) {
     return (
@@ -56,7 +38,7 @@ export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
   if (variant === 'large') {
     return (
       <button
-        onClick={handleConnect}
+        onClick={() => portoConnector && connect({ connector: portoConnector })}
         disabled={isPending || !portoConnector}
         className="flex items-center justify-center gap-3 bg-[#ef4444] hover:bg-[#dc2626] disabled:opacity-50 text-white font-semibold px-8 py-4 rounded-full transition-all shadow-[0_0_30px_rgba(239,68,68,0.3)] hover:shadow-[0_0_40px_rgba(239,68,68,0.4)]"
       >
@@ -77,7 +59,7 @@ export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
 
   return (
     <button
-      onClick={handleConnect}
+      onClick={() => portoConnector && connect({ connector: portoConnector })}
       disabled={isPending || !portoConnector}
       className="flex items-center gap-2 bg-[#ef4444] hover:bg-[#dc2626] disabled:opacity-50 text-white font-semibold px-5 py-2.5 rounded-full transition-colors"
     >

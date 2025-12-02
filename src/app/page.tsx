@@ -81,7 +81,7 @@ export default function Home() {
               <h3>Use Anywhere</h3>
               <p>Connect to any dApp</p>
             </div>
-          </div>
+        </div>
         </div>
       </main>
 
