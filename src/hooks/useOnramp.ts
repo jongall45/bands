@@ -12,8 +12,7 @@ interface Quote {
   paymentTotal: string
   paymentSubtotal: string
   purchaseAmount: string
-  coinbaseFee: string
-  networkFee: string
+  fee: string
 }
 
 export function useOnramp() {
@@ -22,20 +21,24 @@ export function useOnramp() {
   const [error, setError] = useState<string | null>(null)
   const [quote, setQuote] = useState<Quote | null>(null)
 
-  // Generate a simple quote (no API call needed for USDC - 0% fee)
+  // Generate estimated quote
   const getQuote = useCallback(async (amount: number) => {
     if (!address) {
       setError('Wallet not connected')
       return null
     }
 
-    // For USDC, Coinbase charges 0% fee, so quote is simple
+    // MoonPay has ~4.5% fee for card payments, 1% for bank transfers
+    // Apple Pay uses card rails, so ~4.5%
+    const feePercent = 0.045
+    const fee = amount * feePercent
+    const receiveAmount = amount - fee
+
     const formattedQuote: Quote = {
       paymentTotal: amount.toFixed(2),
-      paymentSubtotal: amount.toFixed(2),
-      purchaseAmount: amount.toFixed(2),
-      coinbaseFee: '0.00',
-      networkFee: '0.00',
+      paymentSubtotal: receiveAmount.toFixed(2),
+      purchaseAmount: receiveAmount.toFixed(2),
+      fee: fee.toFixed(2),
     }
 
     setQuote(formattedQuote)
@@ -43,7 +46,7 @@ export function useOnramp() {
     return formattedQuote
   }, [address])
 
-  // Open Coinbase Onramp with direct URL
+  // Open MoonPay widget
   const openOnramp = useCallback(async (options: OnrampOptions = {}) => {
     if (!address) {
       setError('Wallet not connected')
@@ -52,50 +55,43 @@ export function useOnramp() {
 
     const { 
       amount, 
-      fiatCurrency = 'USD',
+      fiatCurrency = 'usd',
     } = options
 
     setIsLoading(true)
     setError(null)
 
     try {
-      // Use Coinbase Pay direct URL (no API key required for basic flow)
-      // This opens the Coinbase widget where users can buy and send to any address
-      const baseUrl = 'https://pay.coinbase.com/buy/select-asset'
-      
+      // MoonPay widget URL - no API key needed for basic flow
       const params = new URLSearchParams({
-        // App identification
-        appId: 'bands-cash',
-        // Destination wallet
-        destinationWallets: JSON.stringify([{
-          address: address,
-          blockchains: ['base'],
-          assets: ['USDC'],
-        }]),
-        // Default to USDC on Base
-        defaultAsset: 'USDC',
-        defaultNetwork: 'base',
-        // Preset amount if provided
-        ...(amount && { presetFiatAmount: amount.toString() }),
-        ...(amount && { fiatCurrency }),
+        currencyCode: 'usdc_base', // USDC on Base network
+        walletAddress: address,
+        baseCurrencyCode: fiatCurrency.toLowerCase(),
+        colorCode: '#ef4444', // Match bands.cash brand color
+        language: 'en',
       })
+      
+      // Add preset amount if specified
+      if (amount) {
+        params.set('baseCurrencyAmount', amount.toString())
+      }
 
-      const onrampUrl = `${baseUrl}?${params.toString()}`
+      const moonpayUrl = `https://buy.moonpay.com?${params.toString()}`
 
-      // Open Coinbase Pay in a popup
+      // Open in popup
       const width = 460
-      const height = 750
+      const height = 700
       const left = (window.screen.width - width) / 2
       const top = (window.screen.height - height) / 2
       
       window.open(
-        onrampUrl,
-        'coinbase-onramp',
-        `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no`
+        moonpayUrl,
+        'moonpay-widget',
+        `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes`
       )
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to open onramp')
+      setError(err instanceof Error ? err.message : 'Failed to open payment')
     } finally {
       setIsLoading(false)
     }

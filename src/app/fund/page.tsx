@@ -27,13 +27,13 @@ export default function FundPage() {
   // Get quote when amount changes
   useEffect(() => {
     const amountNum = parseFloat(amount)
-    if (!amountNum || amountNum < 5) return
+    if (!amountNum || amountNum < 20) return
     getQuote(amountNum)
   }, [amount, getQuote])
 
   const handleFund = async () => {
     const amountNum = parseFloat(amount)
-    if (!amountNum || amountNum < 5) return
+    if (!amountNum || amountNum < 20) return
 
     await openOnramp({
       amount: amountNum,
@@ -42,6 +42,9 @@ export default function FundPage() {
   }
 
   if (!isConnected) return null
+
+  const amountNum = parseFloat(amount) || 0
+  const isValidAmount = amountNum >= 20
 
   return (
     <div className="fund-page">
@@ -64,13 +67,13 @@ export default function FundPage() {
 
         <div className="px-5 space-y-5">
           {/* Info Banner */}
-          <div className="bg-green-500/10 border border-green-500/20 rounded-2xl p-4">
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4">
             <div className="flex items-start gap-3">
-              <Info className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+              <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
               <div>
-                <p className="text-green-700 text-sm font-medium">Zero fees on USDC</p>
-                <p className="text-green-600/70 text-xs mt-1">
-                  Buy USDC with Apple Pay or debit card. Funds arrive on Base in ~1 minute.
+                <p className="text-blue-700 text-sm font-medium">Buy USDC instantly</p>
+                <p className="text-blue-600/70 text-xs mt-1">
+                  Use Apple Pay or debit card. Funds arrive on Base in ~2 minutes.
                 </p>
               </div>
             </div>
@@ -87,8 +90,7 @@ export default function FundPage() {
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
-                  min="5"
-                  max="500"
+                  min="20"
                   className="w-full pl-12 pr-4 py-4 bg-white/[0.03] border border-white/[0.08] rounded-2xl text-white text-4xl font-bold outline-none focus:border-[#ef4444]/50 text-center"
                 />
               </div>
@@ -111,13 +113,13 @@ export default function FundPage() {
               </div>
 
               <p className="text-white/30 text-xs text-center">
-                Min $5 • Max $500/week (guest checkout)
+                Min $20 • Instant delivery
               </p>
             </div>
           </div>
 
           {/* Quote Summary */}
-          {quote && parseFloat(amount) >= 5 && (
+          {quote && isValidAmount && (
             <div className="card">
               <h3 className="text-white/40 text-sm mb-3">You'll receive</h3>
               
@@ -127,7 +129,7 @@ export default function FundPage() {
                 </div>
                 <div>
                   <p className="text-white font-bold text-2xl">
-                    {quote.purchaseAmount} USDC
+                    ~{quote.purchaseAmount} USDC
                   </p>
                   <p className="text-white/40 text-xs">on Base</p>
                 </div>
@@ -135,20 +137,16 @@ export default function FundPage() {
 
               <div className="border-t border-white/[0.06] pt-3 space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-white/40">Subtotal</span>
-                  <span className="text-white">${quote.paymentSubtotal}</span>
+                  <span className="text-white/40">You pay</span>
+                  <span className="text-white">${quote.paymentTotal}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-white/40">Coinbase Fee</span>
-                  <span className="text-green-400">Free</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-white/40">Network Fee</span>
-                  <span className="text-white">~$0</span>
+                  <span className="text-white/40">Processing fee (~4.5%)</span>
+                  <span className="text-white/60">~${quote.fee}</span>
                 </div>
                 <div className="flex justify-between text-sm font-medium pt-2 border-t border-white/[0.06]">
-                  <span className="text-white">Total</span>
-                  <span className="text-white">${quote.paymentTotal}</span>
+                  <span className="text-white">You receive</span>
+                  <span className="text-green-400">~{quote.purchaseAmount} USDC</span>
                 </div>
               </div>
             </div>
@@ -163,7 +161,7 @@ export default function FundPage() {
 
           {/* Payment Methods */}
           <div className="space-y-3">
-            <p className="text-gray-600 text-sm">Payment methods</p>
+            <p className="text-gray-600 text-sm">Supported payment methods</p>
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-white/80 backdrop-blur border border-white/50 rounded-xl p-3 flex items-center gap-3 shadow-sm">
                 <Smartphone className="w-5 h-5 text-gray-800" />
@@ -179,17 +177,19 @@ export default function FundPage() {
           {/* Continue Button */}
           <button
             onClick={handleFund}
-            disabled={isLoading || !isReady || parseFloat(amount) < 5}
+            disabled={isLoading || !isReady || !isValidAmount}
             className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-gray-300 disabled:text-gray-500 text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-[#ef4444]/20"
           >
             {isLoading ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                Opening Coinbase...
+                Opening...
               </>
+            ) : !isValidAmount ? (
+              'Enter $20 or more'
             ) : (
               <>
-                Continue with Coinbase
+                Buy with Apple Pay
                 <ExternalLink className="w-4 h-4" />
               </>
             )}
@@ -207,7 +207,7 @@ export default function FundPage() {
 
           {/* Powered by */}
           <p className="text-gray-400 text-xs text-center">
-            Powered by Coinbase Onramp
+            Powered by MoonPay
           </p>
         </div>
       </div>
