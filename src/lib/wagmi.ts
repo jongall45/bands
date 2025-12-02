@@ -1,10 +1,22 @@
-import { http, createConfig } from 'wagmi'
-import { base, optimism, arbitrum } from 'wagmi/chains'
+import { http, createConfig, createStorage } from 'wagmi'
+import { base, baseSepolia, optimism, arbitrum } from 'wagmi/chains'
+import { porto } from 'porto/wagmi'
 
+// Create wagmi config with Porto connector
 export const wagmiConfig = createConfig({
-  chains: [base, optimism, arbitrum],
+  chains: [base, baseSepolia, optimism, arbitrum],
+  connectors: [
+    porto({
+      // Porto config - use Base as default chain
+      chains: [base, baseSepolia, optimism, arbitrum],
+    }),
+  ],
+  storage: typeof window !== 'undefined' 
+    ? createStorage({ storage: window.localStorage })
+    : undefined,
   transports: {
     [base.id]: http(),
+    [baseSepolia.id]: http(),
     [optimism.id]: http(),
     [arbitrum.id]: http(),
   },

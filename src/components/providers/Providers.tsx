@@ -2,29 +2,8 @@
 
 import { useState, ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { WagmiProvider, createConfig, http } from 'wagmi'
-import { base, baseSepolia, optimism, arbitrum } from 'wagmi/chains'
-import { porto } from 'porto/wagmi'
-
-// Create wagmi config with Porto connector
-const wagmiConfig = createConfig({
-  chains: [base, baseSepolia, optimism, arbitrum],
-  connectors: [
-    porto({
-      // Configure Porto with Base mainnet
-      chains: [base, baseSepolia, optimism, arbitrum],
-    }),
-  ],
-  transports: {
-    [base.id]: http(),
-    [baseSepolia.id]: http(),
-    [optimism.id]: http(),
-    [arbitrum.id]: http(),
-  },
-})
-
-// Re-export hooks from wagmi for convenience
-export { useAccount, useConnect, useDisconnect } from 'wagmi'
+import { WagmiProvider } from 'wagmi'
+import { wagmiConfig } from '@/lib/wagmi'
 
 // Main Providers wrapper
 export function Providers({ children }: { children: ReactNode }) {

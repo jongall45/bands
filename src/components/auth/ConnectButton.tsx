@@ -1,7 +1,6 @@
 'use client'
 
 import { useAccount, useConnect, useDisconnect } from 'wagmi'
-import { Hooks } from 'porto/wagmi'
 import { Loader2, Fingerprint, LogOut } from 'lucide-react'
 
 interface ConnectButtonProps {
@@ -10,35 +9,30 @@ interface ConnectButtonProps {
 
 export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
   const { address, isConnected } = useAccount()
-  const { connect, connectors, isPending: isWagmiPending } = useConnect()
+  const { connect, connectors, isPending, error } = useConnect()
   const { disconnect } = useDisconnect()
-  
-  // Porto-specific hooks for account creation
-  const { mutate: portoConnect, isPending: isPortoConnecting } = Hooks.useConnect()
-  const { mutate: createAccount, isPending: isCreating } = Hooks.useCreateAccount()
 
+  // Find the Porto connector - it should be the first/only one
   const portoConnector = connectors.find(c => c.id === 'xyz.ithaca.porto') || connectors[0]
-  const isPending = isWagmiPending || isPortoConnecting || isCreating
 
-  const handleConnect = async () => {
+  const handleConnect = () => {
+    console.log('Connect clicked')
+    console.log('Available connectors:', connectors.map(c => ({ id: c.id, name: c.name })))
+    console.log('Porto connector:', portoConnector)
+    
     if (!portoConnector) {
-      console.error('Porto connector not found')
+      console.error('No Porto connector found!')
       return
     }
     
-    try {
-      // Use Porto's connect with createAccount capability
-      portoConnect({ 
-        connector: portoConnector,
-        capabilities: {
-          createAccount: true, // Allow account creation if user doesn't have one
-        }
-      })
-    } catch (error) {
-      console.error('Porto connect failed:', error)
-      // Fallback to wagmi connect
-      connect({ connector: portoConnector })
-    }
+    // Simply call connect with the Porto connector
+    // Porto handles the dialog/passkey flow internally
+    connect({ connector: portoConnector })
+  }
+
+  // Log any connection errors
+  if (error) {
+    console.error('Connection error:', error)
   }
 
   if (isConnected && address) {
@@ -63,7 +57,7 @@ export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
     return (
       <button
         onClick={handleConnect}
-        disabled={isPending}
+        disabled={isPending || !portoConnector}
         className="flex items-center justify-center gap-3 bg-[#ef4444] hover:bg-[#dc2626] disabled:opacity-50 text-white font-semibold px-8 py-4 rounded-full transition-all shadow-[0_0_30px_rgba(239,68,68,0.3)] hover:shadow-[0_0_40px_rgba(239,68,68,0.4)]"
       >
         {isPending ? (
@@ -84,7 +78,7 @@ export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
   return (
     <button
       onClick={handleConnect}
-      disabled={isPending}
+      disabled={isPending || !portoConnector}
       className="flex items-center gap-2 bg-[#ef4444] hover:bg-[#dc2626] disabled:opacity-50 text-white font-semibold px-5 py-2.5 rounded-full transition-colors"
     >
       {isPending ? (
