@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAccount } from 'wagmi'
-import { ArrowLeft, Loader2, DollarSign, Info, Smartphone, ExternalLink, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Loader2, DollarSign, Info, Smartphone, ExternalLink, CheckCircle, Copy, Check } from 'lucide-react'
 import Link from 'next/link'
 import { BottomNav } from '@/components/ui/BottomNav'
 
@@ -14,6 +14,7 @@ export default function FundPage() {
   const { address, isConnected } = useAccount()
   const [amount, setAmount] = useState<string>('100')
   const [isLoading, setIsLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   // Redirect if not connected
   useEffect(() => {
@@ -21,6 +22,14 @@ export default function FundPage() {
       router.push('/')
     }
   }, [isConnected, router])
+
+  const copyAddress = () => {
+    if (address) {
+      navigator.clipboard.writeText(address)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
 
   const handleBuy = () => {
     if (!address) {
@@ -32,24 +41,27 @@ export default function FundPage() {
     console.log('[Fund] Opening MoonPay for address:', address)
 
     // MoonPay widget URL with USDC on Base
-    // Important: walletAddress must be the user's address
+    // CRITICAL: walletAddress must be the user's bands.cash wallet address
     const params = new URLSearchParams({
+      apiKey: 'pk_live_sgnwvHJfQXmUPLdyvAp46EwJUiZ3vu', // MoonPay public key
       currencyCode: 'usdc_base',
-      walletAddress: address,
+      walletAddress: address, // User's bands.cash wallet
       baseCurrencyCode: 'usd',
       baseCurrencyAmount: amount,
       colorCode: 'ef4444',
-      // Lock the wallet address so user can't change it
+      // IMPORTANT: Lock the destination address
+      walletAddressTag: '',
       lockAmount: 'false',
-      showWalletAddressForm: 'false',
+      showWalletAddressForm: 'false', // Hide address form - use our address
     })
 
     const url = `https://buy.moonpay.com?${params.toString()}`
     console.log('[Fund] MoonPay URL:', url)
     
-    // Open in new tab on mobile for better UX
+    // Open in new tab
     window.open(url, '_blank')
-    setIsLoading(false)
+    
+    setTimeout(() => setIsLoading(false), 1000)
   }
 
   if (!isConnected || !address) return null
@@ -84,33 +96,48 @@ export default function FundPage() {
           <h1 className="text-gray-900 font-semibold text-lg">Buy USDC</h1>
         </header>
 
-        <div className="px-5 space-y-5">
+        <div className="px-5 space-y-4">
+          {/* Your Wallet Address - Show prominently */}
+          <div className="card">
+            <div className="flex items-center gap-2 mb-2">
+              <CheckCircle className="w-4 h-4 text-green-400" />
+              <p className="text-green-400 text-sm font-medium">Sending to YOUR wallet</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 bg-white/[0.05] rounded-xl p-3 font-mono text-xs text-white break-all">
+                {address}
+              </div>
+              <button
+                onClick={copyAddress}
+                className="p-3 bg-white/[0.05] rounded-xl hover:bg-white/[0.1] transition-colors"
+              >
+                {copied ? (
+                  <Check className="w-4 h-4 text-green-400" />
+                ) : (
+                  <Copy className="w-4 h-4 text-white/60" />
+                )}
+              </button>
+            </div>
+          </div>
+
           {/* Amount Card */}
-          <div className="card text-center py-8">
-            <p className="text-white/40 text-sm mb-4">Amount (USD)</p>
+          <div className="card text-center py-6">
+            <p className="text-white/40 text-sm mb-3">Amount (USD)</p>
             
-            <div className="relative inline-block mb-6">
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 text-white/40 text-5xl">$</span>
+            <div className="relative inline-block mb-4">
+              <span className="absolute left-0 top-1/2 -translate-y-1/2 text-white/40 text-4xl">$</span>
               <input
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0"
                 min="20"
-                className="w-48 pl-10 bg-transparent text-white text-6xl font-bold outline-none text-center"
+                className="w-40 pl-8 bg-transparent text-white text-5xl font-bold outline-none text-center"
               />
             </div>
 
-            {/* Payment Method Badge */}
-            <div className="mb-6">
-              <div className="inline-flex items-center gap-2 bg-white/[0.08] rounded-full px-4 py-2">
-                <Smartphone className="w-4 h-4 text-white" />
-                <span className="text-white text-sm">Apple Pay / Card</span>
-              </div>
-            </div>
-
             {/* Quick Amount Buttons */}
-            <div className="flex justify-center gap-2">
+            <div className="flex justify-center gap-2 mb-4">
               {PRESET_AMOUNTS.map((preset) => (
                 <button
                   key={preset}
@@ -125,12 +152,18 @@ export default function FundPage() {
                 </button>
               ))}
             </div>
+
+            {/* Payment Method */}
+            <div className="inline-flex items-center gap-2 bg-white/[0.08] rounded-full px-4 py-2">
+              <Smartphone className="w-4 h-4 text-white" />
+              <span className="text-white text-sm">Apple Pay / Card</span>
+            </div>
           </div>
 
           {/* Quote Summary */}
           {isValidAmount && (
             <div className="card">
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-3 mb-3">
                 <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center">
                   <DollarSign className="w-5 h-5 text-blue-400" />
                 </div>
@@ -148,29 +181,12 @@ export default function FundPage() {
                   <span className="text-white">${amountNum.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-white/40">Processing fee (~4.5%)</span>
+                  <span className="text-white/40">Est. fee (~4.5%)</span>
                   <span className="text-white/60">~${estimatedFee.toFixed(2)}</span>
                 </div>
               </div>
             </div>
           )}
-
-          {/* Destination Address - IMPORTANT */}
-          <div className="card">
-            <div className="flex items-center gap-2 mb-3">
-              <AlertTriangle className="w-4 h-4 text-yellow-400" />
-              <p className="text-yellow-400 text-sm font-medium">Verify Delivery Address</p>
-            </div>
-            <p className="text-white/40 text-xs mb-2">
-              USDC will be sent directly to YOUR wallet:
-            </p>
-            <div className="bg-white/[0.05] rounded-xl p-3 font-mono text-xs text-white break-all">
-              {address}
-            </div>
-            <p className="text-white/30 text-xs mt-2">
-              ⚠️ In MoonPay, verify the delivery address matches above!
-            </p>
-          </div>
 
           {/* Info Banner */}
           <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4">
@@ -185,11 +201,11 @@ export default function FundPage() {
             </div>
           </div>
 
-          {/* Buy Button - Simple tap button */}
+          {/* Buy Button */}
           <button
             onClick={handleBuy}
             disabled={isLoading || !isValidAmount}
-            className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-red-500/20"
+            className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-red-500/20 active:scale-[0.98]"
           >
             {isLoading ? (
               <>
@@ -198,7 +214,7 @@ export default function FundPage() {
               </>
             ) : (
               <>
-                Buy USDC
+                Buy ${amount} USDC
                 <ExternalLink className="w-4 h-4" />
               </>
             )}
@@ -212,7 +228,7 @@ export default function FundPage() {
 
           {/* Powered by */}
           <p className="text-gray-400 text-xs text-center">
-            Powered by MoonPay • Fees apply
+            Powered by MoonPay
           </p>
         </div>
       </div>
