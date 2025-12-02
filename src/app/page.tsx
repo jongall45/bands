@@ -29,14 +29,10 @@ export default function Home() {
       <div className="aura aura-2" />
       <div className="aura aura-3" />
 
-      {/* Navigation */}
+      {/* Navigation - Clean, just logo and connect */}
       <header className="navbar">
         <LogoInline size="md" />
-        <nav className="nav-links">
-          <a href="#features" className="nav-link">Features</a>
-          <a href="#transparency" className="nav-link">Transparency</a>
-          <ConnectButton />
-        </nav>
+        <ConnectButton />
       </header>
 
       {/* Hero Section */}
@@ -62,7 +58,7 @@ export default function Home() {
           </div>
 
           {/* Features Grid */}
-          <div className="features-grid" id="features">
+          <div className="features-grid">
             <div className="feature-card">
               <Fingerprint className="w-6 h-6 text-[#ef4444]" />
               <h3>Passkey Login</h3>
@@ -99,6 +95,7 @@ export default function Home() {
           --bands-dark-red: #D70015;
           
           min-height: 100vh;
+          min-height: 100dvh;
           width: 100%;
           background: var(--bg-base);
           color: var(--text-main);
@@ -167,49 +164,35 @@ export default function Home() {
           66% { transform: translate(-30px, 40px) scale(0.95); }
         }
 
-        /* === NAVIGATION === */
+        /* === NAVIGATION WITH SAFE AREA === */
         .landing-page .navbar {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 20px 48px;
+          padding: 16px 20px;
+          padding-top: calc(16px + env(safe-area-inset-top, 0px));
           position: fixed;
           top: 0;
           left: 0;
           right: 0;
           z-index: 1000;
-          background: rgba(244, 244, 245, 0.8);
+          background: rgba(244, 244, 245, 0.85);
           backdrop-filter: blur(20px);
           -webkit-backdrop-filter: blur(20px);
-          border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-        }
-
-        .landing-page .nav-links {
-          display: flex;
-          align-items: center;
-          gap: 32px;
-        }
-
-        .landing-page .nav-link {
-          color: var(--text-muted);
-          text-decoration: none;
-          font-size: 0.95rem;
-          font-weight: 500;
-          transition: color 0.2s;
-        }
-
-        .landing-page .nav-link:hover {
-          color: var(--text-main);
         }
 
         /* === HERO === */
         .landing-page .hero {
           min-height: 100vh;
+          min-height: 100dvh;
           display: flex;
           flex-direction: column;
           align-items: center;
           text-align: center;
-          padding: 140px 24px 60px;
+          padding-top: calc(100px + env(safe-area-inset-top, 0px));
+          padding-bottom: 40px;
+          padding-left: 24px;
+          padding-right: 24px;
           position: relative;
           z-index: 1;
         }
@@ -242,7 +225,7 @@ export default function Home() {
         }
 
         .landing-page .hero-title {
-          font-size: clamp(3rem, 10vw, 5.5rem);
+          font-size: clamp(2.8rem, 10vw, 5.5rem);
           font-weight: 700;
           letter-spacing: -0.03em;
           line-height: 1;
@@ -257,24 +240,24 @@ export default function Home() {
         }
 
         .landing-page .subtitle {
-          font-size: 1.25rem;
+          font-size: 1.15rem;
           color: var(--text-muted);
-          margin-bottom: 36px;
+          margin-bottom: 32px;
         }
 
         .landing-page .cta-group {
           display: flex;
           gap: 16px;
           justify-content: center;
-          margin-bottom: 60px;
+          margin-bottom: 48px;
         }
 
         /* === FEATURES GRID === */
         .landing-page .features-grid {
           display: grid;
           grid-template-columns: repeat(2, 1fr);
-          gap: 16px;
-          max-width: 500px;
+          gap: 12px;
+          max-width: 400px;
           margin: 0 auto;
         }
 
@@ -282,7 +265,7 @@ export default function Home() {
           background: white;
           border: 1px solid rgba(0, 0, 0, 0.08);
           border-radius: 20px;
-          padding: 20px;
+          padding: 16px;
           text-align: left;
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
           transition: all 0.2s;
@@ -294,34 +277,42 @@ export default function Home() {
         }
 
         .landing-page .feature-card h3 {
-          font-size: 0.95rem;
+          font-size: 0.9rem;
           font-weight: 600;
           color: var(--text-main);
-          margin: 12px 0 4px;
+          margin: 10px 0 4px;
         }
 
         .landing-page .feature-card p {
-          font-size: 0.85rem;
+          font-size: 0.8rem;
           color: var(--text-muted);
         }
 
-        /* === RESPONSIVE === */
+        /* === MOBILE RESPONSIVE === */
         @media (max-width: 768px) {
-          .landing-page .navbar {
-            padding: 16px 20px;
-          }
-
-          .landing-page .nav-link {
-            display: none;
-          }
-
           .landing-page .hero-title {
-            font-size: 3rem;
+            font-size: 2.8rem;
+          }
+
+          .landing-page .subtitle {
+            font-size: 1rem;
           }
 
           .landing-page .features-grid {
-            grid-template-columns: 1fr;
-            padding: 0 20px;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+          }
+
+          .landing-page .feature-card {
+            padding: 14px;
+          }
+
+          .landing-page .feature-card h3 {
+            font-size: 0.85rem;
+          }
+
+          .landing-page .feature-card p {
+            font-size: 0.75rem;
           }
         }
       `}</style>
