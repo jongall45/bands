@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAccount, useConnect } from 'wagmi'
 import { ConnectButton } from '@/components/auth/ConnectButton'
+import { InstallPrompt } from '@/components/pwa/InstallPrompt'
 import { LogoInline } from '@/components/ui/Logo'
 import { Fingerprint, Shield, Zap, Globe } from 'lucide-react'
 
@@ -85,6 +86,9 @@ export default function Home() {
         </div>
         </div>
       </main>
+
+      {/* PWA Install Prompt */}
+      <InstallPrompt />
 
       <style jsx global>{`
         .landing-page {
