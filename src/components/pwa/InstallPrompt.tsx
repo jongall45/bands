@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { usePWA } from '@/hooks/usePWA'
-import { Download, X, Share, Smartphone } from 'lucide-react'
+import { Download, X, Share, Plus } from 'lucide-react'
 
 export function InstallPrompt() {
   const { isStandalone, isIOS, canInstall, promptInstall } = usePWA()
@@ -18,7 +18,7 @@ export function InstallPrompt() {
       return
     }
 
-    // Check if user has dismissed before (in this session only for testing)
+    // Check if user has dismissed before (in this session only)
     const hasDismissed = sessionStorage.getItem('bands_install_prompt_dismissed')
     if (hasDismissed) {
       return
@@ -54,19 +54,20 @@ export function InstallPrompt() {
   if (!showPrompt) return null
 
   return (
-    <div className="fixed bottom-28 left-4 right-4 z-[9999] max-w-[400px] mx-auto">
+    <div className="fixed bottom-28 left-4 right-4 z-[9999] max-w-[400px] mx-auto animate-slide-up">
       <div className="bg-[#1a1a1a] border border-white/[0.15] rounded-2xl p-4 shadow-2xl shadow-black/50">
         <div className="flex items-start gap-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-[#ef4444] to-[#dc2626] rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-red-500/20">
-            <span className="text-white font-bold text-xl">$</span>
+          {/* $ Logo */}
+          <div className="w-14 h-14 bg-gradient-to-br from-[#ef4444] to-[#dc2626] rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-red-500/30">
+            <span className="text-white font-bold text-2xl">$</span>
           </div>
           
           <div className="flex-1 min-w-0">
-            <h3 className="text-white font-semibold text-base">Install bands App</h3>
+            <h3 className="text-white font-semibold text-base">Install bands</h3>
             <p className="text-white/60 text-sm mt-0.5">
               {isIOS 
-                ? 'Tap Share → "Add to Home Screen"'
-                : 'Add to your home screen for the best experience'
+                ? 'Add to your home screen for the full app experience'
+                : 'Install for quick access'
               }
             </p>
           </div>
@@ -79,36 +80,66 @@ export function InstallPrompt() {
           </button>
         </div>
 
-        <div className="flex gap-2 mt-4">
-          {isIOS ? (
-            <>
-              <button
-                onClick={handleDismiss}
-                className="flex-1 flex items-center justify-center gap-2 py-3 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-xl text-white/70 text-sm font-medium transition-colors"
-              >
-                <Share className="w-4 h-4" />
-                Show me how
-              </button>
-            </>
-          ) : canInstall ? (
-            <button
-              onClick={handleInstall}
-              className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#ef4444] hover:bg-[#dc2626] rounded-xl text-white text-sm font-semibold transition-colors shadow-lg shadow-red-500/20"
-            >
-              <Download className="w-4 h-4" />
-              Install App
-            </button>
-          ) : (
+        {isIOS ? (
+          /* iOS Instructions */
+          <div className="mt-4 space-y-3">
+            <div className="flex items-center gap-3 bg-white/[0.05] rounded-xl p-3">
+              <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                <Share className="w-4 h-4 text-blue-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-white text-sm">1. Tap the <span className="font-semibold">Share</span> button below</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 bg-white/[0.05] rounded-xl p-3">
+              <div className="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">
+                <Plus className="w-4 h-4 text-green-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-white text-sm">2. Select <span className="font-semibold">"Add to Home Screen"</span></p>
+              </div>
+            </div>
             <button
               onClick={handleDismiss}
-              className="flex-1 flex items-center justify-center gap-2 py-3 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-xl text-white/70 text-sm font-medium transition-colors"
+              className="w-full py-3 bg-white/[0.08] hover:bg-white/[0.12] border border-white/[0.1] rounded-xl text-white text-sm font-medium transition-colors"
             >
-              <Smartphone className="w-4 h-4" />
-              Maybe later
+              Got it
             </button>
-          )}
-        </div>
+          </div>
+        ) : canInstall ? (
+          /* Android/Desktop Install Button */
+          <button
+            onClick={handleInstall}
+            className="w-full mt-4 flex items-center justify-center gap-2 py-3 bg-[#ef4444] hover:bg-[#dc2626] rounded-xl text-white text-sm font-semibold transition-colors shadow-lg shadow-red-500/20"
+          >
+            <Download className="w-4 h-4" />
+            Add to Home Screen
+          </button>
+        ) : (
+          <button
+            onClick={handleDismiss}
+            className="w-full mt-4 py-3 bg-white/[0.08] hover:bg-white/[0.12] border border-white/[0.1] rounded-xl text-white/70 text-sm font-medium transition-colors"
+          >
+            Maybe later
+          </button>
+        )}
       </div>
+
+      <style jsx>{`
+        @keyframes slide-up {
+          from {
+            transform: translateY(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
+        .animate-slide-up {
+          animation: slide-up 0.3s ease-out;
+        }
+      `}</style>
     </div>
   )
 }
