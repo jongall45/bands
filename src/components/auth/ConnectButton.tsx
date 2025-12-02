@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAccount, useConnect, useDisconnect } from 'wagmi'
 import { Loader2, Fingerprint, LogOut } from 'lucide-react'
@@ -11,8 +11,8 @@ interface ConnectButtonProps {
 
 export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
   const router = useRouter()
-  const { address, isConnected } = useAccount()
-  const { connect, connectors, isPending, isSuccess } = useConnect()
+  const { address, isConnected, status } = useAccount()
+  const { connect, connectors, isPending, isSuccess, status: connectStatus, error } = useConnect()
   const { disconnect } = useDisconnect()
 
   // Find the Porto connector
@@ -20,10 +20,24 @@ export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
     (connector) => connector.id === 'xyz.ithaca.porto'
   )
 
+  // Debug logging
+  useEffect(() => {
+    console.log('[ConnectButton] State:', { 
+      isConnected, 
+      address, 
+      status,
+      connectStatus,
+      isPending,
+      isSuccess,
+      error: error?.message,
+      connectors: connectors.map(c => c.id)
+    })
+  }, [isConnected, address, status, connectStatus, isPending, isSuccess, error, connectors])
+
   // Redirect to dashboard after successful connection
   useEffect(() => {
     if (isConnected && address) {
-      console.log('Connected! Redirecting to dashboard...')
+      console.log('[ConnectButton] Connected! Redirecting to dashboard...', address)
       router.push('/dashboard')
     }
   }, [isConnected, address, router])
@@ -31,10 +45,17 @@ export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
   // Also redirect when connect succeeds
   useEffect(() => {
     if (isSuccess) {
-      console.log('Connection successful! Redirecting...')
+      console.log('[ConnectButton] Connection mutation successful! Redirecting...')
       router.push('/dashboard')
     }
   }, [isSuccess, router])
+
+  const handleConnect = useCallback(() => {
+    console.log('[ConnectButton] Attempting to connect with Porto...', portoConnector?.id)
+    if (portoConnector) {
+      connect({ connector: portoConnector })
+    }
+  }, [connect, portoConnector])
 
   if (isConnected && address) {
     return (
@@ -57,7 +78,7 @@ export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
   if (variant === 'large') {
     return (
       <button
-        onClick={() => portoConnector && connect({ connector: portoConnector })}
+        onClick={handleConnect}
         disabled={isPending || !portoConnector}
         className="flex items-center justify-center gap-3 bg-[#ef4444] hover:bg-[#dc2626] disabled:opacity-50 text-white font-semibold px-8 py-4 rounded-full transition-all shadow-[0_0_30px_rgba(239,68,68,0.3)] hover:shadow-[0_0_40px_rgba(239,68,68,0.4)]"
       >
@@ -78,7 +99,7 @@ export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
 
   return (
     <button
-      onClick={() => portoConnector && connect({ connector: portoConnector })}
+      onClick={handleConnect}
       disabled={isPending || !portoConnector}
       className="flex items-center gap-2 bg-[#ef4444] hover:bg-[#dc2626] disabled:opacity-50 text-white font-semibold px-5 py-2.5 rounded-full transition-colors"
     >
