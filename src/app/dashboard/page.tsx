@@ -14,7 +14,7 @@ import {
 import { Modal } from '@/components/ui/Modal'
 import { CardInner } from '@/components/ui/Card'
 import { BottomNav } from '@/components/ui/BottomNav'
-import { Logo } from '@/components/ui/Logo'
+import { LogoInline } from '@/components/ui/Logo'
 
 export default function Dashboard() {
   const { ready, authenticated, logout } = usePrivy()
@@ -125,40 +125,54 @@ export default function Dashboard() {
 
   if (!ready) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <RefreshCw className="w-8 h-8 text-[#ef4444] animate-spin" />
-          <p className="text-white/40">Loading your wallet...</p>
+      <div className="dashboard-page">
+        <div className="noise-overlay" />
+        <div className="aura aura-1" />
+        <div className="aura aura-2" />
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <RefreshCw className="w-8 h-8 text-[#ef4444] animate-spin" />
+            <p className="text-gray-500">Loading your wallet...</p>
+          </div>
         </div>
+        <style jsx global>{dashboardStyles}</style>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-black flex flex-col">
-      {/* Header - Centered */}
-      <header className="flex items-center justify-between px-5 py-4 max-w-[430px] mx-auto w-full">
-        <Logo size="sm" />
+    <div className="dashboard-page">
+      {/* Grain Texture Overlay */}
+      <div className="noise-overlay" />
+
+      {/* Atmospheric Red Auras */}
+      <div className="aura aura-1" />
+      <div className="aura aura-2" />
+      <div className="aura aura-3" />
+
+      {/* Header */}
+      <header className="dashboard-header">
+        <LogoInline size="sm" neumorphic={true} />
         <button
           onClick={logout}
-          className="p-2 text-white/40 hover:text-white transition-colors"
+          className="logout-btn"
           title="Sign out"
         >
           <LogOut className="w-5 h-5" strokeWidth={1.5} />
         </button>
       </header>
 
-      {/* Main Content - Centered Card Layout */}
-      <main className="flex-1 flex flex-col px-4 pb-24 max-w-[430px] mx-auto w-full">
+      {/* Main Content */}
+      <main className="dashboard-main">
         
         {/* Balance Card */}
-        <div className="bg-[#111111] border border-white/[0.06] rounded-3xl p-6 mt-4">
+        <div className="card">
           
           {/* Balance Display */}
           <div className="text-center py-6">
-            <p className="text-white/40 text-sm mb-1">Total Balance</p>
+            <p className="text-gray-400 text-sm mb-1">Total Balance</p>
             {balanceLoading ? (
-              <div className="h-12 w-40 mx-auto shimmer rounded-xl" />
+              <div className="h-12 w-40 mx-auto bg-gray-700/30 rounded-xl animate-pulse" />
             ) : (
               <h1 className="text-5xl font-bold text-white tracking-tight font-mono">
                 ${formattedBalance}
@@ -169,7 +183,7 @@ export default function Dashboard() {
             {/* Refresh button */}
             <button 
               onClick={() => refetchBalance()}
-              className="mt-3 p-2 text-white/30 hover:text-white/60 transition-colors"
+              className="mt-3 p-2 text-gray-500 hover:text-gray-300 transition-colors"
             >
               <RefreshCw className={`w-4 h-4 ${balanceLoading ? 'animate-spin' : ''}`} strokeWidth={2} />
             </button>
@@ -179,7 +193,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between py-3 px-4 bg-white/[0.02] rounded-2xl mb-4">
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 bg-[#ef4444] rounded" />
-              <span className="text-white/40 text-sm font-mono">
+              <span className="text-gray-400 text-sm font-mono">
                 {address?.slice(0, 6)}...{address?.slice(-4)}
               </span>
             </div>
@@ -188,14 +202,14 @@ export default function Dashboard() {
                 href={`https://basescan.org/address/${address}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-white/40 text-xs hover:text-white/60 transition-colors flex items-center gap-1"
+                className="text-gray-400 text-xs hover:text-gray-300 transition-colors flex items-center gap-1"
               >
                 BaseScan
                 <ExternalLink className="w-3 h-3" />
               </a>
               <button 
                 onClick={copyAddress}
-                className="p-1.5 text-white/40 hover:text-white/60 transition-colors"
+                className="p-1.5 text-gray-400 hover:text-gray-300 transition-colors"
               >
                 {copied ? (
                   <Check className="w-4 h-4 text-[#22c55e]" />
@@ -206,10 +220,10 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Add Funds Button - Primary CTA */}
+          {/* Add Funds Button */}
           <button 
             onClick={handleAddFunds}
-            className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] text-white font-semibold rounded-2xl transition-all flex items-center justify-center gap-2 mb-3 shadow-[0_0_20px_rgba(239,68,68,0.3)]"
+            className="add-funds-btn"
           >
             <Plus className="w-5 h-5" />
             Add Funds
@@ -220,45 +234,45 @@ export default function Dashboard() {
           <div className="grid grid-cols-3 gap-2">
             <button 
               onClick={() => setShowSend(true)}
-              className="flex flex-col items-center gap-2 py-4 bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] rounded-2xl transition-all"
+              className="action-btn"
             >
-              <ArrowUpRight className="w-5 h-5 text-white/70" strokeWidth={1.5} />
-              <span className="text-white/70 text-sm">Send</span>
+              <ArrowUpRight className="w-5 h-5 text-gray-300" strokeWidth={1.5} />
+              <span className="text-gray-300 text-sm">Send</span>
             </button>
             <button 
               onClick={() => setShowReceive(true)}
-              className="flex flex-col items-center gap-2 py-4 bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] rounded-2xl transition-all"
+              className="action-btn"
             >
-              <ArrowDownLeft className="w-5 h-5 text-white/70" strokeWidth={1.5} />
-              <span className="text-white/70 text-sm">Receive</span>
+              <ArrowDownLeft className="w-5 h-5 text-gray-300" strokeWidth={1.5} />
+              <span className="text-gray-300 text-sm">Receive</span>
             </button>
             <button 
               onClick={handleAddFunds}
-              className="flex flex-col items-center gap-2 py-4 bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] rounded-2xl transition-all"
+              className="action-btn"
             >
-              <ShoppingCart className="w-5 h-5 text-white/70" strokeWidth={1.5} />
-              <span className="text-white/70 text-sm">Buy</span>
+              <ShoppingCart className="w-5 h-5 text-gray-300" strokeWidth={1.5} />
+              <span className="text-gray-300 text-sm">Buy</span>
             </button>
           </div>
         </div>
 
         {/* Recent Activity Card */}
-        <div className="bg-[#111111] border border-white/[0.06] rounded-3xl p-5 mt-4">
+        <div className="card mt-4">
           <h2 className="text-white font-semibold mb-4">Recent Activity</h2>
           
           {/* Empty State */}
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <div className="w-12 h-12 bg-white/[0.03] rounded-full flex items-center justify-center mb-4">
-              <Send className="w-6 h-6 text-white/20" strokeWidth={1.5} />
+              <Send className="w-6 h-6 text-gray-600" strokeWidth={1.5} />
             </div>
-            <p className="text-white/40 text-sm">No transactions yet</p>
-            <p className="text-white/20 text-xs mt-1">Send or receive to get started</p>
+            <p className="text-gray-400 text-sm">No transactions yet</p>
+            <p className="text-gray-600 text-xs mt-1">Send or receive to get started</p>
           </div>
         </div>
 
       </main>
 
-      {/* Bottom Navigation - Using shared component */}
+      {/* Bottom Navigation */}
       <BottomNav />
 
       {/* Send Modal */}
@@ -359,6 +373,167 @@ export default function Dashboard() {
           <p className="text-white/30 text-xs mt-4">Only send USDC on the <span className="text-[#ef4444]">Base</span> network</p>
         </div>
       </Modal>
+
+      <style jsx global>{dashboardStyles}</style>
     </div>
   )
 }
+
+const dashboardStyles = `
+  .dashboard-page {
+    min-height: 100vh;
+    width: 100%;
+    background: #F4F4F5;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* Grain Texture */
+  .dashboard-page .noise-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10000;
+    opacity: 0.08;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  }
+
+  /* Red Auras */
+  .dashboard-page .aura {
+    position: fixed;
+    border-radius: 50%;
+    z-index: 0;
+    animation: aura-float 20s ease-in-out infinite;
+  }
+
+  .dashboard-page .aura-1 {
+    width: 600px;
+    height: 600px;
+    top: -200px;
+    left: -150px;
+    background: #FF3B30;
+    filter: blur(150px);
+    opacity: 0.5;
+  }
+
+  .dashboard-page .aura-2 {
+    width: 500px;
+    height: 500px;
+    bottom: -150px;
+    right: -100px;
+    background: #D70015;
+    filter: blur(140px);
+    opacity: 0.45;
+    animation-delay: 7s;
+  }
+
+  .dashboard-page .aura-3 {
+    width: 300px;
+    height: 300px;
+    top: 50%;
+    right: 20%;
+    background: #FF6B35;
+    filter: blur(120px);
+    opacity: 0.25;
+    animation-delay: 14s;
+  }
+
+  @keyframes aura-float {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(50px, -40px) scale(1.05); }
+    66% { transform: translate(-30px, 40px) scale(0.95); }
+  }
+
+  /* Header */
+  .dashboard-page .dashboard-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    max-width: 430px;
+    margin: 0 auto;
+    width: 100%;
+    position: relative;
+    z-index: 10;
+  }
+
+  .dashboard-page .logout-btn {
+    padding: 8px;
+    color: #6B7280;
+    transition: color 0.2s;
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+
+  .dashboard-page .logout-btn:hover {
+    color: #374151;
+  }
+
+  /* Main Content */
+  .dashboard-page .dashboard-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 0 16px 96px;
+    max-width: 430px;
+    margin: 0 auto;
+    width: 100%;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Cards */
+  .dashboard-page .card {
+    background: #111111;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 24px;
+    padding: 24px;
+  }
+
+  /* Add Funds Button */
+  .dashboard-page .add-funds-btn {
+    width: 100%;
+    padding: 16px;
+    background: #ef4444;
+    color: white;
+    font-weight: 600;
+    border-radius: 16px;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+    transition: all 0.2s;
+  }
+
+  .dashboard-page .add-funds-btn:hover {
+    background: #dc2626;
+  }
+
+  /* Action Buttons */
+  .dashboard-page .action-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .dashboard-page .action-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+`
