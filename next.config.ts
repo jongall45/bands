@@ -16,7 +16,7 @@ const nextConfig: NextConfig = {
   transpilePackages: [
     'porto',
   ],
-  // Add headers to allow Porto dialog to work
+  // Permissive CSP to allow Porto wallet to work
   async headers() {
     return [
       {
@@ -25,14 +25,16 @@ const nextConfig: NextConfig = {
           {
             key: 'Content-Security-Policy',
             value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://id.porto.sh https://*.porto.sh",
-              "style-src 'self' 'unsafe-inline'",
+              "default-src 'self' https:",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:",
+              "style-src 'self' 'unsafe-inline' https:",
+              "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "img-src 'self' data: https: blob:",
-              "font-src 'self' data:",
+              "font-src 'self' data: https://fonts.gstatic.com",
               "connect-src 'self' https: wss:",
-              "frame-src 'self' https://id.porto.sh https://*.porto.sh https://app.vest.exchange https://app.avantis.xyz https://app.avantis.fi https://*.moonpay.com https://superbridge.app",
+              "frame-src 'self' https:",
               "frame-ancestors 'self'",
+              "worker-src 'self' blob:",
             ].join('; '),
           },
         ],

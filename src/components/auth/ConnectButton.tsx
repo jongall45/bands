@@ -29,9 +29,14 @@ export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
       connectStatus,
       isPending,
       isSuccess,
-      error: error?.message,
+      error: error ? { message: error.message, name: error.name, cause: error.cause } : null,
       connectors: connectors.map(c => c.id)
     })
+    
+    // Log full error details
+    if (error) {
+      console.error('[ConnectButton] Connection Error:', error)
+    }
   }, [isConnected, address, status, connectStatus, isPending, isSuccess, error, connectors])
 
   // Redirect to dashboard after successful connection
