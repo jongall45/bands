@@ -1,10 +1,16 @@
-import { createConfig, http } from 'wagmi'
+import { createConfig, http, createStorage, cookieStorage } from 'wagmi'
 import { base, optimism, arbitrum } from 'wagmi/chains'
 import { porto } from 'wagmi/connectors'
 
 export const wagmiConfig = createConfig({
   chains: [base, optimism, arbitrum],
   connectors: [porto()],
+  // Use cookie storage for better persistence across refreshes
+  storage: createStorage({
+    storage: cookieStorage,
+  }),
+  // SSR support
+  ssr: true,
   transports: {
     [base.id]: http(),
     [optimism.id]: http(),
