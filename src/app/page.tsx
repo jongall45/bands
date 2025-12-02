@@ -8,14 +8,15 @@ import { LogoInline } from '@/components/ui/Logo'
 import { Fingerprint, Shield, Zap, Globe } from 'lucide-react'
 
 export default function Home() {
-  const { isConnected } = useAccount()
+  const { isConnected, address } = useAccount()
   const router = useRouter()
 
   useEffect(() => {
-    if (isConnected) {
-      router.push('/dashboard')
+    if (isConnected && address) {
+      console.log('Landing page: User connected, redirecting to dashboard')
+      router.replace('/dashboard')
     }
-  }, [isConnected, router])
+  }, [isConnected, address, router])
 
   return (
     <div className="landing-page">

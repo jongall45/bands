@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAccount, useConnect, useDisconnect } from 'wagmi'
 import { Loader2, Fingerprint, LogOut } from 'lucide-react'
 
@@ -8,14 +10,31 @@ interface ConnectButtonProps {
 }
 
 export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
+  const router = useRouter()
   const { address, isConnected } = useAccount()
-  const { connect, connectors, isPending } = useConnect()
+  const { connect, connectors, isPending, isSuccess } = useConnect()
   const { disconnect } = useDisconnect()
 
   // Find the Porto connector
   const portoConnector = connectors.find(
     (connector) => connector.id === 'xyz.ithaca.porto'
   )
+
+  // Redirect to dashboard after successful connection
+  useEffect(() => {
+    if (isConnected && address) {
+      console.log('Connected! Redirecting to dashboard...')
+      router.push('/dashboard')
+    }
+  }, [isConnected, address, router])
+
+  // Also redirect when connect succeeds
+  useEffect(() => {
+    if (isSuccess) {
+      console.log('Connection successful! Redirecting...')
+      router.push('/dashboard')
+    }
+  }, [isSuccess, router])
 
   if (isConnected && address) {
     return (
