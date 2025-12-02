@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAccount } from 'wagmi'
-import { ArrowLeft, CreditCard, Loader2, DollarSign, Info, Smartphone, ChevronDown } from 'lucide-react'
+import { ArrowLeft, Loader2, DollarSign, Info, Smartphone, ExternalLink, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { BottomNav } from '@/components/ui/BottomNav'
 
@@ -23,27 +23,32 @@ export default function FundPage() {
   }, [isConnected, router])
 
   const handleBuy = () => {
-    if (!address) return
+    if (!address) {
+      console.error('[Fund] No wallet address available')
+      return
+    }
+    
     setIsLoading(true)
+    console.log('[Fund] Opening MoonPay for address:', address)
 
     // MoonPay widget URL with USDC on Base
+    // Important: walletAddress must be the user's address
     const params = new URLSearchParams({
       currencyCode: 'usdc_base',
       walletAddress: address,
       baseCurrencyCode: 'usd',
       baseCurrencyAmount: amount,
       colorCode: 'ef4444',
+      // Lock the wallet address so user can't change it
+      lockAmount: 'false',
+      showWalletAddressForm: 'false',
     })
 
     const url = `https://buy.moonpay.com?${params.toString()}`
+    console.log('[Fund] MoonPay URL:', url)
     
-    // Open in popup for better UX
-    const width = 500
-    const height = 700
-    const left = (window.screen.width - width) / 2
-    const top = (window.screen.height - height) / 2
-    
-    window.open(url, 'moonpay', `width=${width},height=${height},left=${left},top=${top}`)
+    // Open in new tab on mobile for better UX
+    window.open(url, '_blank')
     setIsLoading(false)
   }
 
@@ -76,7 +81,7 @@ export default function FundPage() {
           <Link href="/dashboard" className="text-gray-600 hover:text-gray-900 p-1 -ml-1">
             <ArrowLeft className="w-6 h-6" />
           </Link>
-          <h1 className="text-gray-900 font-semibold text-lg">Deposit</h1>
+          <h1 className="text-gray-900 font-semibold text-lg">Buy USDC</h1>
         </header>
 
         <div className="px-5 space-y-5">
@@ -100,8 +105,7 @@ export default function FundPage() {
             <div className="mb-6">
               <div className="inline-flex items-center gap-2 bg-white/[0.08] rounded-full px-4 py-2">
                 <Smartphone className="w-4 h-4 text-white" />
-                <span className="text-white text-sm">Apple Pay</span>
-                <ChevronDown className="w-4 h-4 text-white/40" />
+                <span className="text-white text-sm">Apple Pay / Card</span>
               </div>
             </div>
 
@@ -151,6 +155,23 @@ export default function FundPage() {
             </div>
           )}
 
+          {/* Destination Address - IMPORTANT */}
+          <div className="card">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle className="w-4 h-4 text-yellow-400" />
+              <p className="text-yellow-400 text-sm font-medium">Verify Delivery Address</p>
+            </div>
+            <p className="text-white/40 text-xs mb-2">
+              USDC will be sent directly to YOUR wallet:
+            </p>
+            <div className="bg-white/[0.05] rounded-xl p-3 font-mono text-xs text-white break-all">
+              {address}
+            </div>
+            <p className="text-white/30 text-xs mt-2">
+              ⚠️ In MoonPay, verify the delivery address matches above!
+            </p>
+          </div>
+
           {/* Info Banner */}
           <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4">
             <div className="flex items-start gap-3">
@@ -164,35 +185,34 @@ export default function FundPage() {
             </div>
           </div>
 
-          {/* Buy Button */}
+          {/* Buy Button - Simple tap button */}
           <button
             onClick={handleBuy}
             disabled={isLoading || !isValidAmount}
-            className="swipe-button w-full relative overflow-hidden"
+            className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-red-500/20"
           >
-            <div className="swipe-track">
-              <div className="swipe-thumb">
-                <span className="text-white text-lg">»</span>
-              </div>
-              <span className="swipe-text">
-                {isLoading ? 'Opening...' : `Swipe to Deposit`}
-              </span>
-            </div>
+            {isLoading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Opening MoonPay...
+              </>
+            ) : (
+              <>
+                Buy USDC
+                <ExternalLink className="w-4 h-4" />
+              </>
+            )}
           </button>
 
-          {/* Destination Info */}
-          <div className="bg-white/50 backdrop-blur rounded-xl p-4">
-            <p className="text-gray-500 text-xs text-center">
-              USDC will be sent to your wallet on Base
+          {!isValidAmount && amount && (
+            <p className="text-red-400 text-sm text-center">
+              Minimum amount is $20
             </p>
-            <p className="text-gray-700 text-xs text-center font-mono mt-1">
-              {address?.slice(0, 6)}...{address?.slice(-4)}
-            </p>
-          </div>
+          )}
 
           {/* Powered by */}
           <p className="text-gray-400 text-xs text-center">
-            Powered by MoonPay
+            Powered by MoonPay • Fees apply
           </p>
         </div>
       </div>
@@ -298,50 +318,6 @@ export default function FundPage() {
         .fund-page .card > * {
           position: relative;
           z-index: 1;
-        }
-
-        /* Swipe Button */
-        .swipe-button {
-          background: linear-gradient(135deg, #1a1a2e, #16213e);
-          border-radius: 50px;
-          padding: 6px;
-          border: none;
-          cursor: pointer;
-        }
-
-        .swipe-button:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .swipe-track {
-          display: flex;
-          align-items: center;
-          background: rgba(255, 255, 255, 0.05);
-          border-radius: 50px;
-          padding: 4px;
-          position: relative;
-        }
-
-        .swipe-thumb {
-          width: 48px;
-          height: 48px;
-          background: linear-gradient(135deg, #ef4444, #dc2626);
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-          box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
-        }
-
-        .swipe-text {
-          flex: 1;
-          text-align: center;
-          color: rgba(255, 255, 255, 0.5);
-          font-size: 14px;
-          font-weight: 500;
-          padding-right: 48px;
         }
       `}</style>
     </div>
