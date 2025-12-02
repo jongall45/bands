@@ -232,7 +232,7 @@ export default function Dashboard() {
               className="action-btn buy-btn"
             >
               <Plus className="w-5 h-5 text-[#ef4444]" strokeWidth={2} />
-              <span className="text-[#ef4444] text-sm font-medium">Buy</span>
+              <span className="text-[#ef4444] text-sm font-medium">Buy USDC</span>
             </Link>
           </div>
         </div>
