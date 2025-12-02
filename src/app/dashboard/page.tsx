@@ -132,7 +132,7 @@ export default function Dashboard() {
         <div className="min-h-screen flex items-center justify-center">
           <div className="flex flex-col items-center gap-4">
             <RefreshCw className="w-8 h-8 text-[#ef4444] animate-spin" />
-            <p className="text-white/40">Loading your wallet...</p>
+            <p className="text-gray-500">Loading your wallet...</p>
           </div>
         </div>
         <style jsx global>{dashboardStyles}</style>
@@ -383,13 +383,13 @@ const dashboardStyles = `
   .dashboard-page {
     min-height: 100vh;
     width: 100%;
-    background: #000000;
+    background: #F4F4F5;
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
     overflow-x: hidden;
     position: relative;
   }
 
-  /* Subtle grain texture */
+  /* Grain texture like homepage */
   .dashboard-page .noise-overlay {
     position: fixed;
     top: 0;
@@ -398,37 +398,55 @@ const dashboardStyles = `
     height: 100%;
     pointer-events: none;
     z-index: 10000;
-    opacity: 0.03;
+    opacity: 0.08;
     mix-blend-mode: overlay;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
   }
 
-  /* Red gradient fade from top-left corner */
+  /* Red auras like homepage */
   .dashboard-page .aura {
     position: fixed;
+    border-radius: 50%;
     z-index: 0;
+    animation: aura-float 20s ease-in-out infinite;
   }
 
   .dashboard-page .aura-1 {
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 60%;
-    background: radial-gradient(
-      ellipse at 0% 0%,
-      rgba(255, 59, 48, 0.35) 0%,
-      rgba(255, 59, 48, 0.15) 25%,
-      rgba(255, 59, 48, 0.05) 50%,
-      transparent 70%
-    );
+    width: 800px;
+    height: 800px;
+    top: -250px;
+    left: -200px;
+    background: #FF3B30;
+    filter: blur(150px);
+    opacity: 0.5;
   }
 
   .dashboard-page .aura-2 {
-    display: none;
+    width: 700px;
+    height: 700px;
+    bottom: -200px;
+    right: -150px;
+    background: #D70015;
+    filter: blur(140px);
+    opacity: 0.45;
+    animation-delay: 7s;
   }
 
   .dashboard-page .aura-3 {
-    display: none;
+    width: 400px;
+    height: 400px;
+    top: 40%;
+    right: 20%;
+    background: #FF6B35;
+    filter: blur(120px);
+    opacity: 0.3;
+    animation-delay: 14s;
+  }
+
+  @keyframes aura-float {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(50px, -40px) scale(1.05); }
+    66% { transform: translate(-30px, 40px) scale(0.95); }
   }
 
   /* Header */
@@ -446,7 +464,7 @@ const dashboardStyles = `
 
   .dashboard-page .logout-btn {
     padding: 8px;
-    color: rgba(255, 255, 255, 0.4);
+    color: #6B7280;
     transition: color 0.2s;
     background: none;
     border: none;
@@ -454,7 +472,7 @@ const dashboardStyles = `
   }
 
   .dashboard-page .logout-btn:hover {
-    color: rgba(255, 255, 255, 0.7);
+    color: #374151;
   }
 
   /* Main Content */
@@ -470,12 +488,37 @@ const dashboardStyles = `
     z-index: 1;
   }
 
-  /* Cards */
+  /* Cards - Dark with red gradient fade from top-left */
   .dashboard-page .card {
     background: #111111;
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 24px;
     padding: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .dashboard-page .card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(
+      ellipse at 0% 0%,
+      rgba(255, 59, 48, 0.25) 0%,
+      rgba(255, 59, 48, 0.1) 30%,
+      rgba(255, 59, 48, 0.03) 50%,
+      transparent 70%
+    );
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .dashboard-page .card > * {
+    position: relative;
+    z-index: 1;
   }
 
   /* Add Funds Button */
