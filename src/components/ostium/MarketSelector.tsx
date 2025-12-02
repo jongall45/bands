@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { OSTIUM_PAIRS, type OstiumPair, type OstiumCategory } from '@/lib/ostium/constants'
-import { useOstiumPrice } from '@/hooks/useOstiumPrices'
-import { ChevronDown, Search, TrendingUp, DollarSign, Building2, BarChart3, Coins, Droplet } from 'lucide-react'
+import { useOstiumPrice, useOstiumPrices } from '@/hooks/useOstiumPrices'
+import { ChevronDown, Search, DollarSign, Building2, BarChart3, Coins, Droplet, X } from 'lucide-react'
 
 interface MarketSelectorProps {
   selectedPair: OstiumPair
@@ -31,11 +31,11 @@ export function OstiumMarketSelector({ selectedPair, onSelectPair }: MarketSelec
     return matchesSearch && matchesCategory
   })
 
-  const formatPrice = (p: number | undefined, symbol: string) => {
-    if (!p) return '---'
-    // Forex pairs need more decimal places
-    const isForex = symbol.includes('EUR') || symbol.includes('GBP') || symbol.includes('JPY') || symbol.includes('CAD') || symbol.includes('MXN')
-    return isForex ? p.toFixed(4) : p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const formatPrice = (p: number | undefined, category: string) => {
+    if (!p || p === 0) return '---'
+    if (category === 'forex') return p.toFixed(4)
+    if (p < 10) return p.toFixed(4)
+    return p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   }
 
   return (
@@ -52,20 +52,23 @@ export function OstiumMarketSelector({ selectedPair, onSelectPair }: MarketSelec
             </span>
           </div>
           <div className="text-left">
-            <p className="text-white font-semibold">{selectedPair.symbol}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-white font-semibold">{selectedPair.symbol}</p>
+              {price?.isMarketOpen && (
+                <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+              )}
+            </div>
             <p className="text-white/40 text-xs">{selectedPair.name}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
             <p className="text-white font-mono text-lg">
-              ${formatPrice(price?.price, selectedPair.symbol)}
+              ${formatPrice(price?.mid, selectedPair.category)}
             </p>
-            {price?.change24h !== undefined && (
-              <p className={`text-xs ${price.change24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {price.change24h >= 0 ? '+' : ''}{price.change24h.toFixed(2)}%
-              </p>
-            )}
+            <p className={`text-xs ${price?.isMarketOpen ? 'text-green-400' : 'text-white/30'}`}>
+              {price?.isMarketOpen ? 'Live' : 'Closed'}
+            </p>
           </div>
           <ChevronDown className={`w-5 h-5 text-white/40 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </div>
@@ -75,10 +78,21 @@ export function OstiumMarketSelector({ selectedPair, onSelectPair }: MarketSelec
       {isOpen && (
         <>
           <div 
-            className="fixed inset-0 z-40" 
+            className="fixed inset-0 z-40 bg-black/50" 
             onClick={() => setIsOpen(false)}
           />
           <div className="absolute top-full left-0 right-0 z-50 bg-[#111111] border border-white/[0.08] rounded-b-2xl shadow-2xl max-h-[70vh] overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between p-3 border-b border-white/[0.06]">
+              <span className="text-white font-medium">Select Market</span>
+              <button 
+                onClick={() => setIsOpen(false)}
+                className="text-white/40 hover:text-white/60"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
             {/* Search */}
             <div className="p-3 border-b border-white/[0.06]">
               <div className="relative">
@@ -95,11 +109,21 @@ export function OstiumMarketSelector({ selectedPair, onSelectPair }: MarketSelec
             </div>
 
             {/* Categories */}
-            <div className="flex gap-2 p-3 overflow-x-auto border-b border-white/[0.06] scrollbar-hide">
+            <div className="flex gap-2 p-3 overflow-x-auto border-b border-white/[0.06]">
+              <button
+                onClick={() => setSelectedCategory(null)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs whitespace-nowrap transition-all ${
+                  selectedCategory === null
+                    ? 'bg-[#ef4444] text-white'
+                    : 'bg-white/[0.05] text-white/60 hover:text-white hover:bg-white/[0.08]'
+                }`}
+              >
+                All
+              </button>
               {CATEGORIES.map(cat => (
                 <button
                   key={cat.id}
-                  onClick={() => setSelectedCategory(selectedCategory === cat.id ? null : cat.id)}
+                  onClick={() => setSelectedCategory(cat.id)}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs whitespace-nowrap transition-all ${
                     selectedCategory === cat.id
                       ? 'bg-[#ef4444] text-white'
@@ -127,6 +151,7 @@ export function OstiumMarketSelector({ selectedPair, onSelectPair }: MarketSelec
                     onClick={() => {
                       onSelectPair(pair)
                       setIsOpen(false)
+                      setSearch('')
                     }}
                   />
                 ))
@@ -143,9 +168,10 @@ function MarketRow({ pair, isSelected, onClick }: { pair: OstiumPair; isSelected
   const { price } = useOstiumPrice(pair.id)
   
   const formatPrice = (p: number | undefined) => {
-    if (!p) return '---'
-    const isForex = pair.category === 'forex'
-    return isForex ? p.toFixed(4) : p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    if (!p || p === 0) return '---'
+    if (pair.category === 'forex') return p.toFixed(4)
+    if (p < 10) return p.toFixed(4)
+    return p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   }
 
   return (
@@ -162,19 +188,21 @@ function MarketRow({ pair, isSelected, onClick }: { pair: OstiumPair; isSelected
           </span>
         </div>
         <div className="text-left">
-          <p className="text-white font-medium text-sm">{pair.symbol}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-white font-medium text-sm">{pair.symbol}</p>
+            {price?.isMarketOpen && (
+              <span className="w-1.5 h-1.5 bg-green-400 rounded-full" />
+            )}
+          </div>
           <p className="text-white/40 text-xs">{pair.name}</p>
         </div>
       </div>
       <div className="text-right">
-        <p className="text-white font-mono text-sm">${formatPrice(price?.price)}</p>
-        {price?.change24h !== undefined && (
-          <p className={`text-xs ${price.change24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {price.change24h >= 0 ? '+' : ''}{price.change24h.toFixed(2)}%
-          </p>
-        )}
+        <p className="text-white font-mono text-sm">${formatPrice(price?.mid)}</p>
+        <p className={`text-xs ${price?.isMarketOpen ? 'text-green-400' : 'text-white/30'}`}>
+          {price?.isMarketOpen ? 'Open' : 'Closed'}
+        </p>
       </div>
     </button>
   )
 }
-

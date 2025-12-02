@@ -33,7 +33,7 @@ export function OstiumPositions() {
 
   // Enrich positions with current prices
   const enrichedPositions = positions.map(pos => {
-    const currentPrice = prices?.find(p => p.pairId === pos.pairId)?.price || pos.entryPrice
+    const currentPrice = prices?.find(p => p.pairId === pos.pairId)?.mid || pos.entryPrice
     const priceDiff = currentPrice - pos.entryPrice
     const pnlRaw = pos.isLong 
       ? priceDiff * pos.collateral * pos.leverage / pos.entryPrice

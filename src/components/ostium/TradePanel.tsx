@@ -1,32 +1,26 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useAccount, useReadContract } from 'wagmi'
 import { formatUnits } from 'viem'
 import { arbitrum } from 'wagmi/chains'
 import { useOstiumTrade } from '@/hooks/useOstiumTrade'
 import { useOstiumPrice } from '@/hooks/useOstiumPrices'
-import { OSTIUM_CONFIG, type OstiumPair } from '@/lib/ostium/constants'
-import { Loader2, TrendingUp, TrendingDown, Info, AlertTriangle } from 'lucide-react'
-
-const ERC20_ABI = [
-  {
-    name: 'balanceOf',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [{ name: 'account', type: 'address' }],
-    outputs: [{ name: '', type: 'uint256' }],
-  },
-] as const
+import { ACTIVE_CONFIG, type OstiumPair } from '@/lib/ostium/constants'
+import { ERC20_ABI } from '@/lib/ostium/abi'
+import { 
+  Loader2, TrendingUp, TrendingDown, Info, AlertCircle, 
+  CheckCircle, ExternalLink, ChevronDown 
+} from 'lucide-react'
 
 interface TradePanelProps {
   pair: OstiumPair
 }
 
 export function OstiumTradePanel({ pair }: TradePanelProps) {
-  const { address } = useAccount()
-  const { openTrade, isPending, isSuccess, error } = useOstiumTrade()
-  const { price } = useOstiumPrice(pair.id)
+  const { address, isConnected } = useAccount()
+  const { openTrade, isPending, isSuccess, isApproving, error, txHash, reset } = useOstiumTrade()
+  const { price, isLoading: priceLoading } = useOstiumPrice(pair.id)
 
   const [isLong, setIsLong] = useState(true)
   const [collateral, setCollateral] = useState('')
@@ -34,30 +28,70 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [takeProfit, setTakeProfit] = useState('')
   const [stopLoss, setStopLoss] = useState('')
-  const [tradeError, setTradeError] = useState<string | null>(null)
+
+  // Reset state when pair changes
+  useEffect(() => {
+    reset()
+    setTakeProfit('')
+    setStopLoss('')
+  }, [pair.id, reset])
 
   // Fetch USDC balance on Arbitrum
-  const { data: usdcBalance } = useReadContract({
-    address: OSTIUM_CONFIG.mainnet.usdcAddress,
+  const { data: usdcBalance, refetch: refetchBalance } = useReadContract({
+    address: ACTIVE_CONFIG.usdcAddress,
     abi: ERC20_ABI,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
     chainId: arbitrum.id,
   })
 
+  // Refetch balance on success
+  useEffect(() => {
+    if (isSuccess) {
+      refetchBalance()
+    }
+  }, [isSuccess, refetchBalance])
+
   const balance = usdcBalance ? parseFloat(formatUnits(usdcBalance, 6)) : 0
-  const currentPrice = price?.price || 0
+  const currentPrice = price?.mid || 0
+  const isMarketOpen = price?.isMarketOpen ?? false
   const collateralNum = parseFloat(collateral || '0')
   const positionSize = collateralNum * leverage
-  
-  // Calculate liquidation price (simplified - actual calculation depends on protocol)
-  const liquidationPrice = isLong
-    ? currentPrice * (1 - 0.9 / leverage)
-    : currentPrice * (1 + 0.9 / leverage)
+
+  // Format price based on pair
+  const formatPrice = (p: number) => {
+    if (p === 0) return '---'
+    if (pair.category === 'forex') return p.toFixed(4)
+    if (p < 10) return p.toFixed(4)
+    return p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  }
+
+  // Calculate liquidation price
+  const liquidationPrice = useMemo(() => {
+    if (!currentPrice || !leverage) return 0
+    const liqDistance = currentPrice / leverage * 0.9
+    return isLong 
+      ? currentPrice - liqDistance 
+      : currentPrice + liqDistance
+  }, [currentPrice, leverage, isLong])
+
+  // Estimated PnL at TP/SL
+  const estimatedTpPnl = useMemo(() => {
+    if (!takeProfit || !currentPrice || !collateralNum) return null
+    const tp = parseFloat(takeProfit)
+    const priceDiff = isLong ? tp - currentPrice : currentPrice - tp
+    return (priceDiff / currentPrice) * positionSize
+  }, [takeProfit, currentPrice, collateralNum, positionSize, isLong])
+
+  const estimatedSlPnl = useMemo(() => {
+    if (!stopLoss || !currentPrice || !collateralNum) return null
+    const sl = parseFloat(stopLoss)
+    const priceDiff = isLong ? sl - currentPrice : currentPrice - sl
+    return (priceDiff / currentPrice) * positionSize
+  }, [stopLoss, currentPrice, collateralNum, positionSize, isLong])
 
   const handleTrade = async () => {
     if (!collateral || !currentPrice) return
-    setTradeError(null)
 
     try {
       await openTrade({
@@ -71,30 +105,52 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
       })
     } catch (err) {
       console.error('Trade error:', err)
-      setTradeError(err instanceof Error ? err.message : 'Trade failed')
     }
   }
 
-  const formatPrice = (p: number) => {
-    const isForex = pair.category === 'forex'
-    return isForex ? p.toFixed(4) : p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  }
-
-  // Check if contracts are configured
-  const isContractConfigured = OSTIUM_CONFIG.mainnet.tradingContract !== '0x0000000000000000000000000000000000000000'
+  // Validation
+  const canTrade = isConnected && 
+    collateral && 
+    collateralNum > 0 && 
+    collateralNum <= balance &&
+    isMarketOpen &&
+    !isPending
 
   return (
     <div className="p-4 space-y-4">
-      {/* Warning if contracts not configured */}
-      {!isContractConfigured && (
-        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
-          <div className="text-sm">
-            <p className="text-yellow-500 font-medium">Demo Mode</p>
-            <p className="text-yellow-500/70 text-xs mt-0.5">
-              Trading contracts not yet configured. This is a UI preview.
-            </p>
+      {/* Market Status Warning */}
+      {!isMarketOpen && !priceLoading && (
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+          <span className="text-yellow-400 text-sm">
+            Market is currently closed. Trading will resume when market opens.
+          </span>
+        </div>
+      )}
+
+      {/* Success Message */}
+      {isSuccess && txHash && (
+        <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <CheckCircle className="w-4 h-4 text-green-400" />
+            <span className="text-green-400 text-sm font-medium">Trade submitted!</span>
           </div>
+          <a 
+            href={`https://arbiscan.io/tx/${txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-green-400/60 text-xs hover:text-green-400 flex items-center gap-1"
+          >
+            View on Arbiscan <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+      )}
+
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+          <span className="text-red-400 text-sm">{error}</span>
         </div>
       )}
 
@@ -129,7 +185,7 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
         <div className="flex items-center justify-between">
           <label className="text-white/40 text-sm">Collateral (USDC)</label>
           <span className="text-white/40 text-xs">
-            Balance: <span className="text-white/60">${balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            Balance: <span className="text-white/60 font-mono">${balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
           </span>
         </div>
         <div className="relative">
@@ -154,7 +210,8 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
             <button
               key={amount}
               onClick={() => setCollateral(Math.min(amount, balance).toString())}
-              className="flex-1 py-2 bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] rounded-lg text-white/60 text-xs font-medium transition-colors"
+              disabled={balance < amount}
+              className="flex-1 py-2 bg-white/[0.03] hover:bg-white/[0.06] disabled:opacity-30 border border-white/[0.06] rounded-lg text-white/60 text-xs font-medium transition-colors"
             >
               ${amount}
             </button>
@@ -168,14 +225,14 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
           <label className="text-white/40 text-sm">Leverage</label>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setLeverage(Math.max(2, leverage - 1))}
+              onClick={() => setLeverage(Math.max(2, leverage - 5))}
               className="w-7 h-7 bg-white/[0.05] hover:bg-white/[0.1] rounded-lg text-white/60 text-sm transition-colors"
             >
               -
             </button>
-            <span className="text-white font-mono text-lg w-12 text-center">{leverage}x</span>
+            <span className="text-white font-mono text-lg w-14 text-center">{leverage}x</span>
             <button
-              onClick={() => setLeverage(Math.min(100, leverage + 1))}
+              onClick={() => setLeverage(Math.min(100, leverage + 5))}
               className="w-7 h-7 bg-white/[0.05] hover:bg-white/[0.1] rounded-lg text-white/60 text-sm transition-colors"
             >
               +
@@ -210,7 +267,9 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
         </div>
         <div className="flex items-center justify-between">
           <span className="text-white/40 text-sm">Entry Price</span>
-          <span className="text-white font-mono">${formatPrice(currentPrice)}</span>
+          <span className="text-white font-mono">
+            {priceLoading ? '...' : `$${formatPrice(currentPrice)}`}
+          </span>
         </div>
         <div className="flex items-center justify-between">
           <span className="text-white/40 text-sm flex items-center gap-1">
@@ -223,16 +282,17 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
         </div>
         <div className="border-t border-white/[0.06] pt-3 flex items-center justify-between">
           <span className="text-white/40 text-sm">Est. Fee</span>
-          <span className="text-white/60 font-mono text-sm">~${(positionSize * 0.001).toFixed(2)}</span>
+          <span className="text-white/60 font-mono text-sm">~${(positionSize * 0.0008).toFixed(2)}</span>
         </div>
       </div>
 
       {/* Advanced Options */}
       <button
         onClick={() => setShowAdvanced(!showAdvanced)}
-        className="text-white/40 text-sm hover:text-white/60 transition-colors flex items-center gap-1"
+        className="w-full text-white/40 text-sm hover:text-white/60 transition-colors flex items-center justify-center gap-1"
       >
-        {showAdvanced ? '▼' : '▶'} Take Profit / Stop Loss
+        <ChevronDown className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
+        {showAdvanced ? 'Hide' : 'Show'} Take Profit / Stop Loss
       </button>
 
       {showAdvanced && (
@@ -243,9 +303,14 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
               type="number"
               value={takeProfit}
               onChange={(e) => setTakeProfit(e.target.value)}
-              placeholder="Price"
-              className="w-full px-3 py-2.5 bg-white/[0.03] border border-green-500/20 rounded-lg text-white text-sm outline-none focus:border-green-500/50 transition-colors"
+              placeholder={isLong ? `> ${formatPrice(currentPrice)}` : `< ${formatPrice(currentPrice)}`}
+              className="w-full px-3 py-2.5 bg-white/[0.03] border border-green-500/20 rounded-lg text-white text-sm outline-none focus:border-green-500/50 transition-colors font-mono"
             />
+            {estimatedTpPnl !== null && (
+              <p className="text-green-400 text-xs mt-1">
+                +${estimatedTpPnl.toFixed(2)} ({((estimatedTpPnl / collateralNum) * 100).toFixed(1)}%)
+              </p>
+            )}
           </div>
           <div>
             <label className="text-red-400/80 text-xs mb-1.5 block font-medium">Stop Loss</label>
@@ -253,31 +318,22 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
               type="number"
               value={stopLoss}
               onChange={(e) => setStopLoss(e.target.value)}
-              placeholder="Price"
-              className="w-full px-3 py-2.5 bg-white/[0.03] border border-red-500/20 rounded-lg text-white text-sm outline-none focus:border-red-500/50 transition-colors"
+              placeholder={isLong ? `< ${formatPrice(currentPrice)}` : `> ${formatPrice(currentPrice)}`}
+              className="w-full px-3 py-2.5 bg-white/[0.03] border border-red-500/20 rounded-lg text-white text-sm outline-none focus:border-red-500/50 transition-colors font-mono"
             />
+            {estimatedSlPnl !== null && (
+              <p className="text-red-400 text-xs mt-1">
+                ${estimatedSlPnl.toFixed(2)} ({((estimatedSlPnl / collateralNum) * 100).toFixed(1)}%)
+              </p>
+            )}
           </div>
-        </div>
-      )}
-
-      {/* Error Display */}
-      {(error || tradeError) && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3">
-          <p className="text-red-400 text-sm">{tradeError || error?.message}</p>
-        </div>
-      )}
-
-      {/* Success Display */}
-      {isSuccess && (
-        <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3">
-          <p className="text-green-400 text-sm">Position opened successfully!</p>
         </div>
       )}
 
       {/* Trade Button */}
       <button
         onClick={handleTrade}
-        disabled={isPending || !collateral || collateralNum <= 0 || !isContractConfigured}
+        disabled={!canTrade}
         className={`w-full py-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
           isLong
             ? 'bg-green-500 hover:bg-green-600 disabled:bg-green-500/30 shadow-lg shadow-green-500/20'
@@ -287,8 +343,14 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
         {isPending ? (
           <>
             <Loader2 className="w-5 h-5 animate-spin" />
-            Opening Position...
+            {isApproving ? 'Approving USDC...' : 'Opening Position...'}
           </>
+        ) : !isConnected ? (
+          'Connect Wallet'
+        ) : !isMarketOpen ? (
+          'Market Closed'
+        ) : collateralNum > balance ? (
+          'Insufficient Balance'
         ) : (
           <>
             {isLong ? 'Long' : 'Short'} {pair.symbol}
@@ -297,9 +359,8 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
       </button>
 
       <p className="text-white/30 text-xs text-center">
-        Trading on Arbitrum • {isContractConfigured ? 'Connected' : 'Demo Mode'}
+        Trading on Arbitrum • Requires ETH for gas
       </p>
     </div>
   )
 }
-

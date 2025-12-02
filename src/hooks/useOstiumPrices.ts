@@ -1,21 +1,29 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { OSTIUM_PAIRS } from '@/lib/ostium/constants'
 
-interface PriceData {
+// Our normalized price data
+export interface PriceData {
   pairId: number
   symbol: string
-  price: number
-  change24h: number
-  high24h: number
-  low24h: number
+  bid: number
+  mid: number
+  ask: number
+  isMarketOpen: boolean
+  isDayTradingClosed: boolean
   timestamp: number
 }
 
 async function fetchOstiumPrices(): Promise<PriceData[]> {
-  const response = await fetch('/api/ostium/prices')
-  if (!response.ok) throw new Error('Failed to fetch prices')
+  // Use our API route to proxy the request (avoids CORS issues)
+  const response = await fetch('/api/ostium/prices', {
+    cache: 'no-store',
+  })
+  
+  if (!response.ok) {
+    throw new Error('Failed to fetch prices')
+  }
+  
   return response.json()
 }
 
@@ -23,8 +31,10 @@ export function useOstiumPrices() {
   return useQuery({
     queryKey: ['ostium-prices'],
     queryFn: fetchOstiumPrices,
-    refetchInterval: 5000, // Refresh every 5 seconds
-    staleTime: 3000,
+    refetchInterval: 2000, // Refresh every 2 seconds for live trading
+    staleTime: 1000,
+    retry: 3,
+    retryDelay: 1000,
   })
 }
 
@@ -33,4 +43,3 @@ export function useOstiumPrice(pairId: number) {
   const price = prices?.find(p => p.pairId === pairId)
   return { price, ...rest }
 }
-

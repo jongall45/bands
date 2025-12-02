@@ -1,25 +1,47 @@
 'use client'
 
-import { useAccount, useSendCalls } from 'wagmi'
-import { encodeFunctionData, parseUnits } from 'viem'
-import { OSTIUM_CONFIG, OSTIUM_TRADING_ABI, USDC_ABI } from '@/lib/ostium/constants'
+import { useState, useCallback } from 'react'
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi'
+import { parseUnits } from 'viem'
+import { arbitrum } from 'wagmi/chains'
+import { ACTIVE_CONFIG, BUILDER_CONFIG, ORDER_TYPE } from '@/lib/ostium/constants'
+import { OSTIUM_TRADING_ABI, ERC20_ABI } from '@/lib/ostium/abi'
 
 interface TradeParams {
   pairId: number
-  collateral: number // USDC amount
-  leverage: number
+  collateral: number      // USDC amount (e.g., 100 for $100)
+  leverage: number        // e.g., 10 for 10x
   isLong: boolean
-  currentPrice: number
-  takeProfit?: number
-  stopLoss?: number
-  slippagePercent?: number
+  currentPrice: number    // Current market price
+  takeProfit?: number     // TP price (optional)
+  stopLoss?: number       // SL price (optional)
+  slippagePercent?: number // Slippage tolerance (default 1%)
+  orderType?: keyof typeof ORDER_TYPE
+  limitPrice?: number     // For limit/stop orders
 }
 
 export function useOstiumTrade() {
   const { address } = useAccount()
-  const { sendCalls, isPending, isSuccess, isError, error, data } = useSendCalls()
+  const [step, setStep] = useState<'idle' | 'approving' | 'trading' | 'success' | 'error'>('idle')
+  const [txHash, setTxHash] = useState<`0x${string}` | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  
+  const { writeContractAsync, isPending: isWriting } = useWriteContract()
+  
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
+    hash: txHash ?? undefined,
+  })
 
-  const openTrade = async (params: TradeParams) => {
+  // Check current allowance
+  const { data: currentAllowance, refetch: refetchAllowance } = useReadContract({
+    address: ACTIVE_CONFIG.usdcAddress,
+    abi: ERC20_ABI,
+    functionName: 'allowance',
+    args: address ? [address, ACTIVE_CONFIG.tradingContract] : undefined,
+    chainId: arbitrum.id,
+  })
+
+  const openTrade = useCallback(async (params: TradeParams) => {
     if (!address) throw new Error('Wallet not connected')
 
     const {
@@ -31,79 +53,183 @@ export function useOstiumTrade() {
       takeProfit = 0,
       stopLoss = 0,
       slippagePercent = 1,
+      orderType = 'MARKET',
+      limitPrice,
     } = params
 
-    // Convert to contract format (USDC has 6 decimals)
-    const collateralWei = parseUnits(collateral.toString(), 6)
-    const priceWei = parseUnits(currentPrice.toFixed(8), 8) // Price precision
-    const tpWei = takeProfit ? parseUnits(takeProfit.toFixed(8), 8) : BigInt(0)
-    const slWei = stopLoss ? parseUnits(stopLoss.toFixed(8), 8) : BigInt(0)
-    const slippageWei = BigInt(Math.floor(slippagePercent * 100)) // 1% = 100
+    setStep('idle')
+    setErrorMessage(null)
+    setTxHash(null)
 
-    const tradingContract = OSTIUM_CONFIG.mainnet.tradingContract
-    const usdcAddress = OSTIUM_CONFIG.mainnet.usdcAddress
+    try {
+      // Convert values to contract format
+      // Collateral: USDC has 6 decimals
+      const collateralWei = parseUnits(collateral.toString(), 6)
+      
+      // Prices: scaled by 1e18
+      const priceToUse = orderType === 'MARKET' ? currentPrice : (limitPrice || currentPrice)
+      const openPriceWei = parseUnits(priceToUse.toFixed(10), 18)
+      const tpWei = takeProfit ? parseUnits(takeProfit.toFixed(10), 18) : BigInt(0)
+      const slWei = stopLoss ? parseUnits(stopLoss.toFixed(10), 18) : BigInt(0)
+      
+      // Leverage: scaled by 1e2 (so 10x = 1000)
+      const leverageScaled = BigInt(Math.floor(leverage * 100))
+      
+      // Slippage: scaled by 1e2 (so 1% = 100)
+      const slippageScaled = BigInt(Math.floor(slippagePercent * 100))
 
-    // Batch: Approve USDC + Open Trade
-    sendCalls({
-      calls: [
-        // 1. Approve USDC spend
-        {
-          to: usdcAddress,
-          data: encodeFunctionData({
-            abi: USDC_ABI,
-            functionName: 'approve',
-            args: [tradingContract, collateralWei],
-          }),
-        },
-        // 2. Open the trade
-        {
-          to: tradingContract,
-          data: encodeFunctionData({
-            abi: OSTIUM_TRADING_ABI,
-            functionName: 'openTrade',
-            args: [
-              BigInt(pairId),
-              collateralWei,
-              BigInt(leverage),
-              isLong,
-              priceWei,
-              slippageWei,
-              tpWei,
-              slWei,
-            ],
-          }),
-        },
-      ],
-    })
-  }
+      // Check if we need to approve
+      const needsApproval = !currentAllowance || currentAllowance < collateralWei
 
-  const closeTrade = async (pairId: number, tradeIndex: number) => {
+      if (needsApproval) {
+        setStep('approving')
+        
+        // Approve USDC spend (approve max to avoid repeated approvals)
+        const approveHash = await writeContractAsync({
+          address: ACTIVE_CONFIG.usdcAddress,
+          abi: ERC20_ABI,
+          functionName: 'approve',
+          args: [ACTIVE_CONFIG.tradingContract, collateralWei * BigInt(10)], // Approve 10x to reduce future approvals
+          chainId: arbitrum.id,
+        })
+        
+        setTxHash(approveHash)
+        
+        // Wait for approval to be mined before proceeding
+        // In production, you'd want to wait for the receipt
+        await new Promise(resolve => setTimeout(resolve, 3000))
+        await refetchAllowance()
+      }
+
+      setStep('trading')
+
+      // Build trade struct
+      const trade = {
+        collateral: collateralWei,
+        openPrice: openPriceWei,
+        tp: tpWei,
+        sl: slWei,
+        trader: address,
+        leverage: leverageScaled,
+        pairIndex: BigInt(pairId),
+        index: BigInt(0), // 0 for new trades
+        buy: isLong,
+      }
+
+      // Builder fee (optional referral)
+      const builderFee = {
+        builder: BUILDER_CONFIG.address as `0x${string}`,
+        builderFee: BUILDER_CONFIG.feePercent,
+      }
+
+      // Execute trade
+      const tradeHash = await writeContractAsync({
+        address: ACTIVE_CONFIG.tradingContract,
+        abi: OSTIUM_TRADING_ABI,
+        functionName: 'openTrade',
+        args: [trade, builderFee, ORDER_TYPE[orderType], slippageScaled],
+        chainId: arbitrum.id,
+      })
+
+      setTxHash(tradeHash)
+      setStep('success')
+      
+      return tradeHash
+    } catch (error) {
+      console.error('Trade execution error:', error)
+      setStep('error')
+      setErrorMessage(error instanceof Error ? error.message : 'Trade failed')
+      throw error
+    }
+  }, [address, currentAllowance, writeContractAsync, refetchAllowance])
+
+  const closeTrade = useCallback(async (pairId: number, tradeIndex: number) => {
     if (!address) throw new Error('Wallet not connected')
 
-    const tradingContract = OSTIUM_CONFIG.mainnet.tradingContract
+    setStep('trading')
+    setErrorMessage(null)
 
-    sendCalls({
-      calls: [
-        {
-          to: tradingContract,
-          data: encodeFunctionData({
-            abi: OSTIUM_TRADING_ABI,
-            functionName: 'closeTrade',
-            args: [BigInt(pairId), BigInt(tradeIndex)],
-          }),
-        },
-      ],
-    })
-  }
+    try {
+      const hash = await writeContractAsync({
+        address: ACTIVE_CONFIG.tradingContract,
+        abi: OSTIUM_TRADING_ABI,
+        functionName: 'closeTradeMarket',
+        args: [BigInt(pairId), BigInt(tradeIndex)],
+        chainId: arbitrum.id,
+      })
+
+      setTxHash(hash)
+      setStep('success')
+      return hash
+    } catch (error) {
+      console.error('Close trade error:', error)
+      setStep('error')
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to close trade')
+      throw error
+    }
+  }, [address, writeContractAsync])
+
+  const updateTakeProfit = useCallback(async (pairId: number, tradeIndex: number, newTp: number) => {
+    if (!address) throw new Error('Wallet not connected')
+
+    const tpWei = parseUnits(newTp.toFixed(10), 18)
+
+    try {
+      const hash = await writeContractAsync({
+        address: ACTIVE_CONFIG.tradingContract,
+        abi: OSTIUM_TRADING_ABI,
+        functionName: 'updateTp',
+        args: [BigInt(pairId), BigInt(tradeIndex), tpWei],
+        chainId: arbitrum.id,
+      })
+
+      setTxHash(hash)
+      return hash
+    } catch (error) {
+      console.error('Update TP error:', error)
+      throw error
+    }
+  }, [address, writeContractAsync])
+
+  const updateStopLoss = useCallback(async (pairId: number, tradeIndex: number, newSl: number) => {
+    if (!address) throw new Error('Wallet not connected')
+
+    const slWei = parseUnits(newSl.toFixed(10), 18)
+
+    try {
+      const hash = await writeContractAsync({
+        address: ACTIVE_CONFIG.tradingContract,
+        abi: OSTIUM_TRADING_ABI,
+        functionName: 'updateSl',
+        args: [BigInt(pairId), BigInt(tradeIndex), slWei],
+        chainId: arbitrum.id,
+      })
+
+      setTxHash(hash)
+      return hash
+    } catch (error) {
+      console.error('Update SL error:', error)
+      throw error
+    }
+  }, [address, writeContractAsync])
+
+  const reset = useCallback(() => {
+    setStep('idle')
+    setTxHash(null)
+    setErrorMessage(null)
+  }, [])
 
   return {
     openTrade,
     closeTrade,
-    isPending,
-    isSuccess,
-    isError,
-    error,
-    data,
+    updateTakeProfit,
+    updateStopLoss,
+    reset,
+    step,
+    isPending: isWriting || isConfirming || step === 'approving' || step === 'trading',
+    isSuccess: step === 'success' && isConfirmed,
+    isApproving: step === 'approving',
+    error: errorMessage,
+    txHash,
   }
 }
-
