@@ -2,15 +2,52 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAccount, useDisconnect } from 'wagmi'
-import { TrendingUp, LogOut, RefreshCw, ArrowUpRight, BarChart3 } from 'lucide-react'
+import { useAccount } from 'wagmi'
+import { TrendingUp, RefreshCw, ArrowUpRight, BarChart3, DollarSign, Zap } from 'lucide-react'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
-import Link from 'next/link'
+
+const protocols = [
+  {
+    name: 'Vest Exchange',
+    description: 'Stock Perpetuals',
+    detail: 'Trade AAPL, TSLA, NVDA • Up to 100x leverage',
+    url: 'https://app.vest.exchange',
+    icon: BarChart3,
+    chain: 'Base',
+    note: 'May be geo-restricted in US',
+  },
+  {
+    name: 'Ostium',
+    description: 'Forex & RWA Perps',
+    detail: 'Trade EUR/USD, Gold, Oil • On Arbitrum',
+    url: 'https://app.ostium.com/trade',
+    icon: DollarSign,
+    chain: 'Arbitrum',
+    note: null,
+  },
+  {
+    name: 'Hyperliquid',
+    description: 'Crypto Perps',
+    detail: 'BTC, ETH, SOL • Up to 50x leverage',
+    url: 'https://app.hyperliquid.xyz',
+    icon: Zap,
+    chain: 'Hyperliquid L1',
+    note: 'Uses own chain - deposit required',
+  },
+  {
+    name: 'GMX',
+    description: 'Decentralized Perps',
+    detail: 'BTC, ETH perps • Deep liquidity',
+    url: 'https://app.gmx.io/#/trade',
+    icon: TrendingUp,
+    chain: 'Arbitrum',
+    note: null,
+  },
+]
 
 export default function SpeculatePage() {
   const { isConnected } = useAccount()
-  const { disconnect } = useDisconnect()
   const router = useRouter()
 
   useEffect(() => {
@@ -46,65 +83,53 @@ export default function SpeculatePage() {
         <header className="flex items-center justify-between px-5 py-4">
           <div>
             <h1 className="text-gray-900 font-semibold text-xl">Speculate</h1>
-            <p className="text-gray-500 text-sm">Trade perps on any asset</p>
+            <p className="text-gray-500 text-sm">Trade perps with Porto wallet</p>
           </div>
           <LogoInline size="sm" />
         </header>
 
-        {/* Protocol Cards */}
-        <div className="px-5 space-y-4 mt-4">
-          {/* Vest Exchange */}
-          <Link
-            href="/speculate/vest"
-            className="card flex items-center justify-between group"
-          >
-            <div className="relative z-10">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-12 h-12 bg-white/[0.05] rounded-2xl flex items-center justify-center">
-                  <BarChart3 className="w-6 h-6 text-[#ef4444]" />
-                </div>
-                <div>
-                  <h3 className="text-white font-semibold">Vest Exchange</h3>
-                  <p className="text-white/40 text-sm">Stock Perpetuals</p>
-                </div>
-              </div>
-              <p className="text-white/30 text-xs">
-                Trade AAPL, TSLA, NVDA and more • Up to 100x leverage
-              </p>
-            </div>
-            <ArrowUpRight className="w-5 h-5 text-white/20 group-hover:text-white/40 transition-colors relative z-10" />
-          </Link>
-
-          {/* Ostium */}
-          <Link
-            href="/speculate/avantis"
-            className="card flex items-center justify-between group"
-          >
-            <div className="relative z-10">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-12 h-12 bg-white/[0.05] rounded-2xl flex items-center justify-center">
-                  <TrendingUp className="w-6 h-6 text-[#ef4444]" />
-                </div>
-                <div>
-                  <h3 className="text-white font-semibold">Ostium</h3>
-                  <p className="text-white/40 text-sm">Forex & RWA Perps</p>
-                </div>
-              </div>
-              <p className="text-white/30 text-xs">
-                Trade EUR/USD, Oil, Gold and more • On Arbitrum
-              </p>
-            </div>
-            <ArrowUpRight className="w-5 h-5 text-white/20 group-hover:text-white/40 transition-colors relative z-10" />
-          </Link>
-        </div>
-
-        {/* Info */}
-        <div className="px-5 mt-6">
-          <div className="bg-white/[0.5] backdrop-blur-lg border border-white/[0.8] rounded-2xl p-4">
-            <p className="text-gray-600 text-sm">
-              <span className="text-[#ef4444] font-medium">Porto wallet</span> connects automatically to these dApps. Gas is paid in USDC.
+        {/* Info Banner */}
+        <div className="px-5 mb-4">
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4">
+            <p className="text-blue-600 text-sm">
+              <strong>Porto wallet</strong> connects automatically to these dApps via EIP-6963. They'll open in a new tab.
             </p>
           </div>
+        </div>
+
+        {/* Protocol Cards */}
+        <div className="px-5 space-y-4">
+          {protocols.map((protocol) => (
+            <a
+              key={protocol.name}
+              href={protocol.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="card flex items-center justify-between group"
+            >
+              <div className="relative z-10 flex-1">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-12 h-12 bg-white/[0.05] rounded-2xl flex items-center justify-center">
+                    <protocol.icon className="w-6 h-6 text-[#ef4444]" />
+                  </div>
+                  <div>
+                    <h3 className="text-white font-semibold">{protocol.name}</h3>
+                    <p className="text-white/40 text-sm">{protocol.description}</p>
+                  </div>
+                </div>
+                <p className="text-white/30 text-xs">{protocol.detail}</p>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-xs bg-white/[0.05] text-white/50 px-2 py-1 rounded-full">
+                    {protocol.chain}
+                  </span>
+                  {protocol.note && (
+                    <span className="text-xs text-yellow-500/70">{protocol.note}</span>
+                  )}
+                </div>
+              </div>
+              <ArrowUpRight className="w-5 h-5 text-white/20 group-hover:text-white/40 transition-colors relative z-10" />
+            </a>
+          ))}
         </div>
       </div>
 
@@ -188,6 +213,7 @@ const speculateStyles = `
 
   /* Cards */
   .speculate-page .card {
+    display: flex;
     background: #111111;
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 24px;
