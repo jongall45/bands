@@ -3,10 +3,46 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAccount } from 'wagmi'
-import { RefreshCw, ArrowRight, Building2, TrendingUp, ExternalLink } from 'lucide-react'
+import { RefreshCw, ArrowRight } from 'lucide-react'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
 import Link from 'next/link'
+import Image from 'next/image'
+
+// Ostium Logo Component (based on their brand - orange with black)
+function OstiumLogo({ className = "w-12 h-12" }: { className?: string }) {
+  return (
+    <div className={`${className} bg-[#FF6B00] rounded-2xl flex items-center justify-center overflow-hidden`}>
+      <svg viewBox="0 0 100 100" className="w-8 h-8">
+        {/* Ostium logo - two opposing crescents */}
+        <path
+          d="M25 15 C25 15 15 50 25 85 C35 85 35 15 25 15"
+          fill="black"
+          stroke="black"
+          strokeWidth="2"
+        />
+        <path
+          d="M35 15 C25 50 35 85 35 85 C45 85 55 50 45 15 C45 15 35 15 35 15"
+          fill="black"
+          stroke="black"
+          strokeWidth="2"
+        />
+        <path
+          d="M55 15 C55 15 45 50 55 85 C65 85 75 50 65 15 C65 15 55 15 55 15"
+          fill="black"
+          stroke="black"
+          strokeWidth="2"
+        />
+        <path
+          d="M75 15 C65 50 75 85 75 85 C85 85 85 50 75 15"
+          fill="black"
+          stroke="black"
+          strokeWidth="2"
+        />
+      </svg>
+    </div>
+  )
+}
 
 export default function SpeculatePage() {
   const { isConnected } = useAccount()
@@ -50,85 +86,48 @@ export default function SpeculatePage() {
           <LogoInline size="sm" />
         </header>
 
-        {/* Protocol Cards */}
-        <div className="px-5 space-y-4">
-          {/* Ostium - Native Integration */}
+        {/* Ostium Card */}
+        <div className="px-5">
           <Link
             href="/speculate/ostium"
             className="card group"
           >
             <div className="relative z-10 flex items-center justify-between w-full">
               <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-12 h-12 bg-gradient-to-br from-orange-500/20 to-red-500/20 rounded-2xl flex items-center justify-center">
-                    <Building2 className="w-6 h-6 text-orange-400" />
-                  </div>
+                <div className="flex items-center gap-3 mb-3">
+                  {/* Ostium Logo */}
+                  <OstiumLogo />
                   <div>
-                    <h3 className="text-white font-semibold flex items-center gap-2">
+                    <h3 className="text-white font-semibold text-lg flex items-center gap-2">
                       Ostium
                       <span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-medium">
                         NATIVE
                       </span>
                     </h3>
-                    <p className="text-white/40 text-sm">Stocks, Forex & RWA Perps</p>
+                    <p className="text-white/50 text-sm">Stocks, Forex & RWA Perps</p>
                   </div>
                 </div>
-                <p className="text-white/30 text-xs">
-                  Trade TSLA, AAPL, EUR/USD, Gold, Oil and more
+                <p className="text-white/40 text-sm mb-3">
+                  Trade TSLA, AAPL, EUR/USD, Gold, Oil and more with up to 100x leverage
                 </p>
-                <div className="flex flex-wrap gap-2 mt-3">
-                  <span className="text-xs bg-white/[0.05] text-white/50 px-2 py-1 rounded-full">TSLA</span>
-                  <span className="text-xs bg-white/[0.05] text-white/50 px-2 py-1 rounded-full">AAPL</span>
-                  <span className="text-xs bg-white/[0.05] text-white/50 px-2 py-1 rounded-full">EUR/USD</span>
-                  <span className="text-xs bg-white/[0.05] text-white/50 px-2 py-1 rounded-full">Gold</span>
-                  <span className="text-xs bg-white/[0.05] text-white/50 px-2 py-1 rounded-full">+20</span>
+                <div className="flex flex-wrap gap-2">
+                  <span className="text-xs bg-white/[0.08] text-white/60 px-2.5 py-1 rounded-full">TSLA</span>
+                  <span className="text-xs bg-white/[0.08] text-white/60 px-2.5 py-1 rounded-full">AAPL</span>
+                  <span className="text-xs bg-white/[0.08] text-white/60 px-2.5 py-1 rounded-full">EUR/USD</span>
+                  <span className="text-xs bg-white/[0.08] text-white/60 px-2.5 py-1 rounded-full">Gold</span>
+                  <span className="text-xs bg-white/[0.08] text-white/60 px-2.5 py-1 rounded-full">BTC</span>
+                  <span className="text-xs bg-white/[0.08] text-white/60 px-2.5 py-1 rounded-full">+20</span>
                 </div>
-                <div className="flex items-center gap-2 mt-3">
-                  <span className="text-xs bg-orange-500/20 text-orange-400 px-2 py-1 rounded-full">
+                <div className="flex items-center gap-3 mt-4">
+                  <span className="text-xs bg-[#FF6B00]/20 text-[#FF6B00] px-2.5 py-1 rounded-full font-medium">
                     Arbitrum
                   </span>
-                  <span className="text-xs text-white/30">Up to 100x leverage</span>
+                  <span className="text-xs text-white/30">Live Prices • Real Trading</span>
                 </div>
               </div>
-              <ArrowRight className="w-5 h-5 text-white/20 group-hover:text-white/40 transition-colors" />
+              <ArrowRight className="w-6 h-6 text-white/20 group-hover:text-white/50 group-hover:translate-x-1 transition-all" />
             </div>
           </Link>
-
-          {/* Vest - External Link (geo-restricted) */}
-          <a
-            href="https://trade.vestmarkets.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="card group opacity-70"
-          >
-            <div className="relative z-10 flex items-center justify-between w-full">
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-12 h-12 bg-white/[0.05] rounded-2xl flex items-center justify-center">
-                    <TrendingUp className="w-6 h-6 text-blue-400/50" />
-                  </div>
-                  <div>
-                    <h3 className="text-white/70 font-semibold flex items-center gap-2">
-                      Vest Exchange
-                      <span className="text-[10px] bg-white/[0.05] text-white/40 px-2 py-0.5 rounded-full">
-                        EXTERNAL
-                      </span>
-                    </h3>
-                    <p className="text-white/30 text-sm">Stock Perpetuals</p>
-                  </div>
-                </div>
-                <p className="text-white/20 text-xs">
-                  Opens in new tab • May be geo-restricted in US
-                </p>
-                <div className="flex items-center gap-2 mt-3">
-                  <span className="text-xs bg-white/[0.03] text-white/30 px-2 py-1 rounded-full">
-                    Base
-                  </span>
-                </div>
-              </div>
-              <ExternalLink className="w-5 h-5 text-white/20 group-hover:text-white/30 transition-colors" />
-            </div>
-          </a>
         </div>
 
         {/* Info Section */}
@@ -136,7 +135,7 @@ export default function SpeculatePage() {
           <div className="bg-white/[0.5] backdrop-blur-lg border border-white/[0.1] rounded-2xl p-4">
             <h4 className="text-gray-800 font-medium text-sm mb-2">Native Trading</h4>
             <p className="text-gray-600 text-sm">
-              Trade directly from bands.cash with your Porto wallet. Native integrations sign transactions locally without redirecting to external sites.
+              Trade directly from bands.cash with your Porto wallet. Transactions are signed locally without redirecting to external sites.
             </p>
           </div>
         </div>
@@ -226,7 +225,7 @@ const speculateStyles = `
     background: #111111;
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 24px;
-    padding: 20px;
+    padding: 24px;
     position: relative;
     overflow: hidden;
     transition: transform 0.2s, border-color 0.2s;
@@ -242,9 +241,9 @@ const speculateStyles = `
     height: 100%;
     background: radial-gradient(
       ellipse at 0% 0%,
-      rgba(255, 59, 48, 0.25) 0%,
-      rgba(255, 59, 48, 0.1) 30%,
-      rgba(255, 59, 48, 0.03) 50%,
+      rgba(255, 107, 0, 0.2) 0%,
+      rgba(255, 107, 0, 0.08) 30%,
+      rgba(255, 107, 0, 0.02) 50%,
       transparent 70%
     );
     pointer-events: none;
@@ -253,7 +252,6 @@ const speculateStyles = `
 
   .speculate-page .card:hover {
     transform: translateY(-2px);
-    border-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 107, 0, 0.2);
   }
 `
-

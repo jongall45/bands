@@ -1,11 +1,12 @@
 'use client'
 
-import { Home, TrendingUp, Wallet, Settings } from 'lucide-react'
+import { Home, TrendingUp, PiggyBank, Settings } from 'lucide-react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 
 const navItems = [
   { href: '/dashboard', icon: Home, label: 'Home' },
+  { href: '/save', icon: PiggyBank, label: 'Save' },
   { href: '/speculate', icon: TrendingUp, label: 'Speculate' },
   { href: '/settings', icon: Settings, label: 'Settings' },
 ]
@@ -23,7 +24,7 @@ export function BottomNav() {
         shadow-[0_8px_32px_rgba(0,0,0,0.4)]
       ">
         {navItems.map(({ href, icon: Icon, label }) => {
-          const isActive = pathname === href
+          const isActive = pathname === href || pathname?.startsWith(href + '/')
           return (
             <Link
               key={href}

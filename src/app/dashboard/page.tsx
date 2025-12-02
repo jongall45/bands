@@ -9,7 +9,7 @@ import { base } from 'wagmi/chains'
 import { USDC_ADDRESS, USDC_DECIMALS, ERC20_ABI } from '@/lib/wagmi'
 import { 
   ArrowUpRight, ArrowDownLeft, Copy, Check, LogOut, 
-  Send, RefreshCw, ExternalLink, Plus, ShoppingCart, QrCode
+  Send, RefreshCw, ExternalLink, ShoppingCart, QrCode
 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { CardInner } from '@/components/ui/Card'
@@ -232,33 +232,6 @@ export default function Dashboard() {
               <ShoppingCart className="w-5 h-5 text-gray-300" strokeWidth={1.5} />
               <span className="text-gray-300 text-sm">Buy</span>
             </button>
-          </div>
-        </div>
-
-        {/* Speculate Card */}
-        <div className="card mt-4">
-          <h2 className="text-white font-semibold mb-4">Speculate</h2>
-          <div className="space-y-3">
-            <a
-              href="/speculate/vest"
-              className="flex items-center justify-between bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] rounded-2xl p-4 transition-colors"
-            >
-              <div>
-                <p className="text-white font-medium">Stock Perps</p>
-                <p className="text-gray-500 text-sm">Trade AAPL, TSLA & more</p>
-              </div>
-              <ArrowUpRight className="w-5 h-5 text-gray-500" />
-            </a>
-            <a
-              href="/speculate/avantis"
-              className="flex items-center justify-between bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] rounded-2xl p-4 transition-colors"
-            >
-              <div>
-                <p className="text-white font-medium">Forex & RWA Perps</p>
-                <p className="text-gray-500 text-sm">Ostium on Arbitrum</p>
-              </div>
-              <ArrowUpRight className="w-5 h-5 text-gray-500" />
-            </a>
           </div>
         </div>
 
