@@ -3,6 +3,8 @@ export const OSTIUM_CONFIG = {
   mainnet: {
     chainId: 42161,
     tradingContract: '0x6D0bA1f9996DBD8885827e1b2e8f6593e7702411' as const,
+    // Trading Storage is the actual spender that receives USDC from users
+    tradingStorageContract: '0x51a1ceB83B83F1985a81C295d1917aDef8C2028f' as const,
     usdcAddress: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as const,
     priceApiUrl: 'https://metadata-backend.ostium.io/PricePublish/latest-prices',
     subgraphUrl: 'https://api.thegraph.com/subgraphs/name/0xostium/ostium-arbitrum',
@@ -10,6 +12,7 @@ export const OSTIUM_CONFIG = {
   testnet: {
     chainId: 421614, // Arbitrum Sepolia
     tradingContract: '0x0000000000000000000000000000000000000000' as const,
+    tradingStorageContract: '0x0000000000000000000000000000000000000000' as const,
     usdcAddress: '0x0000000000000000000000000000000000000000' as const,
     priceApiUrl: 'https://metadata-backend.ostium.io/PricePublish/latest-prices',
     subgraphUrl: 'https://api.thegraph.com/subgraphs/name/0xostium/ostium-arbitrum-sepolia',

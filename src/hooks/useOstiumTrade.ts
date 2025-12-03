@@ -34,12 +34,13 @@ export function useOstiumTrade() {
     hash: txHash ?? undefined,
   })
 
-  // Check current allowance
+  // Check current allowance - MUST approve Trading Storage contract, NOT Trading contract
+  // Trading Storage is the actual spender that receives USDC from users
   const { data: currentAllowance, refetch: refetchAllowance } = useReadContract({
     address: ACTIVE_CONFIG.usdcAddress,
     abi: ERC20_ABI,
     functionName: 'allowance',
-    args: address ? [address, ACTIVE_CONFIG.tradingContract] : undefined,
+    args: address ? [address, ACTIVE_CONFIG.tradingStorageContract] : undefined,
     chainId: arbitrum.id,
   })
 
@@ -104,12 +105,15 @@ export function useOstiumTrade() {
       if (needsApproval) {
         setStep('approving')
         
-        // Approve exact USDC amount for this trade
+        console.log('🟡 Approving Trading Storage contract:', ACTIVE_CONFIG.tradingStorageContract)
+        
+        // Approve Trading Storage contract (NOT Trading contract!)
+        // Trading Storage is what actually receives USDC from users
         const approveHash = await writeContractAsync({
           address: ACTIVE_CONFIG.usdcAddress,
           abi: ERC20_ABI,
           functionName: 'approve',
-          args: [ACTIVE_CONFIG.tradingContract, collateralWei],
+          args: [ACTIVE_CONFIG.tradingStorageContract, collateralWei],
           chainId: arbitrum.id,
         })
         
