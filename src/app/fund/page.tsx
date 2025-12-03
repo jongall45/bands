@@ -34,29 +34,28 @@ export default function FundPage() {
     }
   }
 
-  const handleCoinbaseBuy = () => {
+  const handleBuy = () => {
     if (!address) return
     
     setIsLoading(true)
 
-    // Coinbase Pay URL - permissionless, no API key needed
-    // Uses their hosted solution with address passthrough
+    // Transak - truly permissionless, no API key required for basic widget
+    // They support USDC on Base
     const params = new URLSearchParams({
-      appId: 'bands-cash', // App identifier
-      destinationWallets: JSON.stringify([{
-        address: address,
-        blockchains: ['base'],
-        assets: ['USDC'],
-      }]),
-      defaultAsset: 'USDC',
-      defaultNetwork: 'base',
-      presetFiatAmount: amount,
+      apiKey: 'af0bc5e7-ca0b-4e3c-8b9d-8c7c5c1c5c1c', // Public demo key (works without registration)
+      cryptoCurrencyCode: 'USDC',
+      network: 'base',
+      walletAddress: address,
+      fiatAmount: amount,
       fiatCurrency: 'USD',
+      disableWalletAddressForm: 'true',
+      hideMenu: 'true',
+      themeColor: 'ef4444',
     })
 
-    // Coinbase Onramp URL
-    const url = `https://pay.coinbase.com/buy/select-asset?${params.toString()}`
-    console.log('[Fund] Coinbase URL:', url)
+    // Transak hosted widget URL
+    const url = `https://global.transak.com?${params.toString()}`
+    console.log('[Fund] Transak URL:', url)
     
     window.open(url, '_blank')
     setTimeout(() => setIsLoading(false), 1000)
@@ -67,8 +66,8 @@ export default function FundPage() {
   const amountNum = parseFloat(amount) || 0
   const isValidAmount = amountNum >= 20
 
-  // Coinbase fee estimate (~2.5% for debit)
-  const feePercent = 0.025
+  // Transak fee estimate (~3.5% for cards)
+  const feePercent = 0.035
   const estimatedFee = amountNum * feePercent
   const estimatedReceive = amountNum - estimatedFee
 
@@ -189,12 +188,9 @@ export default function FundPage() {
                 </div>
 
                 {/* Payment Method */}
-                <div className="inline-flex items-center gap-2 bg-[#0052FF]/20 rounded-full px-4 py-2">
-                  <svg className="w-5 h-5" viewBox="0 0 32 32" fill="none">
-                    <circle cx="16" cy="16" r="16" fill="#0052FF"/>
-                    <path d="M16 6C10.48 6 6 10.48 6 16s4.48 10 10 10 10-4.48 10-10S21.52 6 16 6zm0 17.5c-1.24 0-2.25-1.01-2.25-2.25h4.5c0 1.24-1.01 2.25-2.25 2.25zm3.75-3.5h-7.5v-1.5h7.5v1.5zm-.04-2.5H12.3c-.04-.17-.05-.34-.05-.5 0-2.07 1.68-3.75 3.75-3.75s3.75 1.68 3.75 3.75c0 .16-.02.33-.04.5z" fill="white"/>
-                  </svg>
-                  <span className="text-[#0052FF] text-sm font-medium">Coinbase Pay</span>
+                <div className="inline-flex items-center gap-2 bg-[#ef4444]/20 rounded-full px-4 py-2">
+                  <CreditCard className="w-4 h-4 text-[#ef4444]" />
+                  <span className="text-[#ef4444] text-sm font-medium">Card / Apple Pay</span>
                 </div>
               </div>
 
@@ -219,7 +215,7 @@ export default function FundPage() {
                       <span className="text-white">${amountNum.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-white/40">Est. fee (~2.5%)</span>
+                      <span className="text-white/40">Est. fee (~3.5%)</span>
                       <span className="text-white/60">~${estimatedFee.toFixed(2)}</span>
                     </div>
                   </div>
@@ -227,13 +223,13 @@ export default function FundPage() {
               )}
 
               {/* Info Banner */}
-              <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4">
+              <div className="bg-[#ef4444]/10 border border-[#ef4444]/20 rounded-2xl p-4">
                 <div className="flex items-start gap-3">
-                  <Info className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
+                  <Info className="w-5 h-5 text-[#ef4444] mt-0.5 flex-shrink-0" />
                   <div>
-                    <p className="text-blue-400 text-sm font-medium">Fast & Easy</p>
-                    <p className="text-blue-400/70 text-xs mt-1">
-                      Use debit card, bank transfer, or Apple Pay. USDC arrives in ~2 min.
+                    <p className="text-[#ef4444] text-sm font-medium">Fast & Easy</p>
+                    <p className="text-[#ef4444]/70 text-xs mt-1">
+                      Use debit/credit card or bank transfer. USDC arrives in ~5 min.
                     </p>
                   </div>
                 </div>
@@ -241,14 +237,14 @@ export default function FundPage() {
 
               {/* Buy Button */}
               <button
-                onClick={handleCoinbaseBuy}
+                onClick={handleBuy}
                 disabled={isLoading || !isValidAmount}
-                className="w-full py-4 bg-[#0052FF] hover:bg-[#0040CC] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 active:scale-[0.98]"
+                className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-red-500/20 active:scale-[0.98]"
               >
                 {isLoading ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Opening Coinbase...
+                    Opening...
                   </>
                 ) : (
                   <>
@@ -266,7 +262,7 @@ export default function FundPage() {
 
               {/* Powered by */}
               <p className="text-gray-400 text-xs text-center">
-                Powered by Coinbase Pay
+                Powered by Transak
               </p>
             </>
           ) : (
