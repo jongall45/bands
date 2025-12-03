@@ -1,72 +1,97 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { X, ArrowDown, Loader2, Check, AlertCircle, Clock, Zap } from 'lucide-react'
-import { useBridgeSimple } from '@/hooks/useBridgeSimple'
-import { formatUSDC } from '@/lib/relay/api'
+import { useState, useEffect, useRef } from 'react'
+import { X, ArrowDown, Loader2, Check, AlertCircle } from 'lucide-react'
+import { useBridgeFixed } from '@/hooks/useBridgeFixed'
 
-interface BridgeModalProps {
+interface Props {
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
 }
 
-export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: BridgeModalProps) {
-  const [amount, setAmount] = useState('')
+export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
+  // LOCAL state for input - completely controlled here
+  const [inputValue, setInputValue] = useState('')
   const [isSuccess, setIsSuccess] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const quoteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const {
     baseBalance,
     arbBalance,
     quote,
-    isLoadingQuote,
-    fetchQuote,
+    isQuoting,
+    getQuote,
     executeBridge,
     isBridging,
-    bridgeStatus,
+    status,
     error,
     clearError,
-  } = useBridgeSimple()
+  } = useBridgeFixed()
 
-  // Debounced quote fetch
-  useEffect(() => {
-    if (!isOpen) return
-    
-    const timer = setTimeout(() => {
-      if (amount && parseFloat(amount) > 0) {
-        fetchQuote(amount)
-      }
-    }, 500)
-
-    return () => clearTimeout(timer)
-  }, [amount, isOpen, fetchQuote])
-
-  // Reset on open
+  // Reset when modal opens
   useEffect(() => {
     if (isOpen) {
-      setAmount('')
+      console.log('🟡 Modal opened, resetting state')
+      setInputValue('')
       setIsSuccess(false)
       clearError()
+      // Focus input after a brief delay
+      setTimeout(() => {
+        inputRef.current?.focus()
+      }, 100)
     }
   }, [isOpen, clearError])
 
-  // Handle input change
-  const handleAmountChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
-    // Only allow numbers and decimals
-    if (value === '' || /^\d*\.?\d*$/.test(value)) {
-      setAmount(value)
+  // Debounced quote fetch when input changes
+  useEffect(() => {
+    // Clear previous timeout
+    if (quoteTimeoutRef.current) {
+      clearTimeout(quoteTimeoutRef.current)
     }
-  }, [])
 
-  const handleMax = useCallback(() => {
-    setAmount(baseBalance)
-  }, [baseBalance])
+    const amount = parseFloat(inputValue)
+    if (isNaN(amount) || amount <= 0) {
+      console.log('🟡 No valid amount, skipping quote')
+      return
+    }
 
-  const handleBridge = useCallback(async () => {
-    if (!amount || parseFloat(amount) <= 0) return
+    console.log('🟡 Setting quote timeout for:', inputValue)
+    
+    quoteTimeoutRef.current = setTimeout(() => {
+      console.log('🟡 Timeout fired, fetching quote')
+      getQuote(inputValue)
+    }, 600)
 
-    const success = await executeBridge(amount)
+    return () => {
+      if (quoteTimeoutRef.current) {
+        clearTimeout(quoteTimeoutRef.current)
+      }
+    }
+  }, [inputValue, getQuote])
+
+  // Handle input change - MUST be simple and direct
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    console.log('🔴 INPUT CHANGE:', value)
+    
+    // Allow empty, or valid number format
+    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+      setInputValue(value)
+    }
+  }
+
+  // Handle max button
+  const handleMax = () => {
+    console.log('🟡 Max clicked, setting to:', baseBalance)
+    setInputValue(baseBalance)
+  }
+
+  // Handle bridge
+  const handleBridge = async () => {
+    console.log('🟡 Bridge clicked')
+    const success = await executeBridge()
     if (success) {
       setIsSuccess(true)
       setTimeout(() => {
@@ -74,39 +99,31 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: BridgeModa
         onClose()
       }, 2000)
     }
-  }, [amount, executeBridge, onSuccess, onClose])
+  }
 
-  // Calculate values
-  const amountNum = parseFloat(amount) || 0
+  // Calculate states
+  const amountNum = parseFloat(inputValue) || 0
   const balanceNum = parseFloat(baseBalance) || 0
-  const canBridge = amountNum > 0 && amountNum <= balanceNum && !isLoadingQuote && !isBridging && quote
+  const canBridge = amountNum > 0 && amountNum <= balanceNum && quote && !isQuoting && !isBridging
 
-  // Get output amount from quote
-  const outputAmount = quote?.details?.currencyOut?.amount 
-    ? formatUSDC(quote.details.currencyOut.amount)
-    : amountNum > 0 ? amountNum.toFixed(2) : '0.00'
-  
-  const totalFee = quote 
-    ? ((quote.fees?.gas?.amountUsd || 0) + (quote.fees?.relayer?.amountUsd || 0)).toFixed(4)
-    : '~0.05'
-
-  const estimatedTime = quote?.details?.totalTime || 30
-
+  // Don't render if not open
   if (!isOpen) return null
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
+      className="fixed inset-0 flex items-center justify-center p-4"
+      style={{ zIndex: 9999 }}
     >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+      {/* Backdrop - click to close */}
+      <div 
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        onClick={onClose}
+      />
 
-      {/* Modal */}
+      {/* Modal container */}
       <div 
         className="relative w-full max-w-[400px] bg-[#0a0a0a] border border-white/10 rounded-3xl p-6"
+        style={{ zIndex: 10000 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -118,28 +135,25 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: BridgeModa
           <button
             type="button"
             onClick={onClose}
-            className="p-2 hover:bg-white/5 rounded-full transition-colors"
+            className="p-2 hover:bg-white/10 rounded-full"
           >
             <X className="w-5 h-5 text-white/60" />
           </button>
         </div>
 
         {isSuccess ? (
-          /* Success State */
-          <div className="flex flex-col items-center justify-center py-12">
+          <div className="flex flex-col items-center py-12">
             <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-4">
               <Check className="w-8 h-8 text-green-400" />
             </div>
             <h3 className="text-white font-semibold text-lg mb-2">Bridge Complete!</h3>
-            <p className="text-white/40 text-sm text-center">
-              Your USDC is now on Arbitrum. Ready to trade!
-            </p>
+            <p className="text-white/40 text-sm">Your USDC is now on Arbitrum</p>
           </div>
         ) : (
           <>
-            {/* From Section */}
-            <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-4 mb-3">
-              <div className="flex items-center justify-between mb-3">
+            {/* FROM section */}
+            <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 mb-3">
+              <div className="flex items-center justify-between mb-2">
                 <span className="text-white/50 text-sm">From</span>
                 <div className="flex items-center gap-2">
                   <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
@@ -149,28 +163,43 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: BridgeModa
                 </div>
               </div>
 
+              {/* THE INPUT */}
               <div className="flex items-center gap-3">
                 <input
+                  ref={inputRef}
                   type="text"
                   inputMode="decimal"
                   autoComplete="off"
                   autoCorrect="off"
+                  autoCapitalize="off"
                   spellCheck={false}
                   placeholder="0.00"
-                  value={amount}
-                  onChange={handleAmountChange}
-                  className="flex-1 bg-transparent text-white text-2xl font-medium outline-none placeholder:text-white/20 min-w-0 border-none focus:outline-none focus:ring-0"
+                  value={inputValue}
+                  onChange={handleInputChange}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    background: 'transparent',
+                    color: 'white',
+                    fontSize: '1.5rem',
+                    fontWeight: 500,
+                    outline: 'none',
+                    border: 'none',
+                    padding: 0,
+                    margin: 0,
+                    WebkitAppearance: 'none',
+                    MozAppearance: 'textfield' as any,
+                    caretColor: 'white',
+                  }}
                 />
-                <div className="bg-[#ef4444] rounded-xl px-3 py-2 flex items-center gap-1.5 flex-shrink-0">
+                <div className="bg-[#ef4444] rounded-xl px-3 py-2 flex items-center gap-1 flex-shrink-0">
                   <span className="text-white font-bold text-sm">$</span>
                   <span className="text-white font-semibold text-sm">USDC</span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between mt-3">
-                <span className="text-white/30 text-sm">
-                  ≈ ${amountNum.toFixed(2)}
-                </span>
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-white/30 text-sm">≈ ${amountNum.toFixed(2)}</span>
                 <button
                   type="button"
                   onClick={handleMax}
@@ -182,15 +211,15 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: BridgeModa
             </div>
 
             {/* Arrow */}
-            <div className="flex justify-center -my-1 relative z-10">
+            <div className="flex justify-center -my-1 relative" style={{ zIndex: 10 }}>
               <div className="w-10 h-10 bg-[#1a1a1a] rounded-full flex items-center justify-center border border-white/10">
                 <ArrowDown className="w-5 h-5 text-[#ef4444]" />
               </div>
             </div>
 
-            {/* To Section */}
-            <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-4 mb-4 mt-3">
-              <div className="flex items-center justify-between mb-3">
+            {/* TO section */}
+            <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 mb-4 mt-3">
+              <div className="flex items-center justify-between mb-2">
                 <span className="text-white/50 text-sm">To</span>
                 <div className="flex items-center gap-2">
                   <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center">
@@ -202,40 +231,30 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: BridgeModa
 
               <div className="flex items-center gap-3">
                 <span className="text-white text-2xl font-medium">
-                  {isLoadingQuote ? '...' : outputAmount}
+                  {isQuoting ? '...' : quote?.outputAmount || (amountNum > 0 ? amountNum.toFixed(2) : '0.00')}
                 </span>
-                <div className="bg-[#ef4444] rounded-xl px-3 py-2 flex items-center gap-1.5 flex-shrink-0">
+                <div className="bg-[#ef4444] rounded-xl px-3 py-2 flex items-center gap-1 flex-shrink-0">
                   <span className="text-white font-bold text-sm">$</span>
                   <span className="text-white font-semibold text-sm">USDC</span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between mt-3">
-                <span className="text-white/30 text-sm">
-                  ≈ ${outputAmount}
-                </span>
-                <span className="text-white/30 text-xs">
-                  Current: {parseFloat(arbBalance).toFixed(2)} USDC
-                </span>
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-white/30 text-sm">≈ ${quote?.outputAmount || '0.00'}</span>
+                <span className="text-white/30 text-xs">Current: {parseFloat(arbBalance).toFixed(2)} USDC</span>
               </div>
             </div>
 
-            {/* Quote Details */}
-            {amountNum > 0 && (
-              <div className="bg-white/[0.02] border border-white/[0.05] rounded-xl p-3 mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-yellow-400" />
-                    <span className="text-white/50 text-xs">Bridge Fee</span>
-                  </div>
-                  <span className="text-white/70 text-xs">${totalFee}</span>
+            {/* Quote info */}
+            {quote && (
+              <div className="bg-white/[0.02] rounded-xl p-3 mb-4 text-xs">
+                <div className="flex justify-between mb-1">
+                  <span className="text-white/50">Fee</span>
+                  <span className="text-white/70">${quote.fee}</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-blue-400" />
-                    <span className="text-white/50 text-xs">Estimated Time</span>
-                  </div>
-                  <span className="text-white/70 text-xs">~{estimatedTime}s</span>
+                <div className="flex justify-between">
+                  <span className="text-white/50">Time</span>
+                  <span className="text-white/70">~{quote.time}s</span>
                 </div>
               </div>
             )}
@@ -243,24 +262,24 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: BridgeModa
             {/* Error */}
             {error && (
               <div className="flex items-center gap-2 mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                <AlertCircle className="w-4 h-4 text-red-400" />
                 <span className="text-red-400 text-sm">{error}</span>
               </div>
             )}
 
-            {/* Bridge Button */}
+            {/* Bridge button */}
             <button
               type="button"
               onClick={handleBridge}
               disabled={!canBridge}
-              className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-[#ef4444]/30 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2"
+              className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-[#ef4444]/30 disabled:cursor-not-allowed text-white font-semibold rounded-2xl flex items-center justify-center gap-2"
             >
               {isBridging ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  {bridgeStatus || 'Bridging...'}
+                  {status || 'Bridging...'}
                 </>
-              ) : isLoadingQuote ? (
+              ) : isQuoting ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
                   Getting quote...
@@ -270,17 +289,14 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: BridgeModa
               ) : amountNum > balanceNum ? (
                 'Insufficient balance'
               ) : !quote ? (
-                'Enter amount to get quote'
+                'Fetching quote...'
               ) : (
                 `Bridge $${amountNum.toFixed(2)} USDC`
               )}
             </button>
 
-            {/* Footer */}
             <p className="text-white/20 text-xs text-center mt-4">
-              USDC will be bridged to Arbitrum for trading on Ostium.
-              <br />
-              Powered by Relay Protocol.
+              Powered by Relay Protocol
             </p>
           </>
         )}
