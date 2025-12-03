@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useSwitchChain } from 'wagmi'
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useSwitchChain, usePublicClient } from 'wagmi'
 import { parseUnits } from 'viem'
 import { arbitrum } from 'wagmi/chains'
 import { ACTIVE_CONFIG, BUILDER_CONFIG, ORDER_TYPE } from '@/lib/ostium/constants'
@@ -28,6 +28,7 @@ export function useOstiumTrade() {
   
   const { writeContractAsync, isPending: isWriting } = useWriteContract()
   const { switchChainAsync } = useSwitchChain()
+  const publicClient = usePublicClient({ chainId: arbitrum.id })
   
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
     hash: txHash ?? undefined,
@@ -104,10 +105,17 @@ export function useOstiumTrade() {
         })
         
         setTxHash(approveHash)
+        console.log('🟡 Waiting for approval confirmation...')
         
-        // Wait for approval to be mined before proceeding
-        // In production, you'd want to wait for the receipt
-        await new Promise(resolve => setTimeout(resolve, 3000))
+        // Actually wait for the approval transaction to be confirmed
+        if (publicClient) {
+          await publicClient.waitForTransactionReceipt({ 
+            hash: approveHash,
+            confirmations: 1,
+          })
+        }
+        
+        console.log('🟢 Approval confirmed!')
         await refetchAllowance()
       }
 
