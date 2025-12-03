@@ -61,7 +61,8 @@ export const MAX_LEVERAGE_BY_CATEGORY: Record<OstiumCategory, number> = {
 }
 
 // Minimum collateral in USDC (Ostium requires minimum position sizes)
-export const MIN_COLLATERAL_USD = 5 // $5 minimum
+// Setting to $1 - actual minimum may vary by pair
+export const MIN_COLLATERAL_USD = 1
 
 // Builder fee config (optional - for earning referral fees)
 // Set your address here to earn fees on trades through your app
