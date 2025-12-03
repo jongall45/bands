@@ -200,11 +200,18 @@ export function useBridgeFixed() {
             return tx
           },
         } as any,
-        onProgress: (steps: any) => {
-          console.log('🟡 Progress:', steps)
-          const currentStep = steps.find((s: any) => s.status === 'pending')
-          if (currentStep) {
-            setStatus(currentStep.description || 'Processing...')
+        onProgress: (progress: any) => {
+          console.log('🟡 Progress:', progress)
+          // Handle different progress formats
+          if (progress?.currentStep) {
+            setStatus(progress.currentStep.description || 'Processing...')
+          } else if (progress?.steps && Array.isArray(progress.steps)) {
+            const currentStep = progress.steps.find((s: any) => s.status === 'pending')
+            if (currentStep) {
+              setStatus(currentStep.description || 'Processing...')
+            }
+          } else if (typeof progress === 'string') {
+            setStatus(progress)
           }
         },
       })
