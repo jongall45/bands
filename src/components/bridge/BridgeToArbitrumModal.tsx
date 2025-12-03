@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X, ArrowDown, Loader2, Check, AlertCircle } from 'lucide-react'
+import { X, ArrowDown, Loader2, Check, AlertCircle, Fuel } from 'lucide-react'
 import { useBridgeFixed } from '@/hooks/useBridgeFixed'
+import { SwapForGasModal } from './SwapForGasModal'
 
 interface Props {
   isOpen: boolean
@@ -15,6 +16,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
   // LOCAL state for input - completely controlled here
   const [inputValue, setInputValue] = useState('')
   const [isSuccess, setIsSuccess] = useState(false)
+  const [showGasSwap, setShowGasSwap] = useState(false)
   const [mounted, setMounted] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const quoteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -166,12 +168,39 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
         </div>
 
         {isSuccess ? (
-          <div className="flex flex-col items-center py-12">
+          <div className="flex flex-col items-center py-8">
             <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-4">
               <Check className="w-8 h-8 text-green-400" />
             </div>
             <h3 className="text-white font-semibold text-lg mb-2">Bridge Complete!</h3>
-            <p className="text-white/40 text-sm">Your USDC is now on Arbitrum</p>
+            <p className="text-white/40 text-sm text-center mb-6">Your USDC is now on Arbitrum</p>
+            
+            {/* Gas prompt */}
+            <div className="w-full bg-orange-500/10 border border-orange-500/20 rounded-2xl p-4 mb-4">
+              <div className="flex items-center gap-3 mb-3">
+                <Fuel className="w-5 h-5 text-orange-400" />
+                <span className="text-orange-400 font-medium text-sm">Need ETH for Gas?</span>
+              </div>
+              <p className="text-orange-400/70 text-xs mb-3">
+                Swap a small amount of USDC → ETH to pay for transaction fees on Arbitrum.
+              </p>
+              <button
+                onClick={() => setShowGasSwap(true)}
+                className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold text-sm rounded-xl transition-colors"
+              >
+                ⛽ Get Gas ($1 USDC → ETH)
+              </button>
+            </div>
+
+            <button
+              onClick={() => {
+                onSuccess()
+                onClose()
+              }}
+              className="text-white/40 text-sm hover:text-white/60 transition-colors"
+            >
+              Skip, I already have ETH →
+            </button>
           </div>
         ) : (
           <>
@@ -333,5 +362,19 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
   )
 
   // Use portal to render at document.body level, escaping any parent event blocking
-  return createPortal(modalContent, document.body)
+  return (
+    <>
+      {createPortal(modalContent, document.body)}
+      <SwapForGasModal
+        isOpen={showGasSwap}
+        onClose={() => setShowGasSwap(false)}
+        onSuccess={() => {
+          setShowGasSwap(false)
+          onSuccess()
+          onClose()
+        }}
+        suggestedAmount="1"
+      />
+    </>
+  )
 }

@@ -10,8 +10,9 @@ import { ACTIVE_CONFIG, MAX_LEVERAGE_BY_CATEGORY, type OstiumPair, type OstiumCa
 import { ERC20_ABI } from '@/lib/ostium/abi'
 import { 
   Loader2, TrendingUp, TrendingDown, Info, AlertCircle, 
-  CheckCircle, ExternalLink, ChevronDown 
+  CheckCircle, ExternalLink, ChevronDown, Fuel 
 } from 'lucide-react'
+import { SwapForGasModal } from '@/components/bridge/SwapForGasModal'
 
 interface TradePanelProps {
   pair: OstiumPair
@@ -28,6 +29,7 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [takeProfit, setTakeProfit] = useState('')
   const [stopLoss, setStopLoss] = useState('')
+  const [showGasSwap, setShowGasSwap] = useState(false)
 
   // Get max leverage for this pair's category
   const maxLeverage = MAX_LEVERAGE_BY_CATEGORY[pair.category as OstiumCategory] || 50
@@ -54,7 +56,7 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
   })
 
   // Check ETH balance on Arbitrum for gas
-  const { data: ethBalanceData } = useBalance({
+  const { data: ethBalanceData, refetch: refetchEthBalance } = useBalance({
     address,
     chainId: arbitrum.id,
   })
@@ -137,29 +139,23 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
     <div className="p-4 space-y-4 pb-32">
       {/* No ETH for Gas Warning */}
       {!hasEnoughGas && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
+        <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4">
           <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <Fuel className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h3 className="text-red-400 font-semibold text-sm mb-1">
+              <h3 className="text-orange-400 font-semibold text-sm mb-1">
                 ⛽ ETH Required for Gas
               </h3>
-              <p className="text-red-400/70 text-xs mb-3">
-                You need ETH on Arbitrum to pay for transaction gas. Swap ~$1 USDC → ETH on Arbitrum.
+              <p className="text-orange-400/70 text-xs mb-3">
+                Swap ~$1 USDC → ETH on Arbitrum to pay for transaction fees.
               </p>
-              <div className="flex flex-col gap-2">
-                <a
-                  href="https://relay.link/swap?fromChainId=8453&fromCurrency=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913&toChainId=42161&toCurrency=0x0000000000000000000000000000000000000000"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-1.5 bg-red-500 hover:bg-red-600 text-white font-semibold text-xs px-4 py-2.5 rounded-lg transition-colors"
-                >
-                  🔗 Open Relay Swap (Recommended)
-                </a>
-                <p className="text-red-400/50 text-[10px] text-center">
-                  Swap USDC (Base) → ETH (Arbitrum) in one transaction
-                </p>
-              </div>
+              <button
+                onClick={() => setShowGasSwap(true)}
+                className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold text-sm rounded-xl transition-colors flex items-center justify-center gap-2"
+              >
+                <Fuel className="w-4 h-4" />
+                Get Gas ($1 USDC → ETH)
+              </button>
             </div>
           </div>
         </div>
@@ -413,6 +409,18 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
       <p className="text-white/30 text-xs text-center">
         Trading on Arbitrum • Requires ETH for gas
       </p>
+
+      {/* Gas Swap Modal */}
+      <SwapForGasModal
+        isOpen={showGasSwap}
+        onClose={() => setShowGasSwap(false)}
+        onSuccess={() => {
+          setShowGasSwap(false)
+          refetchBalance()
+          refetchEthBalance()
+        }}
+        suggestedAmount="1"
+      />
     </div>
   )
 }
