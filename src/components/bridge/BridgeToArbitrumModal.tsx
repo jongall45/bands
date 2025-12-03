@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X, ArrowDown, Loader2, Check, AlertCircle, Fuel } from 'lucide-react'
+import { X, ArrowDown, Loader2, Check, AlertCircle, Fuel, CheckCircle } from 'lucide-react'
+import { useAccount } from 'wagmi'
 import { useBridgeFixed } from '@/hooks/useBridgeFixed'
 import { SwapForGasModal } from './SwapForGasModal'
 
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
+  const { address } = useAccount()
   // LOCAL state for input - completely controlled here
   const [inputValue, setInputValue] = useState('')
   const [isSuccess, setIsSuccess] = useState(false)
@@ -309,9 +311,18 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
                   <span className="text-white/50">Fee</span>
                   <span className="text-white/70">${quote.fee}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between mb-1">
                   <span className="text-white/50">Time</span>
                   <span className="text-white/70">~{quote.time}s</span>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-white/[0.06]">
+                  <span className="text-white/50">Destination</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-white/70 font-mono">
+                      {address?.slice(0, 6)}...{address?.slice(-4)}
+                    </span>
+                    <CheckCircle className="w-3 h-3 text-green-400" />
+                  </div>
                 </div>
               </div>
             )}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { useAccount, useBalance, useWalletClient, usePublicClient } from 'wagmi'
+import { useAccount, useBalance, useWalletClient, usePublicClient, useSwitchChain } from 'wagmi'
 import { base, arbitrum } from 'viem/chains'
 import { getClient, createClient } from '@reservoir0x/relay-sdk'
 
@@ -38,9 +38,10 @@ interface QuoteData {
 }
 
 export function useBridgeFixed() {
-  const { address } = useAccount()
+  const { address, chainId } = useAccount()
   const { data: walletClient } = useWalletClient()
   const publicClient = usePublicClient({ chainId: base.id })
+  const { switchChainAsync } = useSwitchChain()
 
   // State
   const [quote, setQuote] = useState<QuoteData | null>(null)
@@ -156,6 +157,8 @@ export function useBridgeFixed() {
   // Execute bridge using Relay SDK
   const executeBridge = useCallback(async (): Promise<boolean> => {
     console.log('🟢 executeBridge called')
+    console.log('🟡 Current chain:', chainId)
+    console.log('🟡 User address:', address)
     
     if (!address || !walletClient || !quote?.raw) {
       setError('Not ready to bridge')
@@ -166,6 +169,16 @@ export function useBridgeFixed() {
     setError(null)
 
     try {
+      // CRITICAL: Switch to Base before bridging
+      if (chainId !== base.id) {
+        console.log('🟡 Switching to Base for bridge transaction...')
+        setStatus('Switching to Base...')
+        await switchChainAsync({ chainId: base.id })
+        // Wait for chain switch to complete
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        console.log('🟢 Switched to Base')
+      }
+
       initRelay()
       const client = getClient()
 
@@ -177,7 +190,7 @@ export function useBridgeFixed() {
         quote: quote.raw,
         wallet: {
           vmType: 'evm',
-          getChainId: async () => base.id,
+          getChainId: async () => base.id, // Always return Base as source chain
           address: async () => address,
           handleSignMessageStep: async (item: any) => {
             console.log('🟡 Sign message:', item)
@@ -186,25 +199,39 @@ export function useBridgeFixed() {
             })
             return signature
           },
-          handleSendTransactionStep: async (_chainId: number, item: any) => {
-            console.log('🟡 Send transaction:', item)
+          handleSendTransactionStep: async (txChainId: number, item: any) => {
+            console.log('🟡 Send transaction on chain:', txChainId, item)
             setStatus(item.description || 'Sending transaction...')
             
+            // Switch chain if needed for this specific step
+            if (chainId !== txChainId) {
+              console.log(`🟡 Switching to chain ${txChainId} for this step...`)
+              await switchChainAsync({ chainId: txChainId })
+              await new Promise(resolve => setTimeout(resolve, 500))
+            }
+            
+            // Send transaction with explicit chain
             const tx = await walletClient.sendTransaction({
               to: item.data.to as `0x${string}`,
               data: item.data.data as `0x${string}`,
               value: BigInt(item.data.value || '0'),
+              chain: txChainId === base.id ? base : arbitrum,
             })
             
             console.log('🟡 Transaction sent:', tx)
             return tx
           },
-          handleConfirmTransactionStep: async (txHash: string, _chainId: number) => {
-            console.log('🟡 Confirming transaction:', txHash)
+          handleConfirmTransactionStep: async (txHash: string, confirmChainId: number) => {
+            console.log('🟡 Confirming transaction on chain:', confirmChainId, txHash)
             setStatus('Confirming transaction...')
             
+            // Use the correct chain's public client
+            const confirmClient = confirmChainId === base.id 
+              ? publicClient 
+              : usePublicClient({ chainId: arbitrum.id })
+            
             // Wait for transaction receipt
-            const receipt = await publicClient?.waitForTransactionReceipt({
+            const receipt = await confirmClient?.waitForTransactionReceipt({
               hash: txHash as `0x${string}`,
             })
             
@@ -246,7 +273,7 @@ export function useBridgeFixed() {
     } finally {
       setIsBridging(false)
     }
-  }, [address, walletClient, quote, refetchBase, refetchArb])
+  }, [address, walletClient, quote, chainId, switchChainAsync, publicClient, refetchBase, refetchArb])
 
   return {
     // Balances
