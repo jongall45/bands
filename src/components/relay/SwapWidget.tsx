@@ -1,11 +1,11 @@
 'use client'
 
-import { useAccount, useWalletClient } from 'wagmi'
+import { useAccount, useWalletClient, usePublicClient } from 'wagmi'
 import { SwapWidget as RelaySwapWidget } from '@reservoir0x/relay-kit-ui'
-import { adaptViemWallet } from '@reservoir0x/relay-sdk'
 import { Loader2 } from 'lucide-react'
 import type { Token } from '@reservoir0x/relay-kit-ui'
 import { useMemo } from 'react'
+import { createRelayWalletAdapter } from '@/lib/relay-wallet-adapter'
 
 // Default to USDC on Base as the "from" token
 const USDC_BASE: Token = {
@@ -24,18 +24,29 @@ interface SwapWidgetProps {
 export function SwapWidget({ onSuccess }: SwapWidgetProps) {
   const { address, isConnected } = useAccount()
   const { data: walletClient } = useWalletClient()
+  const publicClient = usePublicClient({ chainId: 8453 })
 
-  // Adapt the wagmi wallet client for Relay SDK
+  // Create custom wallet adapter for Porto
   const adaptedWallet = useMemo(() => {
-    if (!walletClient) return undefined
-    return adaptViemWallet(walletClient)
-  }, [walletClient])
+    if (!walletClient || !publicClient || !address) return undefined
+    return createRelayWalletAdapter(walletClient, publicClient, address)
+  }, [walletClient, publicClient, address])
 
   if (!isConnected || !address) {
     return (
       <div className="flex flex-col items-center justify-center h-64 bg-[#111] border border-white/[0.06] rounded-3xl">
         <Loader2 className="w-6 h-6 text-white/30 animate-spin mb-3" />
         <p className="text-white/40 text-sm">Connect wallet to swap</p>
+      </div>
+    )
+  }
+
+  // Wait for wallet to be ready
+  if (!adaptedWallet) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 bg-[#111] border border-white/[0.06] rounded-3xl">
+        <Loader2 className="w-6 h-6 text-white/30 animate-spin mb-3" />
+        <p className="text-white/40 text-sm">Loading wallet...</p>
       </div>
     )
   }
