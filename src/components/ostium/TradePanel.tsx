@@ -4,18 +4,38 @@ import { useState, useMemo, useEffect } from 'react'
 import { useAccount, useReadContract, useBalance } from 'wagmi'
 import { formatUnits } from 'viem'
 import { arbitrum } from 'wagmi/chains'
-import { useOstiumTrade } from '@/hooks/useOstiumTrade'
-import { useOstiumPrice } from '@/hooks/useOstiumPrices'
-import { ACTIVE_CONFIG, MAX_LEVERAGE_BY_CATEGORY, MIN_COLLATERAL_USD, type OstiumPair, type OstiumCategory } from '@/lib/ostium/constants'
-import { ERC20_ABI } from '@/lib/ostium/abi'
 import { 
   Loader2, TrendingUp, TrendingDown, Info, AlertCircle, 
   CheckCircle, ExternalLink, ChevronDown, Fuel 
 } from 'lucide-react'
+import { useOstiumTrade } from '@/hooks/useOstiumTrade'
+import { useOstiumPrice } from '@/hooks/useOstiumPrices'
+import { OSTIUM_CONTRACTS, MIN_COLLATERAL_USD } from '@/lib/ostium/constants'
+import { ERC20_ABI } from '@/lib/ostium/abi'
 import { SwapForGasModal } from '@/components/bridge/SwapForGasModal'
 
+// Pair type for props
+interface OstiumPairType {
+  id: number
+  symbol: string
+  name: string
+  category: string
+  maxLeverage: number
+  from: string
+  to: string
+}
+
+// Max leverage by category
+const MAX_LEVERAGE: Record<string, number> = {
+  crypto: 200,
+  forex: 200,
+  commodity: 100,
+  stock: 50,
+  index: 50,
+}
+
 interface TradePanelProps {
-  pair: OstiumPair
+  pair: OstiumPairType
 }
 
 export function OstiumTradePanel({ pair }: TradePanelProps) {
@@ -32,7 +52,7 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
   const [showGasSwap, setShowGasSwap] = useState(false)
 
   // Get max leverage for this pair's category
-  const maxLeverage = MAX_LEVERAGE_BY_CATEGORY[pair.category as OstiumCategory] || 50
+  const maxLeverage = pair.maxLeverage || MAX_LEVERAGE[pair.category] || 50
 
   // Reset state when pair changes
   useEffect(() => {
@@ -40,15 +60,15 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
     setTakeProfit('')
     setStopLoss('')
     // Cap leverage to new pair's max
-    const newMax = MAX_LEVERAGE_BY_CATEGORY[pair.category as OstiumCategory] || 50
+    const newMax = pair.maxLeverage || MAX_LEVERAGE[pair.category] || 50
     if (leverage > newMax) {
       setLeverage(Math.min(10, newMax))
     }
-  }, [pair.id, pair.category, reset, leverage])
+  }, [pair.id, pair.category, pair.maxLeverage, reset, leverage])
 
   // Fetch USDC balance on Arbitrum
   const { data: usdcBalance, refetch: refetchBalance } = useReadContract({
-    address: ACTIVE_CONFIG.usdcAddress,
+    address: OSTIUM_CONTRACTS.USDC,
     abi: ERC20_ABI,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
@@ -109,15 +129,15 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
   }, [stopLoss, currentPrice, collateralNum, positionSize, isLong])
 
   const handleTrade = async () => {
-    if (!collateral || !currentPrice) return
+    if (!collateral) return
 
     try {
       await openTrade({
-        pairId: pair.id,
+        pairIndex: pair.id,
         collateral: parseFloat(collateral),
         leverage,
         isLong,
-        currentPrice,
+        slippageBps: 50, // 0.5% slippage
         takeProfit: takeProfit ? parseFloat(takeProfit) : undefined,
         stopLoss: stopLoss ? parseFloat(stopLoss) : undefined,
       })

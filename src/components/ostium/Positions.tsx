@@ -8,7 +8,7 @@ import { Loader2, X, TrendingUp, TrendingDown, Clock } from 'lucide-react'
 export function OstiumPositions() {
   const { data: positions, isLoading } = useOstiumPositions()
   const { data: prices } = useOstiumPrices()
-  const { closeTrade, isPending } = useOstiumTrade()
+  const { closePosition, isPending } = useOstiumTrade()
 
   if (isLoading) {
     return (
@@ -48,7 +48,7 @@ export function OstiumPositions() {
         <PositionCard
           key={`${position.pairId}-${position.index}`}
           position={position}
-          onClose={() => closeTrade(position.pairId, position.index)}
+          onClose={() => closePosition(position.pairId, position.index)}
           isClosing={isPending}
         />
       ))}

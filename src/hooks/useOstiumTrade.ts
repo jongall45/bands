@@ -5,20 +5,25 @@ import { useAccount, useReadContract, useSwitchChain, usePublicClient } from 'wa
 import { useSendCalls, useCallsStatus } from 'wagmi/experimental'
 import { parseUnits, encodeFunctionData } from 'viem'
 import { arbitrum } from 'wagmi/chains'
-import { ACTIVE_CONFIG, BUILDER_CONFIG, ORDER_TYPE } from '@/lib/ostium/constants'
+import { 
+  OSTIUM_CONTRACTS, 
+  ORDER_TYPE, 
+  calculateSlippage, 
+  DEFAULT_SLIPPAGE_BPS,
+  OSTIUM_PAIRS,
+  type OstiumPair 
+} from '@/lib/ostium/constants'
 import { OSTIUM_TRADING_ABI, ERC20_ABI } from '@/lib/ostium/abi'
+import { fetchPairPrice, encodePriceUpdateData } from '@/lib/ostium/api'
 
 interface TradeParams {
-  pairId: number
-  collateral: number      // USDC amount (e.g., 100 for $100)
-  leverage: number        // e.g., 10 for 10x
+  pairIndex: number
+  collateral: number      // In USDC (e.g., 5 for $5)
+  leverage: number        // 1-200 depending on asset
   isLong: boolean
-  currentPrice: number    // Current market price
-  takeProfit?: number     // TP price (optional)
-  stopLoss?: number       // SL price (optional)
-  slippagePercent?: number // Slippage tolerance (default 1%)
-  orderType?: keyof typeof ORDER_TYPE
-  limitPrice?: number     // For limit/stop orders
+  slippageBps?: number    // Default 50 (0.5%)
+  takeProfit?: number     // Price, optional
+  stopLoss?: number       // Price, optional
 }
 
 export function useOstiumTrade() {
@@ -31,7 +36,7 @@ export function useOstiumTrade() {
   const { switchChainAsync } = useSwitchChain()
   const publicClient = usePublicClient({ chainId: arbitrum.id })
   
-  // Track calls status - only query when we have an id
+  // Track calls status
   const { data: callsStatus } = useCallsStatus({
     id: callsId as string,
     query: {
@@ -39,29 +44,84 @@ export function useOstiumTrade() {
     },
   })
 
-  // Check current allowance
+  // Check current allowance for Trading Storage
   const { data: currentAllowance, refetch: refetchAllowance } = useReadContract({
-    address: ACTIVE_CONFIG.usdcAddress,
+    address: OSTIUM_CONTRACTS.USDC,
     abi: ERC20_ABI,
     functionName: 'allowance',
-    args: address ? [address, ACTIVE_CONFIG.tradingStorageContract] : undefined,
+    args: address ? [address, OSTIUM_CONTRACTS.TRADING_STORAGE] : undefined,
     chainId: arbitrum.id,
   })
 
+  /**
+   * Simulate trade before execution
+   */
+  const simulateTrade = useCallback(async (params: TradeParams): Promise<{ success: boolean; error?: string }> => {
+    if (!address || !publicClient) {
+      return { success: false, error: 'Wallet not connected' }
+    }
+
+    const {
+      pairIndex,
+      collateral,
+      leverage,
+      isLong,
+      slippageBps = DEFAULT_SLIPPAGE_BPS,
+      takeProfit = 0,
+      stopLoss = 0,
+    } = params
+
+    try {
+      // Build trade struct according to Ostium spec
+      const collateralWei = parseUnits(collateral.toString(), 6) // USDC has 6 decimals
+      
+      const trade = {
+        trader: address,
+        pairIndex: BigInt(pairIndex),
+        index: BigInt(0), // 0 for new trades
+        initialPosToken: BigInt(0), // 0 for new positions
+        positionSizeUSDC: collateralWei,
+        openPrice: BigInt(0), // 0 for MARKET orders
+        buy: isLong,
+        leverage: BigInt(leverage),
+        tp: BigInt(0), // Set after if needed
+        sl: BigInt(0), // Set after if needed
+      }
+
+      const slippage = calculateSlippage(slippageBps)
+
+      await publicClient.simulateContract({
+        address: OSTIUM_CONTRACTS.TRADING,
+        abi: OSTIUM_TRADING_ABI,
+        functionName: 'openTrade',
+        args: [trade, BigInt(ORDER_TYPE.MARKET), slippage, '0x' as `0x${string}`, BigInt(0)],
+        account: address,
+      })
+
+      return { success: true }
+    } catch (e: any) {
+      console.error('Simulation failed:', e)
+      return { 
+        success: false, 
+        error: e.shortMessage || e.message || 'Simulation failed' 
+      }
+    }
+  }, [address, publicClient])
+
+  /**
+   * Open a market trade
+   */
   const openTrade = useCallback(async (params: TradeParams) => {
     if (!address) throw new Error('Wallet not connected')
 
     const {
-      pairId,
+      pairIndex,
       collateral,
       leverage,
       isLong,
-      currentPrice,
+      slippageBps = DEFAULT_SLIPPAGE_BPS,
       takeProfit = 0,
       stopLoss = 0,
-      slippagePercent = 5,
-      orderType = 'MARKET',
-      limitPrice,
     } = params
 
     setStep('idle')
@@ -69,7 +129,7 @@ export function useOstiumTrade() {
     setCallsId(null)
 
     try {
-      // Switch to Arbitrum if not already on it
+      // Switch to Arbitrum if needed
       if (chainId !== arbitrum.id) {
         console.log('🟡 Switching to Arbitrum...')
         setStep('switching')
@@ -78,202 +138,211 @@ export function useOstiumTrade() {
         await new Promise(resolve => setTimeout(resolve, 500))
       }
 
-      // Convert values to contract format
+      // Fetch latest price for the pair (for logging/display)
+      const priceData = await fetchPairPrice(pairIndex)
+      console.log('🔵 Current price:', priceData?.price)
+
+      // Build trade struct according to Ostium spec
       const collateralWei = parseUnits(collateral.toString(), 6)
       
-      // CRITICAL: For MARKET orders, openPrice MUST be 0!
-      // The contract uses the oracle price for market orders.
-      // Only LIMIT and STOP orders use the actual price.
-      const openPriceWei = orderType === 'MARKET' 
-        ? BigInt(0) 
-        : BigInt(Math.floor((limitPrice || currentPrice) * 1e10))
-      
-      // TP/SL prices: use 1e10 precision (10 decimals)
-      const tpWei = takeProfit ? BigInt(Math.floor(takeProfit * 1e10)) : BigInt(0)
-      const slWei = stopLoss ? BigInt(Math.floor(stopLoss * 1e10)) : BigInt(0)
-      
-      // Leverage: scaled by 1e2 (10x = 1000)
-      const leverageScaled = BigInt(Math.floor(leverage * 100))
-      
-      // Slippage: scaled by 1e10 (1% = 1e8, 5% = 5e8)
-      const slippageScaled = BigInt(Math.floor(slippagePercent * 1e8))
+      // Calculate slippage: basisPoints * 1e7
+      const slippage = calculateSlippage(slippageBps)
 
-      console.log('🔵 Trade parameters:', {
-        collateral: collateralWei.toString(),
-        openPrice: openPriceWei.toString(), // Should be 0 for MARKET orders!
-        leverage: leverageScaled.toString(),
-        slippage: slippageScaled.toString(),
-        tp: tpWei.toString(),
-        sl: slWei.toString(),
-        pairId,
-        isLong,
-        orderType,
-      })
-
-      // Build trade struct
+      // Build the trade struct
       const trade = {
-        collateral: collateralWei,
-        openPrice: openPriceWei,
-        tp: tpWei,
-        sl: slWei,
         trader: address,
-        leverage: leverageScaled,
-        pairIndex: BigInt(pairId),
+        pairIndex: BigInt(pairIndex),
         index: BigInt(0),
+        initialPosToken: BigInt(0),
+        positionSizeUSDC: collateralWei,
+        openPrice: BigInt(0), // MUST be 0 for market orders
         buy: isLong,
+        leverage: BigInt(leverage),
+        tp: BigInt(0),
+        sl: BigInt(0),
       }
 
-      const builderFee = {
-        builder: BUILDER_CONFIG.address as `0x${string}`,
-        builderFee: BUILDER_CONFIG.feePercent,
-      }
+      console.log('🔵 Trade struct:', {
+        trader: trade.trader,
+        pairIndex: trade.pairIndex.toString(),
+        index: trade.index.toString(),
+        initialPosToken: trade.initialPosToken.toString(),
+        positionSizeUSDC: trade.positionSizeUSDC.toString(),
+        openPrice: trade.openPrice.toString(),
+        buy: trade.buy,
+        leverage: trade.leverage.toString(),
+        tp: trade.tp.toString(),
+        sl: trade.sl.toString(),
+      })
+      console.log('🔵 Slippage:', slippage.toString(), `(${slippageBps} bps)`)
 
-      // Encode the approve call data
+      // Encode price update data (start with empty, may need oracle data)
+      const priceUpdateData = encodePriceUpdateData(priceData ?? undefined)
+
+      // Encode approve call
       const approveData = encodeFunctionData({
         abi: ERC20_ABI,
         functionName: 'approve',
-        args: [ACTIVE_CONFIG.tradingStorageContract, collateralWei],
+        args: [OSTIUM_CONTRACTS.TRADING_STORAGE, collateralWei],
       })
 
-      // Encode the trade call data
+      // Encode trade call
       const tradeData = encodeFunctionData({
         abi: OSTIUM_TRADING_ABI,
         functionName: 'openTrade',
-        args: [trade, builderFee, ORDER_TYPE[orderType], slippageScaled],
+        args: [
+          trade,
+          BigInt(ORDER_TYPE.MARKET),
+          slippage,
+          priceUpdateData,
+          BigInt(0), // executionFee
+        ],
       })
 
       // Check if we need approval
       const needsApproval = !currentAllowance || currentAllowance < collateralWei
 
       // Build calls array
-      const calls: { to: `0x${string}`; data: `0x${string}`; value?: bigint }[] = []
+      const calls: { to: `0x${string}`; data: `0x${string}` }[] = []
 
       if (needsApproval) {
-        console.log('🟡 Adding approval call to batch')
+        console.log('🟡 Adding approval call for Trading Storage')
         calls.push({
-          to: ACTIVE_CONFIG.usdcAddress,
+          to: OSTIUM_CONTRACTS.USDC,
           data: approveData,
         })
       }
 
       // Add trade call
       calls.push({
-        to: ACTIVE_CONFIG.tradingContract,
+        to: OSTIUM_CONTRACTS.TRADING,
         data: tradeData,
       })
 
-      console.log('🔵 Sending batched calls:', calls.length, 'calls')
-      console.log('🔵 Calls:', calls)
+      console.log('🔵 Sending', calls.length, 'batched calls')
 
       setStep('pending')
 
-      // Use EIP-5792 sendCalls to batch approve + trade
+      // Use EIP-5792 sendCalls
       const result = await sendCallsAsync({
         calls,
         capabilities: {
-          // Porto supports atomic batching
-          atomicBatch: {
-            supported: true,
-          },
+          atomicBatch: { supported: true },
         },
       })
 
-      console.log('🟢 Calls sent, result:', result)
-      // sendCallsAsync returns the calls bundle id
+      console.log('🟢 Calls sent:', result)
       setCallsId(result.id)
       setStep('success')
       
+      // Refetch allowance
+      refetchAllowance()
+      
       return result.id
-    } catch (error) {
+    } catch (error: any) {
       console.error('Trade execution error:', error)
       setStep('error')
-      setErrorMessage(error instanceof Error ? error.message : 'Trade failed')
+      setErrorMessage(error.shortMessage || error.message || 'Trade failed')
       throw error
     }
-  }, [address, chainId, currentAllowance, sendCallsAsync, switchChainAsync])
+  }, [address, chainId, currentAllowance, sendCallsAsync, switchChainAsync, refetchAllowance])
 
-  const closeTrade = useCallback(async (pairId: number, tradeIndex: number) => {
+  /**
+   * Close an open position
+   */
+  const closePosition = useCallback(async (pairIndex: number, positionIndex: number) => {
     if (!address) throw new Error('Wallet not connected')
 
     setStep('pending')
     setErrorMessage(null)
 
     try {
+      // Fetch price data
+      const priceData = await fetchPairPrice(pairIndex)
+      const priceUpdateData = encodePriceUpdateData(priceData ?? undefined)
+
       const closeData = encodeFunctionData({
         abi: OSTIUM_TRADING_ABI,
         functionName: 'closeTradeMarket',
-        args: [BigInt(pairId), BigInt(tradeIndex)],
+        args: [BigInt(pairIndex), BigInt(positionIndex), priceUpdateData],
       })
 
       const result = await sendCallsAsync({
         calls: [{
-          to: ACTIVE_CONFIG.tradingContract,
+          to: OSTIUM_CONTRACTS.TRADING,
           data: closeData,
         }],
       })
 
+      console.log('🟢 Close position sent:', result)
       setCallsId(result.id)
       setStep('success')
       return result.id
-    } catch (error) {
-      console.error('Close trade error:', error)
+    } catch (error: any) {
+      console.error('Close position error:', error)
       setStep('error')
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to close trade')
+      setErrorMessage(error.shortMessage || error.message || 'Failed to close position')
       throw error
     }
   }, [address, sendCallsAsync])
 
-  const updateTakeProfit = useCallback(async (pairId: number, tradeIndex: number, newTp: number) => {
+  /**
+   * Update take profit
+   */
+  const updateTakeProfit = useCallback(async (pairIndex: number, positionIndex: number, newTp: number) => {
     if (!address) throw new Error('Wallet not connected')
 
-    // TP price uses 1e10 precision
+    // TP price encoding - need to verify format with Ostium
     const tpWei = BigInt(Math.floor(newTp * 1e10))
 
     try {
       const updateData = encodeFunctionData({
         abi: OSTIUM_TRADING_ABI,
         functionName: 'updateTp',
-        args: [BigInt(pairId), BigInt(tradeIndex), tpWei],
+        args: [BigInt(pairIndex), BigInt(positionIndex), tpWei],
       })
 
       const result = await sendCallsAsync({
         calls: [{
-          to: ACTIVE_CONFIG.tradingContract,
+          to: OSTIUM_CONTRACTS.TRADING,
           data: updateData,
         }],
       })
 
       setCallsId(result.id)
       return result.id
-    } catch (error) {
+    } catch (error: any) {
       console.error('Update TP error:', error)
       throw error
     }
   }, [address, sendCallsAsync])
 
-  const updateStopLoss = useCallback(async (pairId: number, tradeIndex: number, newSl: number) => {
+  /**
+   * Update stop loss
+   */
+  const updateStopLoss = useCallback(async (pairIndex: number, positionIndex: number, newSl: number) => {
     if (!address) throw new Error('Wallet not connected')
 
-    // SL price uses 1e10 precision
+    // SL price encoding - need to verify format with Ostium
     const slWei = BigInt(Math.floor(newSl * 1e10))
 
     try {
       const updateData = encodeFunctionData({
         abi: OSTIUM_TRADING_ABI,
         functionName: 'updateSl',
-        args: [BigInt(pairId), BigInt(tradeIndex), slWei],
+        args: [BigInt(pairIndex), BigInt(positionIndex), slWei],
       })
 
       const result = await sendCallsAsync({
         calls: [{
-          to: ACTIVE_CONFIG.tradingContract,
+          to: OSTIUM_CONTRACTS.TRADING,
           data: updateData,
         }],
       })
 
       setCallsId(result.id)
       return result.id
-    } catch (error) {
+    } catch (error: any) {
       console.error('Update SL error:', error)
       throw error
     }
@@ -290,19 +359,28 @@ export function useOstiumTrade() {
   const txHash = (callsStatus as any)?.receipts?.[0]?.transactionHash as `0x${string}` | undefined
 
   return {
+    // Actions
     openTrade,
-    closeTrade,
+    closePosition,
     updateTakeProfit,
     updateStopLoss,
+    simulateTrade,
     reset,
+    
+    // State
     step,
     isPending: isSending || step === 'switching' || step === 'pending',
     isSuccess: step === 'success' && isConfirmed,
     isSwitchingChain: step === 'switching',
-    isApproving: false, // No separate approval step with batched calls
     error: errorMessage,
+    
+    // Transaction info
     txHash,
     callsId,
     callsStatus,
+    
+    // Allowance
+    currentAllowance,
+    refetchAllowance,
   }
 }

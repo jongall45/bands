@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { OSTIUM_PAIRS, ACTIVE_CONFIG } from '@/lib/ostium/constants'
+import { OSTIUM_PAIRS, OSTIUM_API } from '@/lib/ostium/constants'
 
 // Raw response from Ostium API
 interface OstiumPriceResponse {
@@ -18,7 +18,7 @@ interface OstiumPriceResponse {
 export async function GET() {
   try {
     // Fetch live prices from Ostium API
-    const response = await fetch(ACTIVE_CONFIG.priceApiUrl, {
+    const response = await fetch(OSTIUM_API.PRICES, {
       headers: {
         'Accept': 'application/json',
       },
