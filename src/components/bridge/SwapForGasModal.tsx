@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { X, Fuel, Loader2, Check, AlertCircle } from 'lucide-react'
 import { useAccount, useBalance, useWalletClient, usePublicClient, useSwitchChain } from 'wagmi'
-import { arbitrum } from 'viem/chains'
+import { arbitrum, base } from 'viem/chains'
 import { getClient, createClient } from '@reservoir0x/relay-sdk'
 
 // Arbitrum addresses
@@ -146,14 +146,22 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
             })
             return signature
           },
-          handleSendTransactionStep: async (_chainId: number, item: any) => {
-            console.log('🟡 Send transaction:', item)
+          handleSendTransactionStep: async (txChainId: number, item: any) => {
+            console.log('🟡 Send transaction on chain:', txChainId, item)
             setStatus(item.description || 'Sending transaction...')
+            
+            // Ensure we're on the right chain
+            if (chainId !== txChainId) {
+              console.log('🟡 Switching to chain:', txChainId)
+              await switchChainAsync({ chainId: txChainId })
+              await new Promise(resolve => setTimeout(resolve, 500))
+            }
             
             const tx = await walletClient.sendTransaction({
               to: item.data.to as `0x${string}`,
               data: item.data.data as `0x${string}`,
               value: BigInt(item.data.value || '0'),
+              chain: txChainId === arbitrum.id ? arbitrum : txChainId === base.id ? base : undefined,
             })
             
             console.log('🟡 Transaction sent:', tx)
