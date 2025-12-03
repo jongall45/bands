@@ -25,10 +25,14 @@ export default function Home() {
       {/* Grain Texture Overlay */}
       <div className="noise-overlay" />
 
-      {/* Atmospheric Red Auras */}
-      <div className="aura aura-1" />
-      <div className="aura aura-2" />
-      <div className="aura aura-3" />
+      {/* Lava Lamp Blobs */}
+      <div className="lava-container">
+        <div className="lava lava-1" />
+        <div className="lava lava-2" />
+        <div className="lava lava-3" />
+        <div className="lava lava-4" />
+        <div className="lava lava-5" />
+      </div>
 
       {/* Navigation - Clean, just logo and connect */}
       <header className="navbar">
@@ -119,50 +123,149 @@ export default function Home() {
           background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
         }
 
-        /* === RED AURAS === */
-        .landing-page .aura {
+        /* === LAVA LAMP EFFECT === */
+        .landing-page .lava-container {
           position: fixed;
-          border-radius: 50%;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
           z-index: 0;
-          animation: aura-float 20s ease-in-out infinite;
         }
 
-        .landing-page .aura-1 {
-          width: 800px;
-          height: 800px;
-          top: -250px;
-          left: -200px;
-          background: var(--bands-red);
-          filter: blur(150px);
-          opacity: 0.5;
+        .landing-page .lava {
+          position: absolute;
+          border-radius: 50%;
+          filter: blur(80px);
+          mix-blend-mode: normal;
         }
 
-        .landing-page .aura-2 {
-          width: 700px;
-          height: 700px;
-          bottom: -200px;
-          right: -150px;
-          background: var(--bands-dark-red);
-          filter: blur(140px);
-          opacity: 0.45;
-          animation-delay: 7s;
+        .landing-page .lava-1 {
+          width: 600px;
+          height: 600px;
+          background: radial-gradient(circle, #FF3B30 0%, #FF6B6B 50%, transparent 70%);
+          top: -10%;
+          left: -10%;
+          animation: lava1 25s ease-in-out infinite;
         }
 
-        .landing-page .aura-3 {
+        .landing-page .lava-2 {
+          width: 500px;
+          height: 500px;
+          background: radial-gradient(circle, #D70015 0%, #FF4444 50%, transparent 70%);
+          bottom: -5%;
+          right: -5%;
+          animation: lava2 30s ease-in-out infinite;
+        }
+
+        .landing-page .lava-3 {
           width: 400px;
           height: 400px;
-          top: 40%;
-          right: 20%;
-          background: #FF6B35;
-          filter: blur(120px);
-          opacity: 0.3;
-          animation-delay: 14s;
+          background: radial-gradient(circle, #FF6B35 0%, #FFAA88 50%, transparent 70%);
+          top: 30%;
+          right: 10%;
+          animation: lava3 20s ease-in-out infinite;
         }
 
-        @keyframes aura-float {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          33% { transform: translate(50px, -40px) scale(1.05); }
-          66% { transform: translate(-30px, 40px) scale(0.95); }
+        .landing-page .lava-4 {
+          width: 350px;
+          height: 350px;
+          background: radial-gradient(circle, #FF8888 0%, #FFB4B4 50%, transparent 70%);
+          top: 60%;
+          left: 5%;
+          animation: lava4 22s ease-in-out infinite;
+        }
+
+        .landing-page .lava-5 {
+          width: 300px;
+          height: 300px;
+          background: radial-gradient(circle, #FFCCCC 0%, #FFE5E5 50%, transparent 70%);
+          top: 10%;
+          right: 30%;
+          animation: lava5 18s ease-in-out infinite;
+        }
+
+        @keyframes lava1 {
+          0%, 100% {
+            transform: translate(0, 0) scale(1) rotate(0deg);
+            border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+          }
+          25% {
+            transform: translate(100px, 50px) scale(1.1) rotate(90deg);
+            border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
+          }
+          50% {
+            transform: translate(50px, 100px) scale(0.9) rotate(180deg);
+            border-radius: 50% 60% 30% 60% / 30% 70% 40% 50%;
+          }
+          75% {
+            transform: translate(-50px, 50px) scale(1.05) rotate(270deg);
+            border-radius: 40% 60% 60% 40% / 70% 30% 50% 60%;
+          }
+        }
+
+        @keyframes lava2 {
+          0%, 100% {
+            transform: translate(0, 0) scale(1) rotate(0deg);
+            border-radius: 40% 60% 60% 40% / 70% 30% 50% 60%;
+          }
+          25% {
+            transform: translate(-80px, -60px) scale(1.15) rotate(-90deg);
+            border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+          }
+          50% {
+            transform: translate(-40px, -100px) scale(0.95) rotate(-180deg);
+            border-radius: 50% 60% 30% 60% / 30% 70% 40% 50%;
+          }
+          75% {
+            transform: translate(40px, -40px) scale(1.1) rotate(-270deg);
+            border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
+          }
+        }
+
+        @keyframes lava3 {
+          0%, 100% {
+            transform: translate(0, 0) scale(1);
+            border-radius: 50% 60% 30% 60% / 30% 70% 40% 50%;
+          }
+          33% {
+            transform: translate(-100px, 80px) scale(1.2);
+            border-radius: 60% 40% 70% 30% / 40% 60% 50% 70%;
+          }
+          66% {
+            transform: translate(-60px, -60px) scale(0.85);
+            border-radius: 40% 70% 50% 60% / 70% 40% 60% 30%;
+          }
+        }
+
+        @keyframes lava4 {
+          0%, 100% {
+            transform: translate(0, 0) scale(1) rotate(0deg);
+            border-radius: 70% 30% 50% 60% / 40% 70% 30% 60%;
+          }
+          50% {
+            transform: translate(120px, -80px) scale(1.1) rotate(180deg);
+            border-radius: 30% 70% 60% 40% / 60% 30% 70% 40%;
+          }
+        }
+
+        @keyframes lava5 {
+          0%, 100% {
+            transform: translate(0, 0) scale(1);
+            border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
+            opacity: 0.6;
+          }
+          33% {
+            transform: translate(60px, 100px) scale(1.3);
+            border-radius: 70% 30% 30% 70% / 70% 70% 30% 30%;
+            opacity: 0.8;
+          }
+          66% {
+            transform: translate(-80px, 60px) scale(0.9);
+            border-radius: 50% 50% 50% 50%;
+            opacity: 0.5;
+          }
         }
 
         /* === NAVIGATION WITH SAFE AREA === */
