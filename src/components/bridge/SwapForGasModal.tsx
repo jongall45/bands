@@ -96,8 +96,20 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
   const isOnArbitrum = chainId === arbitrum.id
 
   const handleSwap = useCallback(async () => {
-    if (!address || !walletClient || !publicClient) {
-      setError('Wallet not connected')
+    console.log('🟡 Swap clicked, address:', address, 'walletClient:', !!walletClient, 'publicClient:', !!publicClient)
+    
+    if (!address) {
+      setError('Please connect your wallet first')
+      return
+    }
+    
+    if (!walletClient) {
+      setError('Wallet client not ready, please try again')
+      return
+    }
+
+    if (!publicClient) {
+      setError('Network client not ready, please try again')
       return
     }
 
@@ -189,7 +201,9 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
 
   const amountNum = parseFloat(amount) || 0
   const balanceNum = parseFloat(usdcBalance?.formatted || '0')
-  const canSwap = isConnected && amountNum > 0 && amountNum <= balanceNum && !isSwapping
+  // Use address instead of isConnected for more reliable detection
+  const walletConnected = !!address
+  const canSwap = walletConnected && amountNum > 0 && amountNum <= balanceNum && !isSwapping
 
   if (!isOpen) return null
 
@@ -231,15 +245,20 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
         ) : (
           <>
             {/* Wallet status */}
-            {isConnected && address && (
+            {walletConnected ? (
               <div className="flex items-center gap-2 mb-3 p-2 bg-green-500/10 border border-green-500/20 rounded-xl">
                 <div className="w-2 h-2 bg-green-400 rounded-full" />
                 <span className="text-green-400 text-xs font-mono">
-                  {address.slice(0, 6)}...{address.slice(-4)}
+                  {address?.slice(0, 6)}...{address?.slice(-4)}
                 </span>
                 {!isOnArbitrum && (
                   <span className="text-orange-400 text-xs ml-auto">Will switch to Arbitrum</span>
                 )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded-xl">
+                <AlertCircle className="w-4 h-4 text-red-400" />
+                <span className="text-red-400 text-xs">Wallet not connected</span>
               </div>
             )}
 
@@ -303,7 +322,7 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
                   <Loader2 className="w-5 h-5 animate-spin" />
                   {status}
                 </>
-              ) : !isConnected ? (
+              ) : !walletConnected ? (
                 'Wallet not connected'
               ) : balanceNum <= 0 ? (
                 'No USDC on Arbitrum'
