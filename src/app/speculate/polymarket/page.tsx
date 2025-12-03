@@ -63,9 +63,9 @@ export default function PolymarketPage() {
             {/* Polymarket Logo */}
             <div className="w-9 h-9 bg-[#3B5EE8] rounded-xl flex items-center justify-center flex-shrink-0">
               <svg viewBox="0 0 100 100" className="w-5 h-5" fill="none">
-                <path d="M20 20 L50 50 L20 80 L20 20 Z" stroke="white" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                <path d="M80 20 L50 50 L80 80" stroke="white" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                <path d="M20 80 L80 80" stroke="white" strokeWidth="7" strokeLinecap="round" fill="none"/>
+                <path d="M18 22 L18 78 L50 50 Z" stroke="white" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                <path d="M82 22 L50 50 L82 78" stroke="white" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                <path d="M18 78 L82 78" stroke="white" strokeWidth="7" strokeLinecap="round" fill="none"/>
               </svg>
             </div>
             <div>

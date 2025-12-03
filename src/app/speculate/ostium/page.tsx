@@ -36,11 +36,23 @@ export default function OstiumTradingPage() {
     <div className="min-h-screen bg-black pb-24">
       <div className="max-w-[430px] mx-auto">
         {/* Header */}
-        <header className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between bg-black/80 backdrop-blur-lg sticky top-0 z-30">
+        <header 
+          className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between bg-black/80 backdrop-blur-lg sticky top-0 z-30"
+          style={{ paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))' }}
+        >
           <div className="flex items-center gap-3">
             <Link href="/speculate" className="text-white/60 hover:text-white transition-colors">
               <ArrowLeft className="w-5 h-5" />
             </Link>
+            {/* Ostium Logo */}
+            <div className="w-9 h-9 bg-[#FF6B00] rounded-xl flex items-center justify-center flex-shrink-0">
+              <svg viewBox="0 0 100 100" className="w-5 h-5" fill="none">
+                <path d="M35 15 C15 15 15 85 35 85" stroke="black" strokeWidth="9" strokeLinecap="round" fill="none"/>
+                <path d="M35 15 C55 15 55 85 35 85" stroke="black" strokeWidth="9" strokeLinecap="round" fill="none"/>
+                <path d="M65 15 C45 15 45 85 65 85" stroke="black" strokeWidth="9" strokeLinecap="round" fill="none"/>
+                <path d="M65 15 C85 15 85 85 65 85" stroke="black" strokeWidth="9" strokeLinecap="round" fill="none"/>
+              </svg>
+            </div>
             <div>
               <h1 className="text-white font-semibold flex items-center gap-2">
                 Ostium

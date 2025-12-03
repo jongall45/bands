@@ -8,44 +8,72 @@ import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
 import Link from 'next/link'
 
-// Ostium Logo Component
+// Ostium Logo Component - Orange with black double-arc shape
 function OstiumLogo({ className = "w-12 h-12" }: { className?: string }) {
   return (
     <div className={`${className} bg-[#FF6B00] rounded-2xl flex items-center justify-center overflow-hidden`}>
-      <svg viewBox="0 0 100 100" className="w-8 h-8">
-        <path d="M25 15 C25 15 15 50 25 85 C35 85 35 15 25 15" fill="black" strokeWidth="2" />
-        <path d="M35 15 C25 50 35 85 35 85 C45 85 55 50 45 15 C45 15 35 15 35 15" fill="black" strokeWidth="2" />
-        <path d="M55 15 C55 15 45 50 55 85 C65 85 75 50 65 15 C65 15 55 15 55 15" fill="black" strokeWidth="2" />
-        <path d="M75 15 C65 50 75 85 75 85 C85 85 85 50 75 15" fill="black" strokeWidth="2" />
+      <svg viewBox="0 0 100 100" className="w-8 h-8" fill="none">
+        {/* Left arc */}
+        <path 
+          d="M35 15 C15 15 15 85 35 85" 
+          stroke="black" 
+          strokeWidth="8" 
+          strokeLinecap="round"
+          fill="none"
+        />
+        <path 
+          d="M35 15 C55 15 55 85 35 85" 
+          stroke="black" 
+          strokeWidth="8" 
+          strokeLinecap="round"
+          fill="none"
+        />
+        {/* Right arc */}
+        <path 
+          d="M65 15 C45 15 45 85 65 85" 
+          stroke="black" 
+          strokeWidth="8" 
+          strokeLinecap="round"
+          fill="none"
+        />
+        <path 
+          d="M65 15 C85 15 85 85 65 85" 
+          stroke="black" 
+          strokeWidth="8" 
+          strokeLinecap="round"
+          fill="none"
+        />
       </svg>
     </div>
   )
 }
 
-// Polymarket Logo Component
+// Polymarket Logo Component - Blue with white geometric shape
 function PolymarketLogo({ className = "w-12 h-12" }: { className?: string }) {
   return (
     <div className={`${className} bg-[#3B5EE8] rounded-2xl flex items-center justify-center`}>
       <svg viewBox="0 0 100 100" className="w-7 h-7" fill="none">
-        {/* Polymarket geometric logo */}
+        {/* Left triangle outline */}
         <path 
-          d="M20 20 L50 50 L20 80 L20 20 Z" 
+          d="M18 22 L18 78 L50 50 Z" 
           stroke="white" 
           strokeWidth="6" 
           strokeLinecap="round" 
           strokeLinejoin="round"
           fill="none"
         />
+        {/* Right open arrow */}
         <path 
-          d="M80 20 L50 50 L80 80" 
+          d="M82 22 L50 50 L82 78" 
           stroke="white" 
           strokeWidth="6" 
           strokeLinecap="round" 
           strokeLinejoin="round"
           fill="none"
         />
+        {/* Bottom line connecting */}
         <path 
-          d="M20 80 L80 80" 
+          d="M18 78 L82 78" 
           stroke="white" 
           strokeWidth="6" 
           strokeLinecap="round"
