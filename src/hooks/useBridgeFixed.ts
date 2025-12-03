@@ -199,6 +199,18 @@ export function useBridgeFixed() {
             console.log('🟡 Transaction sent:', tx)
             return tx
           },
+          handleConfirmTransactionStep: async (txHash: string, _chainId: number) => {
+            console.log('🟡 Confirming transaction:', txHash)
+            setStatus('Confirming transaction...')
+            
+            // Wait for transaction receipt
+            const receipt = await publicClient?.waitForTransactionReceipt({
+              hash: txHash as `0x${string}`,
+            })
+            
+            console.log('🟢 Transaction confirmed:', receipt)
+            return receipt
+          },
         } as any,
         onProgress: (progress: any) => {
           console.log('🟡 Progress:', progress)
