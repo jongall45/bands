@@ -1,6 +1,3 @@
-// Gamma API for market data (read-only, no auth needed)
-const GAMMA_API = 'https://gamma-api.polymarket.com'
-
 // Types
 export interface PolymarketEvent {
   id: string
@@ -63,90 +60,29 @@ export interface ParsedMarket extends PolymarketMarket {
   outcomeLabels: string[]
 }
 
-// Fetch trending/popular events
-export async function fetchTrendingEvents(limit = 10): Promise<PolymarketEvent[]> {
-  const params = new URLSearchParams({
-    active: 'true',
-    closed: 'false',
-    archived: 'false',
-    limit: limit.toString(),
-    order: 'volume24hr',
-    ascending: 'false',
-  })
-
-  const response = await fetch(`${GAMMA_API}/events?${params}`, {
-    next: { revalidate: 60 }, // Cache for 1 minute
-  })
-  
+// Fetch via our API proxy (avoids CORS)
+export async function fetchTrendingEvents(limit = 12): Promise<PolymarketEvent[]> {
+  const response = await fetch(`/api/polymarket/events?limit=${limit}`)
   if (!response.ok) throw new Error('Failed to fetch events')
-  
-  return response.json()
+  const data = await response.json()
+  return data.result || []
 }
 
-// Fetch events by tag/category
-export async function fetchEventsByTag(
-  tag: string,
-  limit = 20
-): Promise<PolymarketEvent[]> {
-  const params = new URLSearchParams({
-    active: 'true',
-    closed: 'false',
-    tag_slug: tag,
-    limit: limit.toString(),
-    order: 'volume',
-    ascending: 'false',
-  })
-
-  const response = await fetch(`${GAMMA_API}/events?${params}`, {
-    next: { revalidate: 60 },
-  })
-  
+// Fetch events by tag via proxy
+export async function fetchEventsByTag(tag: string, limit = 12): Promise<PolymarketEvent[]> {
+  const response = await fetch(`/api/polymarket/events?tag=${tag}&limit=${limit}`)
   if (!response.ok) throw new Error('Failed to fetch events')
-  
-  return response.json()
+  const data = await response.json()
+  return data.result || []
 }
 
-// Fetch single event by slug
-export async function fetchEvent(slug: string): Promise<PolymarketEvent | null> {
-  const response = await fetch(`${GAMMA_API}/events?slug=${slug}`, {
-    next: { revalidate: 30 },
-  })
-  
-  if (!response.ok) throw new Error('Failed to fetch event')
-  
-  const events = await response.json()
-  return events[0] || null
-}
-
-// Fetch single market by ID
-export async function fetchMarket(marketId: string): Promise<PolymarketMarket> {
-  const response = await fetch(`${GAMMA_API}/markets/${marketId}`, {
-    next: { revalidate: 30 },
-  })
-  
-  if (!response.ok) throw new Error('Failed to fetch market')
-  
-  return response.json()
-}
-
-// Search markets
+// Search markets via proxy
 export async function searchMarkets(query: string): Promise<PolymarketMarket[]> {
   if (!query || query.length < 2) return []
-  
-  const params = new URLSearchParams({
-    active: 'true',
-    closed: 'false',
-    _q: query,
-    limit: '20',
-  })
-
-  const response = await fetch(`${GAMMA_API}/markets?${params}`, {
-    next: { revalidate: 30 },
-  })
-  
+  const response = await fetch(`/api/polymarket/events?search=${encodeURIComponent(query)}`)
   if (!response.ok) throw new Error('Failed to search markets')
-  
-  return response.json()
+  const data = await response.json()
+  return data.result || []
 }
 
 // Parse market data into usable format
@@ -171,18 +107,6 @@ export function parseMarket(market: PolymarketMarket): ParsedMarket {
     noTokenId: tokenIds[1] || '',
     outcomeLabels: outcomes,
   }
-}
-
-// Get order book for a market
-export async function fetchOrderBook(tokenId: string) {
-  const response = await fetch(
-    `https://clob.polymarket.com/book?token_id=${tokenId}`,
-    { next: { revalidate: 5 } }
-  )
-  
-  if (!response.ok) throw new Error('Failed to fetch order book')
-  
-  return response.json()
 }
 
 // Format volume for display
@@ -211,4 +135,3 @@ export const POLYMARKET_CATEGORIES = [
   { slug: 'business', label: 'Business', icon: '💼' },
   { slug: 'global', label: 'World', icon: '🌍' },
 ]
-
