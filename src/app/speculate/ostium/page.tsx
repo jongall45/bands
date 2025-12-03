@@ -59,7 +59,7 @@ export default function OstiumTradingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black pb-24">
+    <div className="min-h-screen bg-black pb-36">
       <div className="max-w-[430px] mx-auto">
         {/* Header */}
         <header 

@@ -117,7 +117,7 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
     !isPending
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 space-y-4 pb-32">
       {/* Market Status Warning */}
       {!isMarketOpen && !priceLoading && (
         <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 flex items-center gap-2">
