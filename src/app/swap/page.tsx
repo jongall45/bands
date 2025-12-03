@@ -2,21 +2,34 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useAccount } from 'wagmi'
-import { ArrowUpDown, ArrowRightLeft, Repeat, RefreshCw } from 'lucide-react'
+import { useAccount, useBalance } from 'wagmi'
+import { ArrowUpDown, ArrowRightLeft, Repeat, RefreshCw, ToggleLeft, ToggleRight } from 'lucide-react'
+import { EnhancedSwapWidget } from '@/components/relay/EnhancedSwapWidget'
+import { EnhancedBridgeWidget } from '@/components/relay/EnhancedBridgeWidget'
 import { CustomSwap } from '@/components/relay/CustomSwap'
-import { BridgeWidget } from '@/components/relay/BridgeWidget'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
+import { base } from 'viem/chains'
 
 type Tab = 'swap' | 'bridge'
+
+const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
 
 export default function SwapPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { isConnected } = useAccount()
+  const { isConnected, address } = useAccount()
   const [activeTab, setActiveTab] = useState<Tab>('swap')
   const [recentTx, setRecentTx] = useState<string | null>(null)
+  const [useCustomUI, setUseCustomUI] = useState(true) // Default to custom UI which works
+
+  // Get USDC balance
+  const { data: usdcBalance } = useBalance({
+    address,
+    token: USDC_BASE,
+    chainId: base.id,
+    query: { enabled: !!address },
+  })
 
   // Redirect if not connected
   useEffect(() => {
@@ -33,8 +46,11 @@ export default function SwapPage() {
     }
   }, [searchParams])
 
-  const handleSuccess = (txHash: string) => {
-    setRecentTx(txHash)
+  const handleSuccess = (data: any) => {
+    const hash = data?.txHash || data?.hash || data
+    if (typeof hash === 'string') {
+      setRecentTx(hash)
+    }
   }
 
   if (!isConnected) {
@@ -74,6 +90,25 @@ export default function SwapPage() {
           <LogoInline size="sm" />
         </header>
 
+        {/* Wallet Badge */}
+        {address && (
+          <div className="px-5 pb-3">
+            <div className="inline-flex items-center gap-3 bg-[#111] rounded-full px-4 py-2">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-green-400 rounded-full" />
+                <span className="text-white/70 text-xs font-mono">
+                  {address.slice(0, 6)}...{address.slice(-4)}
+                </span>
+              </div>
+              {usdcBalance && (
+                <span className="text-[#ef4444] text-xs font-semibold">
+                  ${parseFloat(usdcBalance.formatted).toFixed(2)}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Tab Switcher */}
         <div className="px-5 pb-4">
           <div className="flex bg-[#111] border border-white/[0.06] rounded-2xl p-1">
@@ -105,10 +140,38 @@ export default function SwapPage() {
         {/* Widget Container */}
         <div className="px-5">
           {activeTab === 'swap' ? (
-            <CustomSwap onSuccess={handleSuccess} />
+            useCustomUI ? (
+              <CustomSwap onSuccess={handleSuccess} />
+            ) : (
+              <EnhancedSwapWidget onSuccess={handleSuccess} />
+            )
           ) : (
-            <BridgeWidget onSuccess={handleSuccess} />
+            useCustomUI ? (
+              <CustomSwap onSuccess={handleSuccess} />
+            ) : (
+              <EnhancedBridgeWidget onSuccess={handleSuccess} />
+            )
           )}
+        </div>
+
+        {/* UI Toggle */}
+        <div className="px-5 mt-4">
+          <button
+            onClick={() => setUseCustomUI(!useCustomUI)}
+            className="w-full flex items-center justify-between p-3 bg-[#111] border border-white/[0.06] rounded-2xl"
+          >
+            <span className="text-white/50 text-xs">
+              {useCustomUI ? 'Using bands UI' : 'Using Relay Widget'}
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-white/30 text-xs">Switch</span>
+              {useCustomUI ? (
+                <ToggleRight className="w-5 h-5 text-[#ef4444]" />
+              ) : (
+                <ToggleLeft className="w-5 h-5 text-white/30" />
+              )}
+            </div>
+          </button>
         </div>
 
         {/* Recent Transaction */}
@@ -120,9 +183,9 @@ export default function SwapPage() {
                 href={`https://basescan.org/tx/${recentTx}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-green-400/60 text-xs hover:underline mt-1 block"
+                className="text-green-400/60 text-xs hover:underline mt-1 block font-mono"
               >
-                View on BaseScan →
+                {recentTx.slice(0, 10)}...{recentTx.slice(-8)} →
               </a>
             </div>
           </div>
@@ -255,5 +318,19 @@ const swapStyles = `
   .swap-page .card > * {
     position: relative;
     z-index: 1;
+  }
+
+  /* Relay Widget Container Overrides */
+  .relay-swap-container,
+  .relay-bridge-container {
+    border-radius: 24px;
+    overflow: hidden;
+  }
+
+  .relay-swap-container > div:last-child,
+  .relay-bridge-container > div:last-child {
+    background: #111111 !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-radius: 24px !important;
   }
 `
