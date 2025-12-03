@@ -6,7 +6,7 @@ import { formatUnits } from 'viem'
 import { arbitrum } from 'wagmi/chains'
 import { useOstiumTrade } from '@/hooks/useOstiumTrade'
 import { useOstiumPrice } from '@/hooks/useOstiumPrices'
-import { ACTIVE_CONFIG, MAX_LEVERAGE_BY_CATEGORY, type OstiumPair, type OstiumCategory } from '@/lib/ostium/constants'
+import { ACTIVE_CONFIG, MAX_LEVERAGE_BY_CATEGORY, MIN_COLLATERAL_USD, type OstiumPair, type OstiumCategory } from '@/lib/ostium/constants'
 import { ERC20_ABI } from '@/lib/ostium/abi'
 import { 
   Loader2, TrendingUp, TrendingDown, Info, AlertCircle, 
@@ -127,10 +127,12 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
   }
 
   // Validation
+  const meetsMinimum = collateralNum >= MIN_COLLATERAL_USD
   const canTrade = isConnected && 
     collateral && 
     collateralNum > 0 && 
     collateralNum <= balance &&
+    meetsMinimum &&
     isMarketOpen &&
     hasEnoughGas &&
     !isPending
@@ -226,7 +228,10 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
       {/* Collateral Input */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <label className="text-white/40 text-sm">Collateral (USDC)</label>
+          <label className="text-white/40 text-sm">
+            Collateral (USDC)
+            <span className="text-white/30 ml-1">min ${MIN_COLLATERAL_USD}</span>
+          </label>
           <span className="text-white/40 text-xs">
             Balance: <span className="text-white/60 font-mono">${balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
           </span>
@@ -399,6 +404,8 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
           'Market Closed'
         ) : collateralNum > balance ? (
           'Insufficient Balance'
+        ) : collateralNum > 0 && !meetsMinimum ? (
+          `Minimum $${MIN_COLLATERAL_USD} Required`
         ) : (
           <>
             {isLong ? 'Long' : 'Short'} {pair.symbol}

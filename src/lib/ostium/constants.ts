@@ -60,6 +60,9 @@ export const MAX_LEVERAGE_BY_CATEGORY: Record<OstiumCategory, number> = {
   stock: 25, // Stocks have lower max leverage
 }
 
+// Minimum collateral in USDC (Ostium requires minimum position sizes)
+export const MIN_COLLATERAL_USD = 5 // $5 minimum
+
 // Builder fee config (optional - for earning referral fees)
 // Set your address here to earn fees on trades through your app
 export const BUILDER_CONFIG = {

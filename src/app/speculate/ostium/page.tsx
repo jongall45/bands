@@ -125,8 +125,8 @@ export default function OstiumTradingPage() {
               </div>
               {/* ETH Balance */}
               <div>
-                <span className="text-white/40 text-xs">ETH (Gas)</span>
-                <div className={`font-bold ${hasArbitrumEth ? 'text-green-400' : 'text-orange-400'}`}>
+                <span className="text-white/40 text-xs">Arbitrum ETH</span>
+                <div className={`font-bold ${hasArbitrumEth ? 'text-white' : 'text-orange-400'}`}>
                   {ethBalance ? parseFloat(ethBalance.formatted).toFixed(5) : '0.00000'}
                 </div>
               </div>
