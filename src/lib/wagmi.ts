@@ -1,11 +1,14 @@
 import { createConfig, http, createStorage, cookieStorage } from 'wagmi'
 import { base, optimism, arbitrum } from 'wagmi/chains'
 import { porto } from 'porto/wagmi'
+import { Mode } from 'porto'
 
-// Porto connector with explicit dialog mode
+// Porto connector with explicit dialog mode configuration
 const portoConnector = porto({
-  // Force dialog mode for passkey authentication
-  // This ensures the Porto dialog opens properly
+  // Explicitly configure dialog mode with HTTPS host
+  mode: Mode.dialog({
+    host: 'https://id.porto.sh/dialog',
+  }),
 })
 
 export const wagmiConfig = createConfig({
