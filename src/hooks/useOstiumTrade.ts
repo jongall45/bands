@@ -54,7 +54,7 @@ export function useOstiumTrade() {
       currentPrice,
       takeProfit = 0,
       stopLoss = 0,
-      slippagePercent = 1,
+      slippagePercent = 5, // Higher default slippage
       orderType = 'MARKET',
       limitPrice,
     } = params
@@ -77,17 +77,26 @@ export function useOstiumTrade() {
       // Collateral: USDC has 6 decimals
       const collateralWei = parseUnits(collateral.toString(), 6)
       
-      // Prices: scaled by 1e18
+      // Prices: scaled by 1e10 (Ostium uses 10 decimals for prices)
       const priceToUse = orderType === 'MARKET' ? currentPrice : (limitPrice || currentPrice)
-      const openPriceWei = parseUnits(priceToUse.toFixed(10), 18)
-      const tpWei = takeProfit ? parseUnits(takeProfit.toFixed(10), 18) : BigInt(0)
-      const slWei = stopLoss ? parseUnits(stopLoss.toFixed(10), 18) : BigInt(0)
+      const openPriceWei = BigInt(Math.floor(priceToUse * 1e10))
+      const tpWei = takeProfit ? BigInt(Math.floor(takeProfit * 1e10)) : BigInt(0)
+      const slWei = stopLoss ? BigInt(Math.floor(stopLoss * 1e10)) : BigInt(0)
       
       // Leverage: scaled by 1e2 (so 10x = 1000)
       const leverageScaled = BigInt(Math.floor(leverage * 100))
       
-      // Slippage: scaled by 1e2 (so 1% = 100)
-      const slippageScaled = BigInt(Math.floor(slippagePercent * 100))
+      // Slippage: Ostium uses 1e10 precision (5% = 5e8)
+      const slippageScaled = BigInt(Math.floor(slippagePercent * 1e8))
+      
+      console.log('🔵 Trade parameters:', {
+        collateral: collateralWei.toString(),
+        openPrice: openPriceWei.toString(),
+        leverage: leverageScaled.toString(),
+        slippage: slippageScaled.toString(),
+        pairId,
+        isLong,
+      })
 
       // Check if we need to approve
       const needsApproval = !currentAllowance || currentAllowance < collateralWei
@@ -121,7 +130,7 @@ export function useOstiumTrade() {
 
       setStep('trading')
 
-      // Build trade struct
+      // Build trade struct - using exact format from Ostium docs
       const trade = {
         collateral: collateralWei,
         openPrice: openPriceWei,
@@ -134,11 +143,30 @@ export function useOstiumTrade() {
         buy: isLong,
       }
 
-      // Builder fee (optional referral)
+      // Builder fee (optional referral) - builderFee is uint32, use number
       const builderFee = {
         builder: BUILDER_CONFIG.address as `0x${string}`,
         builderFee: BUILDER_CONFIG.feePercent,
       }
+
+      console.log('🔵 Full trade call:', {
+        trade: {
+          ...trade,
+          collateral: trade.collateral.toString(),
+          openPrice: trade.openPrice.toString(),
+          tp: trade.tp.toString(),
+          sl: trade.sl.toString(),
+          leverage: trade.leverage.toString(),
+          pairIndex: trade.pairIndex.toString(),
+          index: trade.index.toString(),
+        },
+        builderFee: {
+          builder: builderFee.builder,
+          builderFee: builderFee.builderFee.toString(),
+        },
+        orderType: ORDER_TYPE[orderType],
+        slippage: slippageScaled.toString(),
+      })
 
       // Execute trade
       const tradeHash = await writeContractAsync({
@@ -147,6 +175,7 @@ export function useOstiumTrade() {
         functionName: 'openTrade',
         args: [trade, builderFee, ORDER_TYPE[orderType], slippageScaled],
         chainId: arbitrum.id,
+        gas: BigInt(1000000), // Set explicit gas limit
       })
 
       setTxHash(tradeHash)
