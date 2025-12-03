@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { X, ArrowDown, Loader2, Check, AlertCircle } from 'lucide-react'
 import { useBridgeFixed } from '@/hooks/useBridgeFixed'
 
@@ -14,6 +15,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
   // LOCAL state for input - completely controlled here
   const [inputValue, setInputValue] = useState('')
   const [isSuccess, setIsSuccess] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const quoteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -30,6 +32,11 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
     clearError,
   } = useBridgeFixed()
 
+  // For portal - must be mounted on client
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   // Reset when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -40,7 +47,8 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
       // Focus input after a brief delay
       setTimeout(() => {
         inputRef.current?.focus()
-      }, 100)
+        console.log('🟡 Input focused:', inputRef.current)
+      }, 200)
     }
   }, [isOpen, clearError])
 
@@ -106,24 +114,32 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
   const balanceNum = parseFloat(baseBalance) || 0
   const canBridge = amountNum > 0 && amountNum <= balanceNum && quote && !isQuoting && !isBridging
 
-  // Don't render if not open
-  if (!isOpen) return null
+  // Don't render if not open or not mounted (for portal)
+  if (!isOpen || !mounted) return null
 
-  return (
+  // Render in a portal to escape any parent event blocking
+  const modalContent = (
     <div 
       className="fixed inset-0 flex items-center justify-center p-4"
-      style={{ zIndex: 9999 }}
+      style={{ 
+        zIndex: 99999,
+        pointerEvents: 'auto',
+      }}
     >
       {/* Backdrop - click to close */}
       <div 
         className="absolute inset-0 bg-black/80 backdrop-blur-sm"
         onClick={onClose}
+        style={{ pointerEvents: 'auto' }}
       />
 
       {/* Modal container */}
       <div 
         className="relative w-full max-w-[400px] bg-[#0a0a0a] border border-white/10 rounded-3xl p-6"
-        style={{ zIndex: 10000 }}
+        style={{ 
+          zIndex: 100000,
+          pointerEvents: 'auto',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -164,7 +180,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
               </div>
 
               {/* THE INPUT */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3" style={{ pointerEvents: 'auto' }}>
                 <input
                   ref={inputRef}
                   type="text"
@@ -176,6 +192,9 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
                   placeholder="0.00"
                   value={inputValue}
                   onChange={handleInputChange}
+                  onInput={(e) => console.log('🔵 onInput:', (e.target as HTMLInputElement).value)}
+                  onKeyDown={(e) => console.log('🔵 onKeyDown:', e.key)}
+                  onFocus={() => console.log('🔵 Input focused!')}
                   style={{
                     flex: 1,
                     minWidth: 0,
@@ -185,11 +204,12 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
                     fontWeight: 500,
                     outline: 'none',
                     border: 'none',
-                    padding: 0,
+                    padding: '8px',
                     margin: 0,
                     WebkitAppearance: 'none',
                     MozAppearance: 'textfield' as any,
                     caretColor: 'white',
+                    pointerEvents: 'auto',
                   }}
                 />
                 <div className="bg-[#ef4444] rounded-xl px-3 py-2 flex items-center gap-1 flex-shrink-0">
@@ -303,4 +323,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
       </div>
     </div>
   )
+
+  // Use portal to render at document.body level, escaping any parent event blocking
+  return createPortal(modalContent, document.body)
 }
