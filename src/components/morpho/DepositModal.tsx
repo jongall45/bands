@@ -114,17 +114,17 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
                 </button>
               </div>
               
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <input
                   type="number"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
-                  className="flex-1 bg-transparent text-white text-3xl font-medium outline-none placeholder:text-white/20"
+                  className="flex-1 min-w-0 bg-transparent text-white text-3xl font-medium outline-none placeholder:text-white/20"
                 />
-                <div className="bg-[#ef4444] rounded-xl px-4 py-2 flex items-center gap-2">
+                <div className="bg-[#ef4444] rounded-xl px-3 py-2 flex items-center gap-1.5 flex-shrink-0">
                   <span className="text-white font-bold text-sm">$</span>
-                  <span className="text-white font-semibold">USDC</span>
+                  <span className="text-white font-semibold text-sm">USDC</span>
                 </div>
               </div>
 

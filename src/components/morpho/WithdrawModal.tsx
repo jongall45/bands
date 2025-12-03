@@ -147,11 +147,12 @@ export function WithdrawModal({ vault, isOpen, onClose, onSuccess }: WithdrawMod
               <div className="flex items-center justify-between mb-1">
                 <span className="text-white/40 text-sm">You&apos;ll receive</span>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-white text-3xl font-medium">
+              <div className="flex items-center gap-2">
+                <span className="text-white text-3xl font-medium flex-1 min-w-0">
                   {parseFloat(assetsFormatted).toFixed(2)}
                 </span>
-                <div className="bg-[#ef4444] rounded-xl px-3 py-1.5">
+                <div className="bg-[#ef4444] rounded-xl px-3 py-1.5 flex items-center gap-1.5 flex-shrink-0">
+                  <span className="text-white font-bold text-sm">$</span>
                   <span className="text-white font-semibold text-sm">USDC</span>
                 </div>
               </div>

@@ -99,27 +99,32 @@ export default function SavePage() {
         {/* Portfolio Summary - Only show if user has deposits */}
         {totalDeposited > 0 && (
           <div className="px-5 mb-4">
-            <div className="bg-gradient-to-br from-green-500/20 to-green-600/10 border border-green-500/20 rounded-3xl p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <PiggyBank className="w-5 h-5 text-green-400" />
-                <span className="text-green-400/80 text-sm font-medium">Your Savings</span>
-              </div>
+            <div className="bg-[#111111] border border-white/[0.06] rounded-3xl p-5 relative overflow-hidden">
+              {/* Red gradient accent */}
+              <div className="absolute inset-0 bg-gradient-to-br from-[#ef4444]/15 via-transparent to-transparent pointer-events-none" />
               
-              <div className="mb-4">
-                <span className="text-white text-3xl font-bold">
-                  ${totalDeposited.toFixed(2)}
-                </span>
-                <span className="text-white/40 text-sm ml-2">deposited</span>
-              </div>
-
-              <div className="flex items-center justify-between bg-black/20 rounded-xl p-3">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-green-400" />
-                  <span className="text-white/60 text-sm">Projected yearly</span>
+              <div className="relative z-10">
+                <div className="flex items-center gap-2 mb-3">
+                  <PiggyBank className="w-5 h-5 text-[#ef4444]" />
+                  <span className="text-[#ef4444] text-sm font-medium">Your Savings</span>
                 </div>
-                <span className="text-green-400 font-semibold">
-                  +${totalYearlyEarnings.toFixed(2)}
-                </span>
+                
+                <div className="mb-4">
+                  <span className="text-white text-3xl font-bold">
+                    ${totalDeposited.toFixed(2)}
+                  </span>
+                  <span className="text-white/40 text-sm ml-2">deposited</span>
+                </div>
+
+                <div className="flex items-center justify-between bg-white/[0.03] rounded-xl p-3">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-green-400" />
+                    <span className="text-white/60 text-sm">Projected yearly</span>
+                  </div>
+                  <span className="text-green-400 font-semibold">
+                    +${totalYearlyEarnings.toFixed(2)}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
