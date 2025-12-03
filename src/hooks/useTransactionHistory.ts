@@ -5,7 +5,7 @@ import { formatUnits } from 'viem'
 
 export interface Transaction {
   hash: string
-  type: 'send' | 'receive' | 'swap' | 'approve' | 'contract'
+  type: 'send' | 'receive' | 'swap' | 'approve' | 'contract' | 'vault_deposit' | 'vault_withdraw'
   from: string
   to: string
   value: string
@@ -14,6 +14,9 @@ export interface Transaction {
   timestamp: number
   status: 'success' | 'failed'
   blockNumber: string
+  // Vault-specific fields
+  vaultName?: string | null
+  vaultApy?: number | null
 }
 
 async function fetchTransactionHistory(address: string): Promise<Transaction[]> {

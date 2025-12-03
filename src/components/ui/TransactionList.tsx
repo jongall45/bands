@@ -9,7 +9,7 @@ import {
 } from '@/hooks/useTransactionHistory'
 import { 
   ArrowUpRight, ArrowDownLeft, RefreshCw, ExternalLink, 
-  CheckCircle, XCircle, Loader2 
+  CheckCircle, XCircle, Loader2, PiggyBank, TrendingUp
 } from 'lucide-react'
 
 interface TransactionListProps {
@@ -76,11 +76,59 @@ export function TransactionList({ address, limit = 10 }: TransactionListProps) {
 
 function TransactionRow({ tx, userAddress }: { tx: Transaction; userAddress: string }) {
   const isReceive = tx.type === 'receive'
+  const isVaultDeposit = tx.type === 'vault_deposit'
+  const isVaultWithdraw = tx.type === 'vault_withdraw'
+  const isVaultTx = isVaultDeposit || isVaultWithdraw
+  
   const amount = formatTxAmount(tx.value, tx.tokenDecimals)
   const timeAgo = formatRelativeTime(tx.timestamp)
   
   // Determine counterparty
-  const counterparty = isReceive ? tx.from : tx.to
+  const counterparty = isReceive || isVaultWithdraw ? tx.from : tx.to
+
+  // Get display info
+  const getDisplayInfo = () => {
+    if (isVaultDeposit) {
+      return {
+        label: 'Deposited',
+        sublabel: tx.vaultName || 'Morpho Vault',
+        icon: <PiggyBank className="w-5 h-5 text-[#ef4444]" />,
+        iconBg: 'bg-[#ef4444]/10',
+        amountColor: 'text-white',
+        amountPrefix: '-',
+      }
+    }
+    if (isVaultWithdraw) {
+      return {
+        label: 'Withdrew',
+        sublabel: tx.vaultName || 'Morpho Vault',
+        icon: <PiggyBank className="w-5 h-5 text-green-400" />,
+        iconBg: 'bg-green-500/10',
+        amountColor: 'text-green-400',
+        amountPrefix: '+',
+      }
+    }
+    if (isReceive) {
+      return {
+        label: 'Received',
+        sublabel: `From ${shortenAddress(counterparty)}`,
+        icon: <ArrowDownLeft className="w-5 h-5 text-green-400" />,
+        iconBg: 'bg-green-500/10',
+        amountColor: 'text-green-400',
+        amountPrefix: '+',
+      }
+    }
+    return {
+      label: 'Sent',
+      sublabel: `To ${shortenAddress(counterparty)}`,
+      icon: <ArrowUpRight className="w-5 h-5 text-gray-400" />,
+      iconBg: 'bg-white/[0.05]',
+      amountColor: 'text-white',
+      amountPrefix: '-',
+    }
+  }
+
+  const display = getDisplayInfo()
 
   return (
     <a
@@ -91,42 +139,40 @@ function TransactionRow({ tx, userAddress }: { tx: Transaction; userAddress: str
     >
       <div className="flex items-center gap-3">
         {/* Icon */}
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-          isReceive 
-            ? 'bg-green-500/10' 
-            : 'bg-white/[0.05]'
-        }`}>
-          {isReceive ? (
-            <ArrowDownLeft className="w-5 h-5 text-green-400" />
-          ) : (
-            <ArrowUpRight className="w-5 h-5 text-gray-400" />
-          )}
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${display.iconBg}`}>
+          {display.icon}
         </div>
 
         {/* Details */}
         <div>
           <div className="flex items-center gap-2">
             <p className="text-white font-medium text-sm">
-              {isReceive ? 'Received' : 'Sent'}
+              {display.label}
             </p>
             {tx.status === 'failed' && (
               <XCircle className="w-3.5 h-3.5 text-red-400" />
             )}
           </div>
-          <p className="text-white/40 text-xs">
-            {isReceive ? 'From ' : 'To '}
-            {shortenAddress(counterparty)}
-          </p>
+          <div className="flex items-center gap-1.5">
+            <p className="text-white/40 text-xs">
+              {display.sublabel}
+            </p>
+            {/* Show APY for vault transactions */}
+            {isVaultTx && tx.vaultApy && (
+              <span className="flex items-center gap-0.5 text-green-400 text-xs">
+                <TrendingUp className="w-3 h-3" />
+                {tx.vaultApy.toFixed(2)}%
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Amount & Time */}
       <div className="text-right flex items-center gap-2">
         <div>
-          <p className={`font-mono font-medium text-sm ${
-            isReceive ? 'text-green-400' : 'text-white'
-          }`}>
-            {isReceive ? '+' : '-'}{amount} {tx.tokenSymbol}
+          <p className={`font-mono font-medium text-sm ${display.amountColor}`}>
+            {display.amountPrefix}{amount} {tx.tokenSymbol}
           </p>
           <p className="text-white/30 text-xs">{timeAgo}</p>
         </div>
@@ -149,4 +195,3 @@ function EmptyState({ message, submessage }: { message: string; submessage?: str
     </div>
   )
 }
-
