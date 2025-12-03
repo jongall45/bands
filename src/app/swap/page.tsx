@@ -33,11 +33,14 @@ export default function SwapPage() {
     query: { enabled: !!address },
   })
 
-  // Redirect if not connected
+  // Only redirect after a delay to allow connection state to settle
   useEffect(() => {
-    if (!isConnected) {
-      router.push('/')
-    }
+    const timer = setTimeout(() => {
+      if (!isConnected) {
+        router.push('/')
+      }
+    }, 1500) // Give time for wallet to reconnect
+    return () => clearTimeout(timer)
   }, [isConnected, router])
 
   // Handle ?tab=bridge query param

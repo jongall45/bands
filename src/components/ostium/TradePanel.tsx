@@ -145,14 +145,21 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
                 ⛽ ETH Required for Gas
               </h3>
               <p className="text-red-400/70 text-xs mb-3">
-                You need ETH on Arbitrum to pay for transaction gas. Use the Swap tab to convert some USDC → ETH.
+                You need ETH on Arbitrum to pay for transaction gas. Swap ~$1 USDC → ETH on Arbitrum.
               </p>
-              <a
-                href="/swap"
-                className="inline-flex items-center gap-1.5 bg-red-500 hover:bg-red-600 text-white font-semibold text-xs px-4 py-2 rounded-lg transition-colors"
-              >
-                Go to Swap →
-              </a>
+              <div className="flex flex-col gap-2">
+                <a
+                  href="https://relay.link/swap?fromChainId=8453&fromCurrency=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913&toChainId=42161&toCurrency=0x0000000000000000000000000000000000000000"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-1.5 bg-red-500 hover:bg-red-600 text-white font-semibold text-xs px-4 py-2.5 rounded-lg transition-colors"
+                >
+                  🔗 Open Relay Swap (Recommended)
+                </a>
+                <p className="text-red-400/50 text-[10px] text-center">
+                  Swap USDC (Base) → ETH (Arbitrum) in one transaction
+                </p>
+              </div>
             </div>
           </div>
         </div>
