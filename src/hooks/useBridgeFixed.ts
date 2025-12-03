@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { useAccount, useBalance, useWalletClient, usePublicClient, useSwitchChain } from 'wagmi'
+import { useAccount, useBalance, useWalletClient, usePublicClient, useSwitchChain, useChainId } from 'wagmi'
+import { useWallets } from '@privy-io/react-auth'
 import { base, arbitrum } from 'viem/chains'
 import { getClient, createClient } from '@reservoir0x/relay-sdk'
 
@@ -29,6 +30,40 @@ function initRelay() {
   }
 }
 
+/**
+ * Wait for chain switch to actually complete
+ */
+async function waitForChainSwitch(
+  wallets: any[],
+  targetChainId: number,
+  maxAttempts: number = 15
+): Promise<boolean> {
+  const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
+  
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      // Use chainId property (Privy uses this, not getChainId method)
+      const currentChain = embeddedWallet?.chainId
+        ? parseInt(embeddedWallet.chainId.split(':')[1] || embeddedWallet.chainId)
+        : null
+      console.log(`🟡 Chain check ${i + 1}/${maxAttempts}: current=${currentChain}, target=${targetChainId}`)
+      
+      if (currentChain === targetChainId) {
+        console.log('✅ Chain switch confirmed!')
+        return true
+      }
+    } catch (e) {
+      console.log(`🟡 Chain check error (attempt ${i + 1}):`, e)
+    }
+    
+    // Wait 500ms before checking again
+    await new Promise(resolve => setTimeout(resolve, 500))
+  }
+  
+  console.error('❌ Chain switch failed after max attempts')
+  return false
+}
+
 interface QuoteData {
   outputAmount: string
   fee: string
@@ -38,10 +73,15 @@ interface QuoteData {
 }
 
 export function useBridgeFixed() {
-  const { address, chainId } = useAccount()
+  const { address } = useAccount()
+  const currentChainId = useChainId()
   const { data: walletClient } = useWalletClient()
   const publicClient = usePublicClient({ chainId: base.id })
   const { switchChainAsync } = useSwitchChain()
+  const { wallets } = useWallets()
+
+  // Get Privy embedded wallet
+  const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
 
   // State
   const [quote, setQuote] = useState<QuoteData | null>(null)
@@ -154,10 +194,50 @@ export function useBridgeFixed() {
     }
   }, [address])
 
+  /**
+   * Switch to target chain and wait for confirmation
+   */
+  const switchToChain = useCallback(async (targetChainId: number): Promise<boolean> => {
+    console.log(`🟡 Switching to chain ${targetChainId}...`)
+    console.log(`🟡 Current chain: ${currentChainId}`)
+
+    if (currentChainId === targetChainId) {
+      console.log('✅ Already on correct chain')
+      return true
+    }
+
+    try {
+      // Method 1: Try Privy's embedded wallet switchChain
+      if (embeddedWallet) {
+        console.log('🟡 Using Privy embeddedWallet.switchChain...')
+        await embeddedWallet.switchChain(targetChainId)
+        
+        // Wait for chain switch to actually complete
+        const switched = await waitForChainSwitch(wallets, targetChainId)
+        if (switched) return true
+      }
+
+      // Method 2: Fallback to wagmi's switchChainAsync
+      console.log('🟡 Fallback: Using wagmi switchChainAsync...')
+      await switchChainAsync({ chainId: targetChainId })
+      
+      // Extra wait for wagmi
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      
+      // Final verification
+      const finalCheck = await waitForChainSwitch(wallets, targetChainId, 5)
+      return finalCheck
+
+    } catch (err) {
+      console.error('🔴 Chain switch error:', err)
+      return false
+    }
+  }, [currentChainId, embeddedWallet, wallets, switchChainAsync])
+
   // Execute bridge using Relay SDK
   const executeBridge = useCallback(async (): Promise<boolean> => {
     console.log('🟢 executeBridge called')
-    console.log('🟡 Current chain:', chainId)
+    console.log('🟡 Current chain:', currentChainId)
     console.log('🟡 User address:', address)
     
     if (!address || !walletClient || !quote?.raw) {
@@ -169,14 +249,25 @@ export function useBridgeFixed() {
     setError(null)
 
     try {
-      // CRITICAL: Switch to Base before bridging
-      if (chainId !== base.id) {
-        console.log('🟡 Switching to Base for bridge transaction...')
-        setStatus('Switching to Base...')
-        await switchChainAsync({ chainId: base.id })
-        // Wait for chain switch to complete
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        console.log('🟢 Switched to Base')
+      // CRITICAL: Switch to Base BEFORE any transaction
+      setStatus('Switching to Base...')
+      const switched = await switchToChain(base.id)
+      
+      if (!switched) {
+        setError('Failed to switch to Base network. Please manually switch and try again.')
+        return false
+      }
+
+      // Verify we're on Base
+      const chainIdStr = embeddedWallet?.chainId
+      const currentChain = chainIdStr 
+        ? parseInt(chainIdStr.split(':')[1] || chainIdStr) 
+        : null
+      console.log('🟡 Verified chain after switch:', currentChain)
+      
+      if (currentChain !== base.id) {
+        setError('Not on Base network. Please switch manually.')
+        return false
       }
 
       initRelay()
@@ -190,7 +281,15 @@ export function useBridgeFixed() {
         quote: quote.raw,
         wallet: {
           vmType: 'evm',
-          getChainId: async () => base.id, // Always return Base as source chain
+          getChainId: async () => {
+            // Always return the chain we actually need for this step
+            const chainIdStr = embeddedWallet?.chainId
+            const chain = chainIdStr 
+              ? parseInt(chainIdStr.split(':')[1] || chainIdStr) 
+              : base.id
+            console.log('🟡 Wallet getChainId called, returning:', chain)
+            return chain
+          },
           address: async () => address,
           handleSignMessageStep: async (item: any) => {
             console.log('🟡 Sign message:', item)
@@ -200,17 +299,29 @@ export function useBridgeFixed() {
             return signature
           },
           handleSendTransactionStep: async (txChainId: number, item: any) => {
-            console.log('🟡 Send transaction on chain:', txChainId, item)
+            console.log('🟡 Send transaction - required chain:', txChainId, item)
             setStatus(item.description || 'Sending transaction...')
             
             // Switch chain if needed for this specific step
-            if (chainId !== txChainId) {
+            const chainIdStr = embeddedWallet?.chainId
+            const currentChain = chainIdStr 
+              ? parseInt(chainIdStr.split(':')[1] || chainIdStr) 
+              : null
+            console.log('🟡 Current chain for tx:', currentChain, 'need:', txChainId)
+            
+            if (currentChain !== txChainId) {
               console.log(`🟡 Switching to chain ${txChainId} for this step...`)
-              await switchChainAsync({ chainId: txChainId })
-              await new Promise(resolve => setTimeout(resolve, 500))
+              const switched = await switchToChain(txChainId)
+              if (!switched) {
+                throw new Error(`Failed to switch to chain ${txChainId}`)
+              }
             }
             
-            // Send transaction with explicit chain
+            // Get fresh wallet client after chain switch
+            // Small delay to ensure wallet client is updated
+            await new Promise(resolve => setTimeout(resolve, 500))
+            
+            // Send transaction
             const tx = await walletClient.sendTransaction({
               to: item.data.to as `0x${string}`,
               data: item.data.data as `0x${string}`,
@@ -225,23 +336,24 @@ export function useBridgeFixed() {
             console.log('🟡 Confirming transaction on chain:', confirmChainId, txHash)
             setStatus('Confirming transaction...')
             
-            // Use the correct chain's public client
-            const confirmClient = confirmChainId === base.id 
-              ? publicClient 
-              : usePublicClient({ chainId: arbitrum.id })
+            // Use the correct public client for the chain
+            const confirmPublicClient = confirmChainId === base.id 
+              ? publicClient
+              : undefined // Will use default
             
-            // Wait for transaction receipt
-            const receipt = await confirmClient?.waitForTransactionReceipt({
-              hash: txHash as `0x${string}`,
-            })
+            if (confirmPublicClient) {
+              const receipt = await confirmPublicClient.waitForTransactionReceipt({
+                hash: txHash as `0x${string}`,
+              })
+              console.log('🟢 Transaction confirmed:', receipt)
+              return receipt
+            }
             
-            console.log('🟢 Transaction confirmed:', receipt)
-            return receipt
+            return null
           },
         } as any,
         onProgress: (progress: any) => {
           console.log('🟡 Progress:', progress)
-          // Handle different progress formats
           if (progress?.currentStep) {
             setStatus(progress.currentStep.description || 'Processing...')
           } else if (progress?.steps && Array.isArray(progress.steps)) {
@@ -268,12 +380,23 @@ export function useBridgeFixed() {
 
     } catch (err: any) {
       console.error('🔴 Bridge error:', err)
-      setError(err?.message || 'Bridge failed')
+      
+      // Better error messages
+      let errorMsg = 'Bridge failed'
+      if (err?.message?.includes('ChainMismatch')) {
+        errorMsg = 'Network mismatch. Please refresh and try again.'
+      } else if (err?.message?.includes('rejected')) {
+        errorMsg = 'Transaction rejected'
+      } else if (err?.message) {
+        errorMsg = err.message
+      }
+      
+      setError(errorMsg)
       return false
     } finally {
       setIsBridging(false)
     }
-  }, [address, walletClient, quote, chainId, switchChainAsync, publicClient, refetchBase, refetchArb])
+  }, [address, walletClient, quote, currentChainId, switchToChain, embeddedWallet, publicClient, refetchBase, refetchArb])
 
   return {
     // Balances
@@ -289,6 +412,10 @@ export function useBridgeFixed() {
     executeBridge,
     isBridging,
     status,
+    
+    // Current chain info
+    currentChainId,
+    isOnBase: currentChainId === base.id,
     
     // Error
     error,
