@@ -1,65 +1,29 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { X, Fuel, Loader2, Check, AlertCircle } from 'lucide-react'
 import { useAccount, useBalance, useWalletClient, usePublicClient, useSwitchChain } from 'wagmi'
 import { arbitrum } from 'viem/chains'
-import { parseUnits } from 'viem'
+import { getClient, createClient } from '@reservoir0x/relay-sdk'
 
 // Arbitrum addresses
 const USDC_ARBITRUM = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'
-const WETH_ARBITRUM = '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1'
+const ETH_ADDRESS = '0x0000000000000000000000000000000000000000' // Native ETH
 
-// Uniswap V3 Router on Arbitrum
-const UNISWAP_ROUTER = '0xE592427A0AEce92De3Edee1F18E0157C05861564'
-
-const SWAP_ROUTER_ABI = [
-  {
-    inputs: [
-      {
-        components: [
-          { name: 'tokenIn', type: 'address' },
-          { name: 'tokenOut', type: 'address' },
-          { name: 'fee', type: 'uint24' },
-          { name: 'recipient', type: 'address' },
-          { name: 'deadline', type: 'uint256' },
-          { name: 'amountIn', type: 'uint256' },
-          { name: 'amountOutMinimum', type: 'uint256' },
-          { name: 'sqrtPriceLimitX96', type: 'uint160' },
-        ],
-        name: 'params',
-        type: 'tuple',
-      },
-    ],
-    name: 'exactInputSingle',
-    outputs: [{ name: 'amountOut', type: 'uint256' }],
-    stateMutability: 'payable',
-    type: 'function',
-  },
-] as const
-
-const ERC20_ABI = [
-  {
-    inputs: [
-      { name: 'spender', type: 'address' },
-      { name: 'amount', type: 'uint256' },
-    ],
-    name: 'approve',
-    outputs: [{ type: 'bool' }],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { name: 'owner', type: 'address' },
-      { name: 'spender', type: 'address' },
-    ],
-    name: 'allowance',
-    outputs: [{ type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-] as const
+// Initialize Relay SDK
+let relayInitialized = false
+function initRelay() {
+  if (relayInitialized) return
+  try {
+    createClient({
+      baseApiUrl: 'https://api.relay.link',
+      source: 'bands.cash',
+    })
+    relayInitialized = true
+  } catch (e) {
+    console.error('Relay init error:', e)
+  }
+}
 
 interface Props {
   isOpen: boolean
@@ -69,7 +33,7 @@ interface Props {
 }
 
 export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = '1' }: Props) {
-  const { address, isConnected, chainId } = useAccount()
+  const { address, chainId } = useAccount()
   const { data: walletClient } = useWalletClient()
   const publicClient = usePublicClient({ chainId: arbitrum.id })
   const { switchChainAsync } = useSwitchChain()
@@ -79,6 +43,12 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
   const [status, setStatus] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isSuccess, setIsSuccess] = useState(false)
+  const [quote, setQuote] = useState<any>(null)
+
+  // Initialize Relay on mount
+  useEffect(() => {
+    initRelay()
+  }, [])
 
   // Get USDC balance on Arbitrum
   const { data: usdcBalance, refetch: refetchUsdc } = useBalance({
@@ -93,10 +63,43 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
     chainId: arbitrum.id,
   })
 
-  const isOnArbitrum = chainId === arbitrum.id
+  // Fetch quote when amount changes
+  useEffect(() => {
+    const fetchQuote = async () => {
+      if (!address || !amount) return
+      
+      const amountNum = parseFloat(amount)
+      if (isNaN(amountNum) || amountNum <= 0) return
+
+      try {
+        initRelay()
+        const client = getClient()
+        const amountWei = Math.floor(amountNum * 1_000_000).toString()
+
+        const quoteData = await client.actions.getQuote({
+          user: address,
+          chainId: arbitrum.id,
+          toChainId: arbitrum.id, // Same chain swap
+          currency: USDC_ARBITRUM,
+          toCurrency: ETH_ADDRESS,
+          amount: amountWei,
+          recipient: address,
+          tradeType: 'EXACT_INPUT',
+        })
+
+        setQuote(quoteData)
+        console.log('🟢 Gas swap quote:', quoteData)
+      } catch (err) {
+        console.error('Quote error:', err)
+      }
+    }
+
+    const timer = setTimeout(fetchQuote, 500)
+    return () => clearTimeout(timer)
+  }, [address, amount])
 
   const handleSwap = useCallback(async () => {
-    console.log('🟡 Swap clicked, address:', address, 'walletClient:', !!walletClient, 'publicClient:', !!publicClient)
+    console.log('🟡 Swap clicked, address:', address, 'quote:', !!quote)
     
     if (!address) {
       setError('Please connect your wallet first')
@@ -104,18 +107,12 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
     }
     
     if (!walletClient) {
-      setError('Wallet client not ready, please try again')
+      setError('Wallet not ready, please try again')
       return
     }
 
-    if (!publicClient) {
-      setError('Network client not ready, please try again')
-      return
-    }
-
-    const amountNum = parseFloat(amount)
-    if (isNaN(amountNum) || amountNum <= 0) {
-      setError('Invalid amount')
+    if (!quote) {
+      setError('No quote available')
       return
     }
 
@@ -130,55 +127,56 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
         await new Promise(resolve => setTimeout(resolve, 500))
       }
 
-      setStatus('Preparing swap...')
-      const amountIn = parseUnits(amount, 6) // USDC has 6 decimals
-
-      // Check allowance
-      setStatus('Checking allowance...')
-      const allowance = await publicClient.readContract({
-        address: USDC_ARBITRUM as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: 'allowance',
-        args: [address, UNISWAP_ROUTER],
-      })
-
-      // Approve if needed
-      if (allowance < amountIn) {
-        setStatus('Approving USDC...')
-        const approveTx = await walletClient.writeContract({
-          address: USDC_ARBITRUM as `0x${string}`,
-          abi: ERC20_ABI,
-          functionName: 'approve',
-          args: [UNISWAP_ROUTER, amountIn],
-          chain: arbitrum,
-        })
-        
-        await publicClient.waitForTransactionReceipt({ hash: approveTx })
-      }
-
-      // Execute swap
-      setStatus('Swapping USDC → ETH...')
-      const deadline = BigInt(Math.floor(Date.now() / 1000) + 600) // 10 min deadline
+      setStatus('Executing swap via Relay...')
       
-      const swapTx = await walletClient.writeContract({
-        address: UNISWAP_ROUTER,
-        abi: SWAP_ROUTER_ABI,
-        functionName: 'exactInputSingle',
-        args: [{
-          tokenIn: USDC_ARBITRUM as `0x${string}`,
-          tokenOut: WETH_ARBITRUM as `0x${string}`,
-          fee: 500, // 0.05% pool
-          recipient: address,
-          deadline,
-          amountIn,
-          amountOutMinimum: BigInt(0), // Accept any amount (for simplicity)
-          sqrtPriceLimitX96: BigInt(0),
-        }],
-        chain: arbitrum,
-      })
+      initRelay()
+      const client = getClient()
 
-      setStatus('Confirming...')
-      await publicClient.waitForTransactionReceipt({ hash: swapTx })
+      // Execute swap using Relay SDK
+      await client.actions.execute({
+        quote: quote,
+        wallet: {
+          vmType: 'evm',
+          getChainId: async () => arbitrum.id,
+          address: async () => address,
+          handleSignMessageStep: async (item: any) => {
+            console.log('🟡 Sign message:', item)
+            const signature = await walletClient.signMessage({
+              message: item.data.message,
+            })
+            return signature
+          },
+          handleSendTransactionStep: async (_chainId: number, item: any) => {
+            console.log('🟡 Send transaction:', item)
+            setStatus(item.description || 'Sending transaction...')
+            
+            const tx = await walletClient.sendTransaction({
+              to: item.data.to as `0x${string}`,
+              data: item.data.data as `0x${string}`,
+              value: BigInt(item.data.value || '0'),
+            })
+            
+            console.log('🟡 Transaction sent:', tx)
+            return tx
+          },
+          handleConfirmTransactionStep: async (txHash: string, _chainId: number) => {
+            console.log('🟡 Confirming transaction:', txHash)
+            setStatus('Confirming...')
+            
+            const receipt = await publicClient?.waitForTransactionReceipt({
+              hash: txHash as `0x${string}`,
+            })
+            
+            return receipt
+          },
+        } as any,
+        onProgress: (progress: any) => {
+          console.log('🟡 Progress:', progress)
+          if (progress?.currentStep?.description) {
+            setStatus(progress.currentStep.description)
+          }
+        },
+      })
 
       // Refresh balances
       await refetchUsdc()
@@ -197,13 +195,12 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
     } finally {
       setIsSwapping(false)
     }
-  }, [address, walletClient, publicClient, amount, chainId, switchChainAsync, refetchUsdc, refetchEth, onSuccess])
+  }, [address, walletClient, publicClient, chainId, quote, switchChainAsync, refetchUsdc, refetchEth, onSuccess])
 
   const amountNum = parseFloat(amount) || 0
   const balanceNum = parseFloat(usdcBalance?.formatted || '0')
-  // Use address instead of isConnected for more reliable detection
   const walletConnected = !!address
-  const canSwap = walletConnected && amountNum > 0 && amountNum <= balanceNum && !isSwapping
+  const canSwap = walletConnected && amountNum > 0 && amountNum <= balanceNum && quote && !isSwapping
 
   if (!isOpen) return null
 
@@ -251,9 +248,7 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
                 <span className="text-green-400 text-xs font-mono">
                   {address?.slice(0, 6)}...{address?.slice(-4)}
                 </span>
-                {!isOnArbitrum && (
-                  <span className="text-orange-400 text-xs ml-auto">Will switch to Arbitrum</span>
-                )}
+                <span className="text-green-400/60 text-xs ml-auto">Connected</span>
               </div>
             ) : (
               <div className="flex items-center gap-2 mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded-xl">
@@ -296,6 +291,18 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
               </div>
             </div>
 
+            {/* Quote info */}
+            {quote && (
+              <div className="bg-white/[0.02] rounded-xl p-3 mb-4 text-xs">
+                <div className="flex justify-between mb-1">
+                  <span className="text-white/50">You'll receive</span>
+                  <span className="text-white/70">
+                    ~{((quote.details?.currencyOut?.amount || 0) / 1e18).toFixed(6)} ETH
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Info */}
             <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 mb-4">
               <p className="text-orange-400/80 text-xs">
@@ -326,13 +333,15 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
                 'Wallet not connected'
               ) : balanceNum <= 0 ? (
                 'No USDC on Arbitrum'
+              ) : !quote ? (
+                'Getting quote...'
               ) : (
                 `Swap $${amount} USDC → ETH`
               )}
             </button>
 
             <p className="text-white/20 text-xs text-center mt-3">
-              Swap via Uniswap on Arbitrum
+              Swap via Relay Protocol
             </p>
           </>
         )}
@@ -340,4 +349,3 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
     </div>
   )
 }
-
