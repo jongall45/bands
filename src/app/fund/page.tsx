@@ -3,11 +3,13 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAccount } from 'wagmi'
-import { ArrowLeft, Loader2, DollarSign, Info, Smartphone, ExternalLink, CheckCircle, Copy, Check } from 'lucide-react'
+import { ArrowLeft, Loader2, DollarSign, Info, CreditCard, ExternalLink, CheckCircle, Copy, Check, Wallet } from 'lucide-react'
 import Link from 'next/link'
 import { BottomNav } from '@/components/ui/BottomNav'
 
 const PRESET_AMOUNTS = [30, 50, 100, 250]
+
+type OnrampProvider = 'coinbase' | 'manual'
 
 export default function FundPage() {
   const router = useRouter()
@@ -15,6 +17,7 @@ export default function FundPage() {
   const [amount, setAmount] = useState<string>('100')
   const [isLoading, setIsLoading] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [provider, setProvider] = useState<OnrampProvider>('coinbase')
 
   // Redirect if not connected
   useEffect(() => {
@@ -31,36 +34,31 @@ export default function FundPage() {
     }
   }
 
-  const handleBuy = () => {
-    if (!address) {
-      console.error('[Fund] No wallet address available')
-      return
-    }
+  const handleCoinbaseBuy = () => {
+    if (!address) return
     
     setIsLoading(true)
-    console.log('[Fund] Opening MoonPay for address:', address)
 
-    // MoonPay widget URL with USDC on Base
-    // CRITICAL: walletAddress must be the user's bands.cash wallet address
+    // Coinbase Pay URL - permissionless, no API key needed
+    // Uses their hosted solution with address passthrough
     const params = new URLSearchParams({
-      apiKey: 'pk_live_sgnwvHJfQXmUPLdyvAp46EwJUiZ3vu', // MoonPay public key
-      currencyCode: 'usdc_base',
-      walletAddress: address, // User's bands.cash wallet
-      baseCurrencyCode: 'usd',
-      baseCurrencyAmount: amount,
-      colorCode: 'ef4444',
-      // IMPORTANT: Lock the destination address
-      walletAddressTag: '',
-      lockAmount: 'false',
-      showWalletAddressForm: 'false', // Hide address form - use our address
+      appId: 'bands-cash', // App identifier
+      destinationWallets: JSON.stringify([{
+        address: address,
+        blockchains: ['base'],
+        assets: ['USDC'],
+      }]),
+      defaultAsset: 'USDC',
+      defaultNetwork: 'base',
+      presetFiatAmount: amount,
+      fiatCurrency: 'USD',
     })
 
-    const url = `https://buy.moonpay.com?${params.toString()}`
-    console.log('[Fund] MoonPay URL:', url)
+    // Coinbase Onramp URL
+    const url = `https://pay.coinbase.com/buy/select-asset?${params.toString()}`
+    console.log('[Fund] Coinbase URL:', url)
     
-    // Open in new tab
     window.open(url, '_blank')
-    
     setTimeout(() => setIsLoading(false), 1000)
   }
 
@@ -69,8 +67,8 @@ export default function FundPage() {
   const amountNum = parseFloat(amount) || 0
   const isValidAmount = amountNum >= 20
 
-  // MoonPay fee estimate (~4.5% for cards)
-  const feePercent = 0.045
+  // Coinbase fee estimate (~2.5% for debit)
+  const feePercent = 0.025
   const estimatedFee = amountNum * feePercent
   const estimatedReceive = amountNum - estimatedFee
 
@@ -97,12 +95,12 @@ export default function FundPage() {
         </header>
 
         <div className="px-5 space-y-4">
-          {/* Your Wallet Address - Show prominently with easy copy */}
+          {/* Your Wallet Address */}
           <div className="card">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-green-400" />
-                <p className="text-green-400 text-sm font-medium">Your Delivery Address</p>
+                <p className="text-green-400 text-sm font-medium">Delivery Address (Base)</p>
               </div>
               <button
                 onClick={copyAddress}
@@ -127,121 +125,221 @@ export default function FundPage() {
             >
               {address}
             </button>
-            <p className="text-white/30 text-xs mt-2 text-center">
-              Tap address or Copy button to copy
-            </p>
           </div>
 
-          {/* Amount Card */}
-          <div className="card text-center py-6">
-            <p className="text-white/40 text-sm mb-3">Amount (USD)</p>
-            
-            <div className="relative inline-block mb-4">
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 text-white/40 text-4xl">$</span>
-              <input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0"
-                min="20"
-                className="w-40 pl-8 bg-transparent text-white text-5xl font-bold outline-none text-center"
-              />
-            </div>
-
-            {/* Quick Amount Buttons */}
-            <div className="flex justify-center gap-2 mb-4">
-              {PRESET_AMOUNTS.map((preset) => (
-                <button
-                  key={preset}
-                  onClick={() => setAmount(preset.toString())}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                    amount === preset.toString()
-                      ? 'bg-[#ef4444] text-white'
-                      : 'bg-white/[0.06] text-white/60 hover:text-white hover:bg-white/[0.1]'
-                  }`}
-                >
-                  ${preset}
-                </button>
-              ))}
-            </div>
-
-            {/* Payment Method */}
-            <div className="inline-flex items-center gap-2 bg-white/[0.08] rounded-full px-4 py-2">
-              <Smartphone className="w-4 h-4 text-white" />
-              <span className="text-white text-sm">Apple Pay / Card</span>
-            </div>
+          {/* Provider Selector */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setProvider('coinbase')}
+              className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                provider === 'coinbase'
+                  ? 'bg-[#0052FF] text-white'
+                  : 'bg-white/[0.05] text-white/60 border border-white/[0.06]'
+              }`}
+            >
+              <CreditCard className="w-4 h-4" />
+              Buy with Card
+            </button>
+            <button
+              onClick={() => setProvider('manual')}
+              className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                provider === 'manual'
+                  ? 'bg-[#ef4444] text-white'
+                  : 'bg-white/[0.05] text-white/60 border border-white/[0.06]'
+              }`}
+            >
+              <Wallet className="w-4 h-4" />
+              Transfer
+            </button>
           </div>
 
-          {/* Quote Summary */}
-          {isValidAmount && (
-            <div className="card">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center">
-                  <DollarSign className="w-5 h-5 text-blue-400" />
+          {provider === 'coinbase' ? (
+            <>
+              {/* Amount Card */}
+              <div className="card text-center py-6">
+                <p className="text-white/40 text-sm mb-3">Amount (USD)</p>
+                
+                <div className="relative inline-block mb-4">
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 text-white/40 text-4xl">$</span>
+                  <input
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0"
+                    min="20"
+                    className="w-40 pl-8 bg-transparent text-white text-5xl font-bold outline-none text-center"
+                  />
                 </div>
-                <div>
-                  <p className="text-white font-bold text-xl">
-                    ~{estimatedReceive.toFixed(2)} USDC
-                  </p>
-                  <p className="text-white/40 text-xs">You'll receive on Base</p>
+
+                {/* Quick Amount Buttons */}
+                <div className="flex justify-center gap-2 mb-4">
+                  {PRESET_AMOUNTS.map((preset) => (
+                    <button
+                      key={preset}
+                      onClick={() => setAmount(preset.toString())}
+                      className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                        amount === preset.toString()
+                          ? 'bg-[#ef4444] text-white'
+                          : 'bg-white/[0.06] text-white/60 hover:text-white hover:bg-white/[0.1]'
+                      }`}
+                    >
+                      ${preset}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Payment Method */}
+                <div className="inline-flex items-center gap-2 bg-[#0052FF]/20 rounded-full px-4 py-2">
+                  <svg className="w-5 h-5" viewBox="0 0 32 32" fill="none">
+                    <circle cx="16" cy="16" r="16" fill="#0052FF"/>
+                    <path d="M16 6C10.48 6 6 10.48 6 16s4.48 10 10 10 10-4.48 10-10S21.52 6 16 6zm0 17.5c-1.24 0-2.25-1.01-2.25-2.25h4.5c0 1.24-1.01 2.25-2.25 2.25zm3.75-3.5h-7.5v-1.5h7.5v1.5zm-.04-2.5H12.3c-.04-.17-.05-.34-.05-.5 0-2.07 1.68-3.75 3.75-3.75s3.75 1.68 3.75 3.75c0 .16-.02.33-.04.5z" fill="white"/>
+                  </svg>
+                  <span className="text-[#0052FF] text-sm font-medium">Coinbase Pay</span>
                 </div>
               </div>
 
-              <div className="border-t border-white/[0.06] pt-3 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-white/40">You pay</span>
-                  <span className="text-white">${amountNum.toFixed(2)}</span>
+              {/* Quote Summary */}
+              {isValidAmount && (
+                <div className="card">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center">
+                      <DollarSign className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="text-white font-bold text-xl">
+                        ~{estimatedReceive.toFixed(2)} USDC
+                      </p>
+                      <p className="text-white/40 text-xs">You'll receive on Base</p>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-white/[0.06] pt-3 space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-white/40">You pay</span>
+                      <span className="text-white">${amountNum.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-white/40">Est. fee (~2.5%)</span>
+                      <span className="text-white/60">~${estimatedFee.toFixed(2)}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-white/40">Est. fee (~4.5%)</span>
-                  <span className="text-white/60">~${estimatedFee.toFixed(2)}</span>
+              )}
+
+              {/* Info Banner */}
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4">
+                <div className="flex items-start gap-3">
+                  <Info className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-blue-400 text-sm font-medium">Fast & Easy</p>
+                    <p className="text-blue-400/70 text-xs mt-1">
+                      Use debit card, bank transfer, or Apple Pay. USDC arrives in ~2 min.
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* Info Banner */}
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4">
-            <div className="flex items-start gap-3">
-              <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-blue-700 text-sm font-medium">Instant deposits</p>
-                <p className="text-blue-600/70 text-xs mt-1">
-                  Pay with Apple Pay or debit card. USDC arrives in ~2 minutes.
+              {/* Buy Button */}
+              <button
+                onClick={handleCoinbaseBuy}
+                disabled={isLoading || !isValidAmount}
+                className="w-full py-4 bg-[#0052FF] hover:bg-[#0040CC] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 active:scale-[0.98]"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Opening Coinbase...
+                  </>
+                ) : (
+                  <>
+                    Buy ${amount} USDC
+                    <ExternalLink className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+
+              {!isValidAmount && amount && (
+                <p className="text-red-400 text-sm text-center">
+                  Minimum amount is $20
                 </p>
+              )}
+
+              {/* Powered by */}
+              <p className="text-gray-400 text-xs text-center">
+                Powered by Coinbase Pay
+              </p>
+            </>
+          ) : (
+            <>
+              {/* Manual Transfer Instructions */}
+              <div className="card">
+                <h3 className="text-white font-semibold mb-3">Send USDC from another wallet</h3>
+                
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-[#ef4444]/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="text-[#ef4444] text-xs font-bold">1</span>
+                    </div>
+                    <div>
+                      <p className="text-white text-sm font-medium">Copy your address above</p>
+                      <p className="text-white/40 text-xs">This is your bands.cash wallet on Base</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-[#ef4444]/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="text-[#ef4444] text-xs font-bold">2</span>
+                    </div>
+                    <div>
+                      <p className="text-white text-sm font-medium">Send USDC on Base network</p>
+                      <p className="text-white/40 text-xs">From Coinbase, another wallet, or exchange</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-[#ef4444]/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="text-[#ef4444] text-xs font-bold">3</span>
+                    </div>
+                    <div>
+                      <p className="text-white text-sm font-medium">Wait ~30 seconds</p>
+                      <p className="text-white/40 text-xs">Your balance updates automatically</p>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          {/* Buy Button */}
-          <button
-            onClick={handleBuy}
-            disabled={isLoading || !isValidAmount}
-            className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-red-500/20 active:scale-[0.98]"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Opening MoonPay...
-              </>
-            ) : (
-              <>
-                Buy ${amount} USDC
-                <ExternalLink className="w-4 h-4" />
-              </>
-            )}
-          </button>
+              {/* Warning */}
+              <div className="bg-orange-500/10 border border-orange-500/20 rounded-2xl p-4">
+                <div className="flex items-start gap-3">
+                  <Info className="w-5 h-5 text-orange-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-orange-400 text-sm font-medium">Important</p>
+                    <p className="text-orange-400/70 text-xs mt-1">
+                      Only send USDC on the <strong>Base</strong> network. Tokens sent on other networks may be lost.
+                    </p>
+                  </div>
+                </div>
+              </div>
 
-          {!isValidAmount && amount && (
-            <p className="text-red-400 text-sm text-center">
-              Minimum amount is $20
-            </p>
+              {/* Copy Address Button */}
+              <button
+                onClick={copyAddress}
+                className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-red-500/20 active:scale-[0.98]"
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-5 h-5" />
+                    Address Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-5 h-5" />
+                    Copy Wallet Address
+                  </>
+                )}
+              </button>
+            </>
           )}
-
-          {/* Powered by */}
-          <p className="text-gray-400 text-xs text-center">
-            Powered by MoonPay
-          </p>
         </div>
       </div>
 
