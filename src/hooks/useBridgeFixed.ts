@@ -97,6 +97,7 @@ export function useBridgeFixed() {
       
       // Use Relay SDK's getQuote which has better routing
       const data = await client.actions.getQuote({
+        user: address,
         chainId: base.id,
         toChainId: arbitrum.id,
         currency: USDC_BASE,
