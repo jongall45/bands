@@ -43,7 +43,7 @@ export default function PolymarketPage() {
   if (!isConnected) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <RefreshCw className="w-8 h-8 text-purple-500 animate-spin" />
+        <RefreshCw className="w-8 h-8 text-[#3B5EE8] animate-spin" />
       </div>
     )
   }
@@ -60,10 +60,18 @@ export default function PolymarketPage() {
             <Link href="/speculate" className="p-2 -ml-2 hover:bg-white/[0.05] rounded-xl transition-colors">
               <ArrowLeft className="w-5 h-5 text-white/60" />
             </Link>
+            {/* Polymarket Logo */}
+            <div className="w-9 h-9 bg-[#3B5EE8] rounded-xl flex items-center justify-center flex-shrink-0">
+              <svg viewBox="0 0 100 100" className="w-5 h-5" fill="none">
+                <path d="M20 20 L50 50 L20 80 L20 20 Z" stroke="white" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                <path d="M80 20 L50 50 L80 80" stroke="white" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                <path d="M20 80 L80 80" stroke="white" strokeWidth="7" strokeLinecap="round" fill="none"/>
+              </svg>
+            </div>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-white font-semibold">Polymarket</h1>
-                <span className="text-[10px] bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full font-medium">
+                <span className="text-[10px] bg-[#3B5EE8]/20 text-[#7B9EFF] px-2 py-0.5 rounded-full font-medium">
                   Polygon
                 </span>
               </div>
@@ -98,7 +106,7 @@ export default function PolymarketPage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search markets..."
-              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-2xl pl-12 pr-4 py-3 text-white placeholder:text-white/30 outline-none focus:border-purple-500/50 transition-colors"
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-2xl pl-12 pr-4 py-3 text-white placeholder:text-white/30 outline-none focus:border-[#3B5EE8]/50 transition-colors"
             />
           </div>
         </div>
@@ -110,7 +118,7 @@ export default function PolymarketPage() {
               onClick={() => { setSelectedCategory(null); setQuery(''); }}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
                 selectedCategory === null && !query
-                  ? 'bg-purple-500 text-white'
+                  ? 'bg-[#3B5EE8] text-white'
                   : 'bg-white/[0.05] text-white/60 hover:bg-white/[0.08]'
               }`}
             >
@@ -122,7 +130,7 @@ export default function PolymarketPage() {
                 onClick={() => { setSelectedCategory(cat.slug); setQuery(''); }}
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
                   selectedCategory === cat.slug
-                    ? 'bg-purple-500 text-white'
+                    ? 'bg-[#3B5EE8] text-white'
                     : 'bg-white/[0.05] text-white/60 hover:bg-white/[0.08]'
                 }`}
               >
@@ -242,7 +250,7 @@ function EventRow({ event, onSelect }: { event: PolymarketEvent; onSelect: (e: P
           <div className="flex items-center gap-2 text-xs">
             <span className="text-white/40">{formatVolume(event.volume)} vol</span>
             {hasMultipleMarkets && (
-              <span className="text-purple-400 flex items-center gap-1">
+              <span className="text-[#7B9EFF] flex items-center gap-1">
                 {event.markets?.length} markets
                 <ChevronRight className="w-3 h-3" />
               </span>
@@ -349,7 +357,7 @@ function EventDetailPanel({
               <h2 className="text-white font-semibold text-lg leading-tight mb-1">{event.title}</h2>
               <div className="flex items-center gap-3 text-xs">
                 <span className="text-white/40">{formatVolume(event.volume)} total volume</span>
-                <span className="text-purple-400">{markets.length} outcomes</span>
+                <span className="text-[#7B9EFF]">{markets.length} outcomes</span>
               </div>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-white/[0.05] rounded-full -mr-2">
@@ -377,7 +385,7 @@ function EventDetailPanel({
                     {formatProbability(parsed.yesPrice)}
                   </span>
                   <div 
-                    className="w-full bg-gradient-to-t from-purple-600 to-purple-400 rounded-t"
+                    className="w-full bg-gradient-to-t from-[#3B5EE8] to-[#7B9EFF] rounded-t"
                     style={{ height: `${height}%` }}
                   />
                   <span className="text-[9px] text-white/30 truncate w-full text-center">
@@ -437,7 +445,7 @@ function EventDetailPanel({
             href={`https://polymarket.com/event/${event.slug}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="w-full py-3 bg-purple-500 hover:bg-purple-600 text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors"
+            className="w-full py-3 bg-[#3B5EE8] hover:bg-[#2D4BC0] text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors"
           >
             View on Polymarket
             <ExternalLink className="w-4 h-4" />
@@ -565,10 +573,10 @@ function TradingPanel({ market, onClose }: { market: PolymarketMarket; onClose: 
           )}
 
           {/* Polygon Notice */}
-          <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-3 mb-4">
+          <div className="bg-[#3B5EE8]/10 border border-[#3B5EE8]/20 rounded-xl p-3 mb-4">
             <div className="flex items-start gap-2">
-              <Info className="w-4 h-4 text-purple-400 mt-0.5 flex-shrink-0" />
-              <p className="text-purple-400 text-xs">
+              <Info className="w-4 h-4 text-[#7B9EFF] mt-0.5 flex-shrink-0" />
+              <p className="text-[#7B9EFF] text-xs">
                 Polymarket trades on Polygon. Bridge USDC from Base → Polygon in the Swap tab.
               </p>
             </div>
@@ -595,7 +603,7 @@ function TradingPanel({ market, onClose }: { market: PolymarketMarket; onClose: 
 function LoadingState() {
   return (
     <div className="flex items-center justify-center py-12">
-      <RefreshCw className="w-6 h-6 text-purple-400 animate-spin" />
+      <RefreshCw className="w-6 h-6 text-[#3B5EE8] animate-spin" />
     </div>
   )
 }

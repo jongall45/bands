@@ -25,8 +25,33 @@ function OstiumLogo({ className = "w-12 h-12" }: { className?: string }) {
 // Polymarket Logo Component
 function PolymarketLogo({ className = "w-12 h-12" }: { className?: string }) {
   return (
-    <div className={`${className} bg-gradient-to-br from-purple-500 to-purple-700 rounded-2xl flex items-center justify-center`}>
-      <span className="text-2xl">🔮</span>
+    <div className={`${className} bg-[#3B5EE8] rounded-2xl flex items-center justify-center`}>
+      <svg viewBox="0 0 100 100" className="w-7 h-7" fill="none">
+        {/* Polymarket geometric logo */}
+        <path 
+          d="M20 20 L50 50 L20 80 L20 20 Z" 
+          stroke="white" 
+          strokeWidth="6" 
+          strokeLinecap="round" 
+          strokeLinejoin="round"
+          fill="none"
+        />
+        <path 
+          d="M80 20 L50 50 L80 80" 
+          stroke="white" 
+          strokeWidth="6" 
+          strokeLinecap="round" 
+          strokeLinejoin="round"
+          fill="none"
+        />
+        <path 
+          d="M20 80 L80 80" 
+          stroke="white" 
+          strokeWidth="6" 
+          strokeLinecap="round"
+          fill="none"
+        />
+      </svg>
     </div>
   )
 }
@@ -86,7 +111,7 @@ export default function SpeculatePage() {
                   <div>
                     <h3 className="text-white font-semibold text-lg flex items-center gap-2">
                       Polymarket
-                      <span className="text-[10px] bg-purple-500/30 text-purple-300 px-2 py-0.5 rounded-full font-medium">
+                      <span className="text-[10px] bg-[#3B5EE8]/30 text-[#7B9EFF] px-2 py-0.5 rounded-full font-medium">
                         POLYGON
                       </span>
                     </h3>
@@ -279,7 +304,7 @@ const speculateStyles = `
     border-color: rgba(255, 107, 0, 0.2);
   }
 
-  /* Cards - Polymarket (purple) */
+  /* Cards - Polymarket (blue) */
   .speculate-page .card-purple {
     display: flex;
     background: #111111;
@@ -301,9 +326,9 @@ const speculateStyles = `
     height: 100%;
     background: radial-gradient(
       ellipse at 0% 0%,
-      rgba(147, 51, 234, 0.25) 0%,
-      rgba(147, 51, 234, 0.1) 30%,
-      rgba(147, 51, 234, 0.03) 50%,
+      rgba(59, 94, 232, 0.25) 0%,
+      rgba(59, 94, 232, 0.1) 30%,
+      rgba(59, 94, 232, 0.03) 50%,
       transparent 70%
     );
     pointer-events: none;
@@ -312,6 +337,6 @@ const speculateStyles = `
 
   .speculate-page .card-purple:hover {
     transform: translateY(-2px);
-    border-color: rgba(147, 51, 234, 0.3);
+    border-color: rgba(59, 94, 232, 0.3);
   }
 `
