@@ -73,22 +73,60 @@ export function useBridgeFixed() {
         amount: amountWei,
         recipient: address,
         tradeType: 'EXACT_INPUT',
+        // Try with external liquidity for better routing
         useExternalLiquidity: true,
+        // Allow solver to find best route
+        usePermit: false,
+        referrer: 'relay.link/swap',
+        source: 'bands.cash',
       }
 
       console.log('🟡 Requesting quote:', requestBody)
 
-      const response = await fetch(`${RELAY_API}/quote`, {
+      // Try the execute/swap endpoint which has more routing options
+      let response = await fetch(`${RELAY_API}/quote`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(requestBody),
       })
+
+      // If direct quote fails, try with different currency (bridged USDC)
+      if (!response.ok) {
+        console.log('🟡 Direct quote failed, trying with USDC.e...')
+        
+        // Try USDC.e on Arbitrum (bridged version)
+        const USDC_E_ARBITRUM = '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8'
+        
+        const fallbackBody = {
+          ...requestBody,
+          destinationCurrency: USDC_E_ARBITRUM,
+        }
+        
+        response = await fetch(`${RELAY_API}/quote`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(fallbackBody),
+        })
+      }
 
       console.log('🟡 Response status:', response.status)
 
       if (!response.ok) {
         const errorText = await response.text()
         console.error('🔴 Quote error:', errorText)
+        
+        // Parse error for user-friendly message
+        try {
+          const errorJson = JSON.parse(errorText)
+          if (errorJson.message?.includes('unavailable')) {
+            throw new Error('Bridge temporarily unavailable. Try again later or use a smaller amount.')
+          }
+        } catch {
+          // ignore parse error
+        }
+        
         throw new Error(`Quote failed: ${response.status}`)
       }
 
