@@ -3,21 +3,22 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAccount } from 'wagmi'
-import { ArrowLeft, Loader2, DollarSign, Info, CreditCard, ExternalLink, CheckCircle, Copy, Check, Wallet } from 'lucide-react'
+import { ArrowLeft, Loader2, DollarSign, Info, CreditCard, Building2, Smartphone, CheckCircle, Copy, Check, Wallet, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 import { BottomNav } from '@/components/ui/BottomNav'
+import { OnrampModal } from '@/components/onramp/OnrampModal'
 
-const PRESET_AMOUNTS = [30, 50, 100, 250]
+const PRESET_AMOUNTS = [25, 50, 100, 250]
 
-type OnrampProvider = 'coinbase' | 'manual'
+type FundMethod = 'coinbase' | 'transfer'
 
 export default function FundPage() {
   const router = useRouter()
   const { address, isConnected } = useAccount()
-  const [amount, setAmount] = useState<string>('100')
-  const [isLoading, setIsLoading] = useState(false)
+  const [amount, setAmount] = useState<string>('50')
   const [copied, setCopied] = useState(false)
-  const [provider, setProvider] = useState<OnrampProvider>('coinbase')
+  const [method, setMethod] = useState<FundMethod>('coinbase')
+  const [showOnrampModal, setShowOnrampModal] = useState(false)
 
   // Redirect if not connected
   useEffect(() => {
@@ -34,41 +35,11 @@ export default function FundPage() {
     }
   }
 
-  const handleBuy = () => {
-    if (!address) return
-    
-    setIsLoading(true)
-
-    // Transak - truly permissionless, no API key required for basic widget
-    // They support USDC on Base
-    const params = new URLSearchParams({
-      apiKey: 'af0bc5e7-ca0b-4e3c-8b9d-8c7c5c1c5c1c', // Public demo key (works without registration)
-      cryptoCurrencyCode: 'USDC',
-      network: 'base',
-      walletAddress: address,
-      fiatAmount: amount,
-      fiatCurrency: 'USD',
-      disableWalletAddressForm: 'true',
-      hideMenu: 'true',
-      themeColor: 'ef4444',
-    })
-
-    // Transak hosted widget URL
-    const url = `https://global.transak.com?${params.toString()}`
-    console.log('[Fund] Transak URL:', url)
-    
-    window.open(url, '_blank')
-    setTimeout(() => setIsLoading(false), 1000)
-  }
-
   if (!isConnected || !address) return null
 
   const amountNum = parseFloat(amount) || 0
   const isValidAmount = amountNum >= 20
-
-  // Transak fee estimate (~3.5% for cards)
-  const feePercent = 0.035
-  const estimatedFee = amountNum * feePercent
+  const estimatedFee = amountNum * 0.02 // ~2% for Coinbase
   const estimatedReceive = amountNum - estimatedFee
 
   return (
@@ -76,10 +47,12 @@ export default function FundPage() {
       {/* Grain Texture Overlay */}
       <div className="noise-overlay" />
 
-      {/* Atmospheric Red Auras */}
-      <div className="aura aura-1" />
-      <div className="aura aura-2" />
-      <div className="aura aura-3" />
+      {/* Lava Lamp Blobs */}
+      <div className="lava-container">
+        <div className="lava lava-1" />
+        <div className="lava lava-2" />
+        <div className="lava lava-3" />
+      </div>
 
       <div className="max-w-[430px] mx-auto relative z-10 pb-24">
         {/* Header with safe area */}
@@ -90,7 +63,7 @@ export default function FundPage() {
           <Link href="/dashboard" className="text-gray-600 hover:text-gray-900 p-1 -ml-1">
             <ArrowLeft className="w-6 h-6" />
           </Link>
-          <h1 className="text-gray-900 font-semibold text-lg">Buy USDC</h1>
+          <h1 className="text-gray-900 font-semibold text-lg">Add Money</h1>
         </header>
 
         <div className="px-5 space-y-4">
@@ -99,7 +72,7 @@ export default function FundPage() {
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-green-400" />
-                <p className="text-green-400 text-sm font-medium">Delivery Address (Base)</p>
+                <p className="text-green-400 text-sm font-medium">Your Wallet (Base)</p>
               </div>
               <button
                 onClick={copyAddress}
@@ -126,12 +99,12 @@ export default function FundPage() {
             </button>
           </div>
 
-          {/* Provider Selector */}
+          {/* Method Selector */}
           <div className="flex gap-2">
             <button
-              onClick={() => setProvider('coinbase')}
+              onClick={() => setMethod('coinbase')}
               className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                provider === 'coinbase'
+                method === 'coinbase'
                   ? 'bg-[#0052FF] text-white'
                   : 'bg-white/[0.05] text-white/60 border border-white/[0.06]'
               }`}
@@ -140,9 +113,9 @@ export default function FundPage() {
               Buy with Card
             </button>
             <button
-              onClick={() => setProvider('manual')}
+              onClick={() => setMethod('transfer')}
               className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                provider === 'manual'
+                method === 'transfer'
                   ? 'bg-[#ef4444] text-white'
                   : 'bg-white/[0.05] text-white/60 border border-white/[0.06]'
               }`}
@@ -152,7 +125,7 @@ export default function FundPage() {
             </button>
           </div>
 
-          {provider === 'coinbase' ? (
+          {method === 'coinbase' ? (
             <>
               {/* Amount Card */}
               <div className="card text-center py-6">
@@ -187,10 +160,20 @@ export default function FundPage() {
                   ))}
                 </div>
 
-                {/* Payment Method */}
-                <div className="inline-flex items-center gap-2 bg-[#ef4444]/20 rounded-full px-4 py-2">
-                  <CreditCard className="w-4 h-4 text-[#ef4444]" />
-                  <span className="text-[#ef4444] text-sm font-medium">Card / Apple Pay</span>
+                {/* Payment Methods */}
+                <div className="flex items-center justify-center gap-4">
+                  <div className="flex items-center gap-2 text-white/60">
+                    <CreditCard className="w-4 h-4" />
+                    <span className="text-sm">Card</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-white/60">
+                    <Building2 className="w-4 h-4" />
+                    <span className="text-sm">Bank</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-white/60">
+                    <Smartphone className="w-4 h-4" />
+                    <span className="text-sm">Apple Pay</span>
+                  </div>
                 </div>
               </div>
 
@@ -215,7 +198,7 @@ export default function FundPage() {
                       <span className="text-white">${amountNum.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-white/40">Est. fee (~3.5%)</span>
+                      <span className="text-white/40">Est. fee (~2%)</span>
                       <span className="text-white/60">~${estimatedFee.toFixed(2)}</span>
                     </div>
                   </div>
@@ -223,13 +206,13 @@ export default function FundPage() {
               )}
 
               {/* Info Banner */}
-              <div className="bg-[#ef4444]/10 border border-[#ef4444]/20 rounded-2xl p-4">
+              <div className="bg-[#0052FF]/10 border border-[#0052FF]/20 rounded-2xl p-4">
                 <div className="flex items-start gap-3">
-                  <Info className="w-5 h-5 text-[#ef4444] mt-0.5 flex-shrink-0" />
+                  <Info className="w-5 h-5 text-[#0052FF] mt-0.5 flex-shrink-0" />
                   <div>
-                    <p className="text-[#ef4444] text-sm font-medium">Fast & Easy</p>
-                    <p className="text-[#ef4444]/70 text-xs mt-1">
-                      Use debit/credit card or bank transfer. USDC arrives in ~5 min.
+                    <p className="text-[#0052FF] text-sm font-medium">Fast & Secure</p>
+                    <p className="text-[#0052FF]/70 text-xs mt-1">
+                      Pay with Apple Pay, debit card, or bank transfer. USDC arrives in ~2 min.
                     </p>
                   </div>
                 </div>
@@ -237,21 +220,12 @@ export default function FundPage() {
 
               {/* Buy Button */}
               <button
-                onClick={handleBuy}
-                disabled={isLoading || !isValidAmount}
-                className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-red-500/20 active:scale-[0.98]"
+                onClick={() => setShowOnrampModal(true)}
+                disabled={!isValidAmount}
+                className="w-full py-4 bg-[#0052FF] hover:bg-[#0040CC] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 active:scale-[0.98]"
               >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Opening...
-                  </>
-                ) : (
-                  <>
-                    Buy ${amount} USDC
-                    <ExternalLink className="w-4 h-4" />
-                  </>
-                )}
+                <CreditCard className="w-5 h-5" />
+                Buy ${amount} USDC
               </button>
 
               {!isValidAmount && amount && (
@@ -262,7 +236,7 @@ export default function FundPage() {
 
               {/* Powered by */}
               <p className="text-gray-400 text-xs text-center">
-                Powered by Transak
+                Powered by Coinbase
               </p>
             </>
           ) : (
@@ -288,7 +262,7 @@ export default function FundPage() {
                     </div>
                     <div>
                       <p className="text-white text-sm font-medium">Send USDC on Base network</p>
-                      <p className="text-white/40 text-xs">From Coinbase, another wallet, or exchange</p>
+                      <p className="text-white/40 text-xs">From Coinbase, MetaMask, or any exchange</p>
                     </div>
                   </div>
 
@@ -334,6 +308,17 @@ export default function FundPage() {
                   </>
                 )}
               </button>
+
+              {/* Link to buy from Coinbase app */}
+              <a
+                href="https://www.coinbase.com/price/usd-coin"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-3 bg-white/[0.05] hover:bg-white/[0.08] text-white/60 hover:text-white font-medium rounded-2xl transition-colors flex items-center justify-center gap-2 border border-white/[0.06]"
+              >
+                Buy on Coinbase App
+                <ExternalLink className="w-4 h-4" />
+              </a>
             </>
           )}
         </div>
@@ -341,6 +326,15 @@ export default function FundPage() {
 
       {/* Bottom Navigation */}
       <BottomNav />
+
+      {/* Coinbase Onramp Modal */}
+      <OnrampModal
+        isOpen={showOnrampModal}
+        onClose={() => setShowOnrampModal(false)}
+        onSuccess={() => {
+          router.push('/dashboard')
+        }}
+      />
 
       <style jsx global>{`
         .fund-page {
@@ -365,49 +359,66 @@ export default function FundPage() {
           background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
         }
 
-        .fund-page .aura {
+        /* Lava Lamp Effect */
+        .fund-page .lava-container {
           position: fixed;
-          border-radius: 50%;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
           z-index: 0;
-          animation: aura-float 20s ease-in-out infinite;
+          filter: blur(60px);
         }
 
-        .fund-page .aura-1 {
-          width: 800px;
-          height: 800px;
-          top: -250px;
-          left: -200px;
-          background: #FF3B30;
-          filter: blur(150px);
+        .fund-page .lava {
+          position: absolute;
+          will-change: transform, border-radius;
+        }
+
+        .fund-page .lava-1 {
+          width: 70vmax;
+          height: 70vmax;
+          background: radial-gradient(circle at 30% 30%, #FF3B30 0%, #FF6B6B 40%, rgba(255, 107, 107, 0.3) 70%, transparent 100%);
+          top: -20%;
+          left: -20%;
+          opacity: 0.6;
+          animation: lava1 35s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+
+        .fund-page .lava-2 {
+          width: 60vmax;
+          height: 60vmax;
+          background: radial-gradient(circle at 70% 70%, #D70015 0%, #FF4444 40%, rgba(255, 68, 68, 0.3) 70%, transparent 100%);
+          bottom: -15%;
+          right: -15%;
           opacity: 0.5;
+          animation: lava2 40s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
 
-        .fund-page .aura-2 {
-          width: 700px;
-          height: 700px;
-          bottom: -200px;
-          right: -150px;
-          background: #D70015;
-          filter: blur(140px);
-          opacity: 0.45;
-          animation-delay: 7s;
+        .fund-page .lava-3 {
+          width: 45vmax;
+          height: 45vmax;
+          background: radial-gradient(circle at 50% 50%, #FF6B35 0%, #FFAA88 45%, rgba(255, 170, 136, 0.2) 75%, transparent 100%);
+          top: 30%;
+          right: 10%;
+          opacity: 0.4;
+          animation: lava3 28s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
 
-        .fund-page .aura-3 {
-          width: 400px;
-          height: 400px;
-          top: 40%;
-          right: 20%;
-          background: #FF6B35;
-          filter: blur(120px);
-          opacity: 0.3;
-          animation-delay: 14s;
+        @keyframes lava1 {
+          0%, 100% { transform: translate(0, 0) scale(1); border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+          50% { transform: translate(5vw, 10vh) scale(1.1); border-radius: 40% 60% 60% 40% / 40% 60% 40% 60%; }
         }
 
-        @keyframes aura-float {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          33% { transform: translate(50px, -40px) scale(1.05); }
-          66% { transform: translate(-30px, 40px) scale(0.95); }
+        @keyframes lava2 {
+          0%, 100% { transform: translate(0, 0) scale(1); border-radius: 40% 60% 60% 40% / 70% 30% 50% 60%; }
+          50% { transform: translate(-5vw, -10vh) scale(1.15); border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+        }
+
+        @keyframes lava3 {
+          0%, 100% { transform: translate(0, 0) scale(1); border-radius: 50% 60% 30% 60% / 30% 70% 40% 50%; }
+          50% { transform: translate(-10vw, 5vh) scale(1.2); border-radius: 60% 40% 70% 30% / 40% 60% 50% 70%; }
         }
 
         .fund-page .card {
@@ -428,9 +439,9 @@ export default function FundPage() {
           height: 100%;
           background: radial-gradient(
             ellipse at 0% 0%,
-            rgba(255, 59, 48, 0.25) 0%,
-            rgba(255, 59, 48, 0.1) 30%,
-            rgba(255, 59, 48, 0.03) 50%,
+            rgba(255, 59, 48, 0.2) 0%,
+            rgba(255, 59, 48, 0.08) 30%,
+            rgba(255, 59, 48, 0.02) 50%,
             transparent 70%
           );
           pointer-events: none;

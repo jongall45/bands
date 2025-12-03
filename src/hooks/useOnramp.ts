@@ -1,108 +1,161 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useAccount } from 'wagmi'
+import { initOnRamp, CBPayInstanceType } from '@coinbase/cbpay-js'
 
-interface OnrampOptions {
+interface UseOnrampOptions {
   amount?: number
-  fiatCurrency?: string
+  onSuccess?: () => void
+  onExit?: () => void
+  onEvent?: (event: any) => void
 }
 
-interface Quote {
-  paymentTotal: string
-  paymentSubtotal: string
-  purchaseAmount: string
-  fee: string
-}
-
-export function useOnramp() {
+export function useOnramp(options: UseOnrampOptions = {}) {
   const { address } = useAccount()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [quote, setQuote] = useState<Quote | null>(null)
+  const [onrampInstance, setOnrampInstance] = useState<CBPayInstanceType | null>(null)
+  const [isInitialized, setIsInitialized] = useState(false)
 
-  // Generate estimated quote
-  const getQuote = useCallback(async (amount: number) => {
-    if (!address) {
-      setError('Wallet not connected')
-      return null
+  const projectId = process.env.NEXT_PUBLIC_CDP_PROJECT_ID
+
+  // Initialize onramp instance
+  useEffect(() => {
+    if (!address || !projectId) {
+      setIsInitialized(false)
+      return
     }
 
-    // MoonPay has ~4.5% fee for card payments, 1% for bank transfers
-    // Apple Pay uses card rails, so ~4.5%
-    const feePercent = 0.045
-    const fee = amount * feePercent
-    const receiveAmount = amount - fee
+    const amount = options.amount || 50
 
-    const formattedQuote: Quote = {
-      paymentTotal: amount.toFixed(2),
-      paymentSubtotal: receiveAmount.toFixed(2),
-      purchaseAmount: receiveAmount.toFixed(2),
-      fee: fee.toFixed(2),
+    initOnRamp(
+      {
+        appId: projectId,
+        widgetParameters: {
+          addresses: { [address]: ['base'] },
+          assets: ['USDC'],
+          defaultNetwork: 'base',
+          defaultAsset: 'USDC',
+          presetFiatAmount: amount,
+          fiatCurrency: 'USD',
+        },
+        onSuccess: () => {
+          console.log('Onramp success')
+          options.onSuccess?.()
+        },
+        onExit: () => {
+          console.log('Onramp exit')
+          options.onExit?.()
+        },
+        onEvent: (event) => {
+          console.log('Onramp event:', event)
+          options.onEvent?.(event)
+        },
+        experienceLoggedIn: 'popup',
+        experienceLoggedOut: 'popup',
+        closeOnExit: true,
+        closeOnSuccess: true,
+      },
+      (err, instance) => {
+        if (err) {
+          console.error('Onramp init error:', err)
+          setError(err.message)
+          setIsInitialized(false)
+        } else if (instance) {
+          setOnrampInstance(instance)
+          setIsInitialized(true)
+          setError(null)
+        }
+      }
+    )
+
+    return () => {
+      if (onrampInstance) {
+        onrampInstance.destroy()
+        setOnrampInstance(null)
+        setIsInitialized(false)
+      }
+    }
+  }, [address, projectId, options.amount])
+
+  // Open onramp with basic initialization (appId)
+  const openOnramp = useCallback(() => {
+    if (!onrampInstance) {
+      setError('Onramp not initialized')
+      return
     }
 
-    setQuote(formattedQuote)
     setError(null)
-    return formattedQuote
-  }, [address])
+    onrampInstance.open()
+  }, [onrampInstance])
 
-  // Open MoonPay widget
-  const openOnramp = useCallback(async (options: OnrampOptions = {}) => {
+  // Generate session token and open via URL (fallback)
+  const openOnrampWithSessionToken = useCallback(async () => {
     if (!address) {
       setError('Wallet not connected')
       return
     }
 
-    const { 
-      amount, 
-      fiatCurrency = 'usd',
-    } = options
-
     setIsLoading(true)
     setError(null)
 
     try {
-      // MoonPay widget URL - no API key needed for basic flow
-      const params = new URLSearchParams({
-        currencyCode: 'usdc_base', // USDC on Base network
-        walletAddress: address,
-        baseCurrencyCode: fiatCurrency.toLowerCase(),
-        colorCode: '#ef4444', // Match bands.cash brand color
-        language: 'en',
+      // Get session token from our API
+      const response = await fetch('/api/onramp/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          addresses: [
+            {
+              address,
+              blockchains: ['base'],
+            },
+          ],
+          assets: ['USDC'],
+        }),
       })
-      
-      // Add preset amount if specified
-      if (amount) {
-        params.set('baseCurrencyAmount', amount.toString())
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to generate session token')
       }
 
-      const moonpayUrl = `https://buy.moonpay.com?${params.toString()}`
-
+      const data = await response.json()
+      const sessionToken = data.token
+      
+      // Generate URL with session token
+      const url = new URL('https://pay.coinbase.com/buy/select-asset')
+      url.searchParams.set('sessionToken', sessionToken)
+      url.searchParams.set('defaultAsset', 'USDC')
+      url.searchParams.set('defaultNetwork', 'base')
+      url.searchParams.set('presetFiatAmount', (options.amount || 50).toString())
+      url.searchParams.set('fiatCurrency', 'USD')
+      
       // Open in popup
-      const width = 460
+      const width = 450
       const height = 700
-      const left = (window.screen.width - width) / 2
-      const top = (window.screen.height - height) / 2
+      const left = window.screenX + (window.innerWidth - width) / 2
+      const top = window.screenY + (window.innerHeight - height) / 2
       
       window.open(
-        moonpayUrl,
-        'moonpay-widget',
-        `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes`
+        url.toString(),
+        'coinbase-onramp',
+        `width=${width},height=${height},left=${left},top=${top}`
       )
-
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to open payment')
+      setError(err instanceof Error ? err.message : 'Failed to open onramp')
     } finally {
       setIsLoading(false)
     }
-  }, [address])
+  }, [address, options.amount])
 
   return {
     openOnramp,
-    getQuote,
-    quote,
+    openOnrampWithSessionToken,
     isLoading,
     error,
-    isReady: !!address,
+    isReady: isInitialized && !!onrampInstance,
+    clearError: () => setError(null),
   }
 }
