@@ -405,8 +405,19 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
         )}
       </button>
 
+      {/* Alternative: Open in Ostium App */}
+      <a
+        href={`https://app.ostium.io/trade/${pair.symbol.replace('-USD', '')}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="w-full py-3 rounded-xl font-medium text-sm transition-all flex items-center justify-center gap-2 bg-white/[0.05] hover:bg-white/[0.1] text-white/60 hover:text-white border border-white/[0.08]"
+      >
+        <ExternalLink className="w-4 h-4" />
+        Having issues? Trade on Ostium App
+      </a>
+
       <p className="text-white/30 text-xs text-center">
-        Trading on Arbitrum • Requires ETH for gas
+        Direct trading is experimental • Your wallet is connected
       </p>
 
       {/* Gas Swap Modal */}

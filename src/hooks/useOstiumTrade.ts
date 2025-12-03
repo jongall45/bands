@@ -77,17 +77,17 @@ export function useOstiumTrade() {
       // Collateral: USDC has 6 decimals
       const collateralWei = parseUnits(collateral.toString(), 6)
       
-      // Prices: scaled by 1e10 (Ostium uses 10 decimals for prices)
+      // Prices: scaled by 1e18 (Ostium uses 18 decimals for prices)
       const priceToUse = orderType === 'MARKET' ? currentPrice : (limitPrice || currentPrice)
-      const openPriceWei = BigInt(Math.floor(priceToUse * 1e10))
-      const tpWei = takeProfit ? BigInt(Math.floor(takeProfit * 1e10)) : BigInt(0)
-      const slWei = stopLoss ? BigInt(Math.floor(stopLoss * 1e10)) : BigInt(0)
+      const openPriceWei = BigInt(Math.floor(priceToUse * 1e18))
+      const tpWei = takeProfit ? BigInt(Math.floor(takeProfit * 1e18)) : BigInt(0)
+      const slWei = stopLoss ? BigInt(Math.floor(stopLoss * 1e18)) : BigInt(0)
       
-      // Leverage: scaled by 1e2 (so 10x = 1000)
+      // Leverage: scaled by 1e2 (so 10x = 1000, 50x = 5000)
       const leverageScaled = BigInt(Math.floor(leverage * 100))
       
-      // Slippage: Ostium uses 1e10 precision (5% = 5e8)
-      const slippageScaled = BigInt(Math.floor(slippagePercent * 1e8))
+      // Slippage: scaled by 1e2 (2% = 200, 5% = 500)
+      const slippageScaled = BigInt(Math.floor(slippagePercent * 100))
       
       console.log('🔵 Trade parameters:', {
         collateral: collateralWei.toString(),
