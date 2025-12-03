@@ -106,7 +106,7 @@ export default function FundPage() {
               className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
                 method === 'coinbase'
                   ? 'bg-[#0052FF] text-white'
-                  : 'bg-white/[0.05] text-white/60 border border-white/[0.06]'
+                  : 'bg-[#0052FF]/10 text-[#0052FF] border border-[#0052FF]/20'
               }`}
             >
               <CreditCard className="w-4 h-4" />
@@ -117,7 +117,7 @@ export default function FundPage() {
               className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
                 method === 'transfer'
                   ? 'bg-[#ef4444] text-white'
-                  : 'bg-white/[0.05] text-white/60 border border-white/[0.06]'
+                  : 'bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20'
               }`}
             >
               <Wallet className="w-4 h-4" />
