@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useAccount, useReadContract, useSwitchChain, usePublicClient } from 'wagmi'
-import { useSendCalls, useCallsStatus } from 'wagmi/experimental'
+import { useAccount, useReadContract, useSwitchChain, usePublicClient, useWalletClient } from 'wagmi'
 import { parseUnits, encodeFunctionData } from 'viem'
 import { arbitrum } from 'wagmi/chains'
 import { 
@@ -10,8 +9,6 @@ import {
   ORDER_TYPE, 
   calculateSlippage, 
   DEFAULT_SLIPPAGE_BPS,
-  OSTIUM_PAIRS,
-  type OstiumPair 
 } from '@/lib/ostium/constants'
 import { OSTIUM_TRADING_ABI, ERC20_ABI } from '@/lib/ostium/abi'
 import { fetchPairPrice, encodePriceUpdateData } from '@/lib/ostium/api'
@@ -28,21 +25,13 @@ interface TradeParams {
 
 export function useOstiumTrade() {
   const { address, chainId } = useAccount()
-  const [step, setStep] = useState<'idle' | 'switching' | 'pending' | 'success' | 'error'>('idle')
-  const [callsId, setCallsId] = useState<string | null>(null)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  
-  const { sendCallsAsync, isPending: isSending } = useSendCalls()
-  const { switchChainAsync } = useSwitchChain()
+  const { data: walletClient } = useWalletClient()
   const publicClient = usePublicClient({ chainId: arbitrum.id })
+  const { switchChainAsync } = useSwitchChain()
   
-  // Track calls status
-  const { data: callsStatus } = useCallsStatus({
-    id: callsId as string,
-    query: {
-      enabled: !!callsId,
-    },
-  })
+  const [step, setStep] = useState<'idle' | 'switching' | 'approving' | 'trading' | 'success' | 'error'>('idle')
+  const [txHash, setTxHash] = useState<`0x${string}` | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   // Check current allowance for Trading Storage
   const { data: currentAllowance, refetch: refetchAllowance } = useReadContract({
@@ -54,65 +43,42 @@ export function useOstiumTrade() {
   })
 
   /**
-   * Simulate trade before execution
+   * Approve USDC for Trading Storage - using direct sendTransaction
    */
-  const simulateTrade = useCallback(async (params: TradeParams): Promise<{ success: boolean; error?: string }> => {
-    if (!address || !publicClient) {
-      return { success: false, error: 'Wallet not connected' }
-    }
+  const approveUSDC = useCallback(async (amount: bigint): Promise<`0x${string}`> => {
+    if (!walletClient || !address) throw new Error('Wallet not connected')
 
-    const {
-      pairIndex,
-      collateral,
-      leverage,
-      isLong,
-      slippageBps = DEFAULT_SLIPPAGE_BPS,
-      takeProfit = 0,
-      stopLoss = 0,
-    } = params
+    console.log('🟡 Approving USDC for Trading Storage:', OSTIUM_CONTRACTS.TRADING_STORAGE)
+    console.log('🟡 Amount:', amount.toString())
 
-    try {
-      // Build trade struct according to Ostium spec
-      const collateralWei = parseUnits(collateral.toString(), 6) // USDC has 6 decimals
-      
-      const trade = {
-        trader: address,
-        pairIndex: BigInt(pairIndex),
-        index: BigInt(0), // 0 for new trades
-        initialPosToken: BigInt(0), // 0 for new positions
-        positionSizeUSDC: collateralWei,
-        openPrice: BigInt(0), // 0 for MARKET orders
-        buy: isLong,
-        leverage: BigInt(leverage),
-        tp: BigInt(0), // Set after if needed
-        sl: BigInt(0), // Set after if needed
-      }
+    // Manually encode the approve call
+    const calldata = encodeFunctionData({
+      abi: ERC20_ABI,
+      functionName: 'approve',
+      args: [OSTIUM_CONTRACTS.TRADING_STORAGE, amount],
+    })
 
-      const slippage = calculateSlippage(slippageBps)
+    console.log('🟢 Approval calldata:', calldata)
 
-      await publicClient.simulateContract({
-        address: OSTIUM_CONTRACTS.TRADING,
-        abi: OSTIUM_TRADING_ABI,
-        functionName: 'openTrade',
-        args: [trade, BigInt(ORDER_TYPE.MARKET), slippage, '0x' as `0x${string}`, BigInt(0)],
-        account: address,
-      })
+    // Direct transaction - bypass any batching
+    const hash = await walletClient.sendTransaction({
+      to: OSTIUM_CONTRACTS.USDC,
+      data: calldata,
+      chain: arbitrum,
+      value: BigInt(0),
+    })
 
-      return { success: true }
-    } catch (e: any) {
-      console.error('Simulation failed:', e)
-      return { 
-        success: false, 
-        error: e.shortMessage || e.message || 'Simulation failed' 
-      }
-    }
-  }, [address, publicClient])
+    console.log('🟢 Approval tx sent:', hash)
+    return hash
+  }, [walletClient, address])
 
   /**
-   * Open a market trade
+   * Open a market trade using direct sendTransaction
    */
   const openTrade = useCallback(async (params: TradeParams) => {
-    if (!address) throw new Error('Wallet not connected')
+    if (!address || !walletClient || !publicClient) {
+      throw new Error('Wallet not connected')
+    }
 
     const {
       pairIndex,
@@ -120,13 +86,11 @@ export function useOstiumTrade() {
       leverage,
       isLong,
       slippageBps = DEFAULT_SLIPPAGE_BPS,
-      takeProfit = 0,
-      stopLoss = 0,
     } = params
 
     setStep('idle')
     setErrorMessage(null)
-    setCallsId(null)
+    setTxHash(null)
 
     try {
       // Switch to Arbitrum if needed
@@ -138,17 +102,38 @@ export function useOstiumTrade() {
         await new Promise(resolve => setTimeout(resolve, 500))
       }
 
-      // Fetch latest price for the pair (for logging/display)
+      // Fetch latest price for logging
       const priceData = await fetchPairPrice(pairIndex)
-      console.log('🔵 Current price:', priceData?.price)
+      console.log('🟡 Current price:', priceData?.price)
+
+      // Convert collateral to wei (6 decimals for USDC)
+      const collateralWei = parseUnits(collateral.toString(), 6)
+
+      // Check if we need approval
+      const needsApproval = !currentAllowance || currentAllowance < collateralWei
+
+      if (needsApproval) {
+        setStep('approving')
+        console.log('🟡 Need approval, current allowance:', currentAllowance?.toString())
+        
+        const approveHash = await approveUSDC(collateralWei)
+        setTxHash(approveHash)
+        
+        // Wait for approval to be confirmed
+        console.log('🟡 Waiting for approval confirmation...')
+        await publicClient.waitForTransactionReceipt({ 
+          hash: approveHash,
+          confirmations: 1,
+        })
+        console.log('🟢 Approval confirmed!')
+        
+        // Refetch allowance
+        await refetchAllowance()
+      }
+
+      setStep('trading')
 
       // Build trade struct according to Ostium spec
-      const collateralWei = parseUnits(collateral.toString(), 6)
-      
-      // Calculate slippage: basisPoints * 1e7
-      const slippage = calculateSlippage(slippageBps)
-
-      // Build the trade struct
       const trade = {
         trader: address,
         pairIndex: BigInt(pairIndex),
@@ -162,6 +147,12 @@ export function useOstiumTrade() {
         sl: BigInt(0),
       }
 
+      // Calculate slippage: bps * 1e7
+      const slippage = calculateSlippage(slippageBps)
+
+      // Price update data (empty for now - keeper provides)
+      const priceUpdateData = encodePriceUpdateData(priceData ?? undefined)
+
       console.log('🔵 Trade struct:', {
         trader: trade.trader,
         pairIndex: trade.pairIndex.toString(),
@@ -174,20 +165,11 @@ export function useOstiumTrade() {
         tp: trade.tp.toString(),
         sl: trade.sl.toString(),
       })
+      console.log('🔵 Order type:', ORDER_TYPE.MARKET)
       console.log('🔵 Slippage:', slippage.toString(), `(${slippageBps} bps)`)
 
-      // Encode price update data (start with empty, may need oracle data)
-      const priceUpdateData = encodePriceUpdateData(priceData ?? undefined)
-
-      // Encode approve call
-      const approveData = encodeFunctionData({
-        abi: ERC20_ABI,
-        functionName: 'approve',
-        args: [OSTIUM_CONTRACTS.TRADING_STORAGE, collateralWei],
-      })
-
-      // Encode trade call
-      const tradeData = encodeFunctionData({
+      // MANUALLY ENCODE - don't let wagmi/Porto batch this
+      const calldata = encodeFunctionData({
         abi: OSTIUM_TRADING_ABI,
         functionName: 'openTrade',
         args: [
@@ -199,61 +181,60 @@ export function useOstiumTrade() {
         ],
       })
 
-      // Check if we need approval
-      const needsApproval = !currentAllowance || currentAllowance < collateralWei
+      console.log('🟢 Encoded calldata:', calldata)
+      console.log('🟢 Calldata length:', calldata.length, 'chars')
 
-      // Build calls array
-      const calls: { to: `0x${string}`; data: `0x${string}` }[] = []
-
-      if (needsApproval) {
-        console.log('🟡 Adding approval call for Trading Storage')
-        calls.push({
-          to: OSTIUM_CONTRACTS.USDC,
-          data: approveData,
-        })
+      // Verify calldata looks right
+      if (calldata.length < 500) {
+        throw new Error('Calldata too short - encoding may have failed')
       }
 
-      // Add trade call
-      calls.push({
+      // SIMULATE FIRST
+      try {
+        console.log('🟡 Simulating trade...')
+        await publicClient.call({
+          account: address,
+          to: OSTIUM_CONTRACTS.TRADING,
+          data: calldata,
+        })
+        console.log('🟢 Simulation passed!')
+      } catch (simError: any) {
+        console.error('🔴 Simulation failed:', simError)
+        if (simError.cause) {
+          console.error('🔴 Cause:', simError.cause)
+        }
+        throw new Error(`Trade simulation failed: ${simError.shortMessage || simError.message}`)
+      }
+
+      // SEND RAW TRANSACTION - bypass Porto batching
+      console.log('🟡 Sending transaction...')
+      const hash = await walletClient.sendTransaction({
         to: OSTIUM_CONTRACTS.TRADING,
-        data: tradeData,
+        data: calldata,
+        chain: arbitrum,
+        value: BigInt(0),
       })
 
-      console.log('🔵 Sending', calls.length, 'batched calls')
-
-      setStep('pending')
-
-      // Use EIP-5792 sendCalls
-      const result = await sendCallsAsync({
-        calls,
-        capabilities: {
-          atomicBatch: { supported: true },
-        },
-      })
-
-      console.log('🟢 Calls sent:', result)
-      setCallsId(result.id)
+      console.log('🟢 Transaction sent:', hash)
+      setTxHash(hash)
       setStep('success')
       
-      // Refetch allowance
-      refetchAllowance()
-      
-      return result.id
+      return hash
     } catch (error: any) {
       console.error('Trade execution error:', error)
       setStep('error')
       setErrorMessage(error.shortMessage || error.message || 'Trade failed')
       throw error
     }
-  }, [address, chainId, currentAllowance, sendCallsAsync, switchChainAsync, refetchAllowance])
+  }, [address, walletClient, publicClient, chainId, currentAllowance, switchChainAsync, approveUSDC, refetchAllowance])
 
   /**
-   * Close an open position
+   * Close an open position using direct sendTransaction
    */
   const closePosition = useCallback(async (pairIndex: number, positionIndex: number) => {
-    if (!address) throw new Error('Wallet not connected')
+    if (!address || !walletClient) throw new Error('Wallet not connected')
 
-    setStep('pending')
+    setStep('trading')
     setErrorMessage(null)
 
     try {
@@ -261,102 +242,102 @@ export function useOstiumTrade() {
       const priceData = await fetchPairPrice(pairIndex)
       const priceUpdateData = encodePriceUpdateData(priceData ?? undefined)
 
-      const closeData = encodeFunctionData({
+      // Manually encode
+      const calldata = encodeFunctionData({
         abi: OSTIUM_TRADING_ABI,
         functionName: 'closeTradeMarket',
         args: [BigInt(pairIndex), BigInt(positionIndex), priceUpdateData],
       })
 
-      const result = await sendCallsAsync({
-        calls: [{
-          to: OSTIUM_CONTRACTS.TRADING,
-          data: closeData,
-        }],
+      console.log('🟢 Close position calldata:', calldata)
+
+      // Direct transaction
+      const hash = await walletClient.sendTransaction({
+        to: OSTIUM_CONTRACTS.TRADING,
+        data: calldata,
+        chain: arbitrum,
+        value: BigInt(0),
       })
 
-      console.log('🟢 Close position sent:', result)
-      setCallsId(result.id)
+      console.log('🟢 Close position tx:', hash)
+      setTxHash(hash)
       setStep('success')
-      return result.id
+      return hash
     } catch (error: any) {
       console.error('Close position error:', error)
       setStep('error')
       setErrorMessage(error.shortMessage || error.message || 'Failed to close position')
       throw error
     }
-  }, [address, sendCallsAsync])
+  }, [address, walletClient])
 
   /**
    * Update take profit
    */
   const updateTakeProfit = useCallback(async (pairIndex: number, positionIndex: number, newTp: number) => {
-    if (!address) throw new Error('Wallet not connected')
+    if (!address || !walletClient) throw new Error('Wallet not connected')
 
-    // TP price encoding - need to verify format with Ostium
+    // TP price encoding - using 1e10 precision
     const tpWei = BigInt(Math.floor(newTp * 1e10))
 
     try {
-      const updateData = encodeFunctionData({
+      const calldata = encodeFunctionData({
         abi: OSTIUM_TRADING_ABI,
         functionName: 'updateTp',
         args: [BigInt(pairIndex), BigInt(positionIndex), tpWei],
       })
 
-      const result = await sendCallsAsync({
-        calls: [{
-          to: OSTIUM_CONTRACTS.TRADING,
-          data: updateData,
-        }],
+      const hash = await walletClient.sendTransaction({
+        to: OSTIUM_CONTRACTS.TRADING,
+        data: calldata,
+        chain: arbitrum,
+        value: BigInt(0),
       })
 
-      setCallsId(result.id)
-      return result.id
+      setTxHash(hash)
+      return hash
     } catch (error: any) {
       console.error('Update TP error:', error)
       throw error
     }
-  }, [address, sendCallsAsync])
+  }, [address, walletClient])
 
   /**
    * Update stop loss
    */
   const updateStopLoss = useCallback(async (pairIndex: number, positionIndex: number, newSl: number) => {
-    if (!address) throw new Error('Wallet not connected')
+    if (!address || !walletClient) throw new Error('Wallet not connected')
 
-    // SL price encoding - need to verify format with Ostium
+    // SL price encoding - using 1e10 precision
     const slWei = BigInt(Math.floor(newSl * 1e10))
 
     try {
-      const updateData = encodeFunctionData({
+      const calldata = encodeFunctionData({
         abi: OSTIUM_TRADING_ABI,
         functionName: 'updateSl',
         args: [BigInt(pairIndex), BigInt(positionIndex), slWei],
       })
 
-      const result = await sendCallsAsync({
-        calls: [{
-          to: OSTIUM_CONTRACTS.TRADING,
-          data: updateData,
-        }],
+      const hash = await walletClient.sendTransaction({
+        to: OSTIUM_CONTRACTS.TRADING,
+        data: calldata,
+        chain: arbitrum,
+        value: BigInt(0),
       })
 
-      setCallsId(result.id)
-      return result.id
+      setTxHash(hash)
+      return hash
     } catch (error: any) {
       console.error('Update SL error:', error)
       throw error
     }
-  }, [address, sendCallsAsync])
+  }, [address, walletClient])
 
   const reset = useCallback(() => {
     setStep('idle')
-    setCallsId(null)
+    setTxHash(null)
     setErrorMessage(null)
   }, [])
-
-  // Determine if calls are confirmed
-  const isConfirmed = callsStatus?.status === 'success'
-  const txHash = (callsStatus as any)?.receipts?.[0]?.transactionHash as `0x${string}` | undefined
 
   return {
     // Actions
@@ -364,20 +345,19 @@ export function useOstiumTrade() {
     closePosition,
     updateTakeProfit,
     updateStopLoss,
-    simulateTrade,
+    approveUSDC,
     reset,
     
     // State
     step,
-    isPending: isSending || step === 'switching' || step === 'pending',
-    isSuccess: step === 'success' && isConfirmed,
+    isPending: step === 'switching' || step === 'approving' || step === 'trading',
+    isSuccess: step === 'success',
     isSwitchingChain: step === 'switching',
+    isApproving: step === 'approving',
     error: errorMessage,
     
     // Transaction info
     txHash,
-    callsId,
-    callsStatus,
     
     // Allowance
     currentAllowance,
