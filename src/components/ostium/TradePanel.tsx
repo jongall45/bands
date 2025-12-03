@@ -136,7 +136,7 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
     !isPending
 
   return (
-    <div className="p-4 space-y-4 pb-32">
+    <div className="p-4 space-y-4 pb-40">
       {/* No ETH for Gas Warning */}
       {!hasEnoughGas && (
         <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4">

@@ -32,7 +32,14 @@ export default function OstiumTradingPage() {
     chainId: arbitrum.id,
   })
 
+  // Check Arbitrum ETH balance for gas
+  const { data: ethBalance, refetch: refetchEthBalance } = useBalance({
+    address,
+    chainId: arbitrum.id,
+  })
+
   const hasArbitrumUsdc = arbitrumBalance && parseFloat(arbitrumBalance.formatted) > 0
+  const hasArbitrumEth = ethBalance && parseFloat(ethBalance.formatted) > 0.0001
 
   useEffect(() => {
     if (!isConnected) {
@@ -59,7 +66,7 @@ export default function OstiumTradingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black pb-36">
+    <div className="min-h-screen bg-black pb-44">
       <div className="max-w-[430px] mx-auto">
         {/* Header */}
         <header 
@@ -108,32 +115,29 @@ export default function OstiumTradingPage() {
         {/* Balance Bar */}
         <div className="bg-[#0a0a0a] border-b border-white/[0.04] px-4 py-3">
           <div className="flex items-center justify-between">
-            <div>
-              <span className="text-white/40 text-xs">Arbitrum USDC</span>
-              <div className="flex items-center gap-2">
-                <span className="text-white font-bold text-lg">
+            <div className="flex items-center gap-4">
+              {/* USDC Balance */}
+              <div>
+                <span className="text-white/40 text-xs">Arbitrum USDC</span>
+                <div className="text-white font-bold">
                   ${arbitrumBalance ? parseFloat(arbitrumBalance.formatted).toFixed(2) : '0.00'}
-                </span>
-                {!hasArbitrumUsdc && !balanceLoading && (
-                  <button
-                    onClick={() => setShowBridgeModal(true)}
-                    className="flex items-center gap-1 text-[#ef4444] text-xs font-medium hover:underline"
-                  >
-                    <ArrowRightLeft className="w-3 h-3" />
-                    Bridge USDC
-                  </button>
-                )}
+                </div>
+              </div>
+              {/* ETH Balance */}
+              <div>
+                <span className="text-white/40 text-xs">ETH (Gas)</span>
+                <div className={`font-bold ${hasArbitrumEth ? 'text-green-400' : 'text-orange-400'}`}>
+                  {ethBalance ? parseFloat(ethBalance.formatted).toFixed(5) : '0.00000'}
+                </div>
               </div>
             </div>
-            {hasArbitrumUsdc && (
-              <button
-                onClick={() => setShowBridgeModal(true)}
-                className="flex items-center gap-1.5 bg-white/[0.05] hover:bg-white/[0.08] px-3 py-1.5 rounded-lg text-white/60 text-xs transition-colors"
-              >
-                <ArrowRightLeft className="w-3.5 h-3.5" />
-                Bridge More
-              </button>
-            )}
+            <button
+              onClick={() => setShowBridgeModal(true)}
+              className="flex items-center gap-1.5 bg-white/[0.05] hover:bg-white/[0.08] px-3 py-1.5 rounded-lg text-white/60 text-xs transition-colors"
+            >
+              <ArrowRightLeft className="w-3.5 h-3.5" />
+              Bridge More
+            </button>
           </div>
         </div>
 
@@ -218,6 +222,7 @@ export default function OstiumTradingPage() {
           onClose={() => setShowBridgeModal(false)}
           onSuccess={() => {
             refetchBalance()
+            refetchEthBalance()
             setShowBridgeModal(false)
           }}
         />
