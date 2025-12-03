@@ -333,11 +333,11 @@ function EventDetailPanel({
   })
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-50 flex items-end justify-center">
       <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={onClose} />
       
       <div 
-        className="absolute bottom-0 left-0 right-0 bg-[#0a0a0a] border-t border-white/[0.1] rounded-t-3xl max-h-[85vh] overflow-hidden flex flex-col"
+        className="relative w-full max-w-[430px] bg-[#0a0a0a] border-t border-white/[0.1] rounded-t-3xl max-h-[85vh] overflow-hidden flex flex-col"
         style={{ paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))' }}
       >
         {/* Handle */}
@@ -456,7 +456,7 @@ function EventDetailPanel({
   )
 }
 
-// Trading Panel - Fixed bottom padding
+// Trading Panel - Constrained width
 function TradingPanel({ market, onClose }: { market: PolymarketMarket; onClose: () => void }) {
   const [side, setSide] = useState<'YES' | 'NO'>('YES')
   const [amount, setAmount] = useState('')
@@ -469,11 +469,11 @@ function TradingPanel({ market, onClose }: { market: PolymarketMarket; onClose: 
   const potentialProfit = potentialPayout - amountNum
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-50 flex items-end justify-center">
       <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={onClose} />
       
       <div 
-        className="absolute bottom-0 left-0 right-0 bg-[#0a0a0a] border-t border-white/[0.1] rounded-t-3xl max-h-[85vh] overflow-y-auto"
+        className="relative w-full max-w-[430px] bg-[#0a0a0a] border-t border-white/[0.1] rounded-t-3xl max-h-[85vh] overflow-y-auto"
         style={{ paddingBottom: 'calc(100px + env(safe-area-inset-bottom, 0px))' }}
       >
         {/* Handle */}
@@ -572,13 +572,17 @@ function TradingPanel({ market, onClose }: { market: PolymarketMarket; onClose: 
             </div>
           )}
 
-          {/* Polygon Notice */}
+          {/* Why External Link Notice */}
           <div className="bg-[#3B5EE8]/10 border border-[#3B5EE8]/20 rounded-xl p-3 mb-4">
             <div className="flex items-start gap-2">
               <Info className="w-4 h-4 text-[#7B9EFF] mt-0.5 flex-shrink-0" />
-              <p className="text-[#7B9EFF] text-xs">
-                Polymarket trades on Polygon. Bridge USDC from Base → Polygon in the Swap tab.
-              </p>
+              <div className="text-[#7B9EFF] text-xs space-y-1">
+                <p className="font-medium">Trade on Polymarket.com</p>
+                <p className="text-[#7B9EFF]/70">
+                  Polymarket requires Polygon network + their specific wallet registration. 
+                  Connect your wallet on their site to trade.
+                </p>
+              </div>
             </div>
           </div>
 
