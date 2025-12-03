@@ -32,25 +32,33 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
     clearError,
   } = useBridgeFixed()
 
+  // Track if we've initialized for this open session
+  const hasInitializedRef = useRef(false)
+
   // For portal - must be mounted on client
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  // Reset when modal opens
+  // Reset ONLY when modal first opens (not on every render)
   useEffect(() => {
-    if (isOpen) {
-      console.log('🟡 Modal opened, resetting state')
+    if (isOpen && !hasInitializedRef.current) {
+      console.log('🟡 Modal opened, initializing (once)')
+      hasInitializedRef.current = true
       setInputValue('')
       setIsSuccess(false)
-      clearError()
       // Focus input after a brief delay
       setTimeout(() => {
         inputRef.current?.focus()
-        console.log('🟡 Input focused:', inputRef.current)
+        console.log('🟡 Input focused')
       }, 200)
     }
-  }, [isOpen, clearError])
+    
+    // Reset the ref when modal closes
+    if (!isOpen) {
+      hasInitializedRef.current = false
+    }
+  }, [isOpen])
 
   // Debounced quote fetch when input changes
   useEffect(() => {
