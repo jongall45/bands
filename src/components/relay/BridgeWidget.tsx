@@ -1,9 +1,11 @@
 'use client'
 
-import { useAccount } from 'wagmi'
+import { useAccount, useWalletClient } from 'wagmi'
 import { SwapWidget as RelaySwapWidget } from '@reservoir0x/relay-kit-ui'
+import { adaptViemWallet } from '@reservoir0x/relay-sdk'
 import { Loader2 } from 'lucide-react'
 import type { Token } from '@reservoir0x/relay-kit-ui'
+import { useMemo } from 'react'
 
 // USDC on Base - default "from" for bridging
 const USDC_BASE: Token = {
@@ -31,6 +33,13 @@ interface BridgeWidgetProps {
 
 export function BridgeWidget({ onSuccess }: BridgeWidgetProps) {
   const { address, isConnected } = useAccount()
+  const { data: walletClient } = useWalletClient()
+
+  // Adapt the wagmi wallet client for Relay SDK
+  const adaptedWallet = useMemo(() => {
+    if (!walletClient) return undefined
+    return adaptViemWallet(walletClient)
+  }, [walletClient])
 
   if (!isConnected || !address) {
     return (
@@ -48,6 +57,7 @@ export function BridgeWidget({ onSuccess }: BridgeWidgetProps) {
         toToken={USDC_ARBITRUM}
         defaultToAddress={address}
         defaultAmount="10"
+        wallet={adaptedWallet}
         supportedWalletVMs={['evm']}
         lockFromToken={true}
         onSwapSuccess={(data) => {

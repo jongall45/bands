@@ -1,9 +1,11 @@
 'use client'
 
-import { useAccount } from 'wagmi'
+import { useAccount, useWalletClient } from 'wagmi'
 import { SwapWidget as RelaySwapWidget } from '@reservoir0x/relay-kit-ui'
+import { adaptViemWallet } from '@reservoir0x/relay-sdk'
 import { Loader2 } from 'lucide-react'
 import type { Token } from '@reservoir0x/relay-kit-ui'
+import { useMemo } from 'react'
 
 // Default to USDC on Base as the "from" token
 const USDC_BASE: Token = {
@@ -21,6 +23,13 @@ interface SwapWidgetProps {
 
 export function SwapWidget({ onSuccess }: SwapWidgetProps) {
   const { address, isConnected } = useAccount()
+  const { data: walletClient } = useWalletClient()
+
+  // Adapt the wagmi wallet client for Relay SDK
+  const adaptedWallet = useMemo(() => {
+    if (!walletClient) return undefined
+    return adaptViemWallet(walletClient)
+  }, [walletClient])
 
   if (!isConnected || !address) {
     return (
@@ -37,9 +46,11 @@ export function SwapWidget({ onSuccess }: SwapWidgetProps) {
         fromToken={USDC_BASE}
         defaultToAddress={address}
         defaultAmount="10"
+        wallet={adaptedWallet}
         supportedWalletVMs={['evm']}
         singleChainMode={true}
         lockChainId={8453}
+        lockFromToken={true}
         onSwapSuccess={(data) => {
           console.log('[Relay] Swap success:', data)
           onSuccess?.(data)
