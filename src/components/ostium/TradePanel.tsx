@@ -20,7 +20,7 @@ interface TradePanelProps {
 
 export function OstiumTradePanel({ pair }: TradePanelProps) {
   const { address, isConnected } = useAccount()
-  const { openTrade, isPending, isSuccess, isSwitchingChain, isApproving, error, txHash, reset } = useOstiumTrade()
+  const { openTrade, isPending, isSuccess, isSwitchingChain, error, txHash, callsStatus, reset } = useOstiumTrade()
   const { price, isLoading: priceLoading } = useOstiumPrice(pair.id)
 
   const [isLong, setIsLong] = useState(true)
@@ -386,7 +386,7 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
         {isPending ? (
           <>
             <Loader2 className="w-5 h-5 animate-spin" />
-            {isSwitchingChain ? 'Switching to Arbitrum...' : isApproving ? 'Approving USDC...' : 'Opening Position...'}
+            {isSwitchingChain ? 'Switching to Arbitrum...' : 'Opening Position...'}
           </>
         ) : !isConnected ? (
           'Connect Wallet'
