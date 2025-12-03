@@ -51,6 +51,15 @@ export const OSTIUM_PAIRS = [
 export type OstiumPair = typeof OSTIUM_PAIRS[number]
 export type OstiumCategory = 'crypto' | 'forex' | 'commodity' | 'index' | 'stock'
 
+// Max leverage by category (based on Ostium limits)
+export const MAX_LEVERAGE_BY_CATEGORY: Record<OstiumCategory, number> = {
+  crypto: 100,
+  forex: 100,
+  commodity: 50,
+  index: 50,
+  stock: 25, // Stocks have lower max leverage
+}
+
 // Builder fee config (optional - for earning referral fees)
 // Set your address here to earn fees on trades through your app
 export const BUILDER_CONFIG = {

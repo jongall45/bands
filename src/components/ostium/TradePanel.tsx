@@ -6,7 +6,7 @@ import { formatUnits } from 'viem'
 import { arbitrum } from 'wagmi/chains'
 import { useOstiumTrade } from '@/hooks/useOstiumTrade'
 import { useOstiumPrice } from '@/hooks/useOstiumPrices'
-import { ACTIVE_CONFIG, type OstiumPair } from '@/lib/ostium/constants'
+import { ACTIVE_CONFIG, MAX_LEVERAGE_BY_CATEGORY, type OstiumPair, type OstiumCategory } from '@/lib/ostium/constants'
 import { ERC20_ABI } from '@/lib/ostium/abi'
 import { 
   Loader2, TrendingUp, TrendingDown, Info, AlertCircle, 
@@ -29,12 +29,20 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
   const [takeProfit, setTakeProfit] = useState('')
   const [stopLoss, setStopLoss] = useState('')
 
+  // Get max leverage for this pair's category
+  const maxLeverage = MAX_LEVERAGE_BY_CATEGORY[pair.category as OstiumCategory] || 50
+
   // Reset state when pair changes
   useEffect(() => {
     reset()
     setTakeProfit('')
     setStopLoss('')
-  }, [pair.id, reset])
+    // Cap leverage to new pair's max
+    const newMax = MAX_LEVERAGE_BY_CATEGORY[pair.category as OstiumCategory] || 50
+    if (leverage > newMax) {
+      setLeverage(Math.min(10, newMax))
+    }
+  }, [pair.id, pair.category, reset, leverage])
 
   // Fetch USDC balance on Arbitrum
   const { data: usdcBalance, refetch: refetchBalance } = useReadContract({
@@ -222,7 +230,10 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
       {/* Leverage Slider */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <label className="text-white/40 text-sm">Leverage</label>
+          <label className="text-white/40 text-sm">
+            Leverage 
+            <span className="text-white/30 ml-1">(max {maxLeverage}x)</span>
+          </label>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setLeverage(Math.max(2, leverage - 5))}
@@ -232,7 +243,7 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
             </button>
             <span className="text-white font-mono text-lg w-14 text-center">{leverage}x</span>
             <button
-              onClick={() => setLeverage(Math.min(100, leverage + 5))}
+              onClick={() => setLeverage(Math.min(maxLeverage, leverage + 5))}
               className="w-7 h-7 bg-white/[0.05] hover:bg-white/[0.1] rounded-lg text-white/60 text-sm transition-colors"
             >
               +
@@ -242,8 +253,8 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
         <input
           type="range"
           min="2"
-          max="100"
-          value={leverage}
+          max={maxLeverage}
+          value={Math.min(leverage, maxLeverage)}
           onChange={(e) => setLeverage(parseInt(e.target.value))}
           className="w-full h-2 bg-white/[0.1] rounded-full appearance-none cursor-pointer
             [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 
@@ -253,9 +264,9 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
         />
         <div className="flex justify-between text-white/30 text-xs">
           <span>2x</span>
-          <span>25x</span>
-          <span>50x</span>
-          <span>100x</span>
+          <span>{Math.round(maxLeverage / 4)}x</span>
+          <span>{Math.round(maxLeverage / 2)}x</span>
+          <span>{maxLeverage}x</span>
         </div>
       </div>
 
