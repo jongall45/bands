@@ -3,15 +3,16 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAccount, useBalance } from 'wagmi'
-import { ArrowUpDown, ArrowRightLeft, Repeat, RefreshCw, ToggleLeft, ToggleRight } from 'lucide-react'
-import { EnhancedSwapWidget } from '@/components/relay/EnhancedSwapWidget'
-import { EnhancedBridgeWidget } from '@/components/relay/EnhancedBridgeWidget'
+import { ArrowUpDown, ArrowRightLeft, Repeat, RefreshCw, Settings } from 'lucide-react'
 import { CustomSwap } from '@/components/relay/CustomSwap'
+import { RelaySwapWidget } from '@/components/relay/RelaySwapWidget'
+import { RelayBridgeWidget } from '@/components/relay/RelayBridgeWidget'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
 import { base } from 'viem/chains'
 
 type Tab = 'swap' | 'bridge'
+type UIMode = 'custom' | 'relay'
 
 const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
 
@@ -20,8 +21,9 @@ export default function SwapPage() {
   const searchParams = useSearchParams()
   const { isConnected, address } = useAccount()
   const [activeTab, setActiveTab] = useState<Tab>('swap')
+  const [uiMode, setUIMode] = useState<UIMode>('custom')
   const [recentTx, setRecentTx] = useState<string | null>(null)
-  const [useCustomUI, setUseCustomUI] = useState(true) // Default to custom UI which works
+  const [showSettings, setShowSettings] = useState(false)
 
   // Get USDC balance
   const { data: usdcBalance } = useBalance({
@@ -47,8 +49,8 @@ export default function SwapPage() {
   }, [searchParams])
 
   const handleSuccess = (data: any) => {
-    const hash = data?.txHash || data?.hash || data
-    if (typeof hash === 'string') {
+    const hash = data?.txHash || data?.hash || (typeof data === 'string' ? data : null)
+    if (hash) {
       setRecentTx(hash)
     }
   }
@@ -78,7 +80,7 @@ export default function SwapPage() {
       <div className="aura aura-3" />
 
       <div className="max-w-[430px] mx-auto relative z-10 pb-24">
-        {/* Header with safe area */}
+        {/* Header */}
         <header 
           className="flex items-center justify-between px-5 py-4"
           style={{ paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))' }}
@@ -87,10 +89,18 @@ export default function SwapPage() {
             <h1 className="text-gray-900 font-semibold text-xl">Swap & Bridge</h1>
             <p className="text-gray-500 text-sm">Trade tokens across chains</p>
           </div>
-          <LogoInline size="sm" />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className="p-2 text-gray-400 hover:text-gray-600"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+            <LogoInline size="sm" />
+          </div>
         </header>
 
-        {/* Wallet Badge */}
+        {/* Wallet Badge with Balance */}
         {address && (
           <div className="px-5 pb-3">
             <div className="inline-flex items-center gap-3 bg-[#111] rounded-full px-4 py-2">
@@ -102,9 +112,43 @@ export default function SwapPage() {
               </div>
               {usdcBalance && (
                 <span className="text-[#ef4444] text-xs font-semibold">
-                  ${parseFloat(usdcBalance.formatted).toFixed(2)}
+                  ${parseFloat(usdcBalance.formatted).toFixed(2)} USDC
                 </span>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Settings Panel */}
+        {showSettings && (
+          <div className="px-5 pb-4">
+            <div className="bg-[#111] border border-white/[0.06] rounded-2xl p-4">
+              <p className="text-white/40 text-xs mb-3">Swap Interface</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setUIMode('custom')}
+                  className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all ${
+                    uiMode === 'custom'
+                      ? 'bg-[#ef4444] text-white'
+                      : 'bg-white/[0.05] text-white/40'
+                  }`}
+                >
+                  bands UI
+                </button>
+                <button
+                  onClick={() => setUIMode('relay')}
+                  className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all ${
+                    uiMode === 'relay'
+                      ? 'bg-[#ef4444] text-white'
+                      : 'bg-white/[0.05] text-white/40'
+                  }`}
+                >
+                  Relay Widget
+                </button>
+              </div>
+              <p className="text-white/30 text-[10px] mt-2 text-center">
+                {uiMode === 'custom' ? 'Custom UI with full wallet support' : 'Native Relay widget (experimental)'}
+              </p>
             </div>
           </div>
         )}
@@ -140,38 +184,18 @@ export default function SwapPage() {
         {/* Widget Container */}
         <div className="px-5">
           {activeTab === 'swap' ? (
-            useCustomUI ? (
+            uiMode === 'custom' ? (
               <CustomSwap onSuccess={handleSuccess} />
             ) : (
-              <EnhancedSwapWidget onSuccess={handleSuccess} />
+              <RelaySwapWidget onSuccess={handleSuccess} />
             )
           ) : (
-            useCustomUI ? (
+            uiMode === 'custom' ? (
               <CustomSwap onSuccess={handleSuccess} />
             ) : (
-              <EnhancedBridgeWidget onSuccess={handleSuccess} />
+              <RelayBridgeWidget onSuccess={handleSuccess} />
             )
           )}
-        </div>
-
-        {/* UI Toggle */}
-        <div className="px-5 mt-4">
-          <button
-            onClick={() => setUseCustomUI(!useCustomUI)}
-            className="w-full flex items-center justify-between p-3 bg-[#111] border border-white/[0.06] rounded-2xl"
-          >
-            <span className="text-white/50 text-xs">
-              {useCustomUI ? 'Using bands UI' : 'Using Relay Widget'}
-            </span>
-            <div className="flex items-center gap-2">
-              <span className="text-white/30 text-xs">Switch</span>
-              {useCustomUI ? (
-                <ToggleRight className="w-5 h-5 text-[#ef4444]" />
-              ) : (
-                <ToggleLeft className="w-5 h-5 text-white/30" />
-              )}
-            </div>
-          </button>
         </div>
 
         {/* Recent Transaction */}
@@ -191,9 +215,8 @@ export default function SwapPage() {
           </div>
         )}
 
-        {/* Info Section */}
+        {/* Info Cards */}
         <div className="px-5 mt-6 space-y-4">
-          {/* Quick Info Cards */}
           <div className="grid grid-cols-2 gap-3">
             <div className="card p-4">
               <p className="text-white/40 text-xs mb-1">Swap</p>
@@ -320,15 +343,15 @@ const swapStyles = `
     z-index: 1;
   }
 
-  /* Relay Widget Container Overrides */
-  .relay-swap-container,
-  .relay-bridge-container {
+  /* Relay Widget Overrides */
+  .relay-widget-wrapper .relay-swap-container,
+  .relay-widget-wrapper .relay-bridge-container {
     border-radius: 24px;
     overflow: hidden;
   }
 
-  .relay-swap-container > div:last-child,
-  .relay-bridge-container > div:last-child {
+  .relay-widget-wrapper .relay-swap-container > div,
+  .relay-widget-wrapper .relay-bridge-container > div {
     background: #111111 !important;
     border: 1px solid rgba(255, 255, 255, 0.06) !important;
     border-radius: 24px !important;
