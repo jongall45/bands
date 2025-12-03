@@ -3,9 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAccount } from 'wagmi'
-import { ArrowLeft, ArrowUpDown, ArrowRightLeft, Repeat, RefreshCw } from 'lucide-react'
-import Link from 'next/link'
-import { SwapWidget } from '@/components/relay/SwapWidget'
+import { ArrowUpDown, ArrowRightLeft, Repeat, RefreshCw } from 'lucide-react'
+import { CustomSwap } from '@/components/relay/CustomSwap'
 import { BridgeWidget } from '@/components/relay/BridgeWidget'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
@@ -34,10 +33,8 @@ export default function SwapPage() {
     }
   }, [searchParams])
 
-  const handleSuccess = (data: any) => {
-    if (data?.txHash) {
-      setRecentTx(data.txHash)
-    }
+  const handleSuccess = (txHash: string) => {
+    setRecentTx(txHash)
   }
 
   if (!isConnected) {
@@ -108,29 +105,31 @@ export default function SwapPage() {
         {/* Widget Container */}
         <div className="px-5">
           {activeTab === 'swap' ? (
-            <SwapWidget onSuccess={handleSuccess} />
+            <CustomSwap onSuccess={handleSuccess} />
           ) : (
             <BridgeWidget onSuccess={handleSuccess} />
           )}
         </div>
 
-        {/* Info Section */}
-        <div className="px-5 mt-6 space-y-4">
-          {/* Recent Transaction */}
-          {recentTx && (
+        {/* Recent Transaction */}
+        {recentTx && (
+          <div className="px-5 mt-4">
             <div className="bg-green-500/10 border border-green-500/20 rounded-2xl p-4">
               <p className="text-green-400 text-sm font-medium">Transaction Submitted</p>
               <a
-                href={`https://relay.link/transaction/${recentTx}`}
+                href={`https://basescan.org/tx/${recentTx}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-green-400/60 text-xs hover:underline mt-1 block"
               >
-                View on Relay →
+                View on BaseScan →
               </a>
             </div>
-          )}
+          </div>
+        )}
 
+        {/* Info Section */}
+        <div className="px-5 mt-6 space-y-4">
           {/* Quick Info Cards */}
           <div className="grid grid-cols-2 gap-3">
             <div className="card p-4">
@@ -257,19 +256,4 @@ const swapStyles = `
     position: relative;
     z-index: 1;
   }
-
-  /* Relay Widget Overrides */
-  .relay-widget-container {
-    border-radius: 24px;
-    overflow: hidden;
-  }
-
-  /* Override Relay default styles */
-  .relay-widget-container [data-testid="swap-widget"],
-  .relay-widget-container > div {
-    background: #111111 !important;
-    border: 1px solid rgba(255, 255, 255, 0.06) !important;
-    border-radius: 24px !important;
-  }
 `
-
