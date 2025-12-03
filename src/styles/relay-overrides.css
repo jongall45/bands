@@ -1,0 +1,180 @@
+/* Override Relay widget styles to match bands.cash theme */
+
+/* Widget container */
+.relay-widget-container {
+  --relay-primary: #ef4444;
+  --relay-primary-hover: #dc2626;
+}
+
+/* Make the widget blend with our dark cards */
+[class*="SwapWidget"],
+[class*="relay"] {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif !important;
+}
+
+/* Override backgrounds */
+[class*="SwapWidget"] > div,
+[class*="swap-widget"] {
+  background: #111111 !important;
+  border-radius: 24px !important;
+}
+
+/* Input styling */
+[class*="SwapWidget"] input,
+[class*="relay"] input {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: white !important;
+  border-radius: 12px !important;
+}
+
+[class*="SwapWidget"] input:focus,
+[class*="relay"] input:focus {
+  border-color: #ef4444 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
+}
+
+/* Button overrides */
+[class*="SwapWidget"] button[type="submit"],
+[class*="relay"] button[class*="primary"],
+[class*="relay"] button[class*="swap"],
+[class*="relay"] button[class*="confirm"] {
+  background: #ef4444 !important;
+  color: white !important;
+  border-radius: 16px !important;
+  font-weight: 600 !important;
+  border: none !important;
+  transition: background 0.2s !important;
+}
+
+[class*="SwapWidget"] button[type="submit"]:hover,
+[class*="relay"] button[class*="primary"]:hover {
+  background: #dc2626 !important;
+}
+
+[class*="SwapWidget"] button:disabled,
+[class*="relay"] button:disabled {
+  background: rgba(239, 68, 68, 0.5) !important;
+  cursor: not-allowed !important;
+}
+
+/* Token selector buttons */
+[class*="SwapWidget"] [class*="token-select"],
+[class*="relay"] [class*="token-select"],
+[class*="relay"] [class*="TokenSelector"] {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 12px !important;
+  color: white !important;
+}
+
+[class*="SwapWidget"] [class*="token-select"]:hover,
+[class*="relay"] [class*="token-select"]:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Chain selector */
+[class*="relay"] [class*="chain"],
+[class*="relay"] [class*="Chain"] {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 8px !important;
+}
+
+/* Dropdown menus */
+[class*="relay"] [class*="dropdown"],
+[class*="relay"] [class*="Dropdown"],
+[class*="relay"] [class*="menu"],
+[class*="relay"] [class*="Menu"] {
+  background: #1a1a1a !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+}
+
+[class*="relay"] [class*="dropdown-item"]:hover,
+[class*="relay"] [class*="menu-item"]:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Quote/rate display */
+[class*="relay"] [class*="quote"],
+[class*="relay"] [class*="Quote"],
+[class*="relay"] [class*="rate"],
+[class*="relay"] [class*="Rate"] {
+  background: rgba(255, 255, 255, 0.02) !important;
+  border-radius: 12px !important;
+  padding: 12px !important;
+}
+
+/* Text colors */
+[class*="relay"] [class*="label"],
+[class*="relay"] [class*="Label"],
+[class*="relay"] span[class*="secondary"] {
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+[class*="relay"] [class*="value"],
+[class*="relay"] [class*="Value"],
+[class*="relay"] span[class*="primary"] {
+  color: white !important;
+}
+
+/* Loading states */
+[class*="relay"] [class*="loading"],
+[class*="relay"] [class*="Loading"] {
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Success states */
+[class*="relay"] [class*="success"],
+[class*="relay"] [class*="Success"] {
+  color: #22c55e !important;
+}
+
+/* Error states */
+[class*="relay"] [class*="error"],
+[class*="relay"] [class*="Error"] {
+  color: #ef4444 !important;
+  background: rgba(239, 68, 68, 0.1) !important;
+  border-color: rgba(239, 68, 68, 0.2) !important;
+}
+
+/* Swap direction button */
+[class*="relay"] [class*="swap-direction"],
+[class*="relay"] [class*="SwapDirection"],
+[class*="relay"] button[class*="switch"] {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: white !important;
+}
+
+[class*="relay"] [class*="swap-direction"]:hover,
+[class*="relay"] button[class*="switch"]:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Fee breakdown */
+[class*="relay"] [class*="fee"],
+[class*="relay"] [class*="Fee"] {
+  color: rgba(255, 255, 255, 0.6) !important;
+  font-size: 12px !important;
+}
+
+/* Modal overlays */
+[class*="relay"] [class*="modal"],
+[class*="relay"] [class*="Modal"],
+[class*="relay"] [class*="dialog"],
+[class*="relay"] [class*="Dialog"] {
+  background: #111111 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 24px !important;
+}
+
+[class*="relay"] [class*="overlay"],
+[class*="relay"] [class*="Overlay"] {
+  background: rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(4px) !important;
+}
+
