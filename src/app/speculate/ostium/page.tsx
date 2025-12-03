@@ -20,7 +20,8 @@ const USDC_ARBITRUM = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'
 export default function OstiumTradingPage() {
   const { isConnected, address } = useAccount()
   const router = useRouter()
-  const [selectedPair, setSelectedPair] = useState<OstiumPair>(OSTIUM_PAIRS.find(p => p.symbol === 'TSLA-USD') || OSTIUM_PAIRS[22])
+  // Default to BTC which is always open (24/7)
+  const [selectedPair, setSelectedPair] = useState<OstiumPair>(OSTIUM_PAIRS.find(p => p.symbol === 'BTC-USD') || OSTIUM_PAIRS[0])
   const [activeTab, setActiveTab] = useState<'trade' | 'positions'>('trade')
   const [showBridgeModal, setShowBridgeModal] = useState(false)
   const [hasCheckedBalance, setHasCheckedBalance] = useState(false)
@@ -66,7 +67,7 @@ export default function OstiumTradingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black pb-44">
+    <div className="min-h-screen bg-black overflow-y-auto pb-32">
       <div className="max-w-[430px] mx-auto">
         {/* Header */}
         <header 

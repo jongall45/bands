@@ -139,36 +139,28 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
 
   return (
     <div className="p-4 space-y-4 pb-40">
-      {/* No ETH for Gas Warning */}
+      {/* No ETH for Gas Warning - Compact */}
       {!hasEnoughGas && (
-        <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4">
-          <div className="flex items-start gap-3">
-            <Fuel className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h3 className="text-orange-400 font-semibold text-sm mb-1">
-                ⛽ ETH Required for Gas
-              </h3>
-              <p className="text-orange-400/70 text-xs mb-3">
-                Swap ~$1 USDC → ETH on Arbitrum to pay for transaction fees.
-              </p>
-              <button
-                onClick={() => setShowGasSwap(true)}
-                className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold text-sm rounded-xl transition-colors flex items-center justify-center gap-2"
-              >
-                <Fuel className="w-4 h-4" />
-                Get Gas ($1 USDC → ETH)
-              </button>
-            </div>
+        <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Fuel className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" />
+            <span className="text-orange-400 text-xs">Need ETH for gas</span>
           </div>
+          <button
+            onClick={() => setShowGasSwap(true)}
+            className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold text-xs rounded-lg transition-colors"
+          >
+            Get Gas
+          </button>
         </div>
       )}
 
-      {/* Market Status Warning */}
+      {/* Market Status Warning - Compact */}
       {!isMarketOpen && !priceLoading && (
-        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
-          <span className="text-yellow-400 text-sm">
-            Market is currently closed. Trading will resume when market opens.
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2 flex items-center gap-2">
+          <AlertCircle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
+          <span className="text-yellow-400 text-xs">
+            Market closed • Try BTC or ETH (24/7)
           </span>
         </div>
       )}
