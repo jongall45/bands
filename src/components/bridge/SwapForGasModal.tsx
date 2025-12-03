@@ -2,9 +2,9 @@
 
 import { useState, useCallback } from 'react'
 import { X, Fuel, Loader2, Check, AlertCircle } from 'lucide-react'
-import { useAccount, useBalance, useWalletClient, usePublicClient } from 'wagmi'
+import { useAccount, useBalance, useWalletClient, usePublicClient, useSwitchChain } from 'wagmi'
 import { arbitrum } from 'viem/chains'
-import { parseUnits, encodeFunctionData } from 'viem'
+import { parseUnits } from 'viem'
 
 // Arbitrum addresses
 const USDC_ARBITRUM = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'
@@ -69,9 +69,10 @@ interface Props {
 }
 
 export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = '1' }: Props) {
-  const { address } = useAccount()
-  const { data: walletClient } = useWalletClient({ chainId: arbitrum.id })
+  const { address, isConnected, chainId } = useAccount()
+  const { data: walletClient } = useWalletClient()
   const publicClient = usePublicClient({ chainId: arbitrum.id })
+  const { switchChainAsync } = useSwitchChain()
   
   const [amount, setAmount] = useState(suggestedAmount)
   const [isSwapping, setIsSwapping] = useState(false)
@@ -92,6 +93,8 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
     chainId: arbitrum.id,
   })
 
+  const isOnArbitrum = chainId === arbitrum.id
+
   const handleSwap = useCallback(async () => {
     if (!address || !walletClient || !publicClient) {
       setError('Wallet not connected')
@@ -106,9 +109,16 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
 
     setIsSwapping(true)
     setError(null)
-    setStatus('Preparing swap...')
 
     try {
+      // Switch to Arbitrum if needed
+      if (chainId !== arbitrum.id) {
+        setStatus('Switching to Arbitrum...')
+        await switchChainAsync({ chainId: arbitrum.id })
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+
+      setStatus('Preparing swap...')
       const amountIn = parseUnits(amount, 6) // USDC has 6 decimals
 
       // Check allowance
@@ -175,11 +185,11 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
     } finally {
       setIsSwapping(false)
     }
-  }, [address, walletClient, publicClient, amount, refetchUsdc, refetchEth, onSuccess])
+  }, [address, walletClient, publicClient, amount, chainId, switchChainAsync, refetchUsdc, refetchEth, onSuccess])
 
   const amountNum = parseFloat(amount) || 0
   const balanceNum = parseFloat(usdcBalance?.formatted || '0')
-  const canSwap = amountNum > 0 && amountNum <= balanceNum && !isSwapping
+  const canSwap = isConnected && amountNum > 0 && amountNum <= balanceNum && !isSwapping
 
   if (!isOpen) return null
 
@@ -220,6 +230,19 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
           </div>
         ) : (
           <>
+            {/* Wallet status */}
+            {isConnected && address && (
+              <div className="flex items-center gap-2 mb-3 p-2 bg-green-500/10 border border-green-500/20 rounded-xl">
+                <div className="w-2 h-2 bg-green-400 rounded-full" />
+                <span className="text-green-400 text-xs font-mono">
+                  {address.slice(0, 6)}...{address.slice(-4)}
+                </span>
+                {!isOnArbitrum && (
+                  <span className="text-orange-400 text-xs ml-auto">Will switch to Arbitrum</span>
+                )}
+              </div>
+            )}
+
             {/* Current balances */}
             <div className="bg-white/[0.03] rounded-xl p-3 mb-4">
               <div className="flex justify-between text-sm mb-2">
@@ -280,6 +303,8 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
                   <Loader2 className="w-5 h-5 animate-spin" />
                   {status}
                 </>
+              ) : !isConnected ? (
+                'Wallet not connected'
               ) : balanceNum <= 0 ? (
                 'No USDC on Arbitrum'
               ) : (
