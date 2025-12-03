@@ -123,13 +123,25 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: BridgeToAr
               
               <div className="flex items-center gap-3">
                 <input
-                  type="number"
+                  id="bridge-amount"
+                  name="bridge-amount"
+                  type="text"
+                  inputMode="decimal"
+                  pattern="[0-9]*\.?[0-9]*"
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  onChange={(e) => {
+                    // Only allow numbers and decimal point
+                    const val = e.target.value
+                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                      setAmount(val)
+                    }
+                  }}
                   placeholder="0.00"
-                  className="flex-1 bg-transparent text-white text-2xl font-medium outline-none placeholder:text-white/20"
+                  autoComplete="off"
+                  autoFocus
+                  className="flex-1 min-w-0 bg-transparent text-white text-2xl font-medium outline-none placeholder:text-white/20 focus:ring-0"
                 />
-                <div className="bg-[#ef4444] rounded-xl px-3 py-2 flex items-center gap-2">
+                <div className="bg-[#ef4444] rounded-xl px-3 py-2 flex items-center gap-2 flex-shrink-0">
                   <span className="text-white font-bold text-sm">$</span>
                   <span className="text-white font-semibold text-sm">USDC</span>
                 </div>
