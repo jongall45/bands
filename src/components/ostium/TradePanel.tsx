@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import { useAccount, useReadContract } from 'wagmi'
+import { useAccount, useReadContract, useBalance } from 'wagmi'
 import { formatUnits } from 'viem'
 import { arbitrum } from 'wagmi/chains'
 import { useOstiumTrade } from '@/hooks/useOstiumTrade'
@@ -52,6 +52,14 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
     args: address ? [address] : undefined,
     chainId: arbitrum.id,
   })
+
+  // Check ETH balance on Arbitrum for gas
+  const { data: ethBalanceData } = useBalance({
+    address,
+    chainId: arbitrum.id,
+  })
+  
+  const hasEnoughGas = ethBalanceData && parseFloat(ethBalanceData.formatted) > 0.0001
 
   // Refetch balance on success
   useEffect(() => {
@@ -122,10 +130,34 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
     collateralNum > 0 && 
     collateralNum <= balance &&
     isMarketOpen &&
+    hasEnoughGas &&
     !isPending
 
   return (
     <div className="p-4 space-y-4 pb-32">
+      {/* No ETH for Gas Warning */}
+      {!hasEnoughGas && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="text-red-400 font-semibold text-sm mb-1">
+                ⛽ ETH Required for Gas
+              </h3>
+              <p className="text-red-400/70 text-xs mb-3">
+                You need ETH on Arbitrum to pay for transaction gas. Use the Swap tab to convert some USDC → ETH.
+              </p>
+              <a
+                href="/swap"
+                className="inline-flex items-center gap-1.5 bg-red-500 hover:bg-red-600 text-white font-semibold text-xs px-4 py-2 rounded-lg transition-colors"
+              >
+                Go to Swap →
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Market Status Warning */}
       {!isMarketOpen && !priceLoading && (
         <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 flex items-center gap-2">
@@ -358,6 +390,8 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
           </>
         ) : !isConnected ? (
           'Connect Wallet'
+        ) : !hasEnoughGas ? (
+          '⛽ Need ETH for Gas'
         ) : !isMarketOpen ? (
           'Market Closed'
         ) : collateralNum > balance ? (
