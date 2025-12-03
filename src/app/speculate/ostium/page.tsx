@@ -2,27 +2,53 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAccount } from 'wagmi'
+import { useAccount, useBalance } from 'wagmi'
+import { arbitrum } from 'viem/chains'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { OstiumMarketSelector } from '@/components/ostium/MarketSelector'
 import { OstiumTradePanel } from '@/components/ostium/TradePanel'
 import { OstiumPositions } from '@/components/ostium/Positions'
 import { OstiumChart } from '@/components/ostium/Chart'
-import { ArrowLeft, RefreshCw, ExternalLink } from 'lucide-react'
+import { BridgeToArbitrumModal } from '@/components/bridge/BridgeToArbitrumModal'
+import { ArrowLeft, RefreshCw, ExternalLink, AlertCircle, ArrowRightLeft } from 'lucide-react'
 import Link from 'next/link'
 import { OSTIUM_PAIRS, type OstiumPair } from '@/lib/ostium/constants'
+
+// USDC on Arbitrum
+const USDC_ARBITRUM = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'
 
 export default function OstiumTradingPage() {
   const { isConnected, address } = useAccount()
   const router = useRouter()
   const [selectedPair, setSelectedPair] = useState<OstiumPair>(OSTIUM_PAIRS.find(p => p.symbol === 'TSLA-USD') || OSTIUM_PAIRS[22])
   const [activeTab, setActiveTab] = useState<'trade' | 'positions'>('trade')
+  const [showBridgeModal, setShowBridgeModal] = useState(false)
+  const [hasCheckedBalance, setHasCheckedBalance] = useState(false)
+
+  // Check Arbitrum USDC balance
+  const { data: arbitrumBalance, isLoading: balanceLoading, refetch: refetchBalance } = useBalance({
+    address,
+    token: USDC_ARBITRUM as `0x${string}`,
+    chainId: arbitrum.id,
+  })
+
+  const hasArbitrumUsdc = arbitrumBalance && parseFloat(arbitrumBalance.formatted) > 0
 
   useEffect(() => {
     if (!isConnected) {
       router.push('/')
     }
   }, [isConnected, router])
+
+  // Auto-show bridge modal if user has no Arbitrum USDC
+  useEffect(() => {
+    if (!balanceLoading && isConnected && !hasCheckedBalance) {
+      setHasCheckedBalance(true)
+      if (!hasArbitrumUsdc) {
+        setShowBridgeModal(true)
+      }
+    }
+  }, [balanceLoading, isConnected, hasArbitrumUsdc, hasCheckedBalance])
 
   if (!isConnected) {
     return (
@@ -79,6 +105,63 @@ export default function OstiumTradingPage() {
           </div>
         </header>
 
+        {/* Balance Bar */}
+        <div className="bg-[#0a0a0a] border-b border-white/[0.04] px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-white/40 text-xs">Arbitrum USDC</span>
+              <div className="flex items-center gap-2">
+                <span className="text-white font-bold text-lg">
+                  ${arbitrumBalance ? parseFloat(arbitrumBalance.formatted).toFixed(2) : '0.00'}
+                </span>
+                {!hasArbitrumUsdc && !balanceLoading && (
+                  <button
+                    onClick={() => setShowBridgeModal(true)}
+                    className="flex items-center gap-1 text-[#ef4444] text-xs font-medium hover:underline"
+                  >
+                    <ArrowRightLeft className="w-3 h-3" />
+                    Bridge USDC
+                  </button>
+                )}
+              </div>
+            </div>
+            {hasArbitrumUsdc && (
+              <button
+                onClick={() => setShowBridgeModal(true)}
+                className="flex items-center gap-1.5 bg-white/[0.05] hover:bg-white/[0.08] px-3 py-1.5 rounded-lg text-white/60 text-xs transition-colors"
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5" />
+                Bridge More
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* No Balance Warning */}
+        {!hasArbitrumUsdc && !balanceLoading && (
+          <div className="px-4 py-3">
+            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-yellow-400 font-medium text-sm mb-1">
+                    Bridge USDC to Trade
+                  </h3>
+                  <p className="text-yellow-400/60 text-xs mb-2">
+                    Ostium requires USDC on Arbitrum. Bridge your Base USDC to start trading.
+                  </p>
+                  <button
+                    onClick={() => setShowBridgeModal(true)}
+                    className="bg-yellow-500 hover:bg-yellow-600 text-black font-semibold text-xs px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    Bridge Now
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Market Selector */}
         <OstiumMarketSelector
           selectedPair={selectedPair}
@@ -128,6 +211,16 @@ export default function OstiumTradingPage() {
         </div>
 
         <BottomNav />
+
+        {/* Bridge Modal */}
+        <BridgeToArbitrumModal
+          isOpen={showBridgeModal}
+          onClose={() => setShowBridgeModal(false)}
+          onSuccess={() => {
+            refetchBalance()
+            setShowBridgeModal(false)
+          }}
+        />
       </div>
     </div>
   )

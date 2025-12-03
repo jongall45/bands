@@ -2,14 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { useAccount } from 'wagmi'
-import { useBridge } from '@/hooks/useBridge'
 import { SUPPORTED_CHAINS, BRIDGE_TOKENS, Chain, Token } from '@/lib/bridge-api'
 import { ArrowRight, Clock, ArrowDownUp } from 'lucide-react'
-import { formatUnits } from 'viem'
 
 export function BridgeCard() {
-  const { address } = useAccount()
-  const { getQuote, quote, isQuoting, formatDuration } = useBridge()
+  useAccount() // Keep for future use
 
   const [fromChain, setFromChain] = useState<Chain>(SUPPORTED_CHAINS[0])
   const [toChain, setToChain] = useState<Chain>(SUPPORTED_CHAINS[1])
@@ -31,26 +28,6 @@ export function BridgeCard() {
     }
   }, [toChain])
 
-  useEffect(() => {
-    if (!amount || parseFloat(amount) <= 0 || !address) {
-      return
-    }
-
-    const timer = setTimeout(() => {
-      getQuote({
-        fromChain: fromChain.id,
-        toChain: toChain.id,
-        fromToken: fromToken.address,
-        toToken: toToken.address,
-        fromAmount: amount,
-        fromDecimals: fromToken.decimals,
-        fromAddress: address,
-      }).catch(console.error)
-    }, 500)
-
-    return () => clearTimeout(timer)
-  }, [amount, fromChain, toChain, fromToken, toToken, address, getQuote])
-
   const flipChains = () => {
     const tempChain = fromChain
     const tempToken = fromToken
@@ -61,9 +38,6 @@ export function BridgeCard() {
     setAmount('')
   }
 
-  const formattedReceiveAmount = quote
-    ? formatUnits(BigInt(quote.toAmount), toToken.decimals)
-    : '0.00'
 
   return (
     <div className="bg-[#111111] border border-white/[0.06] rounded-3xl p-5 relative overflow-hidden">
@@ -148,10 +122,10 @@ export function BridgeCard() {
         
         <div className="flex items-center gap-3">
           <div className="flex-1 text-white text-2xl font-semibold">
-            {isQuoting ? (
-              <span className="text-white/30">Loading...</span>
+            {amount ? (
+              parseFloat(amount).toLocaleString(undefined, { maximumFractionDigits: 6 })
             ) : (
-              parseFloat(formattedReceiveAmount).toLocaleString(undefined, { maximumFractionDigits: 6 })
+              <span className="text-white/30">0.00</span>
             )}
           </div>
           <select
@@ -168,28 +142,22 @@ export function BridgeCard() {
         </div>
       </div>
 
-      {/* Route Info */}
-      {quote && (
-        <div className="bg-white/[0.02] rounded-2xl p-4 mb-4 border border-white/[0.04] space-y-3">
-          <div className="flex justify-between text-sm">
-            <span className="text-white/40">Bridge</span>
-            <span className="text-white font-medium">{quote.tool}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-white/40 flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              Est. Time
-            </span>
-            <span className="text-white font-medium">{formatDuration(quote.executionDuration)}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-white/40">Route</span>
-            <span className="text-white flex items-center gap-1.5 font-medium">
-              {fromChain.logo} <ArrowRight className="w-3 h-3 text-white/40" /> {toChain.logo}
-            </span>
-          </div>
+      {/* Route Info - Coming Soon */}
+      <div className="bg-white/[0.02] rounded-2xl p-4 mb-4 border border-white/[0.04] space-y-3">
+        <div className="flex justify-between text-sm">
+          <span className="text-white/40">Route</span>
+          <span className="text-white flex items-center gap-1.5 font-medium">
+            {fromChain.logo} <ArrowRight className="w-3 h-3 text-white/40" /> {toChain.logo}
+          </span>
         </div>
-      )}
+        <div className="flex justify-between text-sm">
+          <span className="text-white/40 flex items-center gap-1">
+            <Clock className="w-3 h-3" />
+            Est. Time
+          </span>
+          <span className="text-white/40">~30 seconds</span>
+        </div>
+      </div>
 
       {/* Bridge Button */}
       <button
