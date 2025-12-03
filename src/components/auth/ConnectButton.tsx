@@ -18,6 +18,19 @@ export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
   const { isStandalone, isIOS } = usePWA()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
+
+  // If pending for more than 5 seconds, show help
+  useEffect(() => {
+    if (isPending) {
+      const timer = setTimeout(() => {
+        setShowHelp(true)
+      }, 5000)
+      return () => clearTimeout(timer)
+    } else {
+      setShowHelp(false)
+    }
+  }, [isPending])
 
   // Find the Porto connector
   const portoConnector = connectors.find(
@@ -47,10 +60,20 @@ export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
   // Handle sign in (existing wallet) - just triggers passkey auth
   const handleSignIn = useCallback(() => {
     console.log('[ConnectButton] Sign in with existing passkey...')
+    
+    // If already pending for too long, the popup might be blocked
+    // User clicking again should retry
     if (portoConnector) {
+      // Disconnect first to clear any stuck state
+      if (isPending) {
+        console.log('[ConnectButton] Retrying connection (was pending)...')
+      }
+      
       connect({ connector: portoConnector })
+    } else {
+      console.error('[ConnectButton] Porto connector not found!')
     }
-  }, [connect, portoConnector])
+  }, [connect, portoConnector, isPending])
 
   // Handle create wallet (new user)
   const handleCreateWallet = useCallback(() => {
@@ -224,6 +247,20 @@ export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
                 ? 'No wallet found. Create one first!'
                 : 'Connection failed'}
           </p>
+        )}
+
+        {/* Help message if stuck pending */}
+        {showHelp && isPending && (
+          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 text-center">
+            <p className="text-yellow-600 text-sm">
+              Don't see a popup? Try:
+            </p>
+            <ul className="text-yellow-600/80 text-xs mt-1 space-y-1">
+              <li>• Allow popups for this site</li>
+              <li>• Tap the button again</li>
+              <li>• Check for a Porto dialog</li>
+            </ul>
+          </div>
         )}
       </div>
     )

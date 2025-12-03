@@ -2,9 +2,15 @@ import { createConfig, http, createStorage, cookieStorage } from 'wagmi'
 import { base, optimism, arbitrum } from 'wagmi/chains'
 import { porto } from 'porto/wagmi'
 
+// Porto connector with explicit dialog mode
+const portoConnector = porto({
+  // Force dialog mode for passkey authentication
+  // This ensures the Porto dialog opens properly
+})
+
 export const wagmiConfig = createConfig({
   chains: [base, optimism, arbitrum],
-  connectors: [porto()],
+  connectors: [portoConnector],
   // Use cookie storage for better persistence across refreshes
   storage: createStorage({
     storage: cookieStorage,
