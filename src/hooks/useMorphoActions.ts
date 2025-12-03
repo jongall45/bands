@@ -19,7 +19,7 @@ export function useMorphoActions({ vaultAddress, onSuccess, onError }: UseMorpho
   const publicClient = usePublicClient()
   const [isLoading, setIsLoading] = useState(false)
 
-  // Use Porto's batched transactions
+  // Use batched transactions
   const { sendCallsAsync } = useSendCalls()
 
   // Deposit USDC into vault
@@ -65,7 +65,7 @@ export function useMorphoActions({ vaultAddress, onSuccess, onError }: UseMorpho
         }),
       })
 
-      // Send batched transaction via Porto
+      // Send batched transaction
       const result = await sendCallsAsync({
         calls,
       })

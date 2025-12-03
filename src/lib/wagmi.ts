@@ -1,32 +1,4 @@
-import { createConfig, http, createStorage, cookieStorage } from 'wagmi'
-import { base, optimism, arbitrum } from 'wagmi/chains'
-import { porto } from 'porto/wagmi'
-import { Mode } from 'porto'
-
-// Porto connector with explicit dialog mode configuration
-const portoConnector = porto({
-  // Explicitly configure dialog mode with HTTPS host
-  mode: Mode.dialog({
-    host: 'https://id.porto.sh/dialog',
-  }),
-})
-
-export const wagmiConfig = createConfig({
-  chains: [base, optimism, arbitrum],
-  connectors: [portoConnector],
-  // Use cookie storage for better persistence across refreshes
-  storage: createStorage({
-    storage: cookieStorage,
-  }),
-  // SSR support
-  ssr: true,
-  transports: {
-    [base.id]: http(),
-    [optimism.id]: http(),
-    [arbitrum.id]: http(),
-  },
-})
-
+// USDC constants
 export const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
 export const USDC_DECIMALS = 6
 

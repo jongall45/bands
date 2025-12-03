@@ -168,7 +168,7 @@ export function useOstiumTrade() {
       console.log('🔵 Order type:', ORDER_TYPE.MARKET)
       console.log('🔵 Slippage:', slippage.toString(), `(${slippageBps} bps)`)
 
-      // MANUALLY ENCODE - don't let wagmi/Porto batch this
+      // MANUALLY ENCODE for direct transaction
       const calldata = encodeFunctionData({
         abi: OSTIUM_TRADING_ABI,
         functionName: 'openTrade',
@@ -206,7 +206,7 @@ export function useOstiumTrade() {
         throw new Error(`Trade simulation failed: ${simError.shortMessage || simError.message}`)
       }
 
-      // SEND RAW TRANSACTION - bypass Porto batching
+      // SEND RAW TRANSACTION - direct sendTransaction
       console.log('🟡 Sending transaction...')
       const hash = await walletClient.sendTransaction({
         to: OSTIUM_CONTRACTS.TRADING,

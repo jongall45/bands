@@ -212,7 +212,7 @@ export default function SpeculatePage() {
           <div className="bg-white/[0.5] backdrop-blur-lg border border-white/[0.1] rounded-2xl p-4">
             <h4 className="text-gray-800 font-medium text-sm mb-2">Native Trading</h4>
             <p className="text-gray-600 text-sm">
-              Trade directly from bands.cash with your Porto wallet. Transactions are signed locally without redirecting to external sites.
+              Trade directly from bands.cash with your Privy wallet. Transactions are signed locally without redirecting to external sites.
             </p>
           </div>
         </div>

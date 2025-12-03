@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAccount, useDisconnect, useSendTransaction, useWaitForTransactionReceipt } from 'wagmi'
+import { useSendTransaction, useWaitForTransactionReceipt } from 'wagmi'
 import { useReadContract } from 'wagmi'
 import { formatUnits, parseUnits, isAddress, encodeFunctionData } from 'viem'
 import { base } from 'wagmi/chains'
+import { useAuth } from '@/hooks/useAuth'
 import { USDC_ADDRESS, USDC_DECIMALS, ERC20_ABI } from '@/lib/wagmi'
 import { 
   ArrowUpRight, ArrowDownLeft, Copy, Check, LogOut, 
@@ -20,8 +21,7 @@ import { TransactionList } from '@/components/ui/TransactionList'
 import { InstallPrompt } from '@/components/pwa/InstallPrompt'
 
 export default function Dashboard() {
-  const { address, isConnected } = useAccount()
-  const { disconnect } = useDisconnect()
+  const { isAuthenticated, isConnected, address, logout } = useAuth()
   const router = useRouter()
   const [copied, setCopied] = useState(false)
   const [showSend, setShowSend] = useState(false)
@@ -46,8 +46,8 @@ export default function Dashboard() {
   })
 
   useEffect(() => {
-    if (!isConnected) router.push('/')
-  }, [isConnected, router])
+    if (!isAuthenticated) router.push('/')
+  }, [isAuthenticated, router])
 
   useEffect(() => {
     if (isSuccess) {
@@ -115,7 +115,7 @@ export default function Dashboard() {
     setSendAmount(numericBalance.toString())
   }
 
-  if (!isConnected) {
+  if (!isAuthenticated) {
     return (
       <div className="dashboard-page">
         <div className="noise-overlay" />
@@ -146,7 +146,7 @@ export default function Dashboard() {
       <header className="dashboard-header">
         <LogoInline size="sm" />
         <button
-          onClick={() => disconnect()}
+          onClick={() => logout()}
           className="logout-btn"
           title="Sign out"
         >

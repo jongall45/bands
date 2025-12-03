@@ -18,7 +18,7 @@ export function EmbeddedDApp({ url, name, description, backHref = '/dashboard' }
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Porto announces itself via EIP-6963
+    // Privy announces itself via EIP-6963
     // The embedded dApp should detect it automatically
     if (isConnected) {
       setIsLoading(false)

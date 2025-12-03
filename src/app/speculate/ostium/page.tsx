@@ -2,63 +2,47 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAccount, useBalance } from 'wagmi'
-import { arbitrum } from 'viem/chains'
+import { useAuth } from '@/hooks/useAuth'
 import { BottomNav } from '@/components/ui/BottomNav'
-import { OstiumMarketSelector } from '@/components/ostium/MarketSelector'
-import { OstiumTradePanel } from '@/components/ostium/TradePanel'
-import { OstiumPositions } from '@/components/ostium/Positions'
-import { OstiumChart } from '@/components/ostium/Chart'
 import { BridgeToArbitrumModal } from '@/components/bridge/BridgeToArbitrumModal'
-import { ArrowLeft, RefreshCw, ExternalLink, AlertCircle, ArrowRightLeft } from 'lucide-react'
+import { ArrowLeft, RefreshCw, ExternalLink, AlertCircle, ArrowRightLeft, Wallet } from 'lucide-react'
 import Link from 'next/link'
-import { OSTIUM_PAIRS, type OstiumPair } from '@/lib/ostium/constants'
-
-// USDC on Arbitrum
-const USDC_ARBITRUM = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'
 
 export default function OstiumTradingPage() {
-  const { isConnected, address } = useAccount()
+  const { isAuthenticated, isConnected, address, balances, switchToArbitrum, refetchBalances } = useAuth()
   const router = useRouter()
-  // Default to BTC which is always open (24/7)
-  const [selectedPair, setSelectedPair] = useState<OstiumPair>(OSTIUM_PAIRS.find(p => p.symbol === 'BTC-USD') || OSTIUM_PAIRS[0])
-  const [activeTab, setActiveTab] = useState<'trade' | 'positions'>('trade')
   const [showBridgeModal, setShowBridgeModal] = useState(false)
   const [hasCheckedBalance, setHasCheckedBalance] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
-  // Check Arbitrum USDC balance
-  const { data: arbitrumBalance, isLoading: balanceLoading, refetch: refetchBalance } = useBalance({
-    address,
-    token: USDC_ARBITRUM as `0x${string}`,
-    chainId: arbitrum.id,
-  })
+  const hasArbitrumUsdc = parseFloat(balances.usdcArb) > 0
+  const hasArbitrumEth = parseFloat(balances.ethArb) > 0.0001
 
-  // Check Arbitrum ETH balance for gas
-  const { data: ethBalance, refetch: refetchEthBalance } = useBalance({
-    address,
-    chainId: arbitrum.id,
-  })
-
-  const hasArbitrumUsdc = arbitrumBalance && parseFloat(arbitrumBalance.formatted) > 0
-  const hasArbitrumEth = ethBalance && parseFloat(ethBalance.formatted) > 0.0001
+  // Switch to Arbitrum when component mounts
+  useEffect(() => {
+    if (isAuthenticated && isConnected) {
+      switchToArbitrum().catch(console.error)
+      setIsLoading(false)
+    }
+  }, [isAuthenticated, isConnected, switchToArbitrum])
 
   useEffect(() => {
-    if (!isConnected) {
+    if (!isAuthenticated) {
       router.push('/')
     }
-  }, [isConnected, router])
+  }, [isAuthenticated, router])
 
   // Auto-show bridge modal if user has no Arbitrum USDC
   useEffect(() => {
-    if (!balanceLoading && isConnected && !hasCheckedBalance) {
+    if (!isLoading && isConnected && !hasCheckedBalance) {
       setHasCheckedBalance(true)
       if (!hasArbitrumUsdc) {
         setShowBridgeModal(true)
       }
     }
-  }, [balanceLoading, isConnected, hasArbitrumUsdc, hasCheckedBalance])
+  }, [isLoading, isConnected, hasArbitrumUsdc, hasCheckedBalance])
 
-  if (!isConnected) {
+  if (!isAuthenticated || isLoading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <RefreshCw className="w-8 h-8 text-[#ef4444] animate-spin" />
@@ -67,8 +51,8 @@ export default function OstiumTradingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black overflow-y-auto pb-32">
-      <div className="max-w-[430px] mx-auto">
+    <div className="min-h-screen bg-black flex flex-col">
+      <div className="max-w-[430px] mx-auto w-full flex-1 flex flex-col">
         {/* Header */}
         <header 
           className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between bg-black/80 backdrop-blur-lg sticky top-0 z-30"
@@ -121,14 +105,14 @@ export default function OstiumTradingPage() {
               <div>
                 <span className="text-white/40 text-xs">Arbitrum USDC</span>
                 <div className="text-white font-bold">
-                  ${arbitrumBalance ? parseFloat(arbitrumBalance.formatted).toFixed(2) : '0.00'}
+                  ${parseFloat(balances.usdcArb).toFixed(2)}
                 </div>
               </div>
               {/* ETH Balance */}
               <div>
                 <span className="text-white/40 text-xs">Arbitrum ETH</span>
                 <div className={`font-bold ${hasArbitrumEth ? 'text-white' : 'text-orange-400'}`}>
-                  {ethBalance ? parseFloat(ethBalance.formatted).toFixed(5) : '0.00000'}
+                  {parseFloat(balances.ethArb).toFixed(5)}
                 </div>
               </div>
             </div>
@@ -143,7 +127,7 @@ export default function OstiumTradingPage() {
         </div>
 
         {/* No Balance Warning */}
-        {!hasArbitrumUsdc && !balanceLoading && (
+        {!hasArbitrumUsdc && (
           <div className="px-4 py-3">
             <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3">
               <div className="flex items-start gap-3">
@@ -167,52 +151,24 @@ export default function OstiumTradingPage() {
           </div>
         )}
 
-        {/* Market Selector */}
-        <OstiumMarketSelector
-          selectedPair={selectedPair}
-          onSelectPair={setSelectedPair}
-        />
-
-        {/* Price Chart */}
-        <OstiumChart pairId={selectedPair.id} symbol={selectedPair.symbol} />
-
-        {/* Tabs */}
-        <div className="flex border-b border-white/[0.06] bg-[#0a0a0a]">
-          <button
-            onClick={() => setActiveTab('trade')}
-            className={`flex-1 py-3.5 text-sm font-medium transition-all relative ${
-              activeTab === 'trade'
-                ? 'text-white'
-                : 'text-white/40 hover:text-white/60'
-            }`}
-          >
-            Trade
-            {activeTab === 'trade' && (
-              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-12 h-0.5 bg-[#ef4444] rounded-full" />
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('positions')}
-            className={`flex-1 py-3.5 text-sm font-medium transition-all relative ${
-              activeTab === 'positions'
-                ? 'text-white'
-                : 'text-white/40 hover:text-white/60'
-            }`}
-          >
-            Positions
-            {activeTab === 'positions' && (
-              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-12 h-0.5 bg-[#ef4444] rounded-full" />
-            )}
-          </button>
+        {/* Wallet Connect Info */}
+        <div className="px-4 py-3 bg-[#0a0a0a] border-b border-white/[0.04]">
+          <div className="flex items-center gap-2 text-white/40 text-xs">
+            <Wallet className="w-3.5 h-3.5" />
+            <span>Your wallet: {address?.slice(0, 6)}...{address?.slice(-4)}</span>
+            <span className="text-white/20">•</span>
+            <span>Click "Connect Wallet" in Ostium to link</span>
+          </div>
         </div>
 
-        {/* Content */}
-        <div className="bg-[#0a0a0a] min-h-[50vh]">
-          {activeTab === 'trade' ? (
-            <OstiumTradePanel pair={selectedPair} />
-          ) : (
-            <OstiumPositions />
-          )}
+        {/* Ostium Embed - Full iframe since Privy is EOA compatible */}
+        <div className="flex-1 min-h-[600px]">
+          <iframe
+            src="https://app.ostium.io/trade?embed=true&theme=dark"
+            className="w-full h-full border-0"
+            allow="clipboard-write; clipboard-read"
+            style={{ minHeight: '600px' }}
+          />
         </div>
 
         <BottomNav />
@@ -222,8 +178,7 @@ export default function OstiumTradingPage() {
           isOpen={showBridgeModal}
           onClose={() => setShowBridgeModal(false)}
           onSuccess={() => {
-            refetchBalance()
-            refetchEthBalance()
+            refetchBalances()
             setShowBridgeModal(false)
           }}
         />
@@ -231,4 +186,3 @@ export default function OstiumTradingPage() {
     </div>
   )
 }
-

@@ -159,7 +159,7 @@ export default function SavePage() {
           <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-3 flex items-start gap-3">
             <Info className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
             <p className="text-blue-400 text-sm">
-              Gas is paid in USDC via your Porto wallet. No ETH needed.
+              Deposit USDC into high-yield vaults to earn passive income.
             </p>
           </div>
         </div>

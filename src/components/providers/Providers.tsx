@@ -2,25 +2,24 @@
 
 import { useState, useEffect } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { WagmiProvider, useReconnect } from 'wagmi'
+import { PrivyProvider } from '@privy-io/react-auth'
+import { WagmiProvider, createConfig } from '@privy-io/wagmi'
 import { RelayKitProvider } from '@reservoir0x/relay-kit-ui'
-import { wagmiConfig } from '@/lib/wagmi'
+import { http } from 'viem'
+import { base, arbitrum } from 'viem/chains'
 import { PWALayout } from '@/components/layout/PWALayout'
 
 // Import Relay styles
 import '@reservoir0x/relay-kit-ui/styles.css'
 
-// Component to handle auto-reconnect
-function AutoReconnect({ children }: { children: React.ReactNode }) {
-  const { reconnect } = useReconnect()
-  
-  useEffect(() => {
-    // Try to reconnect on mount if there's a stored session
-    reconnect()
-  }, [reconnect])
-  
-  return <>{children}</>
-}
+// Wagmi config for Privy
+const wagmiConfig = createConfig({
+  chains: [base, arbitrum],
+  transports: {
+    [base.id]: http(),
+    [arbitrum.id]: http(),
+  },
+})
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
@@ -33,6 +32,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }))
   const [mounted, setMounted] = useState(false)
 
+  const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID
+
   // Ensure we only render after mounting to avoid hydration issues
   useEffect(() => {
     setMounted(true)
@@ -42,27 +43,62 @@ export function Providers({ children }: { children: React.ReactNode }) {
     return null
   }
 
+  // If no Privy app ID, show error
+  if (!privyAppId) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center text-white">
+        <div className="text-center">
+          <p className="text-red-500">Missing NEXT_PUBLIC_PRIVY_APP_ID</p>
+          <p className="text-sm text-white/50 mt-2">Add it to .env.local</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <RelayKitProvider
-      options={{
-        appName: 'bands',
-        chains: [
-          { id: 8453, name: 'Base', displayName: 'Base' },
-          { id: 42161, name: 'Arbitrum One', displayName: 'Arbitrum' },
-          { id: 10, name: 'OP Mainnet', displayName: 'Optimism' },
-          { id: 1, name: 'Ethereum', displayName: 'Ethereum' },
-        ],
+    <PrivyProvider
+      appId={privyAppId}
+      config={{
+        // Appearance - match bands.cash dark theme
+        appearance: {
+          theme: 'dark',
+          accentColor: '#ef4444', // Red accent to match bands.cash
+          logo: '/icons/icon.svg',
+          showWalletLoginFirst: false,
+        },
+        
+        // Login methods
+        loginMethods: ['email', 'google', 'apple'],
+        
+        // Embedded wallet config - creates standard EOA
+        embeddedWallets: {
+          ethereum: {
+            createOnLogin: 'users-without-wallets',
+          },
+        },
+        
+        // Chain config
+        defaultChain: base,
+        supportedChains: [base, arbitrum],
       }}
     >
-      <WagmiProvider config={wagmiConfig}>
-        <QueryClientProvider client={queryClient}>
-          <AutoReconnect>
+      <QueryClientProvider client={queryClient}>
+        <WagmiProvider config={wagmiConfig}>
+          <RelayKitProvider
+            options={{
+              appName: 'bands',
+              chains: [
+                { id: 8453, name: 'Base', displayName: 'Base' },
+                { id: 42161, name: 'Arbitrum One', displayName: 'Arbitrum' },
+              ],
+            }}
+          >
             <PWALayout>
               {children}
             </PWALayout>
-          </AutoReconnect>
-        </QueryClientProvider>
-      </WagmiProvider>
-    </RelayKitProvider>
+          </RelayKitProvider>
+        </WagmiProvider>
+      </QueryClientProvider>
+    </PrivyProvider>
   )
 }

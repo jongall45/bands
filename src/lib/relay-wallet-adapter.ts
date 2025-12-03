@@ -1,7 +1,7 @@
 import type { WalletClient, PublicClient } from 'viem'
 import { formatUnits, erc20Abi } from 'viem'
 
-// Custom wallet adapter for Porto smart accounts
+// Custom wallet adapter for smart accounts
 export function createRelayWalletAdapter(
   walletClient: WalletClient,
   publicClient: PublicClient,
@@ -98,13 +98,13 @@ export function createRelayWalletAdapter(
       }
     },
     
-    // Porto supports atomic batching
+    // Support atomic batching
     supportsAtomicBatch: async (chainId: number) => {
       return true
     },
     
     handleBatchTransactionStep: async (chainId: number, items: any[]) => {
-      // For Porto, we can batch transactions
+      // For smart accounts, we can batch transactions
       // For now, just send them sequentially
       let lastHash: string | undefined
       for (const item of items) {

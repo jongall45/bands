@@ -36,7 +36,7 @@ export function BridgeWidget({ onSuccess }: BridgeWidgetProps) {
   const { data: walletClient } = useWalletClient()
   const publicClient = usePublicClient({ chainId: 8453 })
 
-  // Create custom wallet adapter for Porto
+  // Create custom wallet adapter
   const adaptedWallet = useMemo(() => {
     if (!walletClient || !publicClient || !address) return undefined
     return createRelayWalletAdapter(walletClient, publicClient, address)

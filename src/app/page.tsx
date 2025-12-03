@@ -2,23 +2,23 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAccount } from 'wagmi'
+import { useAuth } from '@/hooks/useAuth'
 import { ConnectButton } from '@/components/auth/ConnectButton'
 import { InstallPrompt } from '@/components/pwa/InstallPrompt'
 import { LogoInline } from '@/components/ui/Logo'
-import { Fingerprint, Shield, Zap, Globe } from 'lucide-react'
+import { Mail, Shield, Zap, Globe } from 'lucide-react'
 
 export default function Home() {
-  const { isConnected, address } = useAccount()
+  const { isAuthenticated, address } = useAuth()
   const router = useRouter()
 
   // Redirect to dashboard when connected
   useEffect(() => {
-    if (isConnected && address) {
+    if (isAuthenticated && address) {
       console.log('Landing page: User connected, redirecting to dashboard')
       router.replace('/dashboard')
     }
-  }, [isConnected, address, router])
+  }, [isAuthenticated, address, router])
 
   return (
     <div className="landing-page">
@@ -65,9 +65,9 @@ export default function Home() {
           {/* Features Grid */}
           <div className="features-grid">
             <div className="feature-card">
-              <Fingerprint className="w-6 h-6 text-[#ef4444]" />
-              <h3>Passkey Login</h3>
-              <p>Face ID or Touch ID</p>
+              <Mail className="w-6 h-6 text-[#ef4444]" />
+              <h3>Email Login</h3>
+              <p>Email, Google, or Apple</p>
             </div>
             <div className="feature-card">
               <Shield className="w-6 h-6 text-[#ef4444]" />
@@ -76,13 +76,13 @@ export default function Home() {
             </div>
             <div className="feature-card">
               <Zap className="w-6 h-6 text-[#ef4444]" />
-              <h3>USDC Gas</h3>
-              <p>No ETH needed</p>
+              <h3>Universal Wallet</h3>
+              <p>Works everywhere</p>
             </div>
             <div className="feature-card">
               <Globe className="w-6 h-6 text-[#ef4444]" />
-              <h3>Use Anywhere</h3>
-              <p>Connect to any dApp</p>
+              <h3>All DeFi</h3>
+              <p>Trade on any protocol</p>
             </div>
         </div>
         </div>
