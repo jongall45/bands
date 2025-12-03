@@ -132,94 +132,103 @@ export default function Home() {
           height: 100%;
           overflow: hidden;
           z-index: 0;
+          filter: blur(60px);
         }
 
         .landing-page .lava {
           position: absolute;
-          border-radius: 50%;
-          filter: blur(80px);
           mix-blend-mode: normal;
+          will-change: transform, border-radius;
         }
 
         .landing-page .lava-1 {
-          width: 600px;
-          height: 600px;
-          background: radial-gradient(circle, #FF3B30 0%, #FF6B6B 50%, transparent 70%);
-          top: -10%;
-          left: -10%;
-          animation: lava1 25s ease-in-out infinite;
+          width: 70vmax;
+          height: 70vmax;
+          background: radial-gradient(circle at 30% 30%, #FF3B30 0%, #FF6B6B 40%, rgba(255, 107, 107, 0.3) 70%, transparent 100%);
+          top: -20%;
+          left: -20%;
+          opacity: 0.7;
+          animation: lava1 35s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
 
         .landing-page .lava-2 {
-          width: 500px;
-          height: 500px;
-          background: radial-gradient(circle, #D70015 0%, #FF4444 50%, transparent 70%);
-          bottom: -5%;
-          right: -5%;
-          animation: lava2 30s ease-in-out infinite;
+          width: 60vmax;
+          height: 60vmax;
+          background: radial-gradient(circle at 70% 70%, #D70015 0%, #FF4444 40%, rgba(255, 68, 68, 0.3) 70%, transparent 100%);
+          bottom: -15%;
+          right: -15%;
+          opacity: 0.65;
+          animation: lava2 40s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
 
         .landing-page .lava-3 {
-          width: 400px;
-          height: 400px;
-          background: radial-gradient(circle, #FF6B35 0%, #FFAA88 50%, transparent 70%);
-          top: 30%;
-          right: 10%;
-          animation: lava3 20s ease-in-out infinite;
+          width: 45vmax;
+          height: 45vmax;
+          background: radial-gradient(circle at 50% 50%, #FF6B35 0%, #FFAA88 45%, rgba(255, 170, 136, 0.2) 75%, transparent 100%);
+          top: 25%;
+          right: 5%;
+          opacity: 0.55;
+          animation: lava3 28s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
 
         .landing-page .lava-4 {
-          width: 350px;
-          height: 350px;
-          background: radial-gradient(circle, #FF8888 0%, #FFB4B4 50%, transparent 70%);
-          top: 60%;
-          left: 5%;
-          animation: lava4 22s ease-in-out infinite;
+          width: 50vmax;
+          height: 50vmax;
+          background: radial-gradient(circle at 40% 60%, #FF8888 0%, #FFB4B4 45%, rgba(255, 180, 180, 0.2) 75%, transparent 100%);
+          top: 55%;
+          left: -5%;
+          opacity: 0.5;
+          animation: lava4 32s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
 
         .landing-page .lava-5 {
-          width: 300px;
-          height: 300px;
-          background: radial-gradient(circle, #FFCCCC 0%, #FFE5E5 50%, transparent 70%);
-          top: 10%;
-          right: 30%;
-          animation: lava5 18s ease-in-out infinite;
+          width: 35vmax;
+          height: 35vmax;
+          background: radial-gradient(circle at 60% 40%, #FFCCCC 0%, #FFE5E5 50%, rgba(255, 229, 229, 0.2) 80%, transparent 100%);
+          top: 5%;
+          right: 25%;
+          opacity: 0.6;
+          animation: lava5 25s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
 
         @keyframes lava1 {
           0%, 100% {
-            transform: translate(0, 0) scale(1) rotate(0deg);
+            transform: translate(0, 0) scale(1);
             border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
           }
-          25% {
-            transform: translate(100px, 50px) scale(1.1) rotate(90deg);
+          20% {
+            transform: translate(8vw, 5vh) scale(1.08);
             border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
           }
-          50% {
-            transform: translate(50px, 100px) scale(0.9) rotate(180deg);
+          40% {
+            transform: translate(3vw, 12vh) scale(0.95);
             border-radius: 50% 60% 30% 60% / 30% 70% 40% 50%;
           }
-          75% {
-            transform: translate(-50px, 50px) scale(1.05) rotate(270deg);
+          60% {
+            transform: translate(-5vw, 8vh) scale(1.12);
             border-radius: 40% 60% 60% 40% / 70% 30% 50% 60%;
+          }
+          80% {
+            transform: translate(-2vw, 2vh) scale(1.02);
+            border-radius: 55% 45% 40% 60% / 45% 55% 60% 40%;
           }
         }
 
         @keyframes lava2 {
           0%, 100% {
-            transform: translate(0, 0) scale(1) rotate(0deg);
+            transform: translate(0, 0) scale(1);
             border-radius: 40% 60% 60% 40% / 70% 30% 50% 60%;
           }
           25% {
-            transform: translate(-80px, -60px) scale(1.15) rotate(-90deg);
+            transform: translate(-6vw, -8vh) scale(1.15);
             border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
           }
           50% {
-            transform: translate(-40px, -100px) scale(0.95) rotate(-180deg);
+            transform: translate(-3vw, -15vh) scale(0.9);
             border-radius: 50% 60% 30% 60% / 30% 70% 40% 50%;
           }
           75% {
-            transform: translate(40px, -40px) scale(1.1) rotate(-270deg);
+            transform: translate(5vw, -5vh) scale(1.1);
             border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
           }
         }
@@ -229,23 +238,27 @@ export default function Home() {
             transform: translate(0, 0) scale(1);
             border-radius: 50% 60% 30% 60% / 30% 70% 40% 50%;
           }
-          33% {
-            transform: translate(-100px, 80px) scale(1.2);
+          30% {
+            transform: translate(-12vw, 10vh) scale(1.25);
             border-radius: 60% 40% 70% 30% / 40% 60% 50% 70%;
           }
-          66% {
-            transform: translate(-60px, -60px) scale(0.85);
+          60% {
+            transform: translate(-8vw, -8vh) scale(0.85);
             border-radius: 40% 70% 50% 60% / 70% 40% 60% 30%;
           }
         }
 
         @keyframes lava4 {
           0%, 100% {
-            transform: translate(0, 0) scale(1) rotate(0deg);
+            transform: translate(0, 0) scale(1);
             border-radius: 70% 30% 50% 60% / 40% 70% 30% 60%;
           }
-          50% {
-            transform: translate(120px, -80px) scale(1.1) rotate(180deg);
+          35% {
+            transform: translate(10vw, -6vh) scale(1.15);
+            border-radius: 45% 55% 65% 35% / 55% 45% 35% 65%;
+          }
+          70% {
+            transform: translate(15vw, 5vh) scale(0.9);
             border-radius: 30% 70% 60% 40% / 60% 30% 70% 40%;
           }
         }
@@ -254,17 +267,22 @@ export default function Home() {
           0%, 100% {
             transform: translate(0, 0) scale(1);
             border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
-            opacity: 0.6;
-          }
-          33% {
-            transform: translate(60px, 100px) scale(1.3);
-            border-radius: 70% 30% 30% 70% / 70% 70% 30% 30%;
-            opacity: 0.8;
-          }
-          66% {
-            transform: translate(-80px, 60px) scale(0.9);
-            border-radius: 50% 50% 50% 50%;
             opacity: 0.5;
+          }
+          25% {
+            transform: translate(5vw, 12vh) scale(1.35);
+            border-radius: 70% 30% 30% 70% / 70% 70% 30% 30%;
+            opacity: 0.7;
+          }
+          50% {
+            transform: translate(-6vw, 8vh) scale(1.1);
+            border-radius: 50% 50% 50% 50%;
+            opacity: 0.55;
+          }
+          75% {
+            transform: translate(-10vw, -5vh) scale(0.9);
+            border-radius: 40% 60% 55% 45% / 55% 45% 60% 40%;
+            opacity: 0.65;
           }
         }
 
