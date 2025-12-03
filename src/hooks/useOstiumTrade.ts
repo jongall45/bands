@@ -80,20 +80,34 @@ export function useOstiumTrade() {
 
       // Convert values to contract format
       const collateralWei = parseUnits(collateral.toString(), 6)
-      const priceToUse = orderType === 'MARKET' ? currentPrice : (limitPrice || currentPrice)
-      const openPriceWei = BigInt(Math.floor(priceToUse * 1e18))
-      const tpWei = takeProfit ? BigInt(Math.floor(takeProfit * 1e18)) : BigInt(0)
-      const slWei = stopLoss ? BigInt(Math.floor(stopLoss * 1e18)) : BigInt(0)
+      
+      // CRITICAL: For MARKET orders, openPrice MUST be 0!
+      // The contract uses the oracle price for market orders.
+      // Only LIMIT and STOP orders use the actual price.
+      const openPriceWei = orderType === 'MARKET' 
+        ? BigInt(0) 
+        : BigInt(Math.floor((limitPrice || currentPrice) * 1e10))
+      
+      // TP/SL prices: use 1e10 precision (10 decimals)
+      const tpWei = takeProfit ? BigInt(Math.floor(takeProfit * 1e10)) : BigInt(0)
+      const slWei = stopLoss ? BigInt(Math.floor(stopLoss * 1e10)) : BigInt(0)
+      
+      // Leverage: scaled by 1e2 (10x = 1000)
       const leverageScaled = BigInt(Math.floor(leverage * 100))
-      const slippageScaled = BigInt(Math.floor(slippagePercent * 100))
+      
+      // Slippage: scaled by 1e10 (1% = 1e8, 5% = 5e8)
+      const slippageScaled = BigInt(Math.floor(slippagePercent * 1e8))
 
       console.log('🔵 Trade parameters:', {
         collateral: collateralWei.toString(),
-        openPrice: openPriceWei.toString(),
+        openPrice: openPriceWei.toString(), // Should be 0 for MARKET orders!
         leverage: leverageScaled.toString(),
         slippage: slippageScaled.toString(),
+        tp: tpWei.toString(),
+        sl: slWei.toString(),
         pairId,
         isLong,
+        orderType,
       })
 
       // Build trade struct
@@ -212,7 +226,8 @@ export function useOstiumTrade() {
   const updateTakeProfit = useCallback(async (pairId: number, tradeIndex: number, newTp: number) => {
     if (!address) throw new Error('Wallet not connected')
 
-    const tpWei = BigInt(Math.floor(newTp * 1e18))
+    // TP price uses 1e10 precision
+    const tpWei = BigInt(Math.floor(newTp * 1e10))
 
     try {
       const updateData = encodeFunctionData({
@@ -239,7 +254,8 @@ export function useOstiumTrade() {
   const updateStopLoss = useCallback(async (pairId: number, tradeIndex: number, newSl: number) => {
     if (!address) throw new Error('Wallet not connected')
 
-    const slWei = BigInt(Math.floor(newSl * 1e18))
+    // SL price uses 1e10 precision
+    const slWei = BigInt(Math.floor(newSl * 1e10))
 
     try {
       const updateData = encodeFunctionData({
