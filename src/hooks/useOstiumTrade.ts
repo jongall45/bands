@@ -94,12 +94,12 @@ export function useOstiumTrade() {
       if (needsApproval) {
         setStep('approving')
         
-        // Approve USDC spend (approve max to avoid repeated approvals)
+        // Approve exact USDC amount for this trade
         const approveHash = await writeContractAsync({
           address: ACTIVE_CONFIG.usdcAddress,
           abi: ERC20_ABI,
           functionName: 'approve',
-          args: [ACTIVE_CONFIG.tradingContract, collateralWei * BigInt(10)], // Approve 10x to reduce future approvals
+          args: [ACTIVE_CONFIG.tradingContract, collateralWei],
           chainId: arbitrum.id,
         })
         
