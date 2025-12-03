@@ -5,37 +5,21 @@ import { SwapWidget as RelaySwapWidget } from '@reservoir0x/relay-kit-ui'
 import { Loader2 } from 'lucide-react'
 import type { Token } from '@reservoir0x/relay-kit-ui'
 
-// USDC addresses by chain
-const USDC_TOKENS: Record<number, Token> = {
-  8453: { // Base
-    chainId: 8453,
-    address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-    decimals: 6,
-    name: 'USD Coin',
-    symbol: 'USDC',
-    logoURI: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png',
-  },
-  42161: { // Arbitrum
-    chainId: 42161,
-    address: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
-    decimals: 6,
-    name: 'USD Coin',
-    symbol: 'USDC',
-    logoURI: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png',
-  },
+// Default to USDC on Base as the "from" token
+const USDC_BASE: Token = {
+  chainId: 8453,
+  address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+  decimals: 6,
+  name: 'USD Coin',
+  symbol: 'USDC',
+  logoURI: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png',
 }
 
 interface SwapWidgetProps {
-  defaultFromChainId?: number
-  defaultToChainId?: number
   onSuccess?: (data: any) => void
 }
 
-export function SwapWidget({
-  defaultFromChainId = 8453, // Base
-  defaultToChainId = 8453, // Base
-  onSuccess,
-}: SwapWidgetProps) {
+export function SwapWidget({ onSuccess }: SwapWidgetProps) {
   const { address, isConnected } = useAccount()
 
   if (!isConnected || !address) {
@@ -50,9 +34,12 @@ export function SwapWidget({
   return (
     <div className="relay-widget-container">
       <RelaySwapWidget
+        fromToken={USDC_BASE}
         defaultToAddress={address}
         defaultAmount="10"
         supportedWalletVMs={['evm']}
+        singleChainMode={true}
+        lockChainId={8453}
         onSwapSuccess={(data) => {
           console.log('[Relay] Swap success:', data)
           onSuccess?.(data)

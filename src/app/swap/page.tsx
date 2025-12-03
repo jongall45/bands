@@ -108,17 +108,9 @@ export default function SwapPage() {
         {/* Widget Container */}
         <div className="px-5">
           {activeTab === 'swap' ? (
-            <SwapWidget
-              defaultFromChainId={8453}
-              defaultToChainId={8453}
-              onSuccess={handleSuccess}
-            />
+            <SwapWidget onSuccess={handleSuccess} />
           ) : (
-            <BridgeWidget
-              defaultFromChainId={8453}
-              defaultToChainId={42161}
-              onSuccess={handleSuccess}
-            />
+            <BridgeWidget onSuccess={handleSuccess} />
           )}
         </div>
 

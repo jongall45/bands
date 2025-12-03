@@ -1,180 +1,303 @@
 /* Override Relay widget styles to match bands.cash theme */
 
-/* Widget container */
+/* Widget container - match our card style */
 .relay-widget-container {
   --relay-primary: #ef4444;
   --relay-primary-hover: #dc2626;
+  border-radius: 24px;
+  overflow: hidden;
 }
 
-/* Make the widget blend with our dark cards */
-[class*="SwapWidget"],
-[class*="relay"] {
+/* Main widget wrapper */
+.relay-widget-container > div,
+.relay-widget-container [class*="SwapWidget"] {
+  background: #111111 !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 24px !important;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif !important;
 }
 
-/* Override backgrounds */
-[class*="SwapWidget"] > div,
-[class*="swap-widget"] {
-  background: #111111 !important;
-  border-radius: 24px !important;
+/* Red gradient accent like our other cards */
+.relay-widget-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 200px;
+  background: radial-gradient(
+    ellipse at 0% 0%,
+    rgba(239, 68, 68, 0.15) 0%,
+    rgba(239, 68, 68, 0.05) 40%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+  border-radius: 24px;
 }
 
-/* Input styling */
-[class*="SwapWidget"] input,
-[class*="relay"] input {
+/* Input fields */
+.relay-widget-container input {
   background: rgba(255, 255, 255, 0.03) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   color: white !important;
-  border-radius: 12px !important;
+  border-radius: 16px !important;
+  font-size: 24px !important;
+  font-weight: 600 !important;
 }
 
-[class*="SwapWidget"] input:focus,
-[class*="relay"] input:focus {
-  border-color: #ef4444 !important;
+.relay-widget-container input:focus {
+  border-color: rgba(239, 68, 68, 0.5) !important;
   outline: none !important;
-  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1) !important;
 }
 
-/* Button overrides */
-[class*="SwapWidget"] button[type="submit"],
-[class*="relay"] button[class*="primary"],
-[class*="relay"] button[class*="swap"],
-[class*="relay"] button[class*="confirm"] {
+.relay-widget-container input::placeholder {
+  color: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Primary action buttons - bands red */
+.relay-widget-container button[type="submit"],
+.relay-widget-container button[class*="primary"],
+.relay-widget-container button[class*="swap"],
+.relay-widget-container button[class*="confirm"],
+.relay-widget-container button[class*="Swap"],
+.relay-widget-container button[class*="Confirm"] {
   background: #ef4444 !important;
   color: white !important;
   border-radius: 16px !important;
   font-weight: 600 !important;
+  font-size: 16px !important;
   border: none !important;
-  transition: background 0.2s !important;
+  padding: 16px !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.2) !important;
 }
 
-[class*="SwapWidget"] button[type="submit"]:hover,
-[class*="relay"] button[class*="primary"]:hover {
+.relay-widget-container button[type="submit"]:hover,
+.relay-widget-container button[class*="primary"]:hover {
+  background: #dc2626 !important;
+  box-shadow: 0 0 30px rgba(239, 68, 68, 0.3) !important;
+  transform: translateY(-1px) !important;
+}
+
+.relay-widget-container button:disabled {
+  background: rgba(239, 68, 68, 0.4) !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+/* Token selector buttons - rounded pill style */
+.relay-widget-container [class*="token-select"],
+.relay-widget-container [class*="Token"],
+.relay-widget-container button[class*="select"] {
+  background: #ef4444 !important;
+  border: none !important;
+  border-radius: 12px !important;
+  color: white !important;
+  font-weight: 600 !important;
+  padding: 10px 16px !important;
+  transition: all 0.2s ease !important;
+}
+
+.relay-widget-container [class*="token-select"]:hover,
+.relay-widget-container button[class*="select"]:hover {
   background: #dc2626 !important;
 }
 
-[class*="SwapWidget"] button:disabled,
-[class*="relay"] button:disabled {
-  background: rgba(239, 68, 68, 0.5) !important;
-  cursor: not-allowed !important;
-}
-
-/* Token selector buttons */
-[class*="SwapWidget"] [class*="token-select"],
-[class*="relay"] [class*="token-select"],
-[class*="relay"] [class*="TokenSelector"] {
-  background: rgba(255, 255, 255, 0.05) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 12px !important;
-  color: white !important;
-}
-
-[class*="SwapWidget"] [class*="token-select"]:hover,
-[class*="relay"] [class*="token-select"]:hover {
-  background: rgba(255, 255, 255, 0.08) !important;
-}
-
-/* Chain selector */
-[class*="relay"] [class*="chain"],
-[class*="relay"] [class*="Chain"] {
+/* Chain/network badges */
+.relay-widget-container [class*="chain"],
+.relay-widget-container [class*="Chain"],
+.relay-widget-container [class*="network"] {
   background: rgba(255, 255, 255, 0.05) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 8px !important;
+  font-size: 12px !important;
+}
+
+/* Address pill */
+.relay-widget-container [class*="address"],
+.relay-widget-container [class*="Address"] {
+  background: rgba(139, 92, 246, 0.15) !important;
+  border: 1px solid rgba(139, 92, 246, 0.3) !important;
+  border-radius: 8px !important;
+  color: #a78bfa !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 12px !important;
 }
 
 /* Dropdown menus */
-[class*="relay"] [class*="dropdown"],
-[class*="relay"] [class*="Dropdown"],
-[class*="relay"] [class*="menu"],
-[class*="relay"] [class*="Menu"] {
+.relay-widget-container [class*="dropdown"],
+.relay-widget-container [class*="Dropdown"],
+.relay-widget-container [class*="menu"],
+.relay-widget-container [class*="Menu"],
+.relay-widget-container [class*="modal"],
+.relay-widget-container [class*="Modal"] {
   background: #1a1a1a !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  border-radius: 16px !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+  border-radius: 20px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(20px) !important;
 }
 
-[class*="relay"] [class*="dropdown-item"]:hover,
-[class*="relay"] [class*="menu-item"]:hover {
+.relay-widget-container [class*="dropdown-item"]:hover,
+.relay-widget-container [class*="menu-item"]:hover,
+.relay-widget-container [class*="option"]:hover {
   background: rgba(255, 255, 255, 0.05) !important;
 }
 
-/* Quote/rate display */
-[class*="relay"] [class*="quote"],
-[class*="relay"] [class*="Quote"],
-[class*="relay"] [class*="rate"],
-[class*="relay"] [class*="Rate"] {
+/* Swap direction button (arrow between sell/buy) */
+.relay-widget-container [class*="swap-direction"],
+.relay-widget-container [class*="SwapDirection"],
+.relay-widget-container button[class*="switch"],
+.relay-widget-container [class*="arrow"] {
+  background: #ef4444 !important;
+  border: 3px solid #111111 !important;
+  border-radius: 12px !important;
+  color: white !important;
+  width: 40px !important;
+  height: 40px !important;
+  transition: all 0.2s ease !important;
+}
+
+.relay-widget-container [class*="swap-direction"]:hover,
+.relay-widget-container button[class*="switch"]:hover {
+  background: #dc2626 !important;
+  transform: rotate(180deg) !important;
+}
+
+/* Labels */
+.relay-widget-container [class*="label"],
+.relay-widget-container [class*="Label"],
+.relay-widget-container label {
+  color: rgba(255, 255, 255, 0.5) !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}
+
+/* Values and amounts */
+.relay-widget-container [class*="value"],
+.relay-widget-container [class*="Value"],
+.relay-widget-container [class*="amount"],
+.relay-widget-container [class*="Amount"] {
+  color: white !important;
+  font-weight: 600 !important;
+}
+
+/* USD value display */
+.relay-widget-container [class*="usd"],
+.relay-widget-container [class*="USD"],
+.relay-widget-container [class*="fiat"] {
+  color: rgba(255, 255, 255, 0.4) !important;
+  font-size: 14px !important;
+}
+
+/* Quote/rate info */
+.relay-widget-container [class*="quote"],
+.relay-widget-container [class*="Quote"],
+.relay-widget-container [class*="rate"],
+.relay-widget-container [class*="Rate"],
+.relay-widget-container [class*="fee"],
+.relay-widget-container [class*="Fee"] {
   background: rgba(255, 255, 255, 0.02) !important;
   border-radius: 12px !important;
   padding: 12px !important;
-}
-
-/* Text colors */
-[class*="relay"] [class*="label"],
-[class*="relay"] [class*="Label"],
-[class*="relay"] span[class*="secondary"] {
-  color: rgba(255, 255, 255, 0.4) !important;
-}
-
-[class*="relay"] [class*="value"],
-[class*="relay"] [class*="Value"],
-[class*="relay"] span[class*="primary"] {
-  color: white !important;
+  color: rgba(255, 255, 255, 0.6) !important;
+  font-size: 13px !important;
 }
 
 /* Loading states */
-[class*="relay"] [class*="loading"],
-[class*="relay"] [class*="Loading"] {
-  color: rgba(255, 255, 255, 0.4) !important;
+.relay-widget-container [class*="loading"],
+.relay-widget-container [class*="Loading"],
+.relay-widget-container [class*="skeleton"],
+.relay-widget-container [class*="Skeleton"] {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(255, 255, 255, 0.03) 100%
+  ) !important;
+  background-size: 200% 100% !important;
+  animation: shimmer 1.5s ease-in-out infinite !important;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
 /* Success states */
-[class*="relay"] [class*="success"],
-[class*="relay"] [class*="Success"] {
+.relay-widget-container [class*="success"],
+.relay-widget-container [class*="Success"] {
   color: #22c55e !important;
 }
 
 /* Error states */
-[class*="relay"] [class*="error"],
-[class*="relay"] [class*="Error"] {
+.relay-widget-container [class*="error"],
+.relay-widget-container [class*="Error"] {
   color: #ef4444 !important;
   background: rgba(239, 68, 68, 0.1) !important;
   border-color: rgba(239, 68, 68, 0.2) !important;
 }
 
-/* Swap direction button */
-[class*="relay"] [class*="swap-direction"],
-[class*="relay"] [class*="SwapDirection"],
-[class*="relay"] button[class*="switch"] {
-  background: rgba(255, 255, 255, 0.05) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  color: white !important;
-}
-
-[class*="relay"] [class*="swap-direction"]:hover,
-[class*="relay"] button[class*="switch"]:hover {
-  background: rgba(255, 255, 255, 0.1) !important;
-}
-
-/* Fee breakdown */
-[class*="relay"] [class*="fee"],
-[class*="relay"] [class*="Fee"] {
-  color: rgba(255, 255, 255, 0.6) !important;
-  font-size: 12px !important;
+/* Warning states */
+.relay-widget-container [class*="warning"],
+.relay-widget-container [class*="Warning"] {
+  color: #f59e0b !important;
+  background: rgba(245, 158, 11, 0.1) !important;
 }
 
 /* Modal overlays */
-[class*="relay"] [class*="modal"],
-[class*="relay"] [class*="Modal"],
-[class*="relay"] [class*="dialog"],
-[class*="relay"] [class*="Dialog"] {
-  background: #111111 !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  border-radius: 24px !important;
+.relay-widget-container [class*="overlay"],
+.relay-widget-container [class*="Overlay"] {
+  background: rgba(0, 0, 0, 0.7) !important;
+  backdrop-filter: blur(8px) !important;
 }
 
-[class*="relay"] [class*="overlay"],
-[class*="relay"] [class*="Overlay"] {
-  background: rgba(0, 0, 0, 0.6) !important;
-  backdrop-filter: blur(4px) !important;
+/* Scrollbar in dropdowns */
+.relay-widget-container ::-webkit-scrollbar {
+  width: 6px;
 }
 
+.relay-widget-container ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.relay-widget-container ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.relay-widget-container ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Token list items */
+.relay-widget-container [class*="token-item"],
+.relay-widget-container [class*="TokenItem"],
+.relay-widget-container [class*="currency-item"] {
+  padding: 12px !important;
+  border-radius: 12px !important;
+  transition: background 0.15s ease !important;
+}
+
+.relay-widget-container [class*="token-item"]:hover,
+.relay-widget-container [class*="TokenItem"]:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Token icon containers */
+.relay-widget-container [class*="token-icon"],
+.relay-widget-container [class*="TokenIcon"],
+.relay-widget-container img[class*="icon"] {
+  border-radius: 50% !important;
+}
+
+/* Powered by text */
+.relay-widget-container [class*="powered"],
+.relay-widget-container [class*="Powered"],
+.relay-widget-container [class*="branding"] {
+  color: rgba(255, 255, 255, 0.3) !important;
+  font-size: 11px !important;
+}
