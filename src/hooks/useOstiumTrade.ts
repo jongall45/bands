@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi'
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useSwitchChain } from 'wagmi'
 import { parseUnits } from 'viem'
 import { arbitrum } from 'wagmi/chains'
 import { ACTIVE_CONFIG, BUILDER_CONFIG, ORDER_TYPE } from '@/lib/ostium/constants'
@@ -21,12 +21,13 @@ interface TradeParams {
 }
 
 export function useOstiumTrade() {
-  const { address } = useAccount()
-  const [step, setStep] = useState<'idle' | 'approving' | 'trading' | 'success' | 'error'>('idle')
+  const { address, chainId } = useAccount()
+  const [step, setStep] = useState<'idle' | 'switching' | 'approving' | 'trading' | 'success' | 'error'>('idle')
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   
   const { writeContractAsync, isPending: isWriting } = useWriteContract()
+  const { switchChainAsync } = useSwitchChain()
   
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
     hash: txHash ?? undefined,
@@ -62,6 +63,15 @@ export function useOstiumTrade() {
     setTxHash(null)
 
     try {
+      // Switch to Arbitrum if not already on it
+      if (chainId !== arbitrum.id) {
+        console.log('🟡 Switching to Arbitrum...')
+        setStep('switching')
+        await switchChainAsync({ chainId: arbitrum.id })
+        console.log('🟢 Switched to Arbitrum')
+        // Small delay to ensure chain switch is complete
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
       // Convert values to contract format
       // Collateral: USDC has 6 decimals
       const collateralWei = parseUnits(collateral.toString(), 6)
@@ -226,8 +236,9 @@ export function useOstiumTrade() {
     updateStopLoss,
     reset,
     step,
-    isPending: isWriting || isConfirming || step === 'approving' || step === 'trading',
+    isPending: isWriting || isConfirming || step === 'switching' || step === 'approving' || step === 'trading',
     isSuccess: step === 'success' && isConfirmed,
+    isSwitchingChain: step === 'switching',
     isApproving: step === 'approving',
     error: errorMessage,
     txHash,
