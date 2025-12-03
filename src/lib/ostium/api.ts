@@ -1,4 +1,4 @@
-import { OSTIUM_API, OSTIUM_PAIRS } from './constants'
+import { OSTIUM_PAIRS } from './constants'
 
 export interface PriceData {
   pairIndex: number
@@ -14,11 +14,12 @@ export interface PriceData {
 }
 
 /**
- * Fetch latest prices from Ostium's price API
+ * Fetch latest prices via our API proxy (avoids CORS)
  */
 export async function fetchOstiumPrices(): Promise<PriceData[]> {
   try {
-    const response = await fetch(OSTIUM_API.PRICES, {
+    // Use local API proxy to avoid CORS issues
+    const response = await fetch('/api/ostium/prices', {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
