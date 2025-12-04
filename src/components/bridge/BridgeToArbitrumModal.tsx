@@ -34,6 +34,9 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
     status,
     error,
     clearError,
+    isOnBase,
+    needsManualSwitch,
+    triggerManualSwitch,
   } = useBridgeFixed()
 
   // Track if we've initialized for this open session
@@ -169,7 +172,31 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
           </button>
         </div>
 
-        {isSuccess ? (
+        {/* Manual Switch Required */}
+        {needsManualSwitch && !isSuccess && (
+          <div className="flex flex-col items-center py-8">
+            <div className="w-16 h-16 bg-orange-500/20 rounded-full flex items-center justify-center mb-4">
+              <AlertCircle className="w-8 h-8 text-orange-400" />
+            </div>
+            <h3 className="text-white font-semibold text-lg mb-2">Switch to Base Network</h3>
+            <p className="text-white/40 text-sm text-center mb-6">
+              Please switch to Base network to bridge your USDC
+            </p>
+            
+            <button
+              onClick={triggerManualSwitch}
+              className="w-full py-4 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-2xl flex items-center justify-center gap-2 mb-3"
+            >
+              Switch to Base
+            </button>
+            
+            <p className="text-white/30 text-xs text-center">
+              If the button doesn't work, switch manually in your wallet settings
+            </p>
+          </div>
+        )}
+
+        {!needsManualSwitch && isSuccess ? (
           <div className="flex flex-col items-center py-8">
             <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-4">
               <Check className="w-8 h-8 text-green-400" />
@@ -204,17 +231,34 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
               Skip, I already have ETH →
             </button>
           </div>
-        ) : (
+        ) : !needsManualSwitch ? (
           <>
+            {/* Network Status Banner */}
+            {!isOnBase && (
+              <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-orange-400" />
+                  <span className="text-orange-400 text-xs">Not on Base network</span>
+                </div>
+                <button
+                  onClick={triggerManualSwitch}
+                  className="text-xs bg-orange-500 text-white px-3 py-1 rounded-lg hover:bg-orange-600"
+                >
+                  Switch
+                </button>
+              </div>
+            )}
+
             {/* FROM section */}
             <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 mb-3">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-white/50 text-sm">From</span>
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center ${isOnBase ? 'bg-blue-500' : 'bg-orange-500'}`}>
                     <span className="text-white text-[10px] font-bold">B</span>
                   </div>
                   <span className="text-white/70 text-sm">Base</span>
+                  {isOnBase && <CheckCircle className="w-3 h-3 text-green-400" />}
                 </div>
               </div>
 
@@ -367,7 +411,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
               Powered by Relay Protocol
             </p>
           </>
-        )}
+        ) : null}
       </div>
     </div>
   )
