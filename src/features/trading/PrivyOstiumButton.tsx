@@ -276,13 +276,16 @@ export function PrivyOstiumButton({
       const slippagePrice = calculateSlippage(DEFAULT_SLIPPAGE_BPS)
       console.log('📉 Slippage price:', slippagePrice.toString())
 
-      // Build trade struct
+      // Pyth update fee
+      const pythUpdateFee = BigInt(100000000000000) // 0.0001 ETH
+
+      // Build trade struct (field is positionSizeUSDC, not positionSizeUsd)
       const trade = {
         trader: address,
         pairIndex: BigInt(pairIndex),
         index: BigInt(0),
         initialPosToken: BigInt(0),
-        positionSizeUsd: parsedAmount,
+        positionSizeUSDC: parsedAmount,
         openPrice: BigInt(0),
         buy: isLong,
         leverage: BigInt(leverage),
@@ -290,7 +293,13 @@ export function PrivyOstiumButton({
         sl: BigInt(0),
       }
 
-      console.log('📦 Trade struct:', trade)
+      console.log('📦 Trade struct:', {
+        trader: trade.trader,
+        pairIndex: trade.pairIndex.toString(),
+        positionSizeUSDC: trade.positionSizeUSDC.toString(),
+        buy: trade.buy,
+        leverage: trade.leverage.toString(),
+      })
 
       // Encode openTrade call
       const tradeData = encodeFunctionData({
@@ -298,9 +307,10 @@ export function PrivyOstiumButton({
         functionName: 'openTrade',
         args: [
           trade,
-          ORDER_TYPE.MARKET,
+          BigInt(ORDER_TYPE.MARKET),
           slippagePrice,
           priceUpdateData,
+          pythUpdateFee,
         ],
       })
 
@@ -312,6 +322,7 @@ export function PrivyOstiumButton({
           from: address,
           to: OSTIUM_TRADING,
           data: tradeData,
+          value: `0x${pythUpdateFee.toString(16)}`, // Include Pyth fee
           gas: '0x4C4B40', // 5,000,000 gas limit
         }],
       }) as string
