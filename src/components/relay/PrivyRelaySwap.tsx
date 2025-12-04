@@ -441,50 +441,29 @@ export function PrivyRelaySwap({
         
       } else {
         // ============================================
-        // SAME-CHAIN: Use execute API directly
+        // SAME-CHAIN: Use steps from quote directly
+        // The quote response already contains transaction data
         // ============================================
         console.log('╔════════════════════════════════════════╗')
-        console.log('║     SAME-CHAIN SWAP (Execute API)      ║')
+        console.log('║     SAME-CHAIN SWAP                    ║')
         console.log('╚════════════════════════════════════════╝')
         console.log('💰 Amount:', amount, fromToken, '→', toToken)
+        console.log('📋 Steps from quote:', quote.steps)
 
-        // Get execution steps from Relay
-        const executeResponse = await fetch('https://api.relay.link/execute', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user: address,
-            recipient: address,
-            originChainId: fromChainId,
-            destinationChainId: toChainId,
-            originCurrency: fromTokenInfo.address,
-            destinationCurrency: toTokenInfo.address,
-            amount: amountWei.toString(),
-            tradeType: 'EXACT_INPUT',
-            source: 'bands.cash',
-          }),
-        })
-
-        if (!executeResponse.ok) {
-          const errorText = await executeResponse.text()
-          console.error('❌ Execute API error:', errorText)
-          let errorData: any = {}
-          try { errorData = JSON.parse(errorText) } catch {}
-          throw new Error(errorData.message || `Swap failed: ${executeResponse.status}`)
-        }
-
-        const executeData = await executeResponse.json()
-        console.log('📋 Execute steps:', executeData)
-
-        // Execute each step/transaction
+        // Execute each step/transaction from the quote
         let lastTxHash: string | null = null
+        let stepIndex = 0
 
-        for (const step of executeData.steps || []) {
-          console.log('📌 Processing step:', step.id)
+        for (const step of quote.steps || []) {
+          console.log(`📌 Processing step ${++stepIndex}:`, step.id, step.action || '')
           
           for (const item of step.items || []) {
             if (item.status === 'incomplete' && item.data) {
-              console.log('📤 Sending transaction to:', item.data.to)
+              console.log('📤 Sending transaction:', {
+                to: item.data.to,
+                chainId: item.data.chainId,
+                description: step.description || step.action,
+              })
 
               const txParams: Record<string, string> = {
                 from: address,
@@ -496,6 +475,11 @@ export function PrivyRelaySwap({
                 txParams.value = `0x${BigInt(item.data.value).toString(16)}`
               }
 
+              // Add gas if provided
+              if (item.data.gas) {
+                txParams.gas = `0x${BigInt(item.data.gas).toString(16)}`
+              }
+
               const hash = await provider.request({
                 method: 'eth_sendTransaction',
                 params: [txParams],
@@ -504,6 +488,12 @@ export function PrivyRelaySwap({
               console.log('✅ Transaction sent:', hash)
               lastTxHash = hash
               setTxHash(hash)
+
+              // Wait a moment between transactions for approval to propagate
+              if (step.id === 'approve' || step.action?.toLowerCase().includes('approve')) {
+                console.log('⏳ Waiting for approval to confirm...')
+                await new Promise(resolve => setTimeout(resolve, 3000))
+              }
             }
           }
         }
@@ -513,7 +503,7 @@ export function PrivyRelaySwap({
           onSuccess?.(lastTxHash)
           setTimeout(fetchBalances, 3000)
         } else {
-          throw new Error('No transaction was executed')
+          throw new Error('No transaction was executed - check quote steps')
         }
       }
 
