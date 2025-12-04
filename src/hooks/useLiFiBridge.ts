@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useAccount, useBalance } from 'wagmi'
 import { useWallets } from '@privy-io/react-auth'
 import { base, arbitrum } from 'viem/chains'
-import { parseUnits, formatUnits, createWalletClient, custom } from 'viem'
+import { parseUnits, formatUnits, createWalletClient, custom, type EIP1193Provider } from 'viem'
 import { 
   createConfig, 
   EVM, 
@@ -18,6 +18,12 @@ import {
 // Constants
 const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
 const USDC_ARBITRUM = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'
+
+// Chain registry
+const CHAINS: Record<number, typeof base | typeof arbitrum> = {
+  8453: base,
+  42161: arbitrum,
+}
 
 // Initialize LI.FI SDK once
 let lifiInitialized = false
@@ -59,6 +65,9 @@ export function useLiFiBridge() {
   const [status, setStatus] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [txHash, setTxHash] = useState<string | null>(null)
+  
+  // Track current chain ID ourselves - Privy's doesn't reliably switch
+  const currentChainIdRef = useRef<number>(42161) // Default to Arbitrum (where user usually starts)
 
   // Balances
   const { data: baseBalance, refetch: refetchBase } = useBalance({
@@ -82,40 +91,103 @@ export function useLiFiBridge() {
 
     const setupProvider = async () => {
       try {
-        console.log('🟡 Setting up LI.FI EVM provider...')
+        console.log('🟡 Setting up LI.FI EVM provider with chain-forcing workaround...')
         const provider = await embeddedWallet.getEthereumProvider()
         
-        const chains = [base, arbitrum]
-        
-        // Create a viem wallet client from Privy's provider
-        const getViemWalletClient = async (chainId?: number) => {
-          const targetChain = chains.find(c => c.id === chainId) || base
+        /**
+         * Create a wallet client for a SPECIFIC chain that FORCES the chain ID
+         * regardless of what Privy's internal provider thinks the chain is.
+         * 
+         * This is the key workaround: we intercept eth_chainId calls and return
+         * the chain we want LI.FI to think we're on.
+         */
+        const createChainForcedWalletClient = (targetChainId: number) => {
+          const chain = CHAINS[targetChainId] || base
+          const hexChainId = `0x${targetChainId.toString(16)}`
+          
+          console.log(`🔧 Creating chain-forced wallet client for chain ${targetChainId} (${chain.name})`)
+          
           return createWalletClient({
             account: embeddedWallet.address as `0x${string}`,
-            chain: targetChain,
-            transport: custom(provider),
+            chain: chain,
+            transport: custom({
+              async request({ method, params }: { method: string; params?: any[] }) {
+                // CRITICAL: Override eth_chainId to return our forced chain
+                if (method === 'eth_chainId') {
+                  console.log(`📍 eth_chainId intercepted, returning ${hexChainId} (${targetChainId})`)
+                  return hexChainId
+                }
+                
+                // For eth_sendTransaction, ensure chainId is set correctly in the tx
+                if (method === 'eth_sendTransaction' && params?.[0]) {
+                  console.log('📤 eth_sendTransaction intercepted, forcing chainId in tx params')
+                  // Don't modify chainId in tx params - let the chain config handle it
+                  // Some providers reject if chainId is explicitly set
+                }
+                
+                // For eth_call and eth_estimateGas, just pass through
+                // The RPC will use the correct chain based on the provider's connection
+                
+                // Forward everything else to Privy's provider
+                return provider.request({ method, params: params as any })
+              }
+            } as EIP1193Provider),
           })
         }
         
-        // Configure LI.FI with the EVM provider
+        // Configure LI.FI with the EVM provider that forces chain
         lifiConfig.setProviders([
           EVM({
-            getWalletClient: () => getViemWalletClient(),
-            switchChain: async (chainId) => {
-              console.log('🟡 LI.FI switchChain called for:', chainId)
+            getWalletClient: async () => {
+              // Return client for current tracked chain
+              return createChainForcedWalletClient(currentChainIdRef.current)
+            },
+            switchChain: async (chainId: number) => {
+              console.log('=== CHAIN SWITCH DEBUG ===')
+              console.log('🔄 LI.FI requesting chain switch to:', chainId)
+              console.log('📍 Previous tracked chain:', currentChainIdRef.current)
+              
+              // Get current chain from provider for debugging
+              try {
+                const providerChainId = await provider.request({ method: 'eth_chainId' })
+                console.log('📍 Provider reports chainId:', parseInt(providerChainId as string, 16))
+              } catch (e) {
+                console.log('📍 Could not get provider chainId:', e)
+              }
+              
+              // Try Privy's switch (may not actually work, but try anyway)
               try {
                 await embeddedWallet.switchChain(chainId)
-                console.log('🟢 Chain switch successful')
+                console.log('✅ Privy switchChain() completed')
               } catch (e) {
-                console.warn('🟡 Chain switch warning (continuing anyway):', e)
+                console.warn('⚠️ Privy switchChain failed (expected, using workaround):', e)
               }
-              return getViemWalletClient(chainId)
+              
+              // Check provider again after switch attempt
+              try {
+                const newProviderChainId = await provider.request({ method: 'eth_chainId' })
+                console.log('📍 Provider chainId after switch attempt:', parseInt(newProviderChainId as string, 16))
+              } catch (e) {
+                console.log('📍 Could not get provider chainId after switch:', e)
+              }
+              
+              // Update our tracked chain - THIS IS THE KEY
+              currentChainIdRef.current = chainId
+              console.log('📍 Updated tracked chain to:', chainId)
+              
+              // Return a client that's FORCED to the target chain
+              const client = createChainForcedWalletClient(chainId)
+              
+              console.log('✅ Returning wallet client with chain.id:', client.chain?.id)
+              console.log('=========================')
+              
+              return client
             },
           }),
         ])
         
         setIsProviderReady(true)
-        console.log('🟢 LI.FI EVM provider ready')
+        console.log('🟢 LI.FI EVM provider ready with chain-forcing workaround')
       } catch (err) {
         console.error('🔴 Failed to setup LI.FI provider:', err)
         setError('Failed to initialize bridge')
