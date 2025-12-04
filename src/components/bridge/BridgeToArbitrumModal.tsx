@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X, ArrowDown, Loader2, Check, AlertCircle, Fuel, CheckCircle, ExternalLink } from 'lucide-react'
+import { X, ArrowDown, Loader2, Check, AlertCircle, Fuel, CheckCircle, ExternalLink, AlertTriangle } from 'lucide-react'
 import { useRelayDepositBridge } from '@/hooks/useRelayDepositBridge'
+import { usePrivy } from '@privy-io/react-auth'
 import { SwapForGasModal } from './SwapForGasModal'
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
+  const { logout } = usePrivy()
   const [inputValue, setInputValue] = useState('')
   const [isSuccess, setIsSuccess] = useState(false)
   const [showGasSwap, setShowGasSwap] = useState(false)
@@ -27,12 +29,15 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
     quote,
     txHash,
     walletAddress,
+    currentChainId,
+    isOnWrongChain,
     baseBalance,
     arbBalance,
     isLoading,
     canExecute,
     getQuote,
     executeBridge,
+    switchToBase,
     reset,
     getFallbackUrl,
     clearError,
@@ -101,8 +106,16 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
   }
 
   const handleBridge = async () => {
-    const success = await executeBridge(inputValue)
-    // Modal stays open to show progress
+    await executeBridge(inputValue)
+  }
+
+  const handleSwitchChain = async () => {
+    await switchToBase()
+  }
+
+  const handleLogout = async () => {
+    await logout()
+    onClose()
   }
 
   const amountNum = parseFloat(inputValue) || 0
@@ -111,6 +124,14 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
 
   // Fallback URL
   const fallbackUrl = getFallbackUrl(inputValue || '5')
+
+  // Get chain name
+  const getChainName = (chainId: number | null) => {
+    if (chainId === 8453) return 'Base'
+    if (chainId === 42161) return 'Arbitrum'
+    if (chainId === 1) return 'Ethereum'
+    return `Chain ${chainId}`
+  }
 
   if (!isOpen || !mounted) return null
 
@@ -145,6 +166,79 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
             <X className="w-5 h-5 text-white/60" />
           </button>
         </div>
+
+        {/* Wrong Chain Warning */}
+        {isOnWrongChain && status !== 'switching' && !isSuccess && (
+          <div className="mb-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-2xl">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle className="w-5 h-5 text-yellow-400" />
+              <span className="text-yellow-400 font-medium">Wrong Network</span>
+            </div>
+            <p className="text-yellow-400/70 text-sm mb-4">
+              Your wallet is on <strong>{getChainName(currentChainId)}</strong> but bridging requires <strong>Base</strong>. 
+              The bridge needs to send USDC from your Base wallet.
+            </p>
+            <div className="space-y-2">
+              <button
+                onClick={handleSwitchChain}
+                className="w-full py-2.5 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold text-sm rounded-xl transition-colors"
+              >
+                Switch to Base
+              </button>
+              <button
+                onClick={handleLogout}
+                className="w-full py-2.5 bg-white/10 hover:bg-white/20 text-white/70 font-medium text-sm rounded-xl transition-colors"
+              >
+                Log out & log back in
+              </button>
+              <a
+                href={fallbackUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full py-2.5 text-center text-yellow-400/70 text-sm hover:text-yellow-400"
+              >
+                Or use Relay.link directly →
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* Switching Chain Status */}
+        {status === 'switching' && (
+          <div className="flex items-center gap-2 mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+            <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+            <span className="text-blue-400 text-sm">Switching to Base network...</span>
+          </div>
+        )}
+
+        {/* Wrong Chain Error */}
+        {status === 'wrong_chain' && (
+          <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertCircle className="w-5 h-5 text-red-400" />
+              <span className="text-red-400 font-medium">Network Switch Failed</span>
+            </div>
+            <p className="text-red-400/70 text-sm mb-4">
+              Unable to switch networks automatically. This can happen when your session is cached on another network.
+            </p>
+            <div className="space-y-2">
+              <button
+                onClick={handleLogout}
+                className="w-full py-2.5 bg-red-500 hover:bg-red-600 text-white font-semibold text-sm rounded-xl transition-colors"
+              >
+                Log out to reset
+              </button>
+              <a
+                href={fallbackUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full py-2.5 text-center bg-white/10 hover:bg-white/20 text-white/70 font-medium text-sm rounded-xl transition-colors"
+              >
+                Use Relay.link instead →
+              </a>
+            </div>
+          </div>
+        )}
 
         {isSuccess ? (
           <div className="flex flex-col items-center py-8">
@@ -192,8 +286,16 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
               Skip, I already have ETH →
             </button>
           </div>
-        ) : (
+        ) : status !== 'wrong_chain' && (
           <>
+            {/* Network Status Indicator */}
+            {currentChainId && !isOnWrongChain && (
+              <div className="flex items-center gap-2 mb-4 p-2 bg-green-500/10 border border-green-500/20 rounded-xl">
+                <div className="w-2 h-2 bg-green-400 rounded-full" />
+                <span className="text-green-400 text-xs">Connected to Base</span>
+              </div>
+            )}
+
             {/* FROM section */}
             <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 mb-3">
               <div className="flex items-center justify-between mb-2">
@@ -218,7 +320,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
                   placeholder="0.00"
                   value={inputValue}
                   onChange={handleInputChange}
-                  disabled={isLoading}
+                  disabled={isLoading || isOnWrongChain}
                   style={{
                     flex: 1,
                     minWidth: 0,
@@ -232,7 +334,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
                     margin: 0,
                     caretColor: 'white',
                     pointerEvents: 'auto',
-                    opacity: isLoading ? 0.5 : 1,
+                    opacity: isLoading || isOnWrongChain ? 0.5 : 1,
                   }}
                 />
                 <div className="bg-[#ef4444] rounded-xl px-3 py-2 flex items-center gap-1 flex-shrink-0">
@@ -246,7 +348,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
                 <button
                   type="button"
                   onClick={handleMax}
-                  disabled={isLoading}
+                  disabled={isLoading || isOnWrongChain}
                   className="text-[#ef4444] text-xs font-medium hover:underline disabled:opacity-50"
                 >
                   Balance: {parseFloat(baseBalance).toFixed(2)} USDC
@@ -294,7 +396,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
             </div>
 
             {/* Quote info */}
-            {quote && (
+            {quote && !isOnWrongChain && (
               <div className="bg-white/[0.02] rounded-xl p-3 mb-4 text-xs">
                 <div className="flex justify-between mb-1">
                   <span className="text-white/50">Fee</span>
@@ -366,13 +468,12 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
             )}
 
             {/* Error */}
-            {error && (
+            {error && status !== 'wrong_chain' && (
               <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
                 <div className="flex items-center gap-2 mb-2">
                   <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
                   <span className="text-red-400 text-sm">{error}</span>
                 </div>
-                {/* Show fallback link on error */}
                 <a
                   href={fallbackUrl}
                   target="_blank"
@@ -385,32 +486,34 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
             )}
 
             {/* Bridge button */}
-            <button
-              type="button"
-              onClick={handleBridge}
-              disabled={!canBridgeNow}
-              className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-[#ef4444]/30 disabled:cursor-not-allowed text-white font-semibold rounded-2xl flex items-center justify-center gap-2"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  {statusMessage || 'Processing...'}
-                </>
-              ) : status === 'quoting' ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Getting quote...
-                </>
-              ) : amountNum <= 0 ? (
-                'Enter amount'
-              ) : amountNum > balanceNum ? (
-                'Insufficient balance'
-              ) : !quote ? (
-                'Fetching quote...'
-              ) : (
-                `Bridge $${amountNum.toFixed(2)} USDC`
-              )}
-            </button>
+            {!isOnWrongChain && (
+              <button
+                type="button"
+                onClick={handleBridge}
+                disabled={!canBridgeNow}
+                className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-[#ef4444]/30 disabled:cursor-not-allowed text-white font-semibold rounded-2xl flex items-center justify-center gap-2"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    {statusMessage || 'Processing...'}
+                  </>
+                ) : status === 'quoting' ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Getting quote...
+                  </>
+                ) : amountNum <= 0 ? (
+                  'Enter amount'
+                ) : amountNum > balanceNum ? (
+                  'Insufficient balance'
+                ) : !quote ? (
+                  'Fetching quote...'
+                ) : (
+                  `Bridge $${amountNum.toFixed(2)} USDC`
+                )}
+              </button>
+            )}
 
             {/* Footer with fallback */}
             <div className="flex items-center justify-center gap-2 mt-4">

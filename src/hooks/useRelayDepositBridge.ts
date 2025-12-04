@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useWallets } from '@privy-io/react-auth'
 import { useBalance, useAccount } from 'wagmi'
-import { parseUnits, encodeFunctionData, formatUnits } from 'viem'
+import { parseUnits, encodeFunctionData } from 'viem'
 import { base, arbitrum } from 'viem/chains'
 import { 
   getDepositAddressQuote, 
@@ -33,10 +33,12 @@ export type BridgeStatus =
   | 'quoting' 
   | 'ready' 
   | 'confirming'
+  | 'switching'
   | 'depositing' 
   | 'bridging' 
   | 'complete' 
   | 'error'
+  | 'wrong_chain'
 
 export function useRelayDepositBridge() {
   const { address } = useAccount()
@@ -46,6 +48,7 @@ export function useRelayDepositBridge() {
   const [quote, setQuote] = useState<DepositQuote | null>(null)
   const [txHash, setTxHash] = useState<string | null>(null)
   const [statusMessage, setStatusMessage] = useState('')
+  const [currentChainId, setCurrentChainId] = useState<number | null>(null)
   
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
   
@@ -64,6 +67,23 @@ export function useRelayDepositBridge() {
     chainId: arbitrum.id,
   })
   
+  // Check current chain on mount and when wallet changes
+  useEffect(() => {
+    const checkChain = async () => {
+      if (!embeddedWallet) return
+      try {
+        const provider = await embeddedWallet.getEthereumProvider()
+        const chainIdHex = await provider.request({ method: 'eth_chainId' })
+        const chainId = parseInt(chainIdHex as string, 16)
+        setCurrentChainId(chainId)
+        console.log('📍 Current wallet chain:', chainId, chainId === 8453 ? '(Base)' : chainId === 42161 ? '(Arbitrum)' : '')
+      } catch (e) {
+        console.error('Failed to get chain:', e)
+      }
+    }
+    checkChain()
+  }, [embeddedWallet])
+  
   // Clean up polling on unmount
   useEffect(() => {
     return () => {
@@ -72,6 +92,44 @@ export function useRelayDepositBridge() {
       }
     }
   }, [])
+  
+  /**
+   * Switch wallet to Base network
+   */
+  const switchToBase = useCallback(async (): Promise<boolean> => {
+    if (!embeddedWallet) return false
+    
+    setStatus('switching')
+    setStatusMessage('Switching to Base network...')
+    
+    try {
+      console.log('🔄 Switching to Base (8453)...')
+      await embeddedWallet.switchChain(8453)
+      
+      // Wait for switch to propagate
+      await new Promise(r => setTimeout(r, 1000))
+      
+      // Verify the switch
+      const provider = await embeddedWallet.getEthereumProvider()
+      const chainIdHex = await provider.request({ method: 'eth_chainId' })
+      const chainId = parseInt(chainIdHex as string, 16)
+      
+      console.log('📍 Chain after switch:', chainId)
+      setCurrentChainId(chainId)
+      
+      if (chainId === 8453) {
+        console.log('✅ Successfully switched to Base')
+        setStatus('ready')
+        return true
+      } else {
+        console.error('❌ Switch failed, still on chain:', chainId)
+        return false
+      }
+    } catch (e) {
+      console.error('❌ Chain switch error:', e)
+      return false
+    }
+  }, [embeddedWallet])
   
   /**
    * Get a fresh quote with deposit address
@@ -108,7 +166,7 @@ export function useRelayDepositBridge() {
   
   /**
    * Execute the bridge by sending USDC to the deposit address
-   * This is a simple ERC20 transfer - no chain switching complexity!
+   * IMPORTANT: Wallet MUST be on Base for this to work!
    */
   const executeBridge = useCallback(async (amount: string) => {
     if (!embeddedWallet || !quote?.depositAddress) {
@@ -124,12 +182,53 @@ export function useRelayDepositBridge() {
       if (!newQuote) return false
     }
     
+    // Get current chain
+    const provider = await embeddedWallet.getEthereumProvider()
+    let chainIdHex = await provider.request({ method: 'eth_chainId' })
+    let chainId = parseInt(chainIdHex as string, 16)
+    
+    console.log('╔══════════════════════════════════════╗')
+    console.log('║     DEPOSIT ADDRESS BRIDGE           ║')
+    console.log('╚══════════════════════════════════════╝')
+    console.log('📍 Current chain:', chainId, chainId === 8453 ? '(Base ✓)' : '(NOT Base ✗)')
+    
+    // If not on Base, try to switch
+    if (chainId !== 8453) {
+      console.log('⚠️ Wallet is NOT on Base, attempting to switch...')
+      setStatus('switching')
+      setStatusMessage('Switching to Base network...')
+      
+      try {
+        await embeddedWallet.switchChain(8453)
+        await new Promise(r => setTimeout(r, 1000))
+        
+        // Check again
+        chainIdHex = await provider.request({ method: 'eth_chainId' })
+        chainId = parseInt(chainIdHex as string, 16)
+        console.log('📍 Chain after switch attempt:', chainId)
+        setCurrentChainId(chainId)
+        
+        if (chainId !== 8453) {
+          // Switch failed - show error with instructions
+          console.error('❌ Chain switch failed!')
+          setError('Wallet is on wrong network. Please log out and log back in to reset to Base network.')
+          setStatus('wrong_chain')
+          return false
+        }
+      } catch (e) {
+        console.error('❌ Chain switch error:', e)
+        setError('Unable to switch to Base. Please log out and log back in.')
+        setStatus('wrong_chain')
+        return false
+      }
+    }
+    
+    // Now we should be on Base - proceed with the transfer
     setStatus('confirming')
     setStatusMessage('Confirm in your wallet...')
     setError(null)
     
     try {
-      const provider = await embeddedWallet.getEthereumProvider()
       const amountWei = parseUnits(amount, 6)
       
       // Encode ERC20 transfer to deposit address
@@ -139,35 +238,22 @@ export function useRelayDepositBridge() {
         args: [quote.depositAddress as `0x${string}`, amountWei],
       })
       
-      console.log('╔══════════════════════════════════════╗')
-      console.log('║     DEPOSIT ADDRESS BRIDGE           ║')
-      console.log('╚══════════════════════════════════════╝')
       console.log('📤 Sending USDC to deposit address:', quote.depositAddress)
       console.log('   Amount:', amount, 'USDC')
       console.log('   Request ID:', quote.requestId)
-      
-      // Attempt to switch to Base first (best effort)
-      try {
-        console.log('🔄 Attempting to switch to Base...')
-        await embeddedWallet.switchChain(8453)
-        await new Promise(r => setTimeout(r, 500))
-        console.log('✅ Chain switch completed')
-      } catch (switchError) {
-        console.warn('⚠️ Chain switch warning (may still work):', switchError)
-      }
+      console.log('   Contract:', USDC_BASE, '(Base USDC)')
       
       setStatus('depositing')
       setStatusMessage('Sending to bridge...')
       
-      // Send the ERC20 transfer transaction
-      // Transaction goes to USDC contract on Base, calling transfer()
+      // Send the ERC20 transfer transaction ON BASE
       const hash = await provider.request({
         method: 'eth_sendTransaction',
         params: [{
           from: embeddedWallet.address,
-          to: USDC_BASE,  // USDC contract on Base
+          to: USDC_BASE,  // Base USDC contract
           data: data,
-          value: '0x0',   // No ETH value for ERC20 transfer
+          value: '0x0',
         }],
       })
       
@@ -188,11 +274,11 @@ export function useRelayDepositBridge() {
       const msg = errorMessage.toLowerCase()
       
       if (msg.includes('insufficient') && msg.includes('fund')) {
-        errorMessage = 'Insufficient ETH for gas on Base'
+        errorMessage = 'Insufficient ETH for gas. You need ETH on Base to pay for this transaction.'
       } else if (msg.includes('user rejected') || msg.includes('denied') || msg.includes('cancelled')) {
         errorMessage = 'Transaction cancelled'
-      } else if (msg.includes('chain')) {
-        errorMessage = 'Network error - try using the external link'
+      } else if (msg.includes('chain') || msg.includes('network')) {
+        errorMessage = 'Network error. Please log out and log back in to reset your wallet to Base.'
       }
       
       setError(errorMessage)
@@ -236,7 +322,6 @@ export function useRelayDepositBridge() {
         if (attempts < maxAttempts) {
           pollingRef.current = setTimeout(poll, 5000)
         } else {
-          // Timeout - but bridge may still complete
           console.warn('Status polling timeout - bridge may still complete')
           setStatusMessage('Taking longer than expected... bridge may still complete')
         }
@@ -249,7 +334,7 @@ export function useRelayDepositBridge() {
       }
     }
     
-    // Start polling after a short delay (give time for tx to be indexed)
+    // Start polling after a short delay
     pollingRef.current = setTimeout(poll, 3000)
   }, [refetchBase, refetchArb])
   
@@ -276,6 +361,9 @@ export function useRelayDepositBridge() {
     return getRelayDeepLink(amount, walletAddress)
   }, [embeddedWallet?.address, address])
   
+  // Check if on wrong chain
+  const isOnWrongChain = currentChainId !== null && currentChainId !== 8453
+  
   return {
     // State
     status,
@@ -285,6 +373,10 @@ export function useRelayDepositBridge() {
     txHash,
     walletAddress: embeddedWallet?.address || address,
     
+    // Chain state
+    currentChainId,
+    isOnWrongChain,
+    
     // Balances
     baseBalance: baseBalance?.formatted || '0',
     arbBalance: arbBalance?.formatted || '0',
@@ -292,13 +384,13 @@ export function useRelayDepositBridge() {
     // Actions
     getQuote,
     executeBridge,
+    switchToBase,
     reset,
     getFallbackUrl,
     clearError: useCallback(() => setError(null), []),
     
     // Computed
-    isLoading: ['quoting', 'confirming', 'depositing', 'bridging'].includes(status),
+    isLoading: ['quoting', 'confirming', 'switching', 'depositing', 'bridging'].includes(status),
     canExecute: status === 'ready' && !!quote,
   }
 }
-
