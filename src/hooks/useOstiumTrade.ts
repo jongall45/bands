@@ -338,8 +338,8 @@ export function useOstiumTrade() {
     setErrorMessage(null)
 
     try {
-      const priceData = await fetchPairPrice(pairIndex)
-      const priceUpdateData = encodePriceUpdateData(priceData ?? undefined)
+      // Fetch Pyth price update data
+      const priceUpdateData = await fetchPythPriceUpdate(pairIndex)
 
       const calldata = encodeFunctionData({
         abi: OSTIUM_TRADING_ABI,
