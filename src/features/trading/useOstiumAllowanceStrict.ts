@@ -89,7 +89,7 @@ export function useOstiumAllowanceStrict({ collateralUSDC }: UseOstiumAllowanceS
         isApproved: allowance !== undefined ? allowance >= collateralWei : 'UNKNOWN',
       })
     }
-  }, [userAddress, allowance, collateralWei, blockNumber])
+  }, [userAddress, allowance, collateralWei])
 
   // ============================================
   // STRICT APPROVAL CHECK
