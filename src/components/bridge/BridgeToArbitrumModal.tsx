@@ -286,7 +286,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
               Skip, I already have ETH →
             </button>
           </div>
-        ) : status !== 'wrong_chain' && (
+        ) : (
           <>
             {/* Network Status Indicator */}
             {currentChainId && !isOnWrongChain && (
@@ -468,7 +468,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
             )}
 
             {/* Error */}
-            {error && status !== 'wrong_chain' && (
+            {error && status === 'error' && (
               <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
                 <div className="flex items-center gap-2 mb-2">
                   <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
