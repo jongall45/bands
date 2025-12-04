@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { BridgeToArbitrumModal } from '@/components/bridge/BridgeToArbitrumModal'
+import { SwapForGasModal } from '@/components/bridge/SwapForGasModal'
 import { OstiumMarketSelector } from '@/components/ostium/MarketSelector'
 import { OstiumTradePanel } from '@/components/ostium/TradePanel'
 import { OSTIUM_PAIRS, type OstiumPair } from '@/lib/ostium/constants'
@@ -15,6 +16,7 @@ export default function OstiumTradingPage() {
   const { isAuthenticated, isConnected, address, balances, refetchBalances } = useAuth()
   const router = useRouter()
   const [showBridgeModal, setShowBridgeModal] = useState(false)
+  const [showGasModal, setShowGasModal] = useState(false)
   const [hasCheckedBalance, setHasCheckedBalance] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [selectedPair, setSelectedPair] = useState<OstiumPair>(OSTIUM_PAIRS[0]) // BTC-USD
@@ -113,13 +115,24 @@ export default function OstiumTradingPage() {
                 </div>
               </div>
             </div>
-            <button
-              onClick={() => setShowBridgeModal(true)}
-              className="flex items-center gap-1.5 bg-white/[0.05] hover:bg-white/[0.08] px-3 py-1.5 rounded-lg text-white/60 text-xs transition-colors"
-            >
-              <ArrowRightLeft className="w-3.5 h-3.5" />
-              Bridge
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Gas Button - always visible when ETH is low */}
+              {!hasArbitrumEth && (
+                <button
+                  onClick={() => setShowGasModal(true)}
+                  className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded-lg text-white text-xs font-semibold transition-colors"
+                >
+                  ⛽ Get Gas
+                </button>
+              )}
+              <button
+                onClick={() => setShowBridgeModal(true)}
+                className="flex items-center gap-1.5 bg-white/[0.05] hover:bg-white/[0.08] px-3 py-1.5 rounded-lg text-white/60 text-xs transition-colors"
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5" />
+                Bridge
+              </button>
+            </div>
           </div>
         </div>
 
@@ -169,6 +182,17 @@ export default function OstiumTradingPage() {
             refetchBalances()
             setShowBridgeModal(false)
           }}
+        />
+
+        {/* Gas Swap Modal */}
+        <SwapForGasModal
+          isOpen={showGasModal}
+          onClose={() => setShowGasModal(false)}
+          onSuccess={() => {
+            refetchBalances()
+            setShowGasModal(false)
+          }}
+          suggestedAmount="1"
         />
       </div>
     </div>
