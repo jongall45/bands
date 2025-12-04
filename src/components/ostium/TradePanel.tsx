@@ -5,7 +5,7 @@ import { useAccount, useReadContract, useBalance } from 'wagmi'
 import { formatUnits } from 'viem'
 import { arbitrum } from 'wagmi/chains'
 import { 
-  TrendingUp, TrendingDown, Info, AlertCircle, ChevronDown, Fuel 
+  TrendingUp, TrendingDown, Info, AlertCircle, ChevronDown, Fuel, ExternalLink 
 } from 'lucide-react'
 import { useOstiumPrice } from '@/hooks/useOstiumPrices'
 import { OSTIUM_CONTRACTS, MIN_COLLATERAL_USD } from '@/lib/ostium/constants'
