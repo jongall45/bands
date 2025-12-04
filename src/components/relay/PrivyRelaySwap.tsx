@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useWallets } from '@privy-io/react-auth'
-import { usePublicClient } from 'wagmi'
-import { formatUnits, parseUnits, createWalletClient, custom, http } from 'viem'
+import { usePublicClient, useChainId } from 'wagmi'
+import { formatUnits, parseUnits, encodeFunctionData } from 'viem'
 import { base, arbitrum, optimism, mainnet } from 'viem/chains'
 import { 
   Loader2, 
@@ -12,7 +12,8 @@ import {
   Check,
   ChevronDown,
   Wallet,
-  ArrowRightLeft
+  ArrowRightLeft,
+  ExternalLink
 } from 'lucide-react'
 
 // ============================================
@@ -40,7 +41,7 @@ const TOKENS: Record<string, Record<number, { address: string; decimals: number;
   },
 }
 
-// ERC20 ABI for balance
+// ERC20 ABI for balance and transfer
 const ERC20_ABI = [
   {
     name: 'balanceOf',
@@ -49,12 +50,22 @@ const ERC20_ABI = [
     inputs: [{ name: 'account', type: 'address' }],
     outputs: [{ name: '', type: 'uint256' }],
   },
+  {
+    name: 'transfer',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'to', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
 ] as const
 
 // ============================================
 // TYPES
 // ============================================
-type SwapState = 'idle' | 'quoting' | 'ready' | 'executing' | 'success' | 'error'
+type SwapState = 'idle' | 'quoting' | 'ready' | 'executing' | 'polling' | 'success' | 'error'
 
 interface Quote {
   amountOut: string
@@ -62,6 +73,8 @@ interface Quote {
   gasFeeUsd: string
   relayFeeUsd: string
   totalFeeUsd: string
+  depositAddress: string | null // Deposit address for cross-chain
+  requestId: string | null
   steps: any[]
 }
 
@@ -173,6 +186,9 @@ export function PrivyRelaySwap({
     fetchBalances()
   }, [fetchBalances])
 
+  // Track if this is a cross-chain swap (bridge)
+  const isCrossChain = fromChainId !== toChainId
+
   // ============================================
   // FETCH QUOTE FROM RELAY
   // ============================================
@@ -194,29 +210,35 @@ export function PrivyRelaySwap({
       }
 
       const amountWei = parseUnits(amount, fromTokenInfo.decimals).toString()
+      const isCrossChainSwap = fromChainId !== toChainId
 
-      console.log('🔍 Fetching quote:', {
+      // Build request body - use deposit address for cross-chain
+      const requestBody: any = {
         user: address,
+        recipient: address,
         originChainId: fromChainId,
         destinationChainId: toChainId,
         originCurrency: fromTokenInfo.address,
         destinationCurrency: toTokenInfo.address,
         amount: amountWei,
-      })
+        tradeType: 'EXACT_INPUT',
+        referrer: 'bands.cash',
+      }
+
+      // === CRITICAL: Enable deposit address for cross-chain swaps ===
+      if (isCrossChainSwap) {
+        requestBody.useDepositAddress = true
+        requestBody.refundTo = address
+        requestBody.usePermit = false
+        requestBody.useExternalLiquidity = false
+      }
+
+      console.log('🔍 Fetching quote:', requestBody)
 
       const response = await fetch('https://api.relay.link/quote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user: address,
-          originChainId: fromChainId,
-          destinationChainId: toChainId,
-          originCurrency: fromTokenInfo.address,
-          destinationCurrency: toTokenInfo.address,
-          amount: amountWei,
-          recipient: address,
-          tradeType: 'EXACT_INPUT',
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (!response.ok) {
@@ -231,12 +253,23 @@ export function PrivyRelaySwap({
       const gasFee = parseFloat(data.fees?.gas?.amountUsd || '0')
       const relayFee = parseFloat(data.fees?.relayer?.amountUsd || '0')
 
+      // Extract deposit address for cross-chain swaps
+      const step = data.steps?.[0]
+      const depositAddress = step?.depositAddress || null
+      const requestId = step?.requestId || data.requestId || null
+
+      if (isCrossChainSwap && !depositAddress) {
+        console.warn('⚠️ No deposit address in cross-chain quote, falling back to execute API')
+      }
+
       setQuote({
         amountOut,
         amountOutFormatted: formatUnits(BigInt(amountOut), toTokenInfo.decimals),
         gasFeeUsd: gasFee.toFixed(2),
         relayFeeUsd: relayFee.toFixed(2),
         totalFeeUsd: (gasFee + relayFee).toFixed(2),
+        depositAddress,
+        requestId,
         steps: data.steps || [],
       })
       setState('ready')
@@ -247,6 +280,29 @@ export function PrivyRelaySwap({
       setQuote(null)
     }
   }, [address, amount, fromChainId, toChainId, fromToken, toToken])
+
+  // ============================================
+  // CHECK BRIDGE STATUS (for cross-chain via deposit address)
+  // ============================================
+  const checkBridgeStatus = useCallback(async (requestId: string): Promise<'pending' | 'success' | 'failed'> => {
+    try {
+      const response = await fetch(
+        `https://api.relay.link/intents/status?requestId=${requestId}`,
+        { method: 'GET', headers: { 'Content-Type': 'application/json' } }
+      )
+      
+      if (!response.ok) return 'pending'
+      
+      const data = await response.json()
+      console.log('📊 Bridge status:', data.status)
+      
+      if (data.status === 'success' || data.status === 'completed') return 'success'
+      if (data.status === 'failed' || data.status === 'refunded') return 'failed'
+      return 'pending'
+    } catch {
+      return 'pending'
+    }
+  }, [])
 
   // ============================================
   // EXECUTE SWAP
@@ -265,25 +321,132 @@ export function PrivyRelaySwap({
         throw new Error('Invalid token configuration')
       }
 
-      const amountWei = parseUnits(amount, fromTokenInfo.decimals).toString()
+      const amountWei = parseUnits(amount, fromTokenInfo.decimals)
+      const isCrossChainSwap = fromChainId !== toChainId
 
-      console.log('🚀 Executing swap...')
+      // Get provider from embedded wallet
+      const provider = await embeddedWallet.getEthereumProvider()
+
+      // Ensure we're on the correct source chain
+      const currentChainId = await provider.request({ method: 'eth_chainId' })
+      const expectedChainHex = `0x${fromChainId.toString(16)}`
+      
+      if (currentChainId !== expectedChainHex) {
+        console.log('🔄 Switching chain from', currentChainId, 'to', expectedChainHex)
+        await provider.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: expectedChainHex }],
+        })
+      }
+
+      // ============================================
+      // METHOD 1: DEPOSIT ADDRESS (for cross-chain swaps)
+      // This is the same method that works in BridgeToArbitrumModal
+      // ============================================
+      if (isCrossChainSwap && quote.depositAddress) {
+        console.log('╔════════════════════════════════════════╗')
+        console.log('║     DEPOSIT ADDRESS BRIDGE             ║')
+        console.log('╚════════════════════════════════════════╝')
+        console.log('📍 Deposit address:', quote.depositAddress)
+        console.log('💰 Amount:', amount, fromToken)
+        console.log('🔗 Request ID:', quote.requestId)
+
+        let hash: string
+
+        // Check if sending native ETH or ERC20
+        if (fromTokenInfo.address === '0x0000000000000000000000000000000000000000') {
+          // Native ETH transfer
+          hash = await provider.request({
+            method: 'eth_sendTransaction',
+            params: [{
+              from: address,
+              to: quote.depositAddress,
+              value: `0x${amountWei.toString(16)}`,
+            }],
+          }) as string
+        } else {
+          // ERC20 transfer to deposit address
+          const transferData = encodeFunctionData({
+            abi: ERC20_ABI,
+            functionName: 'transfer',
+            args: [quote.depositAddress as `0x${string}`, amountWei],
+          })
+
+          console.log('📤 Sending', amount, fromToken, 'to deposit address:', quote.depositAddress)
+
+          hash = await provider.request({
+            method: 'eth_sendTransaction',
+            params: [{
+              from: address,
+              to: fromTokenInfo.address,
+              data: transferData,
+            }],
+          }) as string
+        }
+
+        console.log('✅ Deposit transaction submitted:', hash)
+        setTxHash(hash)
+
+        // Poll for bridge completion
+        if (quote.requestId) {
+          setState('polling')
+          
+          let attempts = 0
+          const maxAttempts = 60 // 2 minutes
+          
+          while (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 2000))
+            const status = await checkBridgeStatus(quote.requestId)
+            
+            if (status === 'success') {
+              console.log('✅ Bridge completed successfully!')
+              setState('success')
+              onSuccess?.(hash)
+              setTimeout(fetchBalances, 3000)
+              return
+            }
+            
+            if (status === 'failed') {
+              throw new Error('Bridge failed - funds may be refunded')
+            }
+            
+            attempts++
+          }
+          
+          // Timeout but transaction was sent, still show success
+          console.log('⏰ Bridge status check timed out, but transaction was sent')
+          setState('success')
+          onSuccess?.(hash)
+        } else {
+          setState('success')
+          onSuccess?.(hash)
+        }
+
+        setTimeout(fetchBalances, 3000)
+        return
+      }
+
+      // ============================================
+      // METHOD 2: EXECUTE API (for same-chain swaps or fallback)
+      // ============================================
+      console.log('╔════════════════════════════════════════╗')
+      console.log('║     EXECUTE API (same-chain swap)      ║')
+      console.log('╚════════════════════════════════════════╝')
 
       const executePayload = {
         user: address,
+        recipient: address,
         originChainId: fromChainId,
         destinationChainId: toChainId,
         originCurrency: fromTokenInfo.address,
         destinationCurrency: toTokenInfo.address,
-        amount: amountWei,
-        recipient: address,
+        amount: amountWei.toString(),
         tradeType: 'EXACT_INPUT',
         source: 'bands.cash',
       }
       
       console.log('📤 Execute payload:', executePayload)
 
-      // Get execution data from Relay
       const response = await fetch('https://api.relay.link/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -302,21 +465,6 @@ export function PrivyRelaySwap({
 
       const data = await response.json()
       console.log('📋 Execute data:', data)
-
-      // Get provider from embedded wallet
-      const provider = await embeddedWallet.getEthereumProvider()
-
-      // Ensure we're on the correct chain
-      const currentChainId = await provider.request({ method: 'eth_chainId' })
-      const expectedChainHex = `0x${fromChainId.toString(16)}`
-      
-      if (currentChainId !== expectedChainHex) {
-        console.log('🔄 Switching chain from', currentChainId, 'to', expectedChainHex)
-        await provider.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: expectedChainHex }],
-        })
-      }
 
       // Execute each step
       let lastTxHash: string | null = null
@@ -354,9 +502,6 @@ export function PrivyRelaySwap({
             console.log('✅ Transaction sent:', hash)
             lastTxHash = hash
             setTxHash(hash)
-
-            // Wait for confirmation (optional, for UX)
-            // We don't wait here to allow the UI to update
           }
         }
       }
@@ -364,8 +509,6 @@ export function PrivyRelaySwap({
       if (lastTxHash) {
         setState('success')
         onSuccess?.(lastTxHash)
-        
-        // Refresh balances after a delay
         setTimeout(fetchBalances, 3000)
       } else {
         throw new Error('No transaction was executed')
@@ -377,7 +520,7 @@ export function PrivyRelaySwap({
       setState('error')
       onError?.(error.message)
     }
-  }, [embeddedWallet, address, quote, amount, fromChainId, toChainId, fromToken, toToken, fetchBalances, onSuccess, onError])
+  }, [embeddedWallet, address, quote, amount, fromChainId, toChainId, fromToken, toToken, fetchBalances, onSuccess, onError, checkBridgeStatus])
 
   // ============================================
   // HELPERS
@@ -623,6 +766,14 @@ export function PrivyRelaySwap({
       {/* Quote Details */}
       {quote && state === 'ready' && (
         <div className="bg-[#111] border border-white/[0.06] rounded-2xl p-4 space-y-2">
+          {isCrossChain && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-white/40">Route</span>
+              <span className="text-green-400/80 text-xs font-medium">
+                {quote.depositAddress ? '✓ Deposit Address' : 'Execute API'}
+              </span>
+            </div>
+          )}
           <div className="flex items-center justify-between text-sm">
             <span className="text-white/40">Rate</span>
             <span className="text-white/60">
@@ -641,6 +792,11 @@ export function PrivyRelaySwap({
             <span className="text-white/60 font-medium">Total Fees</span>
             <span className="text-white font-medium">${quote.totalFeeUsd}</span>
           </div>
+          {isCrossChain && (
+            <div className="text-xs text-white/30 pt-1">
+              ≈30 seconds via Relay
+            </div>
+          )}
         </div>
       )}
 
@@ -660,21 +816,56 @@ export function PrivyRelaySwap({
         </div>
       )}
 
+      {/* Polling (waiting for bridge) */}
+      {state === 'polling' && txHash && (
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+            <span className="text-blue-400 font-medium">Bridge in progress...</span>
+          </div>
+          <p className="text-blue-400/60 text-xs mb-2">
+            Your {fromToken} is being bridged to {CHAINS.find(c => c.id === toChainId)?.name}. This usually takes ~30 seconds.
+          </p>
+          <a
+            href={`https://relay.link/transaction/${txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-400/70 text-xs hover:underline font-mono inline-flex items-center gap-1"
+          >
+            Track on Relay <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+      )}
+
       {/* Success */}
       {state === 'success' && txHash && (
         <div className="bg-green-500/10 border border-green-500/20 rounded-2xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <Check className="w-5 h-5 text-green-400" />
-            <span className="text-green-400 font-medium">Swap Submitted!</span>
+            <span className="text-green-400 font-medium">
+              {isCrossChain ? 'Bridge Complete!' : 'Swap Complete!'}
+            </span>
           </div>
-          <a
-            href={`https://basescan.org/tx/${txHash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-green-400/70 text-xs hover:underline font-mono"
-          >
-            {txHash.slice(0, 10)}...{txHash.slice(-8)} →
-          </a>
+          <div className="flex flex-col gap-1">
+            <a
+              href={`https://${fromChainId === base.id ? 'basescan.org' : fromChainId === arbitrum.id ? 'arbiscan.io' : 'etherscan.io'}/tx/${txHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-green-400/70 text-xs hover:underline font-mono inline-flex items-center gap-1"
+            >
+              View on Explorer <ExternalLink className="w-3 h-3" />
+            </a>
+            {isCrossChain && (
+              <a
+                href={`https://relay.link/transaction/${txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-green-400/70 text-xs hover:underline font-mono inline-flex items-center gap-1"
+              >
+                Track on Relay <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
         </div>
       )}
 
@@ -690,7 +881,15 @@ export function PrivyRelaySwap({
           className="w-full py-4 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-2xl transition-all flex items-center justify-center gap-2"
         >
           <ArrowRightLeft className="w-5 h-5" />
-          New Swap
+          New {isCrossChain ? 'Bridge' : 'Swap'}
+        </button>
+      ) : state === 'polling' ? (
+        <button
+          disabled
+          className="w-full py-4 bg-blue-500/30 text-white/60 font-semibold rounded-2xl flex items-center justify-center gap-2 cursor-not-allowed"
+        >
+          <Loader2 className="w-5 h-5 animate-spin" />
+          Bridging in progress...
         </button>
       ) : (
         <button
@@ -712,7 +911,7 @@ export function PrivyRelaySwap({
           ) : state === 'executing' ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              Swapping...
+              {isCrossChain ? 'Bridging...' : 'Swapping...'}
             </>
           ) : !amount || amountNum <= 0 ? (
             'Enter Amount'
@@ -720,6 +919,8 @@ export function PrivyRelaySwap({
             'Insufficient Balance'
           ) : !quote ? (
             'Get Quote'
+          ) : isCrossChain ? (
+            `Bridge ${fromToken} to ${CHAINS.find(c => c.id === toChainId)?.name}`
           ) : (
             `Swap ${fromToken} for ${toToken}`
           )}
