@@ -3,15 +3,23 @@
 import { useAccount, useDisconnect } from 'wagmi'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { ArrowLeft, LogOut, ExternalLink, Copy, Check, Shield, Smartphone, Globe } from 'lucide-react'
+import { ArrowLeft, LogOut, ExternalLink, Copy, Check, Shield, Smartphone, Globe, Key, AlertTriangle, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { BottomNav } from '@/components/ui/BottomNav'
+import { usePrivy, useWallets } from '@privy-io/react-auth'
 
 export default function SettingsPage() {
   const { address, isConnected } = useAccount()
   const { disconnect } = useDisconnect()
+  const { logout, exportWallet } = usePrivy()
+  const { wallets } = useWallets()
   const router = useRouter()
   const [copied, setCopied] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+  const [showExportWarning, setShowExportWarning] = useState(false)
+
+  // Get the embedded wallet
+  const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
 
   useEffect(() => {
     if (!isConnected) {
@@ -27,9 +35,28 @@ export default function SettingsPage() {
     }
   }
 
-  const handleDisconnect = () => {
-    disconnect()
+  const handleDisconnect = async () => {
+    try {
+      await logout()
+    } catch (e) {
+      disconnect()
+    }
     router.push('/')
+  }
+
+  const handleExportWallet = async () => {
+    if (!embeddedWallet) return
+    
+    setIsExporting(true)
+    try {
+      // Privy's exportWallet opens a secure modal for the user to view/copy their private key
+      await exportWallet()
+    } catch (error) {
+      console.error('Failed to export wallet:', error)
+    } finally {
+      setIsExporting(false)
+      setShowExportWarning(false)
+    }
   }
 
   if (!isConnected || !address) return null
@@ -89,6 +116,76 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* Export Private Key Card - COMPLIANCE REQUIREMENT */}
+          {embeddedWallet && (
+            <div className="bg-[#111] border border-white/[0.06] rounded-3xl p-5 relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 via-transparent to-transparent pointer-events-none" />
+              
+              <div className="relative z-10">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 bg-amber-500/20 rounded-xl flex items-center justify-center">
+                    <Key className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-white font-semibold">Export Private Key</h3>
+                    <p className="text-white/40 text-xs">Full control of your wallet</p>
+                  </div>
+                </div>
+                
+                <p className="text-white/50 text-sm mb-4">
+                  Export your private key to use your wallet in any external wallet app like MetaMask, Rainbow, or hardware wallets.
+                </p>
+
+                {!showExportWarning ? (
+                  <button
+                    onClick={() => setShowExportWarning(true)}
+                    className="w-full py-3 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-400 font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Key className="w-4 h-4" />
+                    Export Private Key
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3">
+                      <div className="flex gap-2">
+                        <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-red-400 text-sm font-medium">Security Warning</p>
+                          <p className="text-red-400/70 text-xs mt-1">
+                            Never share your private key with anyone. Anyone with your private key has full access to your funds.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowExportWarning(false)}
+                        className="flex-1 py-3 bg-white/[0.05] hover:bg-white/[0.08] text-white/60 font-medium rounded-xl transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleExportWallet}
+                        disabled={isExporting}
+                        className="flex-1 py-3 bg-red-500 hover:bg-red-600 disabled:bg-red-500/50 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+                      >
+                        {isExporting ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Exporting...
+                          </>
+                        ) : (
+                          'I Understand, Export'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Features Card */}
           <div className="bg-[#111] border border-white/[0.06] rounded-3xl p-5 relative overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-[#FF3B30]/25 via-[#FF3B30]/10 to-transparent pointer-events-none" />
@@ -113,6 +210,16 @@ export default function SettingsPage() {
                 <div>
                   <p className="text-white font-medium">Passkey Auth</p>
                   <p className="text-white/40 text-sm">Secured with Face ID / Touch ID</p>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-4 py-3 border-b border-white/[0.06]">
+                <div className="w-10 h-10 bg-white/[0.05] rounded-xl flex items-center justify-center">
+                  <Key className="w-5 h-5 text-[#ef4444]" />
+                </div>
+                <div>
+                  <p className="text-white font-medium">Exportable Keys</p>
+                  <p className="text-white/40 text-sm">Full access to your private key</p>
                 </div>
               </div>
               
@@ -147,4 +254,3 @@ export default function SettingsPage() {
     </div>
   )
 }
-
