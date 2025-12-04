@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const OSTIUM_BASE = 'https://metadata-backend.ostium.com'
+const OSTIUM_BASE = 'https://metadata-backend.ostium.io'
 
 export async function GET(
   request: NextRequest,
