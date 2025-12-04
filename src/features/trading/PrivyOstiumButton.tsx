@@ -273,7 +273,7 @@ export function PrivyOstiumButton({
       console.log('✅ Price update received, length:', priceUpdateData.length)
 
       // Calculate slippage
-      const slippagePrice = calculateSlippage(isLong, DEFAULT_SLIPPAGE_BPS)
+      const slippagePrice = calculateSlippage(DEFAULT_SLIPPAGE_BPS)
       console.log('📉 Slippage price:', slippagePrice.toString())
 
       // Build trade struct
