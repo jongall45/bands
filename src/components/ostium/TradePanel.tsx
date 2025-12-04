@@ -11,7 +11,7 @@ import { useOstiumPrice } from '@/hooks/useOstiumPrices'
 import { OSTIUM_CONTRACTS, MIN_COLLATERAL_USD } from '@/lib/ostium/constants'
 import { ERC20_ABI } from '@/lib/ostium/abi'
 import { SwapForGasModal } from '@/components/bridge/SwapForGasModal'
-import { SmartTradeButton } from '@/features/trading/SmartTradeButton'
+import { PrivyOstiumButton } from '@/features/trading/PrivyOstiumButton'
 
 // Pair type for props
 interface OstiumPairType {
@@ -332,13 +332,13 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
         </div>
       )}
 
-      {/* Smart Trade Button - Handles Approve + Trade FSM */}
+      {/* Privy Trade Button - Handles Approve + Trade with Privy Wallet */}
       {isConnected && hasEnoughGas && isMarketOpen && collateralNum > 0 && meetsMinimum && collateralNum <= balance ? (
-        <SmartTradeButton
+        <PrivyOstiumButton
           pairIndex={pair.id}
           pairSymbol={pair.symbol}
           isLong={isLong}
-          collateralAmount={collateral}
+          amountUSDC={collateral}
           leverage={leverage}
           onSuccess={() => {
             refetchBalance()
