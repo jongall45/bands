@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X, ArrowDown, Loader2, Check, AlertCircle, Fuel, CheckCircle } from 'lucide-react'
+import { X, ArrowDown, Loader2, Check, AlertCircle, Fuel, CheckCircle, ExternalLink } from 'lucide-react'
 import { useAccount } from 'wagmi'
-import { useBridgeFixed } from '@/hooks/useBridgeFixed'
+import { useLiFiBridge } from '@/hooks/useLiFiBridge'
 import { SwapForGasModal } from './SwapForGasModal'
 
 interface Props {
@@ -15,10 +15,10 @@ interface Props {
 
 export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
   const { address } = useAccount()
-  // LOCAL state for input - completely controlled here
   const [inputValue, setInputValue] = useState('')
   const [isSuccess, setIsSuccess] = useState(false)
   const [showGasSwap, setShowGasSwap] = useState(false)
+  const [showFallback, setShowFallback] = useState(false)
   const [mounted, setMounted] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const quoteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -32,58 +32,46 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
     executeBridge,
     isBridging,
     status,
+    txHash,
     error,
     clearError,
-    isOnBase,
-    needsManualSwitch,
-    triggerManualSwitch,
-  } = useBridgeFixed()
+  } = useLiFiBridge()
 
-  // Track if we've initialized for this open session
   const hasInitializedRef = useRef(false)
 
-  // For portal - must be mounted on client
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  // Reset ONLY when modal first opens (not on every render)
   useEffect(() => {
     if (isOpen && !hasInitializedRef.current) {
-      console.log('🟡 Modal opened, initializing (once)')
       hasInitializedRef.current = true
       setInputValue('')
       setIsSuccess(false)
-      // Focus input after a brief delay
+      setShowFallback(false)
+      clearError()
       setTimeout(() => {
         inputRef.current?.focus()
-        console.log('🟡 Input focused')
       }, 200)
     }
     
-    // Reset the ref when modal closes
     if (!isOpen) {
       hasInitializedRef.current = false
     }
-  }, [isOpen])
+  }, [isOpen, clearError])
 
-  // Debounced quote fetch when input changes
+  // Debounced quote fetch
   useEffect(() => {
-    // Clear previous timeout
     if (quoteTimeoutRef.current) {
       clearTimeout(quoteTimeoutRef.current)
     }
 
     const amount = parseFloat(inputValue)
     if (isNaN(amount) || amount <= 0) {
-      console.log('🟡 No valid amount, skipping quote')
       return
     }
-
-    console.log('🟡 Setting quote timeout for:', inputValue)
     
     quoteTimeoutRef.current = setTimeout(() => {
-      console.log('🟡 Timeout fired, fetching quote')
       getQuote(inputValue)
     }, 600)
 
@@ -94,67 +82,54 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
     }
   }, [inputValue, getQuote])
 
-  // Handle input change - MUST be simple and direct
+  // Show fallback after multiple errors
+  useEffect(() => {
+    if (error && error.includes('switch')) {
+      setShowFallback(true)
+    }
+  }, [error])
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
-    console.log('🔴 INPUT CHANGE:', value)
-    
-    // Allow empty, or valid number format
     if (value === '' || /^\d*\.?\d*$/.test(value)) {
       setInputValue(value)
     }
   }
 
-  // Handle max button
   const handleMax = () => {
-    console.log('🟡 Max clicked, setting to:', baseBalance)
     setInputValue(baseBalance)
   }
 
-  // Handle bridge
   const handleBridge = async () => {
-    console.log('🟡 Bridge clicked')
     const success = await executeBridge()
     if (success) {
       setIsSuccess(true)
-      setTimeout(() => {
-        onSuccess()
-        onClose()
-      }, 2000)
     }
   }
 
-  // Calculate states
   const amountNum = parseFloat(inputValue) || 0
   const balanceNum = parseFloat(baseBalance) || 0
   const canBridge = amountNum > 0 && amountNum <= balanceNum && quote && !isQuoting && !isBridging
 
-  // Don't render if not open or not mounted (for portal)
+  // Relay fallback URL
+  const relayUrl = `https://relay.link/bridge?fromChainId=8453&toChainId=42161&fromCurrency=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913&toCurrency=0xaf88d065e77c8cC2239327C5EDb3A432268e5831&amount=${amountNum * 1_000_000}&toAddress=${address}`
+
   if (!isOpen || !mounted) return null
 
-  // Render in a portal to escape any parent event blocking
   const modalContent = (
     <div 
       className="fixed inset-0 flex items-center justify-center p-4"
-      style={{ 
-        zIndex: 99999,
-        pointerEvents: 'auto',
-      }}
+      style={{ zIndex: 99999, pointerEvents: 'auto' }}
     >
-      {/* Backdrop - click to close */}
       <div 
         className="absolute inset-0 bg-black/80 backdrop-blur-sm"
         onClick={onClose}
         style={{ pointerEvents: 'auto' }}
       />
 
-      {/* Modal container */}
       <div 
-        className="relative w-full max-w-[400px] bg-[#0a0a0a] border border-white/10 rounded-3xl p-6"
-        style={{ 
-          zIndex: 100000,
-          pointerEvents: 'auto',
-        }}
+        className="relative w-full max-w-[400px] bg-[#0a0a0a] border border-white/10 rounded-3xl p-6 max-h-[90vh] overflow-y-auto"
+        style={{ zIndex: 100000, pointerEvents: 'auto' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -172,37 +147,51 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
           </button>
         </div>
 
-        {/* Manual Switch Required */}
-        {needsManualSwitch && !isSuccess && (
-          <div className="flex flex-col items-center py-8">
-            <div className="w-16 h-16 bg-orange-500/20 rounded-full flex items-center justify-center mb-4">
-              <AlertCircle className="w-8 h-8 text-orange-400" />
+        {/* Fallback - Use External Bridge */}
+        {showFallback && !isSuccess && (
+          <div className="mb-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl">
+            <div className="flex items-center gap-2 mb-3">
+              <ExternalLink className="w-5 h-5 text-blue-400" />
+              <span className="text-blue-400 font-medium">Having Trouble?</span>
             </div>
-            <h3 className="text-white font-semibold text-lg mb-2">Switch to Base Network</h3>
-            <p className="text-white/40 text-sm text-center mb-6">
-              Please switch to Base network to bridge your USDC
+            <p className="text-blue-400/70 text-xs mb-3">
+              Use Relay directly if in-app bridging isn't working.
             </p>
-            
-            <button
-              onClick={triggerManualSwitch}
-              className="w-full py-4 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-2xl flex items-center justify-center gap-2 mb-3"
+            <a
+              href={relayUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold text-sm rounded-xl text-center transition-colors"
             >
-              Switch to Base
+              Bridge on Relay.link →
+            </a>
+            <button
+              onClick={() => setShowFallback(false)}
+              className="w-full mt-2 text-white/40 text-xs hover:text-white/60"
+            >
+              Try in-app again
             </button>
-            
-            <p className="text-white/30 text-xs text-center">
-              If the button doesn't work, switch manually in your wallet settings
-            </p>
           </div>
         )}
 
-        {!needsManualSwitch && isSuccess ? (
+        {isSuccess ? (
           <div className="flex flex-col items-center py-8">
             <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-4">
               <Check className="w-8 h-8 text-green-400" />
             </div>
             <h3 className="text-white font-semibold text-lg mb-2">Bridge Complete!</h3>
-            <p className="text-white/40 text-sm text-center mb-6">Your USDC is now on Arbitrum</p>
+            <p className="text-white/40 text-sm text-center mb-2">Your USDC is now on Arbitrum</p>
+            
+            {txHash && (
+              <a
+                href={`https://basescan.org/tx/${txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 text-xs hover:underline mb-4 flex items-center gap-1"
+              >
+                View transaction <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
             
             {/* Gas prompt */}
             <div className="w-full bg-orange-500/10 border border-orange-500/20 rounded-2xl p-4 mb-4">
@@ -231,38 +220,20 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
               Skip, I already have ETH →
             </button>
           </div>
-        ) : !needsManualSwitch ? (
+        ) : (
           <>
-            {/* Network Status Banner */}
-            {!isOnBase && (
-              <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 mb-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-orange-400" />
-                  <span className="text-orange-400 text-xs">Not on Base network</span>
-                </div>
-                <button
-                  onClick={triggerManualSwitch}
-                  className="text-xs bg-orange-500 text-white px-3 py-1 rounded-lg hover:bg-orange-600"
-                >
-                  Switch
-                </button>
-              </div>
-            )}
-
             {/* FROM section */}
             <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 mb-3">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-white/50 text-sm">From</span>
                 <div className="flex items-center gap-2">
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center ${isOnBase ? 'bg-blue-500' : 'bg-orange-500'}`}>
+                  <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
                     <span className="text-white text-[10px] font-bold">B</span>
                   </div>
                   <span className="text-white/70 text-sm">Base</span>
-                  {isOnBase && <CheckCircle className="w-3 h-3 text-green-400" />}
                 </div>
               </div>
 
-              {/* THE INPUT */}
               <div className="flex items-center gap-3" style={{ pointerEvents: 'auto' }}>
                 <input
                   ref={inputRef}
@@ -275,9 +246,6 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
                   placeholder="0.00"
                   value={inputValue}
                   onChange={handleInputChange}
-                  onInput={(e) => console.log('🔵 onInput:', (e.target as HTMLInputElement).value)}
-                  onKeyDown={(e) => console.log('🔵 onKeyDown:', e.key)}
-                  onFocus={() => console.log('🔵 Input focused!')}
                   style={{
                     flex: 1,
                     minWidth: 0,
@@ -289,8 +257,6 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
                     border: 'none',
                     padding: '8px',
                     margin: 0,
-                    WebkitAppearance: 'none',
-                    MozAppearance: 'textfield' as any,
                     caretColor: 'white',
                     pointerEvents: 'auto',
                   }}
@@ -374,7 +340,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
             {/* Error */}
             {error && (
               <div className="flex items-center gap-2 mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-                <AlertCircle className="w-4 h-4 text-red-400" />
+                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
                 <span className="text-red-400 text-sm">{error}</span>
               </div>
             )}
@@ -407,16 +373,23 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
               )}
             </button>
 
-            <p className="text-white/20 text-xs text-center mt-4">
-              Powered by Relay Protocol
-            </p>
+            {/* Fallback link */}
+            <div className="flex items-center justify-center gap-2 mt-4">
+              <p className="text-white/20 text-xs">Powered by LI.FI</p>
+              <span className="text-white/10">•</span>
+              <button
+                onClick={() => setShowFallback(true)}
+                className="text-white/30 text-xs hover:text-white/50"
+              >
+                Having issues?
+              </button>
+            </div>
           </>
-        ) : null}
+        )}
       </div>
     </div>
   )
 
-  // Use portal to render at document.body level, escaping any parent event blocking
   return (
     <>
       {createPortal(modalContent, document.body)}
