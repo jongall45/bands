@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect } from 'react'
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useBlockNumber } from 'wagmi'
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { parseUnits } from 'viem'
 import { arbitrum } from 'wagmi/chains'
 
@@ -42,12 +42,6 @@ interface UseOstiumAllowanceStrictProps {
 
 export function useOstiumAllowanceStrict({ collateralUSDC }: UseOstiumAllowanceStrictProps) {
   const { address: userAddress } = useAccount()
-  
-  // Get current block number for cache busting
-  const { data: blockNumber } = useBlockNumber({ 
-    chainId: arbitrum.id,
-    watch: true,
-  })
 
   // Parse collateral to 6 decimals
   const collateralWei = (() => {
@@ -77,8 +71,6 @@ export function useOstiumAllowanceStrict({ collateralUSDC }: UseOstiumAllowanceS
     chainId: arbitrum.id,
     query: {
       enabled: !!userAddress && collateralWei > BigInt(0),
-      // Include block number in cache key to ensure freshness
-      queryKey: ['allowance', userAddress, OSTIUM_TRADING_ADDRESS, blockNumber?.toString()],
       staleTime: 0, // Always consider stale
       refetchInterval: 4000, // Refetch every 4 seconds
     },
@@ -95,7 +87,6 @@ export function useOstiumAllowanceStrict({ collateralUSDC }: UseOstiumAllowanceS
         allowance: allowance?.toString() ?? 'LOADING',
         required: collateralWei.toString(),
         isApproved: allowance !== undefined ? allowance >= collateralWei : 'UNKNOWN',
-        blockNumber: blockNumber?.toString() ?? 'N/A',
       })
     }
   }, [userAddress, allowance, collateralWei, blockNumber])
