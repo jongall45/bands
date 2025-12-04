@@ -269,25 +269,35 @@ export function PrivyRelaySwap({
 
       console.log('🚀 Executing swap...')
 
+      const executePayload = {
+        user: address,
+        originChainId: fromChainId,
+        destinationChainId: toChainId,
+        originCurrency: fromTokenInfo.address,
+        destinationCurrency: toTokenInfo.address,
+        amount: amountWei,
+        recipient: address,
+        tradeType: 'EXACT_INPUT',
+        source: 'bands.cash',
+      }
+      
+      console.log('📤 Execute payload:', executePayload)
+
       // Get execution data from Relay
       const response = await fetch('https://api.relay.link/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user: address,
-          originChainId: fromChainId,
-          destinationChainId: toChainId,
-          originCurrency: fromTokenInfo.address,
-          destinationCurrency: toTokenInfo.address,
-          amount: amountWei,
-          recipient: address,
-          tradeType: 'EXACT_INPUT',
-        }),
+        body: JSON.stringify(executePayload),
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.message || `Execute failed: ${response.status}`)
+        const errorText = await response.text()
+        console.error('❌ Relay execute error response:', errorText)
+        let errorData: any = {}
+        try {
+          errorData = JSON.parse(errorText)
+        } catch {}
+        throw new Error(errorData.message || errorData.error || `Execute failed: ${response.status}`)
       }
 
       const data = await response.json()
