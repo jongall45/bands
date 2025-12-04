@@ -40,7 +40,19 @@ interface TradePanelProps {
 
 export function OstiumTradePanel({ pair }: TradePanelProps) {
   const { address, isConnected } = useAccount()
-  const { openTrade, isPending, isSuccess, isSwitchingChain, isApproving, error, txHash, reset } = useOstiumTrade()
+  const { 
+    openTrade, 
+    approveUSDC,
+    isPending, 
+    isSuccess, 
+    isApproving, 
+    error, 
+    txHash, 
+    reset,
+    allowance,
+    needsApproval,
+    refetchAllowance,
+  } = useOstiumTrade()
   const { price, isLoading: priceLoading } = useOstiumPrice(pair.id)
 
   const [isLong, setIsLong] = useState(true)
@@ -128,8 +140,25 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
     return (priceDiff / currentPrice) * positionSize
   }, [stopLoss, currentPrice, collateralNum, positionSize, isLong])
 
+  // Check if approval is needed for current collateral amount
+  const requiresApproval = collateralNum > 0 && needsApproval(collateralNum)
+
+  const handleApprove = async () => {
+    try {
+      await approveUSDC()
+    } catch (err) {
+      console.error('Approval error:', err)
+    }
+  }
+
   const handleTrade = async () => {
     if (!collateral) return
+
+    // Double-check approval before trading
+    if (requiresApproval) {
+      console.log('🔴 Approval required before trading')
+      return
+    }
 
     try {
       await openTrade({
@@ -138,8 +167,6 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
         leverage,
         isLong,
         slippageBps: 50, // 0.5% slippage
-        takeProfit: takeProfit ? parseFloat(takeProfit) : undefined,
-        stopLoss: stopLoss ? parseFloat(stopLoss) : undefined,
       })
     } catch (err) {
       console.error('Trade error:', err)
@@ -148,6 +175,14 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
 
   // Validation
   const meetsMinimum = collateralNum >= MIN_COLLATERAL_USD
+  const canApprove = isConnected && 
+    collateral && 
+    collateralNum > 0 && 
+    meetsMinimum &&
+    hasEnoughGas &&
+    !isPending &&
+    requiresApproval
+    
   const canTrade = isConnected && 
     collateral && 
     collateralNum > 0 && 
@@ -155,7 +190,8 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
     meetsMinimum &&
     isMarketOpen &&
     hasEnoughGas &&
-    !isPending
+    !isPending &&
+    !requiresApproval
 
   return (
     <div className="p-4 space-y-4 pb-40">
@@ -393,6 +429,26 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
         </div>
       )}
 
+      {/* Approve Button (shown when approval needed) */}
+      {requiresApproval && collateralNum > 0 && meetsMinimum && (
+        <button
+          onClick={handleApprove}
+          disabled={!canApprove}
+          className="w-full py-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-500/30 shadow-lg shadow-blue-500/20 text-white disabled:text-white/50 disabled:shadow-none"
+        >
+          {isApproving ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Approving USDC...
+            </>
+          ) : (
+            <>
+              🔓 Approve USDC
+            </>
+          )}
+        </button>
+      )}
+
       {/* Trade Button */}
       <button
         onClick={handleTrade}
@@ -403,10 +459,10 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
             : 'bg-red-500 hover:bg-red-600 disabled:bg-red-500/30 shadow-lg shadow-red-500/20'
         } text-white disabled:text-white/50 disabled:shadow-none`}
       >
-        {isPending ? (
+        {isPending && !isApproving ? (
           <>
             <Loader2 className="w-5 h-5 animate-spin" />
-            {isSwitchingChain ? 'Switching to Arbitrum...' : isApproving ? 'Approving USDC...' : 'Opening Position...'}
+            Opening Position...
           </>
         ) : !isConnected ? (
           'Connect Wallet'
@@ -418,6 +474,8 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
           'Insufficient Balance'
         ) : collateralNum > 0 && !meetsMinimum ? (
           `Minimum $${MIN_COLLATERAL_USD} Required`
+        ) : requiresApproval ? (
+          '↑ Approve USDC First'
         ) : (
           <>
             {isLong ? 'Long' : 'Short'} {pair.symbol}
