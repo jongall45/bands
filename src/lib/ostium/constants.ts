@@ -7,7 +7,7 @@ export const OSTIUM_CONTRACTS = {
 
 // API endpoints
 export const OSTIUM_API = {
-  PRICES: 'https://metadata-backend.ostium.io/PricePublish/latest-prices',
+  PRICES: 'https://metadata-backend.ostium.com/PricePublish/latest-prices',
   // GraphQL for positions
   GRAPHQL: 'https://api.thegraph.com/subgraphs/name/ostium/ostium-arbitrum',
 }

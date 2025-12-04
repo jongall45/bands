@@ -427,7 +427,7 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
 
       {/* Alternative: Open in Ostium App */}
       <a
-        href={`https://app.ostium.io/trade/${pair.symbol.replace('-USD', '')}`}
+        href={`https://app.ostium.com/trade/${pair.symbol.replace('-USD', '')}`}
         target="_blank"
         rel="noopener noreferrer"
         className="w-full py-3 rounded-xl font-medium text-sm transition-all flex items-center justify-center gap-2 bg-white/[0.05] hover:bg-white/[0.1] text-white/60 hover:text-white border border-white/[0.08]"

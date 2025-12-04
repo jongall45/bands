@@ -164,7 +164,7 @@ export default function OstiumTradingPage() {
         {/* Ostium Embed - Full iframe since Privy is EOA compatible */}
         <div className="flex-1 min-h-[600px]">
           <iframe
-            src="https://app.ostium.io/trade?embed=true&theme=dark"
+            src="https://app.ostium.com/trade?embed=true&theme=dark"
             className="w-full h-full border-0"
             allow="clipboard-write; clipboard-read"
             style={{ minHeight: '600px' }}
