@@ -250,13 +250,13 @@ export function PrivyRelaySwap({
       const gasFee = parseFloat(data.fees?.gas?.amountUsd || '0')
       const relayFee = parseFloat(data.fees?.relayer?.amountUsd || '0')
 
-      // Extract deposit address for cross-chain swaps
+      // Extract deposit address (should always be present with useDepositAddress: true)
       const step = data.steps?.[0]
       const depositAddress = step?.depositAddress || null
       const requestId = step?.requestId || data.requestId || null
 
-      if (isCrossChainSwap && !depositAddress) {
-        console.warn('⚠️ No deposit address in cross-chain quote, falling back to execute API')
+      if (!depositAddress) {
+        console.warn('⚠️ No deposit address in quote response')
       }
 
       setQuote({
