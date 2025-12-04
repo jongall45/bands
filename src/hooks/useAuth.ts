@@ -63,7 +63,16 @@ export function useAuth() {
     }
   }
   
+  /**
+   * WARNING: Privy embedded wallet switchChain is BROKEN!
+   * Calling this will "succeed" but the wallet stays on its current chain.
+   * Once on Arbitrum, the wallet cannot switch back to Base, breaking the bridge.
+   * 
+   * DO NOT CALL THIS AUTOMATICALLY - only use for external wallet users if needed.
+   * For embedded wallets, user must logout/login to reset to Base (defaultChain).
+   */
   const switchToArbitrum = async () => {
+    console.warn('⚠️ switchToArbitrum called - this is broken for Privy embedded wallets!')
     if (embeddedWallet) {
       await embeddedWallet.switchChain(arbitrum.id)
     } else if (switchChain) {
