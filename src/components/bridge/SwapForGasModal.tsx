@@ -1,28 +1,36 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
-import { X, Fuel, Loader2, Check, AlertCircle } from 'lucide-react'
-import { useAccount, useBalance, useWalletClient, usePublicClient, useSwitchChain } from 'wagmi'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { X, Fuel, Loader2, Check, AlertCircle, ExternalLink } from 'lucide-react'
+import { useAccount, useBalance } from 'wagmi'
+import { useWallets } from '@privy-io/react-auth'
 import { arbitrum, base } from 'viem/chains'
-import { getClient, createClient } from '@reservoir0x/relay-sdk'
+import { parseUnits, encodeFunctionData } from 'viem'
 
-// Arbitrum addresses
+// Addresses
+const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
 const USDC_ARBITRUM = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'
-const ETH_ADDRESS = '0x0000000000000000000000000000000000000000' // Native ETH
+const ETH_ARBITRUM = '0x0000000000000000000000000000000000000000'
 
-// Initialize Relay SDK
-let relayInitialized = false
-function initRelay() {
-  if (relayInitialized) return
-  try {
-    createClient({
-      baseApiUrl: 'https://api.relay.link',
-      source: 'bands.cash',
-    })
-    relayInitialized = true
-  } catch (e) {
-    console.error('Relay init error:', e)
-  }
+// Simple ERC20 transfer ABI
+const ERC20_TRANSFER_ABI = [
+  {
+    name: 'transfer',
+    type: 'function',
+    inputs: [
+      { name: 'to', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ type: 'bool' }],
+  },
+] as const
+
+interface DepositQuote {
+  requestId: string
+  depositAddress: string
+  amountOut: string
+  fees: string
+  expiresAt: number
 }
 
 interface Props {
@@ -33,182 +41,255 @@ interface Props {
 }
 
 export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = '1' }: Props) {
-  const { address, chainId } = useAccount()
-  const { data: walletClient } = useWalletClient()
-  const publicClient = usePublicClient({ chainId: arbitrum.id })
-  const { switchChainAsync } = useSwitchChain()
+  const { address } = useAccount()
+  const { wallets } = useWallets()
+  const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
   
   const [amount, setAmount] = useState(suggestedAmount)
-  const [isSwapping, setIsSwapping] = useState(false)
-  const [status, setStatus] = useState('')
+  const [status, setStatus] = useState<'idle' | 'quoting' | 'ready' | 'confirming' | 'sending' | 'bridging' | 'success' | 'error'>('idle')
+  const [statusMessage, setStatusMessage] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [isSuccess, setIsSuccess] = useState(false)
-  const [quote, setQuote] = useState<any>(null)
+  const [quote, setQuote] = useState<DepositQuote | null>(null)
+  const [txHash, setTxHash] = useState<string | null>(null)
+  
+  const pollingRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Initialize Relay on mount
+  // Get USDC balance on Base (source chain)
+  const { data: usdcBaseBalance, refetch: refetchUsdcBase } = useBalance({
+    address,
+    token: USDC_BASE as `0x${string}`,
+    chainId: base.id,
+  })
+
+  // Get ETH balance on Arbitrum (destination)
+  const { data: ethArbBalance, refetch: refetchEthArb } = useBalance({
+    address,
+    chainId: arbitrum.id,
+  })
+
+  // Clean up polling on unmount
   useEffect(() => {
-    initRelay()
+    return () => {
+      if (pollingRef.current) {
+        clearTimeout(pollingRef.current)
+      }
+    }
   }, [])
 
-  // Get USDC balance on Arbitrum
-  const { data: usdcBalance, refetch: refetchUsdc } = useBalance({
-    address,
-    token: USDC_ARBITRUM as `0x${string}`,
-    chainId: arbitrum.id,
-  })
-
-  // Get ETH balance on Arbitrum
-  const { data: ethBalance, refetch: refetchEth } = useBalance({
-    address,
-    chainId: arbitrum.id,
-  })
+  // Reset state when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setStatus('idle')
+      setError(null)
+      setQuote(null)
+      setTxHash(null)
+      setAmount(suggestedAmount)
+    }
+  }, [isOpen, suggestedAmount])
 
   // Fetch quote when amount changes
   useEffect(() => {
+    if (!isOpen || !address) return
+    
+    const amountNum = parseFloat(amount)
+    if (isNaN(amountNum) || amountNum <= 0) return
+
     const fetchQuote = async () => {
-      if (!address || !amount) return
+      setStatus('quoting')
+      setError(null)
       
-      const amountNum = parseFloat(amount)
-      if (isNaN(amountNum) || amountNum <= 0) return
-
       try {
-        initRelay()
-        const client = getClient()
-        const amountWei = Math.floor(amountNum * 1_000_000).toString()
-
-        const quoteData = await client.actions.getQuote({
-          user: address,
-          chainId: arbitrum.id,
-          toChainId: arbitrum.id, // Same chain swap
-          currency: USDC_ARBITRUM,
-          toCurrency: ETH_ADDRESS,
-          amount: amountWei,
-          recipient: address,
-          tradeType: 'EXACT_INPUT',
+        const amountWei = parseUnits(amount, 6).toString()
+        
+        // Relay API for cross-chain swap: Base USDC → Arbitrum ETH
+        const response = await fetch('https://api.relay.link/quote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user: address,
+            recipient: address,
+            originChainId: 8453,         // Base
+            destinationChainId: 42161,   // Arbitrum
+            originCurrency: USDC_BASE,
+            destinationCurrency: ETH_ARBITRUM, // Native ETH
+            amount: amountWei,
+            tradeType: 'EXACT_INPUT',
+            useDepositAddress: true,
+            refundTo: address,
+            usePermit: false,
+            referrer: 'bands.cash',
+          }),
         })
 
-        setQuote(quoteData)
-        console.log('🟢 Gas swap quote:', quoteData)
-      } catch (err) {
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}))
+          throw new Error(err.message || 'Failed to get quote')
+        }
+
+        const data = await response.json()
+        console.log('🟢 Gas swap quote:', data)
+
+        const step = data.steps?.[0]
+        if (!step?.depositAddress) {
+          throw new Error('No deposit address available')
+        }
+
+        const ethOut = data.details?.currencyOut?.amount || '0'
+        const ethOutFormatted = (parseFloat(ethOut) / 1e18).toFixed(6)
+
+        setQuote({
+          requestId: step.requestId || data.requestId,
+          depositAddress: step.depositAddress,
+          amountOut: ethOutFormatted,
+          fees: data.fees?.gas?.amountUsd || '0',
+          expiresAt: Date.now() + 30000,
+        })
+        setStatus('ready')
+      } catch (err: any) {
         console.error('Quote error:', err)
+        setError(err.message || 'Failed to get quote')
+        setStatus('error')
       }
     }
 
     const timer = setTimeout(fetchQuote, 500)
     return () => clearTimeout(timer)
-  }, [address, amount])
+  }, [isOpen, address, amount])
 
+  // Execute the swap via deposit address
   const handleSwap = useCallback(async () => {
-    console.log('🟡 Swap clicked, address:', address, 'quote:', !!quote)
-    
-    if (!address) {
-      setError('Please connect your wallet first')
-      return
-    }
-    
-    if (!walletClient) {
-      setError('Wallet not ready, please try again')
+    if (!embeddedWallet || !quote?.depositAddress) {
+      setError('No quote or wallet available')
       return
     }
 
-    if (!quote) {
-      setError('No quote available')
+    // Check if quote expired
+    if (Date.now() > quote.expiresAt) {
+      setError('Quote expired. Please try again.')
+      setStatus('error')
       return
     }
 
-    setIsSwapping(true)
+    setStatus('confirming')
+    setStatusMessage('Confirm in your wallet...')
     setError(null)
 
     try {
-      // Switch to Arbitrum if needed
-      if (chainId !== arbitrum.id) {
-        setStatus('Switching to Arbitrum...')
-        await switchChainAsync({ chainId: arbitrum.id })
-        await new Promise(resolve => setTimeout(resolve, 500))
-      }
+      const provider = await embeddedWallet.getEthereumProvider()
+      const amountWei = parseUnits(amount, 6)
 
-      setStatus('Executing swap via Relay...')
-      
-      initRelay()
-      const client = getClient()
-
-      // Execute swap using Relay SDK
-      await client.actions.execute({
-        quote: quote,
-        wallet: {
-          vmType: 'evm',
-          getChainId: async () => arbitrum.id,
-          address: async () => address,
-          handleSignMessageStep: async (item: any) => {
-            console.log('🟡 Sign message:', item)
-            const signature = await walletClient.signMessage({
-              message: item.data.message,
-            })
-            return signature
-          },
-          handleSendTransactionStep: async (txChainId: number, item: any) => {
-            console.log('🟡 Send transaction on chain:', txChainId, item)
-            setStatus(item.description || 'Sending transaction...')
-            
-            // Ensure we're on the right chain
-            if (chainId !== txChainId) {
-              console.log('🟡 Switching to chain:', txChainId)
-              await switchChainAsync({ chainId: txChainId })
-              await new Promise(resolve => setTimeout(resolve, 500))
-            }
-            
-            const tx = await walletClient.sendTransaction({
-              to: item.data.to as `0x${string}`,
-              data: item.data.data as `0x${string}`,
-              value: BigInt(item.data.value || '0'),
-              chain: txChainId === arbitrum.id ? arbitrum : txChainId === base.id ? base : undefined,
-            })
-            
-            console.log('🟡 Transaction sent:', tx)
-            return tx
-          },
-          handleConfirmTransactionStep: async (txHash: string, _chainId: number) => {
-            console.log('🟡 Confirming transaction:', txHash)
-            setStatus('Confirming...')
-            
-            const receipt = await publicClient?.waitForTransactionReceipt({
-              hash: txHash as `0x${string}`,
-            })
-            
-            return receipt
-          },
-        } as any,
-        onProgress: (progress: any) => {
-          console.log('🟡 Progress:', progress)
-          if (progress?.currentStep?.description) {
-            setStatus(progress.currentStep.description)
-          }
-        },
+      // Encode ERC20 transfer to deposit address
+      const data = encodeFunctionData({
+        abi: ERC20_TRANSFER_ABI,
+        functionName: 'transfer',
+        args: [quote.depositAddress as `0x${string}`, amountWei],
       })
 
-      // Refresh balances
-      await refetchUsdc()
-      await refetchEth()
+      console.log('╔══════════════════════════════════════╗')
+      console.log('║     GAS SWAP VIA DEPOSIT ADDRESS     ║')
+      console.log('╚══════════════════════════════════════╝')
+      console.log('📤 Sending USDC to deposit address:', quote.depositAddress)
+      console.log('   Amount:', amount, 'USDC')
+      console.log('   Will receive:', quote.amountOut, 'ETH on Arbitrum')
 
-      setIsSuccess(true)
-      setStatus('Swap complete!')
-      
-      setTimeout(() => {
-        onSuccess()
-      }, 2000)
+      // Try to switch to Base first (best effort)
+      try {
+        await embeddedWallet.switchChain(8453)
+        await new Promise(r => setTimeout(r, 500))
+      } catch (e) {
+        console.warn('Chain switch warning:', e)
+      }
 
+      setStatus('sending')
+      setStatusMessage('Sending to bridge...')
+
+      // Send ERC20 transfer to Base USDC contract
+      const hash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{
+          from: embeddedWallet.address,
+          to: USDC_BASE,
+          data: data,
+          value: '0x0',
+        }],
+      })
+
+      console.log('✅ Deposit transaction submitted:', hash)
+      setTxHash(hash as string)
+      setStatus('bridging')
+      setStatusMessage('Swapping to ETH on Arbitrum...')
+
+      // Poll for completion
+      pollBridgeStatus(quote.requestId)
     } catch (err: any) {
       console.error('Swap error:', err)
-      setError(err?.message || 'Swap failed')
-    } finally {
-      setIsSwapping(false)
+      
+      let errorMsg = err.message || 'Swap failed'
+      const msg = errorMsg.toLowerCase()
+      
+      if (msg.includes('insufficient') || msg.includes('fund')) {
+        errorMsg = 'Insufficient ETH for gas on Base'
+      } else if (msg.includes('rejected') || msg.includes('denied') || msg.includes('cancelled')) {
+        errorMsg = 'Transaction cancelled'
+      }
+      
+      setError(errorMsg)
+      setStatus('error')
     }
-  }, [address, walletClient, publicClient, chainId, quote, switchChainAsync, refetchUsdc, refetchEth, onSuccess])
+  }, [embeddedWallet, quote, amount])
+
+  // Poll for bridge completion
+  const pollBridgeStatus = useCallback(async (requestId: string) => {
+    const maxAttempts = 60
+    let attempts = 0
+
+    const poll = async () => {
+      try {
+        const response = await fetch(`https://api.relay.link/intents/status?requestId=${requestId}`)
+        const data = await response.json()
+        console.log('🔄 Bridge status:', data.status)
+
+        if (data.status === 'success' || data.status === 'completed') {
+          setStatus('success')
+          setStatusMessage('ETH received!')
+          
+          setTimeout(() => {
+            refetchUsdcBase()
+            refetchEthArb()
+          }, 2000)
+          
+          setTimeout(onSuccess, 3000)
+          return
+        }
+
+        if (data.status === 'failed' || data.status === 'refunded') {
+          setError('Swap failed - funds will be refunded')
+          setStatus('error')
+          return
+        }
+
+        attempts++
+        if (attempts < maxAttempts) {
+          pollingRef.current = setTimeout(poll, 3000)
+        }
+      } catch (e) {
+        attempts++
+        if (attempts < maxAttempts) {
+          pollingRef.current = setTimeout(poll, 3000)
+        }
+      }
+    }
+
+    pollingRef.current = setTimeout(poll, 3000)
+  }, [refetchUsdcBase, refetchEthArb, onSuccess])
 
   const amountNum = parseFloat(amount) || 0
-  const balanceNum = parseFloat(usdcBalance?.formatted || '0')
-  const walletConnected = !!address
-  const canSwap = walletConnected && amountNum > 0 && amountNum <= balanceNum && quote && !isSwapping
+  const balanceNum = parseFloat(usdcBaseBalance?.formatted || '0')
+  const isLoading = ['quoting', 'confirming', 'sending', 'bridging'].includes(status)
+  const canSwap = status === 'ready' && quote && amountNum > 0 && amountNum <= balanceNum && !isLoading
+
+  // Fallback URL
+  const fallbackUrl = `https://relay.link/bridge/arbitrum?fromChainId=8453&fromCurrency=${USDC_BASE}&toCurrency=${ETH_ARBITRUM}&amount=${parseUnits(amount || '1', 6).toString()}&toAddress=${address}`
 
   if (!isOpen) return null
 
@@ -229,7 +310,7 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
             </div>
             <div>
               <h2 className="text-white font-semibold">Get Gas on Arbitrum</h2>
-              <p className="text-white/40 text-xs">Swap USDC → ETH for fees</p>
+              <p className="text-white/40 text-xs">Base USDC → Arbitrum ETH</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full">
@@ -237,7 +318,7 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
           </button>
         </div>
 
-        {isSuccess ? (
+        {status === 'success' ? (
           <div className="flex flex-col items-center py-8">
             <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-4">
               <Check className="w-8 h-8 text-green-400" />
@@ -246,40 +327,34 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
             <p className="text-white/40 text-sm text-center">
               You now have ETH on Arbitrum for transactions
             </p>
+            {txHash && (
+              <a
+                href={`https://basescan.org/tx/${txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 text-xs hover:underline mt-3 flex items-center gap-1"
+              >
+                View transaction <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
           </div>
         ) : (
           <>
-            {/* Wallet status */}
-            {walletConnected ? (
-              <div className="flex items-center gap-2 mb-3 p-2 bg-green-500/10 border border-green-500/20 rounded-xl">
-                <div className="w-2 h-2 bg-green-400 rounded-full" />
-                <span className="text-green-400 text-xs font-mono">
-                  {address?.slice(0, 6)}...{address?.slice(-4)}
-                </span>
-                <span className="text-green-400/60 text-xs ml-auto">Connected</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded-xl">
-                <AlertCircle className="w-4 h-4 text-red-400" />
-                <span className="text-red-400 text-xs">Wallet not connected</span>
-              </div>
-            )}
-
-            {/* Current balances */}
+            {/* Balances */}
             <div className="bg-white/[0.03] rounded-xl p-3 mb-4">
               <div className="flex justify-between text-sm mb-2">
-                <span className="text-white/50">USDC on Arbitrum</span>
+                <span className="text-white/50">USDC on Base</span>
                 <span className="text-white font-mono">${balanceNum.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-white/50">ETH on Arbitrum</span>
                 <span className="text-white font-mono">
-                  {parseFloat(ethBalance?.formatted || '0').toFixed(5)} ETH
+                  {parseFloat(ethArbBalance?.formatted || '0').toFixed(5)} ETH
                 </span>
               </div>
             </div>
 
-            {/* Amount input */}
+            {/* Amount selector */}
             <div className="mb-4">
               <label className="text-white/40 text-xs mb-2 block">Swap amount (USDC)</label>
               <div className="flex gap-2">
@@ -287,11 +362,12 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
                   <button
                     key={preset}
                     onClick={() => setAmount(preset)}
+                    disabled={isLoading}
                     className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                       amount === preset
                         ? 'bg-orange-500 text-white'
                         : 'bg-white/[0.05] text-white/60 hover:bg-white/[0.08]'
-                    }`}
+                    } disabled:opacity-50`}
                   >
                     ${preset}
                   </button>
@@ -302,12 +378,51 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
             {/* Quote info */}
             {quote && (
               <div className="bg-white/[0.02] rounded-xl p-3 mb-4 text-xs">
-                <div className="flex justify-between mb-1">
+                <div className="flex justify-between">
                   <span className="text-white/50">You'll receive</span>
-                  <span className="text-white/70">
-                    ~{((quote.details?.currencyOut?.amount || 0) / 1e18).toFixed(6)} ETH
-                  </span>
+                  <span className="text-white/70">~{quote.amountOut} ETH</span>
                 </div>
+              </div>
+            )}
+
+            {/* Status messages */}
+            {status === 'quoting' && (
+              <div className="flex items-center gap-2 mb-4 p-3 bg-white/5 rounded-xl">
+                <Loader2 className="w-4 h-4 text-white/60 animate-spin" />
+                <span className="text-white/60 text-sm">Getting quote...</span>
+              </div>
+            )}
+
+            {status === 'confirming' && (
+              <div className="flex items-center gap-2 mb-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
+                <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />
+                <span className="text-yellow-400 text-sm">Confirm in your wallet...</span>
+              </div>
+            )}
+
+            {status === 'sending' && (
+              <div className="flex items-center gap-2 mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+                <span className="text-blue-400 text-sm">Sending to bridge...</span>
+              </div>
+            )}
+
+            {status === 'bridging' && (
+              <div className="mb-4 p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl">
+                <div className="flex items-center gap-2 mb-2">
+                  <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
+                  <span className="text-purple-400 text-sm">Swapping to ETH...</span>
+                </div>
+                {txHash && (
+                  <a
+                    href={`https://basescan.org/tx/${txHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-purple-400/70 text-xs hover:underline flex items-center gap-1"
+                  >
+                    View on Basescan <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
               </div>
             )}
 
@@ -320,9 +435,19 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
 
             {/* Error */}
             {error && (
-              <div className="flex items-center gap-2 mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-                <AlertCircle className="w-4 h-4 text-red-400" />
-                <span className="text-red-400 text-sm">{error}</span>
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertCircle className="w-4 h-4 text-red-400" />
+                  <span className="text-red-400 text-sm">{error}</span>
+                </div>
+                <a
+                  href={fallbackUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-red-400/70 text-xs hover:underline flex items-center gap-1"
+                >
+                  Try on Relay.link <ExternalLink className="w-3 h-3" />
+                </a>
               </div>
             )}
 
@@ -332,15 +457,13 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
               disabled={!canSwap}
               className="w-full py-4 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-500/30 disabled:cursor-not-allowed text-white font-semibold rounded-2xl flex items-center justify-center gap-2"
             >
-              {isSwapping ? (
+              {isLoading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  {status}
+                  {statusMessage || 'Processing...'}
                 </>
-              ) : !walletConnected ? (
-                'Wallet not connected'
               ) : balanceNum <= 0 ? (
-                'No USDC on Arbitrum'
+                'No USDC on Base'
               ) : !quote ? (
                 'Getting quote...'
               ) : (
@@ -349,7 +472,7 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
             </button>
 
             <p className="text-white/20 text-xs text-center mt-3">
-              Swap via Relay Protocol
+              Cross-chain swap via Relay
             </p>
           </>
         )}
