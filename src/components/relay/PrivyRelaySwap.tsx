@@ -216,14 +216,6 @@ export function PrivyRelaySwap({
       return
     }
 
-    // Same-chain swaps don't support deposit addresses
-    // Show error with fallback to Relay website
-    if (fromChainId === toChainId) {
-      setErrorMessage('Same-chain swaps require Relay website. Click below to swap.')
-      setState('error')
-      return
-    }
-
     setState('quoting')
     setErrorMessage(null)
 
@@ -236,9 +228,10 @@ export function PrivyRelaySwap({
       }
 
       const amountWei = parseUnits(amount, fromTokenInfo.decimals).toString()
+      const isSameChain = fromChainId === toChainId
 
-      // === Deposit address only works for CROSS-CHAIN operations ===
-      const requestBody = {
+      // Build request - different params for same-chain vs cross-chain
+      const requestBody: Record<string, any> = {
         user: address,
         recipient: address,
         originChainId: fromChainId,
@@ -247,14 +240,18 @@ export function PrivyRelaySwap({
         destinationCurrency: toTokenInfo.address,
         amount: amountWei,
         tradeType: 'EXACT_INPUT',
-        useDepositAddress: true,
-        refundTo: address,
-        usePermit: false,
-        useExternalLiquidity: false,
         referrer: 'bands.cash',
       }
 
-      console.log('🔍 Fetching cross-chain quote with deposit address:', requestBody)
+      // Only use deposit address for CROSS-CHAIN (Relay doesn't support it for same-chain)
+      if (!isSameChain) {
+        requestBody.useDepositAddress = true
+        requestBody.refundTo = address
+        requestBody.usePermit = false
+        requestBody.useExternalLiquidity = false
+      }
+
+      console.log(`🔍 Fetching ${isSameChain ? 'same-chain' : 'cross-chain'} quote:`, requestBody)
 
       const response = await fetch('https://api.relay.link/quote', {
         method: 'POST',
@@ -361,96 +358,164 @@ export function PrivyRelaySwap({
       }
 
       // ============================================
-      // DEPOSIT ADDRESS METHOD (works for both same-chain AND cross-chain)
-      // This is the exact same method that works in SwapForGasModal and BridgeToArbitrumModal
+      // EXECUTE BASED ON SWAP TYPE
       // ============================================
-      if (!quote.depositAddress) {
-        throw new Error('No deposit address available. Please try again.')
-      }
+      
+      if (isCrossChainSwap && quote.depositAddress) {
+        // ============================================
+        // CROSS-CHAIN: Use deposit address method
+        // ============================================
+        console.log('╔════════════════════════════════════════╗')
+        console.log('║     CROSS-CHAIN BRIDGE (Deposit)       ║')
+        console.log('╚════════════════════════════════════════╝')
+        console.log('📍 Deposit address:', quote.depositAddress)
+        console.log('💰 Amount:', amount, fromToken)
+        console.log('🔗 Request ID:', quote.requestId)
 
-      console.log('╔════════════════════════════════════════╗')
-      console.log('║     DEPOSIT ADDRESS SWAP/BRIDGE        ║')
-      console.log('╚════════════════════════════════════════╝')
-      console.log('📍 Deposit address:', quote.depositAddress)
-      console.log('💰 Amount:', amount, fromToken)
-      console.log('🔗 Request ID:', quote.requestId)
-      console.log('🔄 Type:', isCrossChainSwap ? 'Cross-chain bridge' : 'Same-chain swap')
+        let hash: string
 
-      let hash: string
+        if (fromTokenInfo.address === '0x0000000000000000000000000000000000000000') {
+          hash = await provider.request({
+            method: 'eth_sendTransaction',
+            params: [{
+              from: address,
+              to: quote.depositAddress,
+              value: `0x${amountWei.toString(16)}`,
+            }],
+          }) as string
+        } else {
+          const transferData = encodeFunctionData({
+            abi: ERC20_ABI,
+            functionName: 'transfer',
+            args: [quote.depositAddress as `0x${string}`, amountWei],
+          })
 
-      // Check if sending native ETH or ERC20
-      if (fromTokenInfo.address === '0x0000000000000000000000000000000000000000') {
-        // Native ETH transfer to deposit address
-        console.log('📤 Sending native ETH to deposit address:', quote.depositAddress)
-        
-        hash = await provider.request({
-          method: 'eth_sendTransaction',
-          params: [{
-            from: address,
-            to: quote.depositAddress,
-            value: `0x${amountWei.toString(16)}`,
-          }],
-        }) as string
-      } else {
-        // ERC20 transfer to deposit address
-        const transferData = encodeFunctionData({
-          abi: ERC20_ABI,
-          functionName: 'transfer',
-          args: [quote.depositAddress as `0x${string}`, amountWei],
-        })
+          hash = await provider.request({
+            method: 'eth_sendTransaction',
+            params: [{
+              from: address,
+              to: fromTokenInfo.address,
+              data: transferData,
+            }],
+          }) as string
+        }
 
-        console.log('📤 Sending', amount, fromToken, 'to deposit address:', quote.depositAddress)
-        console.log('   Contract:', fromTokenInfo.address)
+        console.log('✅ Deposit transaction submitted:', hash)
+        setTxHash(hash)
 
-        hash = await provider.request({
-          method: 'eth_sendTransaction',
-          params: [{
-            from: address,
-            to: fromTokenInfo.address,
-            data: transferData,
-          }],
-        }) as string
-      }
-
-      console.log('✅ Deposit transaction submitted:', hash)
-      setTxHash(hash)
-
-      // Poll for completion
-      if (quote.requestId) {
-        setState('polling')
-        
-        let attempts = 0
-        const maxAttempts = 60 // 2 minutes
-        
-        while (attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 2000))
-          const status = await checkBridgeStatus(quote.requestId)
+        // Poll for completion
+        if (quote.requestId) {
+          setState('polling')
           
-          if (status === 'success') {
-            console.log('✅ Swap/Bridge completed successfully!')
-            setState('success')
-            onSuccess?.(hash)
-            setTimeout(fetchBalances, 3000)
-            return
+          let attempts = 0
+          const maxAttempts = 60
+          
+          while (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 2000))
+            const status = await checkBridgeStatus(quote.requestId)
+            
+            if (status === 'success') {
+              console.log('✅ Bridge completed!')
+              setState('success')
+              onSuccess?.(hash)
+              setTimeout(fetchBalances, 3000)
+              return
+            }
+            
+            if (status === 'failed') {
+              throw new Error('Bridge failed - funds may be refunded')
+            }
+            
+            attempts++
           }
           
-          if (status === 'failed') {
-            throw new Error('Operation failed - funds may be refunded')
-          }
-          
-          attempts++
+          console.log('⏰ Status check timed out, but transaction was sent')
+          setState('success')
+          onSuccess?.(hash)
+        } else {
+          setState('success')
+          onSuccess?.(hash)
         }
         
-        // Timeout but transaction was sent, still show success
-        console.log('⏰ Status check timed out, but transaction was sent')
-        setState('success')
-        onSuccess?.(hash)
+        setTimeout(fetchBalances, 3000)
+        
       } else {
-        setState('success')
-        onSuccess?.(hash)
-      }
+        // ============================================
+        // SAME-CHAIN: Use execute API directly
+        // ============================================
+        console.log('╔════════════════════════════════════════╗')
+        console.log('║     SAME-CHAIN SWAP (Execute API)      ║')
+        console.log('╚════════════════════════════════════════╝')
+        console.log('💰 Amount:', amount, fromToken, '→', toToken)
 
-      setTimeout(fetchBalances, 3000)
+        // Get execution steps from Relay
+        const executeResponse = await fetch('https://api.relay.link/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user: address,
+            recipient: address,
+            originChainId: fromChainId,
+            destinationChainId: toChainId,
+            originCurrency: fromTokenInfo.address,
+            destinationCurrency: toTokenInfo.address,
+            amount: amountWei.toString(),
+            tradeType: 'EXACT_INPUT',
+            source: 'bands.cash',
+          }),
+        })
+
+        if (!executeResponse.ok) {
+          const errorText = await executeResponse.text()
+          console.error('❌ Execute API error:', errorText)
+          let errorData: any = {}
+          try { errorData = JSON.parse(errorText) } catch {}
+          throw new Error(errorData.message || `Swap failed: ${executeResponse.status}`)
+        }
+
+        const executeData = await executeResponse.json()
+        console.log('📋 Execute steps:', executeData)
+
+        // Execute each step/transaction
+        let lastTxHash: string | null = null
+
+        for (const step of executeData.steps || []) {
+          console.log('📌 Processing step:', step.id)
+          
+          for (const item of step.items || []) {
+            if (item.status === 'incomplete' && item.data) {
+              console.log('📤 Sending transaction to:', item.data.to)
+
+              const txParams: Record<string, string> = {
+                from: address,
+                to: item.data.to,
+                data: item.data.data,
+              }
+
+              if (item.data.value && item.data.value !== '0') {
+                txParams.value = `0x${BigInt(item.data.value).toString(16)}`
+              }
+
+              const hash = await provider.request({
+                method: 'eth_sendTransaction',
+                params: [txParams],
+              }) as string
+
+              console.log('✅ Transaction sent:', hash)
+              lastTxHash = hash
+              setTxHash(hash)
+            }
+          }
+        }
+
+        if (lastTxHash) {
+          setState('success')
+          onSuccess?.(lastTxHash)
+          setTimeout(fetchBalances, 3000)
+        } else {
+          throw new Error('No transaction was executed')
+        }
+      }
 
     } catch (error: any) {
       console.error('❌ Swap error:', error)
@@ -741,34 +806,20 @@ export function PrivyRelaySwap({
       {/* Error */}
       {errorMessage && (
         <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4">
-          <div className="flex items-start gap-3 mb-2">
+          <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-            <span className="text-red-400 text-sm">{errorMessage}</span>
+            <div>
+              <span className="text-red-400 text-sm">{errorMessage}</span>
+              <a
+                href={getRelayFallbackUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-red-400/60 text-xs hover:underline flex items-center gap-1 mt-1"
+              >
+                Try on Relay.link <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
           </div>
-          {!isCrossChain && (
-            <a
-              href={getRelayFallbackUrl()}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 mt-2 px-4 py-2 bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-sm font-medium rounded-xl transition-colors"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Open in Relay
-            </a>
-          )}
-        </div>
-      )}
-
-      {/* Same-chain notice */}
-      {!isCrossChain && amountNum > 0 && (
-        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-4">
-          <div className="flex items-center gap-3 mb-2">
-            <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0" />
-            <span className="text-yellow-400 text-sm">Same-chain swaps open in Relay</span>
-          </div>
-          <p className="text-yellow-400/60 text-xs">
-            For {CHAINS.find(c => c.id === fromChainId)?.name} → {CHAINS.find(c => c.id === fromChainId)?.name} swaps, you'll be redirected to Relay's website.
-          </p>
         </div>
       )}
 
@@ -855,29 +906,7 @@ export function PrivyRelaySwap({
           <Loader2 className="w-5 h-5 animate-spin" />
           Bridging in progress...
         </button>
-      ) : !isCrossChain ? (
-        // Same-chain: Open Relay website
-        <a
-          href={getRelayFallbackUrl()}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`w-full py-4 text-white font-semibold rounded-2xl transition-all flex items-center justify-center gap-2 ${
-            !amount || amountNum <= 0 || hasInsufficientBalance
-              ? 'bg-[#7C3AED]/30 cursor-not-allowed pointer-events-none'
-              : 'bg-[#7C3AED] hover:bg-[#6D28D9] shadow-lg shadow-purple-500/20'
-          }`}
-        >
-          <ExternalLink className="w-5 h-5" />
-          {!amount || amountNum <= 0 ? (
-            'Enter Amount'
-          ) : hasInsufficientBalance ? (
-            'Insufficient Balance'
-          ) : (
-            `Swap on Relay`
-          )}
-        </a>
       ) : (
-        // Cross-chain: Use deposit address method
         <button
           onClick={quote ? executeSwap : fetchQuote}
           disabled={
@@ -897,7 +926,7 @@ export function PrivyRelaySwap({
           ) : state === 'executing' ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              Bridging...
+              {isCrossChain ? 'Bridging...' : 'Swapping...'}
             </>
           ) : !amount || amountNum <= 0 ? (
             'Enter Amount'
@@ -905,8 +934,10 @@ export function PrivyRelaySwap({
             'Insufficient Balance'
           ) : !quote ? (
             'Get Quote'
-          ) : (
+          ) : isCrossChain ? (
             `Bridge ${fromToken} to ${CHAINS.find(c => c.id === toChainId)?.name}`
+          ) : (
+            `Swap ${fromToken} for ${toToken}`
           )}
         </button>
       )}
