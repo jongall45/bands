@@ -2,36 +2,25 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useAccount, useBalance } from 'wagmi'
-import { ArrowUpDown, ArrowRightLeft, Repeat, RefreshCw, Settings } from 'lucide-react'
-import { CustomSwap } from '@/components/relay/CustomSwap'
-import { RelaySwapWidget } from '@/components/relay/RelaySwapWidget'
-import { RelayBridgeWidget } from '@/components/relay/RelayBridgeWidget'
+import { useWallets } from '@privy-io/react-auth'
+import { ArrowUpDown, ArrowRightLeft, Repeat, RefreshCw } from 'lucide-react'
+import { PrivyRelaySwap } from '@/components/relay/PrivyRelaySwap'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
-import { base } from 'viem/chains'
 
 type Tab = 'swap' | 'bridge'
-type UIMode = 'custom' | 'relay'
-
-const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
 
 export default function SwapPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { isConnected, address } = useAccount()
+  const { wallets } = useWallets()
   const [activeTab, setActiveTab] = useState<Tab>('swap')
-  const [uiMode, setUIMode] = useState<UIMode>('custom')
   const [recentTx, setRecentTx] = useState<string | null>(null)
-  const [showSettings, setShowSettings] = useState(false)
 
-  // Get USDC balance
-  const { data: usdcBalance } = useBalance({
-    address,
-    token: USDC_BASE,
-    chainId: base.id,
-    query: { enabled: !!address },
-  })
+  // Get the embedded Privy wallet
+  const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
+  const address = embeddedWallet?.address
+  const isConnected = !!embeddedWallet
 
   // Only redirect after a delay to allow connection state to settle
   useEffect(() => {
@@ -39,7 +28,7 @@ export default function SwapPage() {
       if (!isConnected) {
         router.push('/')
       }
-    }, 1500) // Give time for wallet to reconnect
+    }, 1500)
     return () => clearTimeout(timer)
   }, [isConnected, router])
 
@@ -92,69 +81,8 @@ export default function SwapPage() {
             <h1 className="text-gray-900 font-semibold text-xl">Swap & Bridge</h1>
             <p className="text-gray-500 text-sm">Trade tokens across chains</p>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowSettings(!showSettings)}
-              className="p-2 text-gray-400 hover:text-gray-600"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
-            <LogoInline size="sm" />
-          </div>
+          <LogoInline size="sm" />
         </header>
-
-        {/* Wallet Badge with Balance */}
-        {address && (
-          <div className="px-5 pb-3">
-            <div className="inline-flex items-center gap-3 bg-[#111] rounded-full px-4 py-2">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-green-400 rounded-full" />
-                <span className="text-white/70 text-xs font-mono">
-                  {address.slice(0, 6)}...{address.slice(-4)}
-                </span>
-              </div>
-              {usdcBalance && (
-                <span className="text-[#ef4444] text-xs font-semibold">
-                  ${parseFloat(usdcBalance.formatted).toFixed(2)} USDC
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Settings Panel */}
-        {showSettings && (
-          <div className="px-5 pb-4">
-            <div className="bg-[#111] border border-white/[0.06] rounded-2xl p-4">
-              <p className="text-white/40 text-xs mb-3">Swap Interface</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setUIMode('custom')}
-                  className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all ${
-                    uiMode === 'custom'
-                      ? 'bg-[#ef4444] text-white'
-                      : 'bg-white/[0.05] text-white/40'
-                  }`}
-                >
-                  bands UI
-                </button>
-                <button
-                  onClick={() => setUIMode('relay')}
-                  className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all ${
-                    uiMode === 'relay'
-                      ? 'bg-[#ef4444] text-white'
-                      : 'bg-white/[0.05] text-white/40'
-                  }`}
-                >
-                  Relay Widget
-                </button>
-              </div>
-              <p className="text-white/30 text-[10px] mt-2 text-center">
-                {uiMode === 'custom' ? 'Custom UI with full wallet support' : 'Native Relay widget (experimental)'}
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* Tab Switcher */}
         <div className="px-5 pb-4">
@@ -184,20 +112,18 @@ export default function SwapPage() {
           </div>
         </div>
 
-        {/* Widget Container */}
+        {/* Widget Container - Custom Privy + Relay Integration */}
         <div className="px-5">
           {activeTab === 'swap' ? (
-            uiMode === 'custom' ? (
-              <CustomSwap onSuccess={handleSuccess} />
-            ) : (
-              <RelaySwapWidget onSuccess={handleSuccess} />
-            )
+            <PrivyRelaySwap onSuccess={handleSuccess} />
           ) : (
-            uiMode === 'custom' ? (
-              <CustomSwap onSuccess={handleSuccess} />
-            ) : (
-              <RelayBridgeWidget onSuccess={handleSuccess} />
-            )
+            <PrivyRelaySwap 
+              defaultFromChain={8453}
+              defaultToChain={42161}
+              defaultFromToken="USDC"
+              defaultToToken="USDC"
+              onSuccess={handleSuccess} 
+            />
           )}
         </div>
 
@@ -223,11 +149,11 @@ export default function SwapPage() {
           <div className="grid grid-cols-2 gap-3">
             <div className="card p-4">
               <p className="text-white/40 text-xs mb-1">Swap</p>
-              <p className="text-white text-sm">Exchange tokens on the same chain</p>
+              <p className="text-white text-sm">Exchange tokens on any chain</p>
             </div>
             <div className="card p-4">
               <p className="text-white/40 text-xs mb-1">Bridge</p>
-              <p className="text-white text-sm">Move USDC across chains instantly</p>
+              <p className="text-white text-sm">Move tokens across chains</p>
             </div>
           </div>
 
