@@ -5,14 +5,14 @@ import { useAccount, useReadContract, useBalance } from 'wagmi'
 import { formatUnits } from 'viem'
 import { arbitrum } from 'wagmi/chains'
 import { 
-  Loader2, TrendingUp, TrendingDown, Info, AlertCircle, 
-  CheckCircle, ExternalLink, ChevronDown, Fuel 
+  TrendingUp, TrendingDown, Info, AlertCircle, 
+  ExternalLink, ChevronDown, Fuel 
 } from 'lucide-react'
-import { useOstiumTrade } from '@/hooks/useOstiumTrade'
 import { useOstiumPrice } from '@/hooks/useOstiumPrices'
 import { OSTIUM_CONTRACTS, MIN_COLLATERAL_USD } from '@/lib/ostium/constants'
 import { ERC20_ABI } from '@/lib/ostium/abi'
 import { SwapForGasModal } from '@/components/bridge/SwapForGasModal'
+import { SmartTradeButton } from '@/features/trading/SmartTradeButton'
 
 // Pair type for props
 interface OstiumPairType {
@@ -40,19 +40,6 @@ interface TradePanelProps {
 
 export function OstiumTradePanel({ pair }: TradePanelProps) {
   const { address, isConnected } = useAccount()
-  const { 
-    openTrade, 
-    approveUSDC,
-    isPending, 
-    isSuccess, 
-    isApproving, 
-    error, 
-    txHash, 
-    reset,
-    allowance,
-    needsApproval,
-    refetchAllowance,
-  } = useOstiumTrade()
   const { price, isLoading: priceLoading } = useOstiumPrice(pair.id)
 
   const [isLong, setIsLong] = useState(true)
@@ -68,7 +55,6 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
 
   // Reset state when pair changes
   useEffect(() => {
-    reset()
     setTakeProfit('')
     setStopLoss('')
     // Cap leverage to new pair's max
@@ -76,7 +62,7 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
     if (leverage > newMax) {
       setLeverage(Math.min(10, newMax))
     }
-  }, [pair.id, pair.category, pair.maxLeverage, reset, leverage])
+  }, [pair.id, pair.category, pair.maxLeverage, leverage])
 
   // Fetch USDC balance on Arbitrum
   const { data: usdcBalance, refetch: refetchBalance } = useReadContract({
@@ -140,58 +126,8 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
     return (priceDiff / currentPrice) * positionSize
   }, [stopLoss, currentPrice, collateralNum, positionSize, isLong])
 
-  // Check if approval is needed for current collateral amount
-  const requiresApproval = collateralNum > 0 && needsApproval(collateralNum)
-
-  const handleApprove = async () => {
-    try {
-      await approveUSDC()
-    } catch (err) {
-      console.error('Approval error:', err)
-    }
-  }
-
-  const handleTrade = async () => {
-    if (!collateral) return
-
-    // Double-check approval before trading
-    if (requiresApproval) {
-      console.log('🔴 Approval required before trading')
-      return
-    }
-
-    try {
-      await openTrade({
-        pairIndex: pair.id,
-        collateral: parseFloat(collateral),
-        leverage,
-        isLong,
-        slippageBps: 50, // 0.5% slippage
-      })
-    } catch (err) {
-      console.error('Trade error:', err)
-    }
-  }
-
   // Validation
   const meetsMinimum = collateralNum >= MIN_COLLATERAL_USD
-  const canApprove = isConnected && 
-    collateral && 
-    collateralNum > 0 && 
-    meetsMinimum &&
-    hasEnoughGas &&
-    !isPending &&
-    requiresApproval
-    
-  const canTrade = isConnected && 
-    collateral && 
-    collateralNum > 0 && 
-    collateralNum <= balance &&
-    meetsMinimum &&
-    isMarketOpen &&
-    hasEnoughGas &&
-    !isPending &&
-    !requiresApproval
 
   return (
     <div className="p-4 space-y-4 pb-40">
@@ -429,59 +365,38 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
         </div>
       )}
 
-      {/* Approve Button (shown when approval needed) */}
-      {requiresApproval && collateralNum > 0 && meetsMinimum && (
+      {/* Smart Trade Button - Handles Approve + Trade FSM */}
+      {isConnected && hasEnoughGas && isMarketOpen && collateralNum > 0 && meetsMinimum && collateralNum <= balance ? (
+        <SmartTradeButton
+          pairIndex={pair.id}
+          pairSymbol={pair.symbol}
+          isLong={isLong}
+          collateralAmount={collateral}
+          leverage={leverage}
+          onSuccess={() => {
+            refetchBalance()
+          }}
+        />
+      ) : (
         <button
-          onClick={handleApprove}
-          disabled={!canApprove}
-          className="w-full py-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-500/30 shadow-lg shadow-blue-500/20 text-white disabled:text-white/50 disabled:shadow-none"
+          disabled
+          className="w-full py-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 bg-gray-500/30 text-white/50"
         >
-          {isApproving ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Approving USDC...
-            </>
+          {!isConnected ? (
+            'Connect Wallet'
+          ) : !hasEnoughGas ? (
+            '⛽ Need ETH for Gas'
+          ) : !isMarketOpen ? (
+            'Market Closed'
+          ) : collateralNum > balance ? (
+            'Insufficient Balance'
+          ) : collateralNum > 0 && !meetsMinimum ? (
+            `Minimum $${MIN_COLLATERAL_USD} Required`
           ) : (
-            <>
-              🔓 Approve USDC
-            </>
+            'Enter Amount'
           )}
         </button>
       )}
-
-      {/* Trade Button */}
-      <button
-        onClick={handleTrade}
-        disabled={!canTrade}
-        className={`w-full py-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
-          isLong
-            ? 'bg-green-500 hover:bg-green-600 disabled:bg-green-500/30 shadow-lg shadow-green-500/20'
-            : 'bg-red-500 hover:bg-red-600 disabled:bg-red-500/30 shadow-lg shadow-red-500/20'
-        } text-white disabled:text-white/50 disabled:shadow-none`}
-      >
-        {isPending && !isApproving ? (
-          <>
-            <Loader2 className="w-5 h-5 animate-spin" />
-            Opening Position...
-          </>
-        ) : !isConnected ? (
-          'Connect Wallet'
-        ) : !hasEnoughGas ? (
-          '⛽ Need ETH for Gas'
-        ) : !isMarketOpen ? (
-          'Market Closed'
-        ) : collateralNum > balance ? (
-          'Insufficient Balance'
-        ) : collateralNum > 0 && !meetsMinimum ? (
-          `Minimum $${MIN_COLLATERAL_USD} Required`
-        ) : requiresApproval ? (
-          '↑ Approve USDC First'
-        ) : (
-          <>
-            {isLong ? 'Long' : 'Short'} {pair.symbol}
-          </>
-        )}
-      </button>
 
       {/* Alternative: Open in Ostium App */}
       <a
