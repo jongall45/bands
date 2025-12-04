@@ -225,8 +225,15 @@ export function useOstiumTrade() {
 
       // Convert collateral to wei (6 decimals for USDC)
       const collateralWei = parseUnits(collateral.toString(), 6)
+      
+      // Position size = collateral * leverage (in USDC with 6 decimals)
+      const positionSizeWei = collateralWei * BigInt(leverage)
+      
+      console.log('🔵 Collateral (USDC):', collateral)
+      console.log('🔵 Leverage:', leverage)
+      console.log('🔵 Position Size (USDC):', (Number(positionSizeWei) / 1e6).toFixed(2))
 
-      // Check if we need approval
+      // Check if we need approval - approve for collateral amount
       await refetchAllowance()
       const needsApproval = !currentAllowance || currentAllowance < collateralWei
 
@@ -234,7 +241,9 @@ export function useOstiumTrade() {
         setStep('approving')
         console.log('🟡 Need approval, current allowance:', currentAllowance?.toString())
         
-        const approveHash = await approveUSDC(collateralWei)
+        // Approve max to avoid future approvals
+        const maxApproval = parseUnits('1000000', 6) // 1M USDC
+        const approveHash = await approveUSDC(maxApproval)
         setTxHash(approveHash)
         
         // Wait for approval to be confirmed
@@ -251,12 +260,13 @@ export function useOstiumTrade() {
       setStep('trading')
 
       // Build trade struct according to Ostium spec
+      // positionSizeUSDC = the total position size (collateral * leverage)
       const trade = {
         trader: address,
         pairIndex: BigInt(pairIndex),
         index: BigInt(0),
         initialPosToken: BigInt(0),
-        positionSizeUSDC: collateralWei,
+        positionSizeUSDC: positionSizeWei, // This is collateral * leverage
         openPrice: BigInt(0), // MUST be 0 for market orders
         buy: isLong,
         leverage: BigInt(leverage),
@@ -274,6 +284,7 @@ export function useOstiumTrade() {
         trader: trade.trader,
         pairIndex: trade.pairIndex.toString(),
         positionSizeUSDC: trade.positionSizeUSDC.toString(),
+        collateral: collateral,
         buy: trade.buy,
         leverage: trade.leverage.toString(),
       })
@@ -293,21 +304,10 @@ export function useOstiumTrade() {
 
       console.log('🟢 Encoded calldata length:', calldata.length)
 
-      // Simulate first
-      try {
-        console.log('🟡 Simulating trade...')
-        await publicClient.call({
-          account: address,
-          to: OSTIUM_CONTRACTS.TRADING,
-          data: calldata,
-        })
-        console.log('🟢 Simulation passed!')
-      } catch (simError: any) {
-        console.error('🔴 Simulation failed:', simError)
-        // Continue anyway - simulation might fail for various reasons
-        console.log('⚠️ Continuing despite simulation failure...')
-      }
-
+      // Skip simulation - just execute directly
+      // Simulation can fail due to RPC issues but actual tx might work
+      console.log('🟡 Executing trade on Arbitrum...')
+      
       // Execute the trade
       const hash = await executeOnArbitrum(OSTIUM_CONTRACTS.TRADING, calldata)
       
