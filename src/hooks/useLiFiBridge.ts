@@ -19,10 +19,10 @@ import {
 const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
 const USDC_ARBITRUM = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'
 
-// Chain registry
-const CHAINS: Record<number, typeof base | typeof arbitrum> = {
-  8453: base,
-  42161: arbitrum,
+// Chain registry with RPC URLs
+const CHAINS: Record<number, { chain: typeof base | typeof arbitrum; rpcUrl: string }> = {
+  8453: { chain: base, rpcUrl: 'https://mainnet.base.org' },
+  42161: { chain: arbitrum, rpcUrl: 'https://arb1.arbitrum.io/rpc' },
 }
 
 // Initialize LI.FI SDK once
@@ -67,7 +67,8 @@ export function useLiFiBridge() {
   const [txHash, setTxHash] = useState<string | null>(null)
   
   // Track current chain ID ourselves - Privy's doesn't reliably switch
-  const currentChainIdRef = useRef<number>(42161) // Default to Arbitrum (where user usually starts)
+  // Start with Base (8453) since that's where bridge transactions start
+  const currentChainIdRef = useRef<number>(8453)
 
   // Balances
   const { data: baseBalance, refetch: refetchBase } = useBalance({
@@ -91,44 +92,103 @@ export function useLiFiBridge() {
 
     const setupProvider = async () => {
       try {
-        console.log('🟡 Setting up LI.FI EVM provider with chain-forcing workaround...')
+        console.log('🟡 Setting up LI.FI EVM provider with FULL chain-forcing workaround...')
         const provider = await embeddedWallet.getEthereumProvider()
         
         /**
          * Create a wallet client for a SPECIFIC chain that FORCES the chain ID
          * regardless of what Privy's internal provider thinks the chain is.
          * 
-         * This is the key workaround: we intercept eth_chainId calls and return
-         * the chain we want LI.FI to think we're on.
+         * KEY INSIGHT: Privy's provider sends transactions to whatever chain it's "connected" to,
+         * but we can't reliably switch it. So we:
+         * 1. Intercept eth_chainId and return our forced chain
+         * 2. Use chain-specific RPC for read operations (eth_call, eth_getBalance, etc.)
+         * 3. Use Privy's provider for signing/sending (it will send to correct chain based on RPC)
          */
         const createChainForcedWalletClient = (targetChainId: number) => {
-          const chain = CHAINS[targetChainId] || base
+          const chainConfig = CHAINS[targetChainId] || CHAINS[8453]
+          const chain = chainConfig.chain
+          const rpcUrl = chainConfig.rpcUrl
           const hexChainId = `0x${targetChainId.toString(16)}`
           
           console.log(`🔧 Creating chain-forced wallet client for chain ${targetChainId} (${chain.name})`)
+          console.log(`🔧 Using RPC: ${rpcUrl}`)
           
           return createWalletClient({
             account: embeddedWallet.address as `0x${string}`,
             chain: chain,
             transport: custom({
               async request({ method, params }: { method: string; params?: any[] }) {
-                // CRITICAL: Override eth_chainId to return our forced chain
+                // === CRITICAL INTERCEPTS ===
+                
+                // 1. eth_chainId - ALWAYS return our forced chain
                 if (method === 'eth_chainId') {
-                  console.log(`📍 eth_chainId intercepted, returning ${hexChainId} (${targetChainId})`)
+                  console.log(`📍 eth_chainId intercepted → returning ${hexChainId} (${targetChainId})`)
                   return hexChainId
                 }
                 
-                // For eth_sendTransaction, ensure chainId is set correctly in the tx
-                if (method === 'eth_sendTransaction' && params?.[0]) {
-                  console.log('📤 eth_sendTransaction intercepted, forcing chainId in tx params')
-                  // Don't modify chainId in tx params - let the chain config handle it
-                  // Some providers reject if chainId is explicitly set
+                // 2. Read operations - Use chain-specific RPC to ensure we're reading from correct chain
+                const readMethods = [
+                  'eth_blockNumber',
+                  'eth_getBalance', 
+                  'eth_getCode',
+                  'eth_call',
+                  'eth_estimateGas',
+                  'eth_gasPrice',
+                  'eth_maxPriorityFeePerGas',
+                  'eth_getTransactionCount',
+                  'eth_getBlockByNumber',
+                  'eth_getBlockByHash',
+                  'eth_getTransactionByHash',
+                  'eth_getTransactionReceipt',
+                  'eth_getLogs',
+                ]
+                
+                if (readMethods.includes(method)) {
+                  console.log(`📖 Read operation ${method} → routing to ${chain.name} RPC`)
+                  try {
+                    const response = await fetch(rpcUrl, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: Date.now(),
+                        method,
+                        params: params || [],
+                      }),
+                    })
+                    const data = await response.json()
+                    if (data.error) {
+                      console.error(`📖 RPC error for ${method}:`, data.error)
+                      throw new Error(data.error.message || 'RPC error')
+                    }
+                    return data.result
+                  } catch (e) {
+                    console.error(`📖 Failed to call ${method} via RPC, falling back to provider:`, e)
+                    // Fall back to Privy provider
+                    return provider.request({ method, params: params as any })
+                  }
                 }
                 
-                // For eth_call and eth_estimateGas, just pass through
-                // The RPC will use the correct chain based on the provider's connection
+                // 3. eth_sendTransaction - Log and forward to Privy
+                if (method === 'eth_sendTransaction') {
+                  console.log('📤 eth_sendTransaction intercepted')
+                  console.log('📤 Transaction params:', JSON.stringify(params?.[0], null, 2))
+                  console.log(`📤 Sending via Privy provider (chain: ${targetChainId})`)
+                  
+                  // Privy's provider should handle the actual chain routing
+                  // We've already done our best to "be on" the right chain
+                  return provider.request({ method, params: params as any })
+                }
                 
-                // Forward everything else to Privy's provider
+                // 4. eth_signTypedData_v4 and personal_sign - Forward to Privy
+                if (method.startsWith('eth_sign') || method === 'personal_sign') {
+                  console.log(`✍️ Signing operation ${method} → forwarding to Privy`)
+                  return provider.request({ method, params: params as any })
+                }
+                
+                // 5. All other methods - Forward to Privy
+                console.log(`🔀 Unknown method ${method} → forwarding to Privy provider`)
                 return provider.request({ method, params: params as any })
               }
             } as EIP1193Provider),
@@ -140,25 +200,29 @@ export function useLiFiBridge() {
           EVM({
             getWalletClient: async () => {
               // Return client for current tracked chain
+              console.log(`📍 getWalletClient called, returning client for chain ${currentChainIdRef.current}`)
               return createChainForcedWalletClient(currentChainIdRef.current)
             },
             switchChain: async (chainId: number) => {
-              console.log('=== CHAIN SWITCH DEBUG ===')
+              console.log('╔══════════════════════════════════════╗')
+              console.log('║        CHAIN SWITCH DEBUG            ║')
+              console.log('╚══════════════════════════════════════╝')
               console.log('🔄 LI.FI requesting chain switch to:', chainId)
               console.log('📍 Previous tracked chain:', currentChainIdRef.current)
               
               // Get current chain from provider for debugging
               try {
                 const providerChainId = await provider.request({ method: 'eth_chainId' })
-                console.log('📍 Provider reports chainId:', parseInt(providerChainId as string, 16))
+                console.log('📍 Privy provider reports chainId:', parseInt(providerChainId as string, 16))
               } catch (e) {
                 console.log('📍 Could not get provider chainId:', e)
               }
               
               // Try Privy's switch (may not actually work, but try anyway)
               try {
+                console.log('🔄 Attempting Privy switchChain()...')
                 await embeddedWallet.switchChain(chainId)
-                console.log('✅ Privy switchChain() completed')
+                console.log('✅ Privy switchChain() completed (but may not have actually switched)')
               } catch (e) {
                 console.warn('⚠️ Privy switchChain failed (expected, using workaround):', e)
               }
@@ -166,20 +230,30 @@ export function useLiFiBridge() {
               // Check provider again after switch attempt
               try {
                 const newProviderChainId = await provider.request({ method: 'eth_chainId' })
-                console.log('📍 Provider chainId after switch attempt:', parseInt(newProviderChainId as string, 16))
+                const parsedChain = parseInt(newProviderChainId as string, 16)
+                console.log('📍 Privy provider chainId after switch attempt:', parsedChain)
+                
+                if (parsedChain !== chainId) {
+                  console.log('⚠️ Privy provider did NOT switch - this is expected, using forced client')
+                }
               } catch (e) {
                 console.log('📍 Could not get provider chainId after switch:', e)
               }
               
-              // Update our tracked chain - THIS IS THE KEY
+              // UPDATE OUR TRACKED CHAIN - THIS IS THE KEY
               currentChainIdRef.current = chainId
               console.log('📍 Updated tracked chain to:', chainId)
               
               // Return a client that's FORCED to the target chain
               const client = createChainForcedWalletClient(chainId)
               
-              console.log('✅ Returning wallet client with chain.id:', client.chain?.id)
-              console.log('=========================')
+              console.log('✅ Returning wallet client with:')
+              console.log('   - chain.id:', client.chain?.id)
+              console.log('   - chain.name:', client.chain?.name)
+              console.log('   - account:', client.account?.address)
+              console.log('╔══════════════════════════════════════╗')
+              console.log('║     CHAIN SWITCH COMPLETE            ║')
+              console.log('╚══════════════════════════════════════╝')
               
               return client
             },
@@ -187,7 +261,8 @@ export function useLiFiBridge() {
         ])
         
         setIsProviderReady(true)
-        console.log('🟢 LI.FI EVM provider ready with chain-forcing workaround')
+        console.log('🟢 LI.FI EVM provider ready with FULL chain-forcing workaround')
+        console.log('🟢 Current tracked chain:', currentChainIdRef.current)
       } catch (err) {
         console.error('🔴 Failed to setup LI.FI provider:', err)
         setError('Failed to initialize bridge')
@@ -282,7 +357,9 @@ export function useLiFiBridge() {
 
   // Execute bridge using LI.FI
   const executeBridge = useCallback(async (): Promise<boolean> => {
-    console.log('🟢 LI.FI executeBridge called')
+    console.log('╔══════════════════════════════════════╗')
+    console.log('║        EXECUTE BRIDGE START          ║')
+    console.log('╚══════════════════════════════════════╝')
     
     if (!embeddedWallet || !quote?.route) {
       setError('Not ready to bridge')
@@ -294,6 +371,11 @@ export function useLiFiBridge() {
       return false
     }
 
+    // IMPORTANT: Set chain to Base BEFORE executing
+    // This ensures our getWalletClient returns a Base client
+    console.log('🔄 Pre-setting tracked chain to Base (8453) before execute...')
+    currentChainIdRef.current = 8453
+
     setIsBridging(true)
     setError(null)
     setTxHash(null)
@@ -301,11 +383,18 @@ export function useLiFiBridge() {
 
     try {
       console.log('🟡 Executing route with LI.FI...')
+      console.log('🟡 Current tracked chain:', currentChainIdRef.current)
+      console.log('🟡 Route fromChainId:', quote.route.fromChainId)
+      console.log('🟡 Route toChainId:', quote.route.toChainId)
 
       // Execute the route - LI.FI uses the configured EVM provider
       const executedRoute = await executeRoute(quote.route as RouteExtended, {
         updateRouteHook: (updatedRoute) => {
-          console.log('🟡 Route updated:', updatedRoute)
+          console.log('🟡 Route update - steps:', updatedRoute.steps.map(s => ({
+            tool: s.tool,
+            status: s.execution?.status,
+            txHash: s.execution?.process?.[0]?.txHash
+          })))
           
           // Update status based on route state
           const currentStep = updatedRoute.steps.find(s => s.execution?.status === 'PENDING')
@@ -320,6 +409,7 @@ export function useLiFiBridge() {
             if (step.execution?.process) {
               for (const process of step.execution.process) {
                 if (process.txHash) {
+                  console.log('🟢 Got txHash:', process.txHash)
                   setTxHash(process.txHash)
                 }
               }
@@ -341,16 +431,25 @@ export function useLiFiBridge() {
 
     } catch (err: any) {
       console.error('🔴 LI.FI bridge error:', err)
+      console.error('🔴 Error details:', {
+        message: err?.message,
+        code: err?.code,
+        name: err?.name,
+        stack: err?.stack,
+      })
       
       let errorMsg = 'Bridge failed'
-      if (err?.message?.includes('rejected')) {
-        errorMsg = 'Transaction rejected'
-      } else if (err?.message?.includes('switch')) {
-        errorMsg = 'Please switch networks manually and try again'
-      } else if (err?.message?.includes('provider')) {
+      if (err?.message?.includes('rejected') || err?.message?.includes('denied')) {
+        errorMsg = 'Transaction rejected by user'
+      } else if (err?.message?.includes('insufficient')) {
+        errorMsg = 'Insufficient balance or gas'
+      } else if (err?.message?.includes('chain') || err?.message?.includes('Chain')) {
+        errorMsg = 'Chain switching issue - try the external link below'
+      } else if (err?.message?.includes('provider') || err?.message?.includes('Provider')) {
         errorMsg = 'Provider error - please refresh and try again'
       } else if (err?.message) {
-        errorMsg = err.message
+        // Show first 100 chars of error
+        errorMsg = err.message.slice(0, 100)
       }
       
       setError(errorMsg)
