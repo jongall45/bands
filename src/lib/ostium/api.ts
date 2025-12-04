@@ -113,6 +113,7 @@ export async function fetchPairPrice(pairIndex: number): Promise<PriceData | nul
 
 /**
  * Fetch Pyth price update data from Hermes API
+ * Returns the raw bytes that can be passed to updatePriceFeeds or contracts that use Pyth
  */
 export async function fetchPythPriceUpdate(pairIndex: number): Promise<`0x${string}`> {
   const feedId = PYTH_FEED_IDS[pairIndex]
@@ -123,9 +124,9 @@ export async function fetchPythPriceUpdate(pairIndex: number): Promise<`0x${stri
   }
 
   try {
-    // Fetch from Pyth Hermes API
+    // Use the v2 endpoint which returns properly formatted data
     const response = await fetch(
-      `https://hermes.pyth.network/api/latest_vaas?ids[]=0x${feedId}`,
+      `https://hermes.pyth.network/v2/updates/price/latest?ids[]=0x${feedId}&encoding=hex&parsed=false`,
       { cache: 'no-store' }
     )
     
@@ -133,23 +134,25 @@ export async function fetchPythPriceUpdate(pairIndex: number): Promise<`0x${stri
       throw new Error(`Pyth API error: ${response.status}`)
     }
     
-    const vaas = await response.json()
+    const data = await response.json()
     
-    if (!vaas || vaas.length === 0) {
-      console.warn('No VAA data returned from Pyth')
-      return '0x'
+    // The v2 API returns binary data in the 'binary.data' field as an array of hex strings
+    if (data.binary?.data && data.binary.data.length > 0) {
+      // The data is already hex encoded
+      const hexData = data.binary.data[0]
+      console.log('🟢 Fetched Pyth price update (v2), length:', hexData.length)
+      return (hexData.startsWith('0x') ? hexData : `0x${hexData}`) as `0x${string}`
     }
     
-    // The VAA is base64 encoded - decode it to hex
-    const base64Vaa = vaas[0]
-    const binaryData = atob(base64Vaa)
-    let hexString = '0x'
-    for (let i = 0; i < binaryData.length; i++) {
-      hexString += binaryData.charCodeAt(i).toString(16).padStart(2, '0')
+    // Fallback to the older format if binary.data isn't present
+    if (data.data && data.data.length > 0) {
+      const hexData = data.data[0]
+      console.log('🟢 Fetched Pyth price update (fallback), length:', hexData.length)
+      return (hexData.startsWith('0x') ? hexData : `0x${hexData}`) as `0x${string}`
     }
     
-    console.log('🟢 Fetched Pyth price update, length:', hexString.length)
-    return hexString as `0x${string}`
+    console.warn('No price update data returned from Pyth')
+    return '0x'
   } catch (error) {
     console.error('Failed to fetch Pyth price update:', error)
     return '0x'
