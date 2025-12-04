@@ -1,17 +1,25 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { useAccount, useBalance, useWalletClient } from 'wagmi'
+import { useAccount, useBalance } from 'wagmi'
 import { useWallets } from '@privy-io/react-auth'
 import { base, arbitrum } from 'viem/chains'
-import { parseUnits, formatUnits } from 'viem'
-import { createConfig, getRoutes, executeRoute, type Route, type RouteExtended } from '@lifi/sdk'
+import { parseUnits, formatUnits, createWalletClient, custom } from 'viem'
+import { 
+  createConfig, 
+  EVM, 
+  config as lifiConfig,
+  getRoutes, 
+  executeRoute, 
+  type Route, 
+  type RouteExtended 
+} from '@lifi/sdk'
 
 // Constants
 const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
 const USDC_ARBITRUM = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'
 
-// Initialize LI.FI SDK
+// Initialize LI.FI SDK once
 let lifiInitialized = false
 function initLiFi() {
   if (lifiInitialized) return
@@ -26,6 +34,9 @@ function initLiFi() {
   }
 }
 
+// Initialize on module load
+initLiFi()
+
 interface QuoteData {
   outputAmount: string
   fee: string
@@ -35,24 +46,19 @@ interface QuoteData {
 
 export function useLiFiBridge() {
   const { address } = useAccount()
-  const { data: walletClient } = useWalletClient()
   const { wallets } = useWallets()
 
   // Get Privy embedded wallet
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
 
   // State
+  const [isProviderReady, setIsProviderReady] = useState(false)
   const [quote, setQuote] = useState<QuoteData | null>(null)
   const [isQuoting, setIsQuoting] = useState(false)
   const [isBridging, setIsBridging] = useState(false)
   const [status, setStatus] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [txHash, setTxHash] = useState<string | null>(null)
-
-  // Initialize LI.FI on mount
-  useEffect(() => {
-    initLiFi()
-  }, [])
 
   // Balances
   const { data: baseBalance, refetch: refetchBase } = useBalance({
@@ -67,12 +73,64 @@ export function useLiFiBridge() {
     chainId: arbitrum.id,
   })
 
+  // Set up LI.FI EVM provider when wallet is available
+  useEffect(() => {
+    if (!embeddedWallet) {
+      console.log('🟡 No embedded wallet yet')
+      return
+    }
+
+    const setupProvider = async () => {
+      try {
+        console.log('🟡 Setting up LI.FI EVM provider...')
+        const provider = await embeddedWallet.getEthereumProvider()
+        
+        const chains = [base, arbitrum]
+        
+        // Create a viem wallet client from Privy's provider
+        const getViemWalletClient = async (chainId?: number) => {
+          const targetChain = chains.find(c => c.id === chainId) || base
+          return createWalletClient({
+            account: embeddedWallet.address as `0x${string}`,
+            chain: targetChain,
+            transport: custom(provider),
+          })
+        }
+        
+        // Configure LI.FI with the EVM provider
+        lifiConfig.setProviders([
+          EVM({
+            getWalletClient: () => getViemWalletClient(),
+            switchChain: async (chainId) => {
+              console.log('🟡 LI.FI switchChain called for:', chainId)
+              try {
+                await embeddedWallet.switchChain(chainId)
+                console.log('🟢 Chain switch successful')
+              } catch (e) {
+                console.warn('🟡 Chain switch warning (continuing anyway):', e)
+              }
+              return getViemWalletClient(chainId)
+            },
+          }),
+        ])
+        
+        setIsProviderReady(true)
+        console.log('🟢 LI.FI EVM provider ready')
+      } catch (err) {
+        console.error('🔴 Failed to setup LI.FI provider:', err)
+        setError('Failed to initialize bridge')
+      }
+    }
+    
+    setupProvider()
+  }, [embeddedWallet])
+
   // Get quote from LI.FI
   const getQuote = useCallback(async (amountUsd: string) => {
     console.log('🟢 LI.FI getQuote called with:', amountUsd)
     
-    if (!address) {
-      console.log('🔴 No address')
+    if (!embeddedWallet) {
+      console.log('🔴 No wallet')
       return null
     }
 
@@ -86,8 +144,6 @@ export function useLiFiBridge() {
     setError(null)
 
     try {
-      initLiFi()
-      
       const amountWei = parseUnits(amountNum.toFixed(6), 6).toString()
       console.log('🟡 Amount in wei:', amountWei)
 
@@ -98,8 +154,8 @@ export function useLiFiBridge() {
         fromAmount: amountWei,
         toChainId: arbitrum.id,
         toTokenAddress: USDC_ARBITRUM,
-        fromAddress: address,
-        toAddress: address,
+        fromAddress: embeddedWallet.address,
+        toAddress: embeddedWallet.address,
         options: {
           order: 'RECOMMENDED',
           slippage: 0.005, // 0.5%
@@ -150,40 +206,31 @@ export function useLiFiBridge() {
     } finally {
       setIsQuoting(false)
     }
-  }, [address])
+  }, [embeddedWallet])
 
   // Execute bridge using LI.FI
   const executeBridge = useCallback(async (): Promise<boolean> => {
     console.log('🟢 LI.FI executeBridge called')
     
-    if (!address || !walletClient || !quote?.route) {
+    if (!embeddedWallet || !quote?.route) {
       setError('Not ready to bridge')
+      return false
+    }
+
+    if (!isProviderReady) {
+      setError('Bridge provider not initialized. Please try again.')
       return false
     }
 
     setIsBridging(true)
     setError(null)
     setTxHash(null)
+    setStatus('Preparing bridge...')
 
     try {
-      initLiFi()
-      
-      console.log('🟡 Getting Ethereum provider from embedded wallet...')
-      
-      // Get the provider from the embedded wallet
-      let provider: any
-      if (embeddedWallet) {
-        provider = await embeddedWallet.getEthereumProvider()
-      }
-
-      if (!provider) {
-        throw new Error('No provider available')
-      }
-
       console.log('🟡 Executing route with LI.FI...')
-      setStatus('Preparing bridge...')
 
-      // Execute the route - LI.FI handles chain switching internally
+      // Execute the route - LI.FI uses the configured EVM provider
       const executedRoute = await executeRoute(quote.route as RouteExtended, {
         updateRouteHook: (updatedRoute) => {
           console.log('🟡 Route updated:', updatedRoute)
@@ -207,25 +254,6 @@ export function useLiFiBridge() {
             }
           }
         },
-        switchChainHook: async (requiredChainId: number) => {
-          console.log('🟡 LI.FI requesting chain switch to:', requiredChainId)
-          setStatus(`Switching to ${requiredChainId === base.id ? 'Base' : 'Arbitrum'}...`)
-          
-          // Try to switch chain via provider
-          try {
-            await provider.request({
-              method: 'wallet_switchEthereumChain',
-              params: [{ chainId: `0x${requiredChainId.toString(16)}` }],
-            })
-            
-            // Wait for switch
-            await new Promise(r => setTimeout(r, 2000))
-            return walletClient
-          } catch (switchError) {
-            console.error('🔴 Chain switch error:', switchError)
-            throw new Error(`Please switch to ${requiredChainId === base.id ? 'Base' : 'Arbitrum'} network manually`)
-          }
-        },
       })
 
       console.log('🟢 LI.FI bridge complete:', executedRoute)
@@ -246,7 +274,9 @@ export function useLiFiBridge() {
       if (err?.message?.includes('rejected')) {
         errorMsg = 'Transaction rejected'
       } else if (err?.message?.includes('switch')) {
-        errorMsg = err.message
+        errorMsg = 'Please switch networks manually and try again'
+      } else if (err?.message?.includes('provider')) {
+        errorMsg = 'Provider error - please refresh and try again'
       } else if (err?.message) {
         errorMsg = err.message
       }
@@ -256,9 +286,12 @@ export function useLiFiBridge() {
     } finally {
       setIsBridging(false)
     }
-  }, [address, walletClient, quote, embeddedWallet, refetchBase, refetchArb])
+  }, [embeddedWallet, quote, isProviderReady, refetchBase, refetchArb])
 
   return {
+    // Provider state
+    isProviderReady,
+    
     // Balances
     baseBalance: baseBalance?.formatted || '0',
     arbBalance: arbBalance?.formatted || '0',
@@ -273,6 +306,9 @@ export function useLiFiBridge() {
     isBridging,
     status,
     txHash,
+    
+    // Wallet
+    walletAddress: embeddedWallet?.address,
     
     // Error
     error,

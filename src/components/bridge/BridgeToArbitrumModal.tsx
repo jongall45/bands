@@ -24,6 +24,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
   const quoteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const {
+    isProviderReady,
     baseBalance,
     arbBalance,
     quote,
@@ -109,7 +110,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
 
   const amountNum = parseFloat(inputValue) || 0
   const balanceNum = parseFloat(baseBalance) || 0
-  const canBridge = amountNum > 0 && amountNum <= balanceNum && quote && !isQuoting && !isBridging
+  const canBridge = isProviderReady && amountNum > 0 && amountNum <= balanceNum && quote && !isQuoting && !isBridging
 
   // Relay fallback URL
   const relayUrl = `https://relay.link/bridge?fromChainId=8453&toChainId=42161&fromCurrency=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913&toCurrency=0xaf88d065e77c8cC2239327C5EDb3A432268e5831&amount=${amountNum * 1_000_000}&toAddress=${address}`
@@ -174,7 +175,15 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
           </div>
         )}
 
-        {isSuccess ? (
+        {/* Provider Loading State */}
+        {!isProviderReady && !isSuccess && (
+          <div className="flex flex-col items-center py-8">
+            <Loader2 className="w-8 h-8 text-[#ef4444] animate-spin mb-4" />
+            <p className="text-white/60 text-sm">Initializing bridge...</p>
+          </div>
+        )}
+
+        {isProviderReady && isSuccess ? (
           <div className="flex flex-col items-center py-8">
             <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-4">
               <Check className="w-8 h-8 text-green-400" />
@@ -220,7 +229,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
               Skip, I already have ETH →
             </button>
           </div>
-        ) : (
+        ) : isProviderReady ? (
           <>
             {/* FROM section */}
             <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 mb-3">
@@ -385,7 +394,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
               </button>
             </div>
           </>
-        )}
+        ) : null}
       </div>
     </div>
   )
