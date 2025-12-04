@@ -173,7 +173,12 @@ export function useOstiumTrade() {
       console.log('🟢 Approval confirmed!')
 
       // Refetch allowance
-      await refetchAllowance()
+      const newAllowance = await refetchAllowance()
+      console.log('🟢 USDC Allowance for TRADING:', newAllowance.toString())
+
+      // Reset to idle - approval complete, now ready to trade
+      setStep('idle')
+      setTxHash(null) // Clear the approval tx hash so trade button works
 
       return txHash
     } catch (e: any) {
