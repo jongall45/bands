@@ -218,7 +218,7 @@ export function SmartTradeButton({
         leverage: trade.leverage.toString(),
       })
 
-      // Execute trade
+      // Execute trade - cast value to satisfy TypeScript
       writeTrade({
         address: OSTIUM_TRADING,
         abi: OSTIUM_TRADING_ABI,
@@ -230,10 +230,10 @@ export function SmartTradeButton({
           priceUpdateData,
           pythUpdateFee,
         ],
-        value: pythUpdateFee,
+        value: pythUpdateFee as bigint | undefined,
         chainId: 42161, // Arbitrum
         gas: BigInt(3000000), // 3M gas limit
-      })
+      } as any)
     } catch (error: any) {
       console.error('Trade error:', error)
       setErrorMessage(error.message || 'Failed to execute trade')
