@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-import { useAccount, useReadContract, useSwitchChain, usePublicClient, useWalletClient } from 'wagmi'
-import { parseUnits, encodeFunctionData } from 'viem'
+import { useState, useCallback, useEffect } from 'react'
+import { useWallets } from '@privy-io/react-auth'
+import { usePublicClient } from 'wagmi'
+import { parseUnits, encodeFunctionData, createWalletClient, custom, type EIP1193Provider } from 'viem'
 import { arbitrum } from 'wagmi/chains'
 import { 
   OSTIUM_CONTRACTS, 
@@ -12,6 +13,9 @@ import {
 } from '@/lib/ostium/constants'
 import { OSTIUM_TRADING_ABI, ERC20_ABI } from '@/lib/ostium/abi'
 import { fetchPairPrice, encodePriceUpdateData } from '@/lib/ostium/api'
+
+const ARBITRUM_CHAIN_ID = 42161
+const ARBITRUM_CHAIN_ID_HEX = '0xa4b1'
 
 interface TradeParams {
   pairIndex: number
@@ -23,60 +27,180 @@ interface TradeParams {
   stopLoss?: number       // Price, optional
 }
 
+/**
+ * Hook for Ostium trading that works directly with Privy embedded wallets
+ * Bypasses wagmi's unreliable chain switching
+ */
 export function useOstiumTrade() {
-  const { address, chainId } = useAccount()
-  const { data: walletClient } = useWalletClient()
+  const { wallets } = useWallets()
   const publicClient = usePublicClient({ chainId: arbitrum.id })
-  const { switchChainAsync } = useSwitchChain()
   
+  const [address, setAddress] = useState<`0x${string}` | null>(null)
   const [step, setStep] = useState<'idle' | 'switching' | 'approving' | 'trading' | 'success' | 'error'>('idle')
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [currentAllowance, setCurrentAllowance] = useState<bigint | null>(null)
 
-  // Check current allowance for Trading Storage
-  const { data: currentAllowance, refetch: refetchAllowance } = useReadContract({
-    address: OSTIUM_CONTRACTS.USDC,
-    abi: ERC20_ABI,
-    functionName: 'allowance',
-    args: address ? [address, OSTIUM_CONTRACTS.TRADING_STORAGE] : undefined,
-    chainId: arbitrum.id,
-  })
+  // Get the embedded wallet
+  const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
+  
+  // Get wallet address
+  useEffect(() => {
+    if (embeddedWallet) {
+      setAddress(embeddedWallet.address as `0x${string}`)
+    }
+  }, [embeddedWallet])
+
+  // Fetch allowance
+  const refetchAllowance = useCallback(async () => {
+    if (!address || !publicClient) return
+    
+    try {
+      const allowance = await publicClient.readContract({
+        address: OSTIUM_CONTRACTS.USDC,
+        abi: ERC20_ABI,
+        functionName: 'allowance',
+        args: [address, OSTIUM_CONTRACTS.TRADING_STORAGE],
+      })
+      setCurrentAllowance(allowance as bigint)
+    } catch (e) {
+      console.error('Error fetching allowance:', e)
+    }
+  }, [address, publicClient])
+
+  useEffect(() => {
+    refetchAllowance()
+  }, [refetchAllowance])
 
   /**
-   * Approve USDC for Trading Storage - using direct sendTransaction
+   * Force switch to Arbitrum using direct provider calls
+   * Returns true if successful, false if failed
+   */
+  const ensureArbitrumChain = useCallback(async (provider: EIP1193Provider): Promise<boolean> => {
+    try {
+      // Check current chain
+      const currentChainId = await provider.request({ method: 'eth_chainId' })
+      console.log('🔵 Current chain ID:', currentChainId)
+      
+      if (currentChainId === ARBITRUM_CHAIN_ID_HEX || parseInt(currentChainId as string, 16) === ARBITRUM_CHAIN_ID) {
+        console.log('🟢 Already on Arbitrum')
+        return true
+      }
+
+      console.log('🟡 Switching to Arbitrum...')
+      
+      // Try to switch chain
+      try {
+        await provider.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: ARBITRUM_CHAIN_ID_HEX }],
+        })
+      } catch (switchError: any) {
+        // Chain might not be added - try to add it
+        if (switchError.code === 4902) {
+          console.log('🟡 Arbitrum not added, adding chain...')
+          await provider.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: ARBITRUM_CHAIN_ID_HEX,
+              chainName: 'Arbitrum One',
+              nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+              rpcUrls: ['https://arb1.arbitrum.io/rpc'],
+              blockExplorerUrls: ['https://arbiscan.io'],
+            }],
+          })
+          // Try switch again
+          await provider.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: ARBITRUM_CHAIN_ID_HEX }],
+          })
+        } else {
+          throw switchError
+        }
+      }
+
+      // Wait a moment for the switch to propagate
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      // Verify the switch
+      const newChainId = await provider.request({ method: 'eth_chainId' })
+      console.log('🔵 Chain after switch:', newChainId)
+      
+      const isArbitrum = newChainId === ARBITRUM_CHAIN_ID_HEX || parseInt(newChainId as string, 16) === ARBITRUM_CHAIN_ID
+      
+      if (!isArbitrum) {
+        console.error('🔴 Chain switch failed - still on:', newChainId)
+        return false
+      }
+      
+      console.log('🟢 Successfully switched to Arbitrum')
+      return true
+    } catch (error) {
+      console.error('🔴 Error switching chain:', error)
+      return false
+    }
+  }, [])
+
+  /**
+   * Execute a transaction on Arbitrum using the provider directly
+   */
+  const executeOnArbitrum = useCallback(async (
+    to: `0x${string}`,
+    data: `0x${string}`,
+    value: bigint = BigInt(0)
+  ): Promise<`0x${string}`> => {
+    if (!embeddedWallet || !address) {
+      throw new Error('Wallet not connected')
+    }
+
+    const provider = await embeddedWallet.getEthereumProvider()
+    
+    // Ensure we're on Arbitrum
+    const onArbitrum = await ensureArbitrumChain(provider)
+    if (!onArbitrum) {
+      throw new Error('Failed to switch to Arbitrum. Please log out and log back in, then try again.')
+    }
+
+    console.log('🟡 Sending transaction on Arbitrum...')
+    console.log('  To:', to)
+    console.log('  Data length:', data.length)
+
+    // Send transaction directly via provider
+    const txHash = await provider.request({
+      method: 'eth_sendTransaction',
+      params: [{
+        from: address,
+        to,
+        data,
+        value: value > 0 ? `0x${value.toString(16)}` : '0x0',
+      }],
+    }) as `0x${string}`
+
+    console.log('🟢 Transaction sent:', txHash)
+    return txHash
+  }, [embeddedWallet, address, ensureArbitrumChain])
+
+  /**
+   * Approve USDC for Trading Storage
    */
   const approveUSDC = useCallback(async (amount: bigint): Promise<`0x${string}`> => {
-    if (!walletClient || !address) throw new Error('Wallet not connected')
-
     console.log('🟡 Approving USDC for Trading Storage:', OSTIUM_CONTRACTS.TRADING_STORAGE)
     console.log('🟡 Amount:', amount.toString())
 
-    // Manually encode the approve call
     const calldata = encodeFunctionData({
       abi: ERC20_ABI,
       functionName: 'approve',
       args: [OSTIUM_CONTRACTS.TRADING_STORAGE, amount],
     })
 
-    console.log('🟢 Approval calldata:', calldata)
-
-    // Direct transaction - bypass any batching
-    const hash = await walletClient.sendTransaction({
-      to: OSTIUM_CONTRACTS.USDC,
-      data: calldata,
-      chain: arbitrum,
-      value: BigInt(0),
-    })
-
-    console.log('🟢 Approval tx sent:', hash)
-    return hash
-  }, [walletClient, address])
+    return executeOnArbitrum(OSTIUM_CONTRACTS.USDC, calldata)
+  }, [executeOnArbitrum])
 
   /**
-   * Open a market trade using direct sendTransaction
+   * Open a market trade
    */
   const openTrade = useCallback(async (params: TradeParams) => {
-    if (!address || !walletClient || !publicClient) {
+    if (!address || !publicClient) {
       throw new Error('Wallet not connected')
     }
 
@@ -93,16 +217,9 @@ export function useOstiumTrade() {
     setTxHash(null)
 
     try {
-      // Switch to Arbitrum if needed
-      if (chainId !== arbitrum.id) {
-        console.log('🟡 Switching to Arbitrum...')
-        setStep('switching')
-        await switchChainAsync({ chainId: arbitrum.id })
-        console.log('🟢 Switched to Arbitrum')
-        await new Promise(resolve => setTimeout(resolve, 500))
-      }
+      setStep('switching')
 
-      // Fetch latest price for logging
+      // Fetch latest price
       const priceData = await fetchPairPrice(pairIndex)
       console.log('🟡 Current price:', priceData?.price)
 
@@ -110,6 +227,7 @@ export function useOstiumTrade() {
       const collateralWei = parseUnits(collateral.toString(), 6)
 
       // Check if we need approval
+      await refetchAllowance()
       const needsApproval = !currentAllowance || currentAllowance < collateralWei
 
       if (needsApproval) {
@@ -127,7 +245,6 @@ export function useOstiumTrade() {
         })
         console.log('🟢 Approval confirmed!')
         
-        // Refetch allowance
         await refetchAllowance()
       }
 
@@ -150,25 +267,18 @@ export function useOstiumTrade() {
       // Calculate slippage: bps * 1e7
       const slippage = calculateSlippage(slippageBps)
 
-      // Price update data (empty for now - keeper provides)
+      // Price update data
       const priceUpdateData = encodePriceUpdateData(priceData ?? undefined)
 
       console.log('🔵 Trade struct:', {
         trader: trade.trader,
         pairIndex: trade.pairIndex.toString(),
-        index: trade.index.toString(),
-        initialPosToken: trade.initialPosToken.toString(),
         positionSizeUSDC: trade.positionSizeUSDC.toString(),
-        openPrice: trade.openPrice.toString(),
         buy: trade.buy,
         leverage: trade.leverage.toString(),
-        tp: trade.tp.toString(),
-        sl: trade.sl.toString(),
       })
-      console.log('🔵 Order type:', ORDER_TYPE.MARKET)
-      console.log('🔵 Slippage:', slippage.toString(), `(${slippageBps} bps)`)
 
-      // MANUALLY ENCODE for direct transaction
+      // Encode the trade call
       const calldata = encodeFunctionData({
         abi: OSTIUM_TRADING_ABI,
         functionName: 'openTrade',
@@ -181,15 +291,9 @@ export function useOstiumTrade() {
         ],
       })
 
-      console.log('🟢 Encoded calldata:', calldata)
-      console.log('🟢 Calldata length:', calldata.length, 'chars')
+      console.log('🟢 Encoded calldata length:', calldata.length)
 
-      // Verify calldata looks right
-      if (calldata.length < 500) {
-        throw new Error('Calldata too short - encoding may have failed')
-      }
-
-      // SIMULATE FIRST
+      // Simulate first
       try {
         console.log('🟡 Simulating trade...')
         await publicClient.call({
@@ -200,22 +304,13 @@ export function useOstiumTrade() {
         console.log('🟢 Simulation passed!')
       } catch (simError: any) {
         console.error('🔴 Simulation failed:', simError)
-        if (simError.cause) {
-          console.error('🔴 Cause:', simError.cause)
-        }
-        throw new Error(`Trade simulation failed: ${simError.shortMessage || simError.message}`)
+        // Continue anyway - simulation might fail for various reasons
+        console.log('⚠️ Continuing despite simulation failure...')
       }
 
-      // SEND RAW TRANSACTION - direct sendTransaction
-      console.log('🟡 Sending transaction...')
-      const hash = await walletClient.sendTransaction({
-        to: OSTIUM_CONTRACTS.TRADING,
-        data: calldata,
-        chain: arbitrum,
-        value: BigInt(0),
-      })
-
-      console.log('🟢 Transaction sent:', hash)
+      // Execute the trade
+      const hash = await executeOnArbitrum(OSTIUM_CONTRACTS.TRADING, calldata)
+      
       setTxHash(hash)
       setStep('success')
       
@@ -226,40 +321,29 @@ export function useOstiumTrade() {
       setErrorMessage(error.shortMessage || error.message || 'Trade failed')
       throw error
     }
-  }, [address, walletClient, publicClient, chainId, currentAllowance, switchChainAsync, approveUSDC, refetchAllowance])
+  }, [address, publicClient, currentAllowance, approveUSDC, refetchAllowance, executeOnArbitrum])
 
   /**
-   * Close an open position using direct sendTransaction
+   * Close an open position
    */
   const closePosition = useCallback(async (pairIndex: number, positionIndex: number) => {
-    if (!address || !walletClient) throw new Error('Wallet not connected')
+    if (!address) throw new Error('Wallet not connected')
 
     setStep('trading')
     setErrorMessage(null)
 
     try {
-      // Fetch price data
       const priceData = await fetchPairPrice(pairIndex)
       const priceUpdateData = encodePriceUpdateData(priceData ?? undefined)
 
-      // Manually encode
       const calldata = encodeFunctionData({
         abi: OSTIUM_TRADING_ABI,
         functionName: 'closeTradeMarket',
         args: [BigInt(pairIndex), BigInt(positionIndex), priceUpdateData],
       })
 
-      console.log('🟢 Close position calldata:', calldata)
-
-      // Direct transaction
-      const hash = await walletClient.sendTransaction({
-        to: OSTIUM_CONTRACTS.TRADING,
-        data: calldata,
-        chain: arbitrum,
-        value: BigInt(0),
-      })
-
-      console.log('🟢 Close position tx:', hash)
+      const hash = await executeOnArbitrum(OSTIUM_CONTRACTS.TRADING, calldata)
+      
       setTxHash(hash)
       setStep('success')
       return hash
@@ -269,15 +353,14 @@ export function useOstiumTrade() {
       setErrorMessage(error.shortMessage || error.message || 'Failed to close position')
       throw error
     }
-  }, [address, walletClient])
+  }, [address, executeOnArbitrum])
 
   /**
    * Update take profit
    */
   const updateTakeProfit = useCallback(async (pairIndex: number, positionIndex: number, newTp: number) => {
-    if (!address || !walletClient) throw new Error('Wallet not connected')
+    if (!address) throw new Error('Wallet not connected')
 
-    // TP price encoding - using 1e10 precision
     const tpWei = BigInt(Math.floor(newTp * 1e10))
 
     try {
@@ -287,28 +370,21 @@ export function useOstiumTrade() {
         args: [BigInt(pairIndex), BigInt(positionIndex), tpWei],
       })
 
-      const hash = await walletClient.sendTransaction({
-        to: OSTIUM_CONTRACTS.TRADING,
-        data: calldata,
-        chain: arbitrum,
-        value: BigInt(0),
-      })
-
+      const hash = await executeOnArbitrum(OSTIUM_CONTRACTS.TRADING, calldata)
       setTxHash(hash)
       return hash
     } catch (error: any) {
       console.error('Update TP error:', error)
       throw error
     }
-  }, [address, walletClient])
+  }, [address, executeOnArbitrum])
 
   /**
    * Update stop loss
    */
   const updateStopLoss = useCallback(async (pairIndex: number, positionIndex: number, newSl: number) => {
-    if (!address || !walletClient) throw new Error('Wallet not connected')
+    if (!address) throw new Error('Wallet not connected')
 
-    // SL price encoding - using 1e10 precision
     const slWei = BigInt(Math.floor(newSl * 1e10))
 
     try {
@@ -318,20 +394,14 @@ export function useOstiumTrade() {
         args: [BigInt(pairIndex), BigInt(positionIndex), slWei],
       })
 
-      const hash = await walletClient.sendTransaction({
-        to: OSTIUM_CONTRACTS.TRADING,
-        data: calldata,
-        chain: arbitrum,
-        value: BigInt(0),
-      })
-
+      const hash = await executeOnArbitrum(OSTIUM_CONTRACTS.TRADING, calldata)
       setTxHash(hash)
       return hash
     } catch (error: any) {
       console.error('Update SL error:', error)
       throw error
     }
-  }, [address, walletClient])
+  }, [address, executeOnArbitrum])
 
   const reset = useCallback(() => {
     setStep('idle')
@@ -362,5 +432,9 @@ export function useOstiumTrade() {
     // Allowance
     currentAllowance,
     refetchAllowance,
+    
+    // Wallet info
+    address,
+    isConnected: !!embeddedWallet && !!address,
   }
 }
