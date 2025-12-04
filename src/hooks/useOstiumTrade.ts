@@ -249,6 +249,10 @@ export function useOstiumTrade() {
       const priceUpdateData = await fetchPythPriceUpdate(pairIndex)
       console.log('🔵 Price update data length:', priceUpdateData.length)
 
+      // Pyth update requires a small ETH fee (typically 1 wei per price update)
+      // Add a buffer to be safe - 0.0001 ETH should be more than enough
+      const pythUpdateFee = BigInt(100000000000000) // 0.0001 ETH in wei
+
       // Build trade struct
       const trade = {
         trader: address,
@@ -274,6 +278,8 @@ export function useOstiumTrade() {
       console.log('buy (isLong):', trade.buy)
       console.log('leverage:', trade.leverage.toString())
       console.log('slippage:', slippage.toString())
+      console.log('pythUpdateFee (ETH):', (Number(pythUpdateFee) / 1e18).toFixed(6))
+      console.log('priceUpdateData:', priceUpdateData.slice(0, 50) + '...')
       console.log('======================================')
 
       // Encode the trade call
@@ -285,20 +291,21 @@ export function useOstiumTrade() {
           BigInt(ORDER_TYPE.MARKET),
           slippage,
           priceUpdateData,
-          BigInt(0), // executionFee
+          pythUpdateFee, // executionFee - pass the same value as msg.value
         ],
       })
 
       console.log('🟢 Encoded calldata length:', calldata.length)
       console.log('🟡 Executing trade on Arbitrum...')
 
-      // Execute with generous gas limit
+      // Execute with generous gas limit and Pyth update fee
       const hash = await provider.request({
         method: 'eth_sendTransaction',
         params: [{
           from: address,
           to: OSTIUM_CONTRACTS.TRADING,
           data: calldata,
+          value: `0x${pythUpdateFee.toString(16)}`, // Send ETH for Pyth fee
           gas: '0x2DC6C0', // 3,000,000 gas
         }],
       }) as `0x${string}`
