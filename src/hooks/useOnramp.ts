@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useAccount } from 'wagmi'
 import { initOnRamp, CBPayInstanceType } from '@coinbase/cbpay-js'
 
@@ -15,22 +15,64 @@ export function useOnramp(options: UseOnrampOptions = {}) {
   const { address } = useAccount()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [onrampInstance, setOnrampInstance] = useState<CBPayInstanceType | null>(null)
-  const [isInitialized, setIsInitialized] = useState(false)
+  const [isReady, setIsReady] = useState(false)
+  const onrampInstanceRef = useRef<CBPayInstanceType | null>(null)
+  const isInitializingRef = useRef(false)
 
   const projectId = process.env.NEXT_PUBLIC_CDP_PROJECT_ID
 
-  // Initialize onramp instance
-  useEffect(() => {
-    if (!address || !projectId) {
-      setIsInitialized(false)
-      return
+  // Fetch session token from our backend
+  const fetchSessionToken = useCallback(async (): Promise<string | null> => {
+    if (!address) return null
+
+    try {
+      const response = await fetch('/api/onramp/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          addresses: [{ address, blockchains: ['base'] }],
+          assets: ['USDC'],
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to fetch session token')
+      }
+
+      const data = await response.json()
+      return data.token
+    } catch (err) {
+      console.error('Failed to fetch session token:', err)
+      return null
     }
+  }, [address])
 
-    const amount = options.amount || 50
+  // Initialize onramp with session token (secure initialization)
+  const initializeOnramp = useCallback(async () => {
+    if (!address || !projectId || isInitializingRef.current) return
 
-    initOnRamp(
-      {
+    isInitializingRef.current = true
+    setIsReady(false)
+    setError(null)
+
+    try {
+      // Destroy existing instance
+      if (onrampInstanceRef.current) {
+        onrampInstanceRef.current.destroy()
+        onrampInstanceRef.current = null
+      }
+
+      // Fetch session token for secure initialization
+      const sessionToken = await fetchSessionToken()
+      
+      if (!sessionToken) {
+        console.warn('No session token, trying without secure init...')
+      }
+
+      const amount = options.amount || 50
+
+      const initConfig: any = {
         appId: projectId,
         widgetParameters: {
           addresses: { [address]: ['base'] },
@@ -41,14 +83,14 @@ export function useOnramp(options: UseOnrampOptions = {}) {
           fiatCurrency: 'USD',
         },
         onSuccess: () => {
-          console.log('Onramp success')
+          console.log('✅ Onramp success')
           options.onSuccess?.()
         },
         onExit: () => {
           console.log('Onramp exit')
           options.onExit?.()
         },
-        onEvent: (event) => {
+        onEvent: (event: any) => {
           console.log('Onramp event:', event)
           options.onEvent?.(event)
         },
@@ -56,42 +98,81 @@ export function useOnramp(options: UseOnrampOptions = {}) {
         experienceLoggedOut: 'popup',
         closeOnExit: true,
         closeOnSuccess: true,
-      },
-      (err, instance) => {
+      }
+
+      // Add session token if available (required for secure initialization)
+      if (sessionToken) {
+        initConfig.sessionToken = sessionToken
+      }
+
+      initOnRamp(initConfig, (err, instance) => {
+        isInitializingRef.current = false
+        
         if (err) {
           console.error('Onramp init error:', err)
-          setError(err.message)
-          setIsInitialized(false)
+          setError(err.message || 'Failed to initialize onramp')
+          setIsReady(false)
         } else if (instance) {
-          setOnrampInstance(instance)
-          setIsInitialized(true)
+          onrampInstanceRef.current = instance
+          setIsReady(true)
           setError(null)
+          console.log('✅ Onramp initialized successfully')
         }
-      }
-    )
+      })
+    } catch (err) {
+      isInitializingRef.current = false
+      console.error('Onramp initialization error:', err)
+      setError(err instanceof Error ? err.message : 'Failed to initialize')
+    }
+  }, [address, projectId, options.amount, fetchSessionToken, options.onSuccess, options.onExit, options.onEvent])
+
+  // Initialize when address changes
+  useEffect(() => {
+    if (address && projectId) {
+      initializeOnramp()
+    }
 
     return () => {
-      if (onrampInstance) {
-        onrampInstance.destroy()
-        setOnrampInstance(null)
-        setIsInitialized(false)
+      if (onrampInstanceRef.current) {
+        onrampInstanceRef.current.destroy()
+        onrampInstanceRef.current = null
       }
     }
-  }, [address, projectId, options.amount])
+  }, [address, projectId])
 
-  // Open onramp with basic initialization (appId)
-  const openOnramp = useCallback(() => {
-    if (!onrampInstance) {
-      setError('Onramp not initialized')
-      return
+  // Open onramp
+  const openOnramp = useCallback(async () => {
+    setError(null)
+
+    // If not ready, try to initialize first
+    if (!isReady || !onrampInstanceRef.current) {
+      setIsLoading(true)
+      await initializeOnramp()
+      
+      // Wait a bit for initialization
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      if (!onrampInstanceRef.current) {
+        setIsLoading(false)
+        // Fall back to URL method
+        await openOnrampViaUrl()
+        return
+      }
     }
 
-    setError(null)
-    onrampInstance.open()
-  }, [onrampInstance])
+    try {
+      onrampInstanceRef.current?.open()
+    } catch (err) {
+      console.error('Failed to open onramp:', err)
+      // Fall back to URL method
+      await openOnrampViaUrl()
+    } finally {
+      setIsLoading(false)
+    }
+  }, [isReady, initializeOnramp])
 
-  // Generate session token and open via URL (fallback)
-  const openOnrampWithSessionToken = useCallback(async () => {
+  // Fallback: Open via URL with session token
+  const openOnrampViaUrl = useCallback(async () => {
     if (!address) {
       setError('Wallet not connected')
       return
@@ -101,35 +182,19 @@ export function useOnramp(options: UseOnrampOptions = {}) {
     setError(null)
 
     try {
-      // Get session token from our API
-      const response = await fetch('/api/onramp/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          addresses: [
-            {
-              address,
-              blockchains: ['base'],
-            },
-          ],
-          assets: ['USDC'],
-        }),
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to generate session token')
+      const sessionToken = await fetchSessionToken()
+      
+      if (!sessionToken) {
+        throw new Error('Failed to get session token')
       }
 
-      const data = await response.json()
-      const sessionToken = data.token
+      const amount = options.amount || 50
       
-      // Generate URL with session token
       const url = new URL('https://pay.coinbase.com/buy/select-asset')
       url.searchParams.set('sessionToken', sessionToken)
       url.searchParams.set('defaultAsset', 'USDC')
       url.searchParams.set('defaultNetwork', 'base')
-      url.searchParams.set('presetFiatAmount', (options.amount || 50).toString())
+      url.searchParams.set('presetFiatAmount', amount.toString())
       url.searchParams.set('fiatCurrency', 'USD')
       
       // Open in popup
@@ -148,14 +213,15 @@ export function useOnramp(options: UseOnrampOptions = {}) {
     } finally {
       setIsLoading(false)
     }
-  }, [address, options.amount])
+  }, [address, options.amount, fetchSessionToken])
 
   return {
     openOnramp,
-    openOnrampWithSessionToken,
+    openOnrampViaUrl,
     isLoading,
     error,
-    isReady: isInitialized && !!onrampInstance,
+    isReady,
+    reinitialize: initializeOnramp,
     clearError: () => setError(null),
   }
 }
