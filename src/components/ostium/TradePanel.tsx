@@ -81,13 +81,6 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
   
   const hasEnoughGas = ethBalanceData && parseFloat(ethBalanceData.formatted) > 0.0001
 
-  // Refetch balance on success
-  useEffect(() => {
-    if (isSuccess) {
-      refetchBalance()
-    }
-  }, [isSuccess, refetchBalance])
-
   const balance = usdcBalance ? parseFloat(formatUnits(usdcBalance, 6)) : 0
   const currentPrice = price?.mid || 0
   const isMarketOpen = price?.isMarketOpen ?? false
