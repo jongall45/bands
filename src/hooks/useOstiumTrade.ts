@@ -171,6 +171,7 @@ export function useOstiumTrade() {
     console.log('  Data length:', data.length)
 
     // Send transaction directly via provider
+    // Specify explicit gas limit to avoid "intrinsic gas too low" errors
     const txHash = await provider.request({
       method: 'eth_sendTransaction',
       params: [{
@@ -178,6 +179,7 @@ export function useOstiumTrade() {
         to,
         data,
         value: value > 0 ? `0x${value.toString(16)}` : '0x0',
+        gas: '0x7A120', // 500,000 gas limit
       }],
     }) as `0x${string}`
 
@@ -231,12 +233,9 @@ export function useOstiumTrade() {
       // Convert collateral to wei (6 decimals for USDC)
       const collateralWei = parseUnits(collateral.toString(), 6)
       
-      // Position size = collateral * leverage (in USDC with 6 decimals)
-      const positionSizeWei = collateralWei * BigInt(leverage)
-      
       console.log('🔵 Collateral (USDC):', collateral)
+      console.log('🔵 Collateral Wei:', collateralWei.toString())
       console.log('🔵 Leverage:', leverage)
-      console.log('🔵 Position Size (USDC):', (Number(positionSizeWei) / 1e6).toFixed(2))
 
       // Check if we need approval - approve for collateral amount
       await refetchAllowance()
@@ -265,13 +264,13 @@ export function useOstiumTrade() {
       setStep('trading')
 
       // Build trade struct according to Ostium spec
-      // positionSizeUSDC = the total position size (collateral * leverage)
+      // positionSizeUSDC = the collateral amount (contract calculates position size)
       const trade = {
         trader: address,
         pairIndex: BigInt(pairIndex),
         index: BigInt(0),
         initialPosToken: BigInt(0),
-        positionSizeUSDC: positionSizeWei, // This is collateral * leverage
+        positionSizeUSDC: collateralWei, // Collateral amount in USDC
         openPrice: BigInt(0), // MUST be 0 for market orders
         buy: isLong,
         leverage: BigInt(leverage),
@@ -288,10 +287,9 @@ export function useOstiumTrade() {
       console.log('🔵 Trade struct:', {
         trader: trade.trader,
         pairIndex: trade.pairIndex.toString(),
-        positionSizeUSDC: trade.positionSizeUSDC.toString(),
-        collateral: collateral,
+        positionSizeUSDC: trade.positionSizeUSDC.toString() + ` ($${collateral} USDC)`,
         buy: trade.buy,
-        leverage: trade.leverage.toString(),
+        leverage: trade.leverage.toString() + 'x',
       })
 
       // Encode the trade call
