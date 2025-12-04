@@ -17,7 +17,7 @@ import {
   DEFAULT_SLIPPAGE_BPS,
 } from '@/lib/ostium/constants'
 import { OSTIUM_TRADING_ABI, ERC20_ABI } from '@/lib/ostium/abi'
-import { fetchPairPrice, encodePriceUpdateData } from '@/lib/ostium/api'
+import { fetchPairPrice, fetchPythPriceUpdate } from '@/lib/ostium/api'
 
 const ARBITRUM_CHAIN_ID = 42161
 const ARBITRUM_CHAIN_ID_HEX = '0xa4b1'
@@ -281,8 +281,10 @@ export function useOstiumTrade() {
       // Calculate slippage: bps * 1e7
       const slippage = calculateSlippage(slippageBps)
 
-      // Price update data
-      const priceUpdateData = encodePriceUpdateData(priceData ?? undefined)
+      // Fetch real Pyth price update data
+      console.log('🟡 Fetching Pyth price update data...')
+      const priceUpdateData = await fetchPythPriceUpdate(pairIndex)
+      console.log('🔵 Price update data length:', priceUpdateData.length)
 
       console.log('🔵 Trade struct:', {
         trader: trade.trader,

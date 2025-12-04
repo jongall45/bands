@@ -1,5 +1,17 @@
 import { OSTIUM_PAIRS } from './constants'
 
+// Pyth price feed IDs for Ostium pairs (hex without 0x prefix)
+const PYTH_FEED_IDS: Record<number, string> = {
+  0: 'e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43', // BTC-USD
+  1: 'ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace', // ETH-USD
+  2: 'ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d', // SOL-USD
+  5: '765d2ba906dbc32ca17cc11f5310a89e9ee1f6420508c63861f2f8ba4ee34bb2', // XAU-USD (Gold)
+  6: 'f2fb02c32b055c805e7238d628e5e9dadef274376114eb1f012337cabe93871e', // XAG-USD (Silver)
+  10: 'a995d00bb36a63cef7fd2c287dc105fc8f3d93779f062f09551b0af3e81ec30b', // EUR-USD
+  11: '84c2dde9633d93d1bcad84e244ec23eb3cabb0d3a4f68cec1ff0a5fd2d3b8417', // GBP-USD
+  12: 'ef2c98c804ba503c6a707e38be4dfbb16683775f195b091252bf24693042fd52', // USD-JPY
+}
+
 export interface PriceData {
   pairIndex: number
   symbol: string
@@ -100,27 +112,65 @@ export async function fetchPairPrice(pairIndex: number): Promise<PriceData | nul
 }
 
 /**
- * Encode price update data for contract call
- * For market orders, we may be able to pass empty bytes
- * and let the keeper provide the price
+ * Fetch Pyth price update data from Hermes API
  */
-export function encodePriceUpdateData(priceData?: PriceData): `0x${string}` {
-  // Start simple - try empty bytes first
-  // If the contract requires oracle data, we'll need to encode it properly
-  if (!priceData?.raw) {
+export async function fetchPythPriceUpdate(pairIndex: number): Promise<`0x${string}`> {
+  const feedId = PYTH_FEED_IDS[pairIndex]
+  
+  if (!feedId) {
+    console.warn(`No Pyth feed ID for pair index ${pairIndex}, returning empty bytes`)
     return '0x'
   }
-  
-  // If the API provides a proof or signature, use it
-  if (priceData.raw.proof) {
-    return priceData.raw.proof as `0x${string}`
+
+  try {
+    // Fetch from Pyth Hermes API
+    const response = await fetch(
+      `https://hermes.pyth.network/api/latest_vaas?ids[]=0x${feedId}`,
+      { cache: 'no-store' }
+    )
+    
+    if (!response.ok) {
+      throw new Error(`Pyth API error: ${response.status}`)
+    }
+    
+    const vaas = await response.json()
+    
+    if (!vaas || vaas.length === 0) {
+      console.warn('No VAA data returned from Pyth')
+      return '0x'
+    }
+    
+    // The VAA is base64 encoded - decode it to hex
+    const base64Vaa = vaas[0]
+    const binaryData = atob(base64Vaa)
+    let hexString = '0x'
+    for (let i = 0; i < binaryData.length; i++) {
+      hexString += binaryData.charCodeAt(i).toString(16).padStart(2, '0')
+    }
+    
+    console.log('🟢 Fetched Pyth price update, length:', hexString.length)
+    return hexString as `0x${string}`
+  } catch (error) {
+    console.error('Failed to fetch Pyth price update:', error)
+    return '0x'
   }
-  
-  if (priceData.raw.priceUpdateData) {
+}
+
+/**
+ * Encode price update data for contract call (sync wrapper)
+ * Note: For actual trades, use fetchPythPriceUpdate instead
+ */
+export function encodePriceUpdateData(priceData?: PriceData): `0x${string}` {
+  // If the API provides pre-encoded data, use it
+  if (priceData?.raw?.priceUpdateData) {
     return priceData.raw.priceUpdateData as `0x${string}`
   }
   
-  // Default to empty bytes
+  if (priceData?.raw?.proof) {
+    return priceData.raw.proof as `0x${string}`
+  }
+  
+  // Default to empty - caller should use fetchPythPriceUpdate for real trades
   return '0x'
 }
 
