@@ -120,13 +120,18 @@ export function useRelayDepositBridge() {
       if (chainId === 8453) {
         console.log('✅ Successfully switched to Base')
         setStatus('ready')
+        setError(null)
         return true
       } else {
         console.error('❌ Switch failed, still on chain:', chainId)
+        setStatus('wrong_chain')
+        setError('Unable to switch networks. Please log out and log back in to reset your wallet to Base.')
         return false
       }
     } catch (e) {
       console.error('❌ Chain switch error:', e)
+      setStatus('wrong_chain')
+      setError('Network switch failed. Please log out and log back in.')
       return false
     }
   }, [embeddedWallet])
