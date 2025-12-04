@@ -189,12 +189,38 @@ export function PrivyRelaySwap({
   // Track if this is a cross-chain swap (bridge)
   const isCrossChain = fromChainId !== toChainId
 
+  // Generate fallback URL for Relay website
+  const getRelayFallbackUrl = useCallback(() => {
+    const fromTokenInfo = TOKENS[fromToken][fromChainId]
+    const toTokenInfo = TOKENS[toToken][toChainId]
+    if (!fromTokenInfo || !toTokenInfo || !address) return 'https://relay.link'
+    
+    const amountWei = amount ? parseUnits(amount, fromTokenInfo.decimals).toString() : '0'
+    const params = new URLSearchParams({
+      fromChainId: fromChainId.toString(),
+      toChainId: toChainId.toString(),
+      fromCurrency: fromTokenInfo.address,
+      toCurrency: toTokenInfo.address,
+      amount: amountWei,
+      toAddress: address,
+    })
+    return `https://relay.link/swap?${params.toString()}`
+  }, [fromChainId, toChainId, fromToken, toToken, amount, address])
+
   // ============================================
-  // FETCH QUOTE FROM RELAY (ALWAYS use deposit address)
+  // FETCH QUOTE FROM RELAY
   // ============================================
   const fetchQuote = useCallback(async () => {
     if (!address || !amount || parseFloat(amount) <= 0) {
       setQuote(null)
+      return
+    }
+
+    // Same-chain swaps don't support deposit addresses
+    // Show error with fallback to Relay website
+    if (fromChainId === toChainId) {
+      setErrorMessage('Same-chain swaps require Relay website. Click below to swap.')
+      setState('error')
       return
     }
 
@@ -211,8 +237,7 @@ export function PrivyRelaySwap({
 
       const amountWei = parseUnits(amount, fromTokenInfo.decimals).toString()
 
-      // === CRITICAL: ALWAYS use deposit address (this is what SwapForGasModal does) ===
-      // Relay supports deposit addresses for both same-chain AND cross-chain operations
+      // === Deposit address only works for CROSS-CHAIN operations ===
       const requestBody = {
         user: address,
         recipient: address,
@@ -222,7 +247,6 @@ export function PrivyRelaySwap({
         destinationCurrency: toTokenInfo.address,
         amount: amountWei,
         tradeType: 'EXACT_INPUT',
-        // === ALWAYS enable deposit address mode ===
         useDepositAddress: true,
         refundTo: address,
         usePermit: false,
@@ -230,7 +254,7 @@ export function PrivyRelaySwap({
         referrer: 'bands.cash',
       }
 
-      console.log('🔍 Fetching quote with deposit address:', requestBody)
+      console.log('🔍 Fetching cross-chain quote with deposit address:', requestBody)
 
       const response = await fetch('https://api.relay.link/quote', {
         method: 'POST',
@@ -716,9 +740,35 @@ export function PrivyRelaySwap({
 
       {/* Error */}
       {errorMessage && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-          <span className="text-red-400 text-sm">{errorMessage}</span>
+        <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4">
+          <div className="flex items-start gap-3 mb-2">
+            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+            <span className="text-red-400 text-sm">{errorMessage}</span>
+          </div>
+          {!isCrossChain && (
+            <a
+              href={getRelayFallbackUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 mt-2 px-4 py-2 bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-sm font-medium rounded-xl transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Open in Relay
+            </a>
+          )}
+        </div>
+      )}
+
+      {/* Same-chain notice */}
+      {!isCrossChain && amountNum > 0 && (
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-4">
+          <div className="flex items-center gap-3 mb-2">
+            <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0" />
+            <span className="text-yellow-400 text-sm">Same-chain swaps open in Relay</span>
+          </div>
+          <p className="text-yellow-400/60 text-xs">
+            For {CHAINS.find(c => c.id === fromChainId)?.name} → {CHAINS.find(c => c.id === fromChainId)?.name} swaps, you'll be redirected to Relay's website.
+          </p>
         </div>
       )}
 
@@ -805,7 +855,29 @@ export function PrivyRelaySwap({
           <Loader2 className="w-5 h-5 animate-spin" />
           Bridging in progress...
         </button>
+      ) : !isCrossChain ? (
+        // Same-chain: Open Relay website
+        <a
+          href={getRelayFallbackUrl()}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`w-full py-4 text-white font-semibold rounded-2xl transition-all flex items-center justify-center gap-2 ${
+            !amount || amountNum <= 0 || hasInsufficientBalance
+              ? 'bg-[#7C3AED]/30 cursor-not-allowed pointer-events-none'
+              : 'bg-[#7C3AED] hover:bg-[#6D28D9] shadow-lg shadow-purple-500/20'
+          }`}
+        >
+          <ExternalLink className="w-5 h-5" />
+          {!amount || amountNum <= 0 ? (
+            'Enter Amount'
+          ) : hasInsufficientBalance ? (
+            'Insufficient Balance'
+          ) : (
+            `Swap on Relay`
+          )}
+        </a>
       ) : (
+        // Cross-chain: Use deposit address method
         <button
           onClick={quote ? executeSwap : fetchQuote}
           disabled={
@@ -825,7 +897,7 @@ export function PrivyRelaySwap({
           ) : state === 'executing' ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              {isCrossChain ? 'Bridging...' : 'Swapping...'}
+              Bridging...
             </>
           ) : !amount || amountNum <= 0 ? (
             'Enter Amount'
@@ -833,10 +905,8 @@ export function PrivyRelaySwap({
             'Insufficient Balance'
           ) : !quote ? (
             'Get Quote'
-          ) : isCrossChain ? (
-            `Bridge ${fromToken} to ${CHAINS.find(c => c.id === toChainId)?.name}`
           ) : (
-            `Swap ${fromToken} for ${toToken}`
+            `Bridge ${fromToken} to ${CHAINS.find(c => c.id === toChainId)?.name}`
           )}
         </button>
       )}
