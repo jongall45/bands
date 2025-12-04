@@ -3,7 +3,12 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useWallets } from '@privy-io/react-auth'
 import { usePublicClient } from 'wagmi'
-import { parseUnits, encodeFunctionData, createWalletClient, custom, type EIP1193Provider } from 'viem'
+import { parseUnits, encodeFunctionData } from 'viem'
+
+// Simple provider type for Privy wallet
+interface PrivyProvider {
+  request: (args: { method: string; params?: any[] }) => Promise<any>
+}
 import { arbitrum } from 'wagmi/chains'
 import { 
   OSTIUM_CONTRACTS, 
@@ -76,7 +81,7 @@ export function useOstiumTrade() {
    * Force switch to Arbitrum using direct provider calls
    * Returns true if successful, false if failed
    */
-  const ensureArbitrumChain = useCallback(async (provider: EIP1193Provider): Promise<boolean> => {
+  const ensureArbitrumChain = useCallback(async (provider: PrivyProvider): Promise<boolean> => {
     try {
       // Check current chain
       const currentChainId = await provider.request({ method: 'eth_chainId' })
