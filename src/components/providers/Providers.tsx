@@ -81,12 +81,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
           },
         },
         
-        // Smart Wallet config - enables Account Abstraction (Kernel/ZeroDev)
-        // This allows batched transactions for 1-click trading
-        smartWallets: {
-          createOnLogin: 'users-without-wallets',
-        },
-        
         // Chain config
         defaultChain: base,
         supportedChains: [base, arbitrum],
