@@ -129,25 +129,34 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
       try {
         const amountWei = parseUnits(amount, 6).toString()
         const isFromBase = sourceChain === 'base'
+        const isCrossChain = isFromBase // Base → Arbitrum is cross-chain, Arbitrum → Arbitrum is same-chain
         
-        // Relay API for swap: USDC → ETH
+        // Build quote request - only use deposit address for cross-chain
+        const requestBody: Record<string, any> = {
+          user: address,
+          recipient: address,
+          originChainId: isFromBase ? 8453 : 42161,
+          destinationChainId: 42161,
+          originCurrency: isFromBase ? USDC_BASE : USDC_ARBITRUM,
+          destinationCurrency: ETH_ARBITRUM,
+          amount: amountWei,
+          tradeType: 'EXACT_INPUT',
+          referrer: 'bands.cash',
+        }
+
+        // Only use deposit address for CROSS-CHAIN (Base → Arbitrum)
+        if (isCrossChain) {
+          requestBody.useDepositAddress = true
+          requestBody.refundTo = address
+          requestBody.usePermit = false
+        }
+
+        console.log('🔍 Gas swap quote request:', requestBody)
+        
         const response = await fetch('https://api.relay.link/quote', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user: address,
-            recipient: address,
-            originChainId: isFromBase ? 8453 : 42161,    // Base or Arbitrum
-            destinationChainId: 42161,                    // Always Arbitrum
-            originCurrency: isFromBase ? USDC_BASE : USDC_ARBITRUM,
-            destinationCurrency: ETH_ARBITRUM,            // Native ETH
-            amount: amountWei,
-            tradeType: 'EXACT_INPUT',
-            useDepositAddress: true,
-            refundTo: address,
-            usePermit: false,
-            referrer: 'bands.cash',
-          }),
+          body: JSON.stringify(requestBody),
         })
 
         if (!response.ok) {
@@ -159,16 +168,19 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
         console.log('🟢 Gas swap quote:', data)
 
         const step = data.steps?.[0]
-        if (!step?.depositAddress) {
-          throw new Error('No deposit address available')
+        const depositAddress = step?.depositAddress || null
+
+        // For cross-chain, we need deposit address
+        if (isCrossChain && !depositAddress) {
+          throw new Error('No deposit address available for cross-chain swap')
         }
 
         const ethOut = data.details?.currencyOut?.amount || '0'
         const ethOutFormatted = (parseFloat(ethOut) / 1e18).toFixed(6)
 
         setQuote({
-          requestId: step.requestId || data.requestId,
-          depositAddress: step.depositAddress,
+          requestId: step?.requestId || data.requestId,
+          depositAddress: depositAddress || '', // Will be empty for same-chain
           amountOut: ethOutFormatted,
           fees: data.fees?.gas?.amountUsd || '0',
           expiresAt: Date.now() + 30000,
@@ -186,9 +198,9 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
     return () => clearTimeout(timer)
   }, [isOpen, address, amount, sourceChain])
 
-  // Execute the swap via deposit address
+  // Execute the swap
   const handleSwap = useCallback(async () => {
-    if (!embeddedWallet || !quote?.depositAddress) {
+    if (!embeddedWallet || !quote) {
       setError('No quote or wallet available')
       return
     }
@@ -211,21 +223,6 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
       const usdcContract = isFromBase ? USDC_BASE : USDC_ARBITRUM
       const targetChainId = isFromBase ? 8453 : 42161
 
-      // Encode ERC20 transfer to deposit address
-      const data = encodeFunctionData({
-        abi: ERC20_TRANSFER_ABI,
-        functionName: 'transfer',
-        args: [quote.depositAddress as `0x${string}`, amountWei],
-      })
-
-      console.log('╔══════════════════════════════════════╗')
-      console.log('║     GAS SWAP VIA DEPOSIT ADDRESS     ║')
-      console.log('╚══════════════════════════════════════╝')
-      console.log('📤 Source chain:', isFromBase ? 'Base' : 'Arbitrum')
-      console.log('📤 Sending USDC to deposit address:', quote.depositAddress)
-      console.log('   Amount:', amount, 'USDC')
-      console.log('   Will receive:', quote.amountOut, 'ETH on Arbitrum')
-
       // Try to switch to correct chain first
       try {
         await embeddedWallet.switchChain(targetChainId)
@@ -234,27 +231,55 @@ export function SwapForGasModal({ isOpen, onClose, onSuccess, suggestedAmount = 
         console.warn('Chain switch warning:', e)
       }
 
-      setStatus('sending')
-      setStatusMessage(`Sending on ${isFromBase ? 'Base' : 'Arbitrum'}...`)
+      // CROSS-CHAIN (Base → Arbitrum): Use deposit address
+      if (isFromBase && quote.depositAddress) {
+        const data = encodeFunctionData({
+          abi: ERC20_TRANSFER_ABI,
+          functionName: 'transfer',
+          args: [quote.depositAddress as `0x${string}`, amountWei],
+        })
 
-      // Send ERC20 transfer to USDC contract
-      const hash = await provider.request({
-        method: 'eth_sendTransaction',
-        params: [{
-          from: embeddedWallet.address,
-          to: usdcContract,
-          data: data,
-          value: '0x0',
-        }],
-      })
+        console.log('╔══════════════════════════════════════╗')
+        console.log('║     GAS SWAP VIA DEPOSIT ADDRESS     ║')
+        console.log('╚══════════════════════════════════════╝')
+        console.log('📤 Source chain: Base')
+        console.log('📤 Sending USDC to deposit address:', quote.depositAddress)
+        console.log('   Amount:', amount, 'USDC')
+        console.log('   Will receive:', quote.amountOut, 'ETH on Arbitrum')
 
-      console.log('✅ Deposit transaction submitted:', hash)
-      setTxHash(hash as string)
-      setStatus('bridging')
-      setStatusMessage('Swapping to ETH...')
+        setStatus('sending')
+        setStatusMessage('Sending on Base...')
 
-      // Poll for completion
-      pollBridgeStatus(quote.requestId)
+        const hash = await provider.request({
+          method: 'eth_sendTransaction',
+          params: [{
+            from: embeddedWallet.address,
+            to: usdcContract,
+            data: data,
+            value: '0x0',
+          }],
+        })
+
+        console.log('✅ Deposit transaction submitted:', hash)
+        setTxHash(hash as string)
+        setStatus('bridging')
+        setStatusMessage('Swapping to ETH...')
+
+        pollBridgeStatus(quote.requestId)
+      } else {
+        // SAME-CHAIN (Arbitrum → Arbitrum): Use Relay widget fallback
+        // For now, redirect to Relay website since same-chain needs complex execution
+        console.log('╔══════════════════════════════════════╗')
+        console.log('║     SAME-CHAIN SWAP (Arbitrum)       ║')
+        console.log('╚══════════════════════════════════════╝')
+        console.log('⚠️ Same-chain gas swap - redirecting to Relay')
+        
+        const relayUrl = `https://relay.link/swap?fromChainId=42161&toChainId=42161&fromCurrency=${USDC_ARBITRUM}&toCurrency=${ETH_ARBITRUM}&amount=${amountWei.toString()}&toAddress=${embeddedWallet.address}`
+        window.open(relayUrl, '_blank')
+        
+        setError('Same-chain swaps open in Relay. Check the new tab.')
+        setStatus('error')
+      }
     } catch (err: any) {
       console.error('Swap error:', err)
       
