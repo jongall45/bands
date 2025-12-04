@@ -5,8 +5,7 @@ import { useAccount, useReadContract, useBalance } from 'wagmi'
 import { formatUnits } from 'viem'
 import { arbitrum } from 'wagmi/chains'
 import { 
-  TrendingUp, TrendingDown, Info, AlertCircle, 
-  ExternalLink, ChevronDown, Fuel 
+  TrendingUp, TrendingDown, Info, AlertCircle, ChevronDown, Fuel 
 } from 'lucide-react'
 import { useOstiumPrice } from '@/hooks/useOstiumPrices'
 import { OSTIUM_CONTRACTS, MIN_COLLATERAL_USD } from '@/lib/ostium/constants'
@@ -150,31 +149,6 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
         </div>
       )}
 
-      {/* Success Message */}
-      {isSuccess && txHash && (
-        <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <CheckCircle className="w-4 h-4 text-green-400" />
-            <span className="text-green-400 text-sm font-medium">Trade submitted!</span>
-          </div>
-          <a 
-            href={`https://arbiscan.io/tx/${txHash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-green-400/60 text-xs hover:text-green-400 flex items-center gap-1"
-          >
-            View on Arbiscan <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
-      )}
-
-      {/* Error Message */}
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-start gap-2">
-          <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-          <span className="text-red-400 text-sm">{error}</span>
-        </div>
-      )}
 
       {/* Long/Short Toggle */}
       <div className="grid grid-cols-2 gap-2 p-1.5 bg-white/[0.03] rounded-xl">
