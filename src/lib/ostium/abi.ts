@@ -3,7 +3,7 @@ export const OSTIUM_TRADING_ABI = [
   {
     name: 'openTrade',
     type: 'function',
-    stateMutability: 'nonpayable',
+    stateMutability: 'payable', // Must be payable to accept ETH for Pyth oracle fees
     inputs: [
       {
         name: '_trade',

@@ -173,12 +173,11 @@ export function PrivyOstiumButton({
   }, [parsedAmount, address, fetchAllowanceAndBalance])
 
   // ============================================
-  // STEP 1: APPROVE USDC
+  // EXECUTE FULL FLOW: APPROVE → TRADE (automatic)
   // ============================================
-  const handleApprove = useCallback(async () => {
+  const executeFullFlow = useCallback(async () => {
     if (!embeddedWallet || !address) return
 
-    setState('approving')
     setErrorMessage(null)
 
     try {
@@ -196,68 +195,47 @@ export function PrivyOstiumButton({
         })
       }
 
-      // Encode approve call with EXACT amount
-      const approveData = encodeFunctionData({
-        abi: ERC20_ABI,
-        functionName: 'approve',
-        args: [OSTIUM_TRADING, parsedAmount],
-      })
+      // Check if approval is needed
+      const needsApproval = allowance === null || allowance < parsedAmount
 
-      console.log('╔════════════════════════════════════════╗')
-      console.log('║     STEP 1: APPROVE USDC               ║')
-      console.log('╚════════════════════════════════════════╝')
-      console.log('📍 Spender:', OSTIUM_TRADING)
-      console.log('💰 Amount:', amountUSDC, 'USDC')
+      if (needsApproval) {
+        // ============================================
+        // STEP 1: APPROVE USDC
+        // ============================================
+        setState('approving')
 
-      const hash = await provider.request({
-        method: 'eth_sendTransaction',
-        params: [{
-          from: address,
-          to: USDC_ADDRESS,
-          data: approveData,
-        }],
-      }) as string
-
-      console.log('✅ Approval tx submitted:', hash)
-      setTxHash(hash)
-
-      // Wait for confirmation
-      console.log('⏳ Waiting for approval confirmation...')
-      await new Promise(resolve => setTimeout(resolve, 3000))
-
-      // Refetch allowance
-      await fetchAllowanceAndBalance()
-
-    } catch (error: any) {
-      console.error('❌ Approval error:', error)
-      setErrorMessage(error.message || 'Approval failed')
-      setState('error')
-      onError?.(error.message)
-    }
-  }, [embeddedWallet, address, parsedAmount, amountUSDC, fetchAllowanceAndBalance, onError])
-
-  // ============================================
-  // STEP 2: EXECUTE TRADE
-  // ============================================
-  const handleTrade = useCallback(async () => {
-    if (!embeddedWallet || !address) return
-
-    setState('trading')
-    setErrorMessage(null)
-
-    try {
-      const provider = await embeddedWallet.getEthereumProvider()
-
-      // Ensure we're on Arbitrum
-      const currentChainId = await provider.request({ method: 'eth_chainId' })
-      const arbitrumChainHex = `0x${arbitrum.id.toString(16)}`
-      
-      if (currentChainId !== arbitrumChainHex) {
-        await provider.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: arbitrumChainHex }],
+        const approveData = encodeFunctionData({
+          abi: ERC20_ABI,
+          functionName: 'approve',
+          args: [OSTIUM_TRADING, parsedAmount],
         })
+
+        console.log('╔════════════════════════════════════════╗')
+        console.log('║     STEP 1: APPROVE USDC               ║')
+        console.log('╚════════════════════════════════════════╝')
+        console.log('📍 Spender:', OSTIUM_TRADING)
+        console.log('💰 Amount:', amountUSDC, 'USDC')
+
+        const approvalHash = await provider.request({
+          method: 'eth_sendTransaction',
+          params: [{
+            from: address,
+            to: USDC_ADDRESS,
+            data: approveData,
+          }],
+        }) as string
+
+        console.log('✅ Approval tx submitted:', approvalHash)
+
+        // Wait for approval confirmation
+        console.log('⏳ Waiting for approval confirmation...')
+        await new Promise(resolve => setTimeout(resolve, 4000))
       }
+
+      // ============================================
+      // STEP 2: EXECUTE TRADE (automatic continuation)
+      // ============================================
+      setState('trading')
 
       console.log('╔════════════════════════════════════════╗')
       console.log('║     STEP 2: EXECUTE TRADE              ║')
@@ -279,7 +257,7 @@ export function PrivyOstiumButton({
       // Pyth update fee
       const pythUpdateFee = BigInt(100000000000000) // 0.0001 ETH
 
-      // Build trade struct (field is positionSizeUSDC, not positionSizeUsd)
+      // Build trade struct
       const trade = {
         trader: address,
         pairIndex: BigInt(pairIndex),
@@ -316,29 +294,30 @@ export function PrivyOstiumButton({
 
       console.log('📤 Sending trade transaction...')
 
-      const hash = await provider.request({
+      const tradeHash = await provider.request({
         method: 'eth_sendTransaction',
         params: [{
           from: address,
           to: OSTIUM_TRADING,
           data: tradeData,
-          value: `0x${pythUpdateFee.toString(16)}`, // Include Pyth fee
+          value: `0x${pythUpdateFee.toString(16)}`,
           gas: '0x4C4B40', // 5,000,000 gas limit
         }],
       }) as string
 
-      console.log('✅ Trade tx submitted:', hash)
-      setTxHash(hash)
+      console.log('✅ Trade tx submitted:', tradeHash)
+      setTxHash(tradeHash)
       setState('success')
-      onSuccess?.(hash)
+      onSuccess?.(tradeHash)
 
     } catch (error: any) {
-      console.error('❌ Trade error:', error)
+      console.error('❌ Trade flow error:', error)
       setErrorMessage(error.message || 'Trade failed')
       setState('error')
       onError?.(error.message)
     }
-  }, [embeddedWallet, address, pairIndex, pairSymbol, leverage, isLong, parsedAmount, amountUSDC, onSuccess, onError])
+  }, [embeddedWallet, address, allowance, parsedAmount, amountUSDC, pairIndex, pairSymbol, leverage, isLong, onSuccess, onError])
+
 
   // ============================================
   // RENDER
@@ -411,21 +390,24 @@ export function PrivyOstiumButton({
     )
   }
 
-  // State: Needs Approval
+  // State: Needs Approval - Will auto-continue to trade after approval
   if (state === 'needs_approval') {
+    const bgColor = isLong ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'
+    const Icon = isLong ? TrendingUp : TrendingDown
+
     return (
       <button
-        onClick={handleApprove}
+        onClick={executeFullFlow}
         disabled={disabled}
-        className="w-full py-4 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-500/30 text-white font-semibold rounded-2xl flex items-center justify-center gap-2 transition-colors"
+        className={`w-full py-4 ${bgColor} disabled:opacity-30 text-white font-semibold rounded-2xl flex items-center justify-center gap-2 transition-colors`}
       >
-        <Lock className="w-5 h-5" />
-        Approve {amountUSDC} USDC
+        <Icon className="w-5 h-5" />
+        {isLong ? 'Long' : 'Short'} {pairSymbol} ({leverage}x)
       </button>
     )
   }
 
-  // State: Approving
+  // State: Approving (will auto-continue to trade)
   if (state === 'approving') {
     return (
       <button
@@ -433,19 +415,19 @@ export function PrivyOstiumButton({
         className="w-full py-4 bg-amber-500/50 text-white font-semibold rounded-2xl cursor-not-allowed flex items-center justify-center gap-2"
       >
         <Loader2 className="w-5 h-5 animate-spin" />
-        Approving...
+        Step 1: Approving USDC...
       </button>
     )
   }
 
-  // State: Ready to Trade
+  // State: Ready to Trade (allowance already sufficient)
   if (state === 'ready_to_trade') {
     const bgColor = isLong ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'
     const Icon = isLong ? TrendingUp : TrendingDown
 
     return (
       <button
-        onClick={handleTrade}
+        onClick={executeFullFlow}
         disabled={disabled}
         className={`w-full py-4 ${bgColor} disabled:opacity-30 text-white font-semibold rounded-2xl flex items-center justify-center gap-2 transition-colors`}
       >
@@ -463,7 +445,7 @@ export function PrivyOstiumButton({
         className="w-full py-4 bg-blue-500/50 text-white font-semibold rounded-2xl cursor-not-allowed flex items-center justify-center gap-2"
       >
         <Loader2 className="w-5 h-5 animate-spin" />
-        Executing Trade...
+        Step 2: Executing Trade...
       </button>
     )
   }
