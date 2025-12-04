@@ -3,8 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { X, ArrowDown, Loader2, Check, AlertCircle, Fuel, CheckCircle, ExternalLink } from 'lucide-react'
-import { useAccount } from 'wagmi'
-import { useLiFiBridge } from '@/hooks/useLiFiBridge'
+import { useRelayDepositBridge } from '@/hooks/useRelayDepositBridge'
 import { SwapForGasModal } from './SwapForGasModal'
 
 interface Props {
@@ -14,29 +13,30 @@ interface Props {
 }
 
 export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
-  const { address } = useAccount()
   const [inputValue, setInputValue] = useState('')
   const [isSuccess, setIsSuccess] = useState(false)
   const [showGasSwap, setShowGasSwap] = useState(false)
-  const [showFallback, setShowFallback] = useState(false)
   const [mounted, setMounted] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const quoteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const {
-    isProviderReady,
+    status,
+    statusMessage,
+    error,
+    quote,
+    txHash,
+    walletAddress,
     baseBalance,
     arbBalance,
-    quote,
-    isQuoting,
+    isLoading,
+    canExecute,
     getQuote,
     executeBridge,
-    isBridging,
-    status,
-    txHash,
-    error,
+    reset,
+    getFallbackUrl,
     clearError,
-  } = useLiFiBridge()
+  } = useRelayDepositBridge()
 
   const hasInitializedRef = useRef(false)
 
@@ -49,8 +49,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
       hasInitializedRef.current = true
       setInputValue('')
       setIsSuccess(false)
-      setShowFallback(false)
-      clearError()
+      reset()
       setTimeout(() => {
         inputRef.current?.focus()
       }, 200)
@@ -59,7 +58,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
     if (!isOpen) {
       hasInitializedRef.current = false
     }
-  }, [isOpen, clearError])
+  }, [isOpen, reset])
 
   // Debounced quote fetch
   useEffect(() => {
@@ -83,12 +82,12 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
     }
   }, [inputValue, getQuote])
 
-  // Show fallback after multiple errors
+  // Handle success state
   useEffect(() => {
-    if (error && error.includes('switch')) {
-      setShowFallback(true)
+    if (status === 'complete') {
+      setIsSuccess(true)
     }
-  }, [error])
+  }, [status])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
@@ -102,18 +101,16 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
   }
 
   const handleBridge = async () => {
-    const success = await executeBridge()
-    if (success) {
-      setIsSuccess(true)
-    }
+    const success = await executeBridge(inputValue)
+    // Modal stays open to show progress
   }
 
   const amountNum = parseFloat(inputValue) || 0
   const balanceNum = parseFloat(baseBalance) || 0
-  const canBridge = isProviderReady && amountNum > 0 && amountNum <= balanceNum && quote && !isQuoting && !isBridging
+  const canBridgeNow = canExecute && amountNum > 0 && amountNum <= balanceNum && !isLoading
 
-  // Relay fallback URL
-  const relayUrl = `https://relay.link/bridge?fromChainId=8453&toChainId=42161&fromCurrency=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913&toCurrency=0xaf88d065e77c8cC2239327C5EDb3A432268e5831&amount=${amountNum * 1_000_000}&toAddress=${address}`
+  // Fallback URL
+  const fallbackUrl = getFallbackUrl(inputValue || '5')
 
   if (!isOpen || !mounted) return null
 
@@ -142,48 +139,14 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="p-2 hover:bg-white/10 rounded-full"
+            disabled={isLoading && status !== 'bridging'}
+            className="p-2 hover:bg-white/10 rounded-full disabled:opacity-50"
           >
             <X className="w-5 h-5 text-white/60" />
           </button>
         </div>
 
-        {/* Fallback - Use External Bridge */}
-        {showFallback && !isSuccess && (
-          <div className="mb-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl">
-            <div className="flex items-center gap-2 mb-3">
-              <ExternalLink className="w-5 h-5 text-blue-400" />
-              <span className="text-blue-400 font-medium">Having Trouble?</span>
-            </div>
-            <p className="text-blue-400/70 text-xs mb-3">
-              Use Relay directly if in-app bridging isn't working.
-            </p>
-            <a
-              href={relayUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block w-full py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold text-sm rounded-xl text-center transition-colors"
-            >
-              Bridge on Relay.link →
-            </a>
-            <button
-              onClick={() => setShowFallback(false)}
-              className="w-full mt-2 text-white/40 text-xs hover:text-white/60"
-            >
-              Try in-app again
-            </button>
-          </div>
-        )}
-
-        {/* Provider Loading State */}
-        {!isProviderReady && !isSuccess && (
-          <div className="flex flex-col items-center py-8">
-            <Loader2 className="w-8 h-8 text-[#ef4444] animate-spin mb-4" />
-            <p className="text-white/60 text-sm">Initializing bridge...</p>
-          </div>
-        )}
-
-        {isProviderReady && isSuccess ? (
+        {isSuccess ? (
           <div className="flex flex-col items-center py-8">
             <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-4">
               <Check className="w-8 h-8 text-green-400" />
@@ -198,7 +161,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
                 rel="noopener noreferrer"
                 className="text-blue-400 text-xs hover:underline mb-4 flex items-center gap-1"
               >
-                View transaction <ExternalLink className="w-3 h-3" />
+                View deposit transaction <ExternalLink className="w-3 h-3" />
               </a>
             )}
             
@@ -229,7 +192,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
               Skip, I already have ETH →
             </button>
           </div>
-        ) : isProviderReady ? (
+        ) : (
           <>
             {/* FROM section */}
             <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 mb-3">
@@ -255,6 +218,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
                   placeholder="0.00"
                   value={inputValue}
                   onChange={handleInputChange}
+                  disabled={isLoading}
                   style={{
                     flex: 1,
                     minWidth: 0,
@@ -268,6 +232,7 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
                     margin: 0,
                     caretColor: 'white',
                     pointerEvents: 'auto',
+                    opacity: isLoading ? 0.5 : 1,
                   }}
                 />
                 <div className="bg-[#ef4444] rounded-xl px-3 py-2 flex items-center gap-1 flex-shrink-0">
@@ -281,7 +246,8 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
                 <button
                   type="button"
                   onClick={handleMax}
-                  className="text-[#ef4444] text-xs font-medium hover:underline"
+                  disabled={isLoading}
+                  className="text-[#ef4444] text-xs font-medium hover:underline disabled:opacity-50"
                 >
                   Balance: {parseFloat(baseBalance).toFixed(2)} USDC
                 </button>
@@ -309,7 +275,9 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
 
               <div className="flex items-center gap-3">
                 <span className="text-white text-2xl font-medium">
-                  {isQuoting ? '...' : quote?.outputAmount || (amountNum > 0 ? amountNum.toFixed(2) : '0.00')}
+                  {status === 'quoting' ? '...' : 
+                   quote ? (amountNum - parseFloat(quote.fees.total)).toFixed(2) : 
+                   amountNum > 0 ? amountNum.toFixed(2) : '0.00'}
                 </span>
                 <div className="bg-[#ef4444] rounded-xl px-3 py-2 flex items-center gap-1 flex-shrink-0">
                   <span className="text-white font-bold text-sm">$</span>
@@ -318,7 +286,9 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
               </div>
 
               <div className="flex items-center justify-between mt-2">
-                <span className="text-white/30 text-sm">≈ ${quote?.outputAmount || '0.00'}</span>
+                <span className="text-white/30 text-sm">
+                  ≈ ${quote ? (amountNum - parseFloat(quote.fees.total)).toFixed(2) : '0.00'}
+                </span>
                 <span className="text-white/30 text-xs">Current: {parseFloat(arbBalance).toFixed(2)} USDC</span>
               </div>
             </div>
@@ -328,29 +298,89 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
               <div className="bg-white/[0.02] rounded-xl p-3 mb-4 text-xs">
                 <div className="flex justify-between mb-1">
                   <span className="text-white/50">Fee</span>
-                  <span className="text-white/70">${quote.fee}</span>
+                  <span className="text-white/70">${quote.fees.total}</span>
                 </div>
                 <div className="flex justify-between mb-1">
                   <span className="text-white/50">Time</span>
-                  <span className="text-white/70">~{quote.time}s</span>
+                  <span className="text-white/70">~30 seconds</span>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-white/[0.06]">
                   <span className="text-white/50">Destination</span>
                   <div className="flex items-center gap-1">
                     <span className="text-white/70 font-mono">
-                      {address?.slice(0, 6)}...{address?.slice(-4)}
+                      {walletAddress?.slice(0, 6)}...{walletAddress?.slice(-4)}
                     </span>
                     <CheckCircle className="w-3 h-3 text-green-400" />
                   </div>
                 </div>
+                {quote.depositAddress && (
+                  <div className="flex justify-between items-center pt-2 border-t border-white/[0.06] mt-2">
+                    <span className="text-white/50">Via Relay</span>
+                    <span className="text-white/50 font-mono text-[10px]">
+                      {quote.depositAddress.slice(0, 8)}...{quote.depositAddress.slice(-6)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Status Messages */}
+            {status === 'quoting' && (
+              <div className="flex items-center gap-2 mb-4 p-3 bg-white/5 rounded-xl">
+                <Loader2 className="w-4 h-4 text-white/60 animate-spin" />
+                <span className="text-white/60 text-sm">Getting quote...</span>
+              </div>
+            )}
+
+            {status === 'confirming' && (
+              <div className="flex items-center gap-2 mb-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
+                <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />
+                <span className="text-yellow-400 text-sm">Confirm in your wallet...</span>
+              </div>
+            )}
+
+            {status === 'depositing' && (
+              <div className="flex items-center gap-2 mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+                <span className="text-blue-400 text-sm">Sending to bridge...</span>
+              </div>
+            )}
+
+            {status === 'bridging' && (
+              <div className="mb-4 p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl">
+                <div className="flex items-center gap-2 mb-2">
+                  <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
+                  <span className="text-purple-400 text-sm">Bridge in progress...</span>
+                </div>
+                {txHash && (
+                  <a
+                    href={`https://basescan.org/tx/${txHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-purple-400/70 text-xs hover:underline flex items-center gap-1"
+                  >
+                    View on Basescan <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
               </div>
             )}
 
             {/* Error */}
             {error && (
-              <div className="flex items-center gap-2 mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                <span className="text-red-400 text-sm">{error}</span>
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  <span className="text-red-400 text-sm">{error}</span>
+                </div>
+                {/* Show fallback link on error */}
+                <a
+                  href={fallbackUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-red-400/70 text-xs hover:underline flex items-center gap-1"
+                >
+                  Try bridging on Relay.link instead <ExternalLink className="w-3 h-3" />
+                </a>
               </div>
             )}
 
@@ -358,15 +388,15 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
             <button
               type="button"
               onClick={handleBridge}
-              disabled={!canBridge}
+              disabled={!canBridgeNow}
               className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-[#ef4444]/30 disabled:cursor-not-allowed text-white font-semibold rounded-2xl flex items-center justify-center gap-2"
             >
-              {isBridging ? (
+              {isLoading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  {status || 'Bridging...'}
+                  {statusMessage || 'Processing...'}
                 </>
-              ) : isQuoting ? (
+              ) : status === 'quoting' ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
                   Getting quote...
@@ -382,19 +412,21 @@ export function BridgeToArbitrumModal({ isOpen, onClose, onSuccess }: Props) {
               )}
             </button>
 
-            {/* Fallback link */}
+            {/* Footer with fallback */}
             <div className="flex items-center justify-center gap-2 mt-4">
-              <p className="text-white/20 text-xs">Powered by LI.FI</p>
+              <p className="text-white/20 text-xs">Powered by Relay</p>
               <span className="text-white/10">•</span>
-              <button
-                onClick={() => setShowFallback(true)}
+              <a
+                href={fallbackUrl}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="text-white/30 text-xs hover:text-white/50"
               >
-                Having issues?
-              </button>
+                Open in Relay →
+              </a>
             </div>
           </>
-        ) : null}
+        )}
       </div>
     </div>
   )

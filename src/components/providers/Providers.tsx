@@ -8,9 +8,13 @@ import { RelayKitProvider } from '@reservoir0x/relay-kit-ui'
 import { http } from 'viem'
 import { base, arbitrum } from 'viem/chains'
 import { PWALayout } from '@/components/layout/PWALayout'
+import { initializeRelayClient } from '@/lib/relay-client'
 
 // Import Relay styles
 import '@reservoir0x/relay-kit-ui/styles.css'
+
+// Initialize Relay SDK client for deposit address bridge
+initializeRelayClient()
 
 // Wagmi config for Privy
 const wagmiConfig = createConfig({
