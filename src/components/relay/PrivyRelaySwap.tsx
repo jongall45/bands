@@ -450,6 +450,9 @@ export function PrivyRelaySwap({
         console.log('💰 Amount:', amount, fromToken, '→', toToken)
         console.log('📋 Steps from quote:', quote.steps)
 
+        // ERC20 approve function selector
+        const APPROVE_SELECTOR = '0x095ea7b3'
+
         // Execute each step/transaction from the quote
         let lastTxHash: string | null = null
         let stepIndex = 0
@@ -459,16 +462,34 @@ export function PrivyRelaySwap({
           
           for (const item of step.items || []) {
             if (item.status === 'incomplete' && item.data) {
+              let txData = item.data.data
+
+              // Check if this is an approve transaction and fix the amount
+              const isApproveStep = step.id === 'approve' || 
+                                    step.action?.toLowerCase().includes('approve') ||
+                                    (txData && txData.startsWith(APPROVE_SELECTOR))
+
+              if (isApproveStep && txData && txData.startsWith(APPROVE_SELECTOR)) {
+                // Override approval amount to exact swap amount for security
+                // approve(address spender, uint256 amount)
+                // Data format: 0x095ea7b3 + 32 bytes spender + 32 bytes amount
+                const spender = txData.slice(10, 74) // Keep the spender address
+                const exactAmount = amountWei.toString(16).padStart(64, '0')
+                txData = APPROVE_SELECTOR + spender + exactAmount
+                console.log('🔒 Fixed approval amount to exact swap amount:', amount, fromToken)
+              }
+
               console.log('📤 Sending transaction:', {
                 to: item.data.to,
                 chainId: item.data.chainId,
                 description: step.description || step.action,
+                isApprove: isApproveStep,
               })
 
               const txParams: Record<string, string> = {
                 from: address,
                 to: item.data.to,
-                data: item.data.data,
+                data: txData,
               }
 
               if (item.data.value && item.data.value !== '0') {
@@ -490,7 +511,7 @@ export function PrivyRelaySwap({
               setTxHash(hash)
 
               // Wait a moment between transactions for approval to propagate
-              if (step.id === 'approve' || step.action?.toLowerCase().includes('approve')) {
+              if (isApproveStep) {
                 console.log('⏳ Waiting for approval to confirm...')
                 await new Promise(resolve => setTimeout(resolve, 3000))
               }
