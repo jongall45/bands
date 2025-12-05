@@ -15,10 +15,12 @@ const ARBITRUM_CHAIN_ID = 42161
 const CONTRACTS = {
   // USDC on Arbitrum (6 decimals)
   USDC: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as `0x${string}`,
-  // Ostium Trading - where openMarketOrder is called
+  // Ostium Trading - where depositCollateral + openMarketOrder are called
   OSTIUM_TRADING: '0x6D0bA1f9996DBD8885827e1b2e8f6593e7702411' as `0x${string}`,
   // Ostium Storage - where USDC must be approved & transferred to
   OSTIUM_STORAGE: '0xcCd5891083A8acD2074690F65d3024E7D13d66E7' as `0x${string}`,
+  // Chainlink BTC/USD Price Feed on Arbitrum
+  CHAINLINK_BTC_USD: '0x6ce185860a4963106506C203335A2910B1E39f9B' as `0x${string}`,
 }
 
 // ============================================
@@ -31,9 +33,15 @@ const ERC20_ABI = parseAbi([
   'function allowance(address owner, address spender) view returns (uint256)',
 ])
 
-// Ostium Trading ABI - openMarketOrder
+// Ostium Trading ABI - depositCollateral + openMarketOrder
 const TRADING_ABI = parseAbi([
-  'function openMarketOrder(uint256 pairIndex, bool isLong, uint256 leverage, uint256 quantity, uint256 maxSlippage, uint256 timestamp)',
+  'function depositCollateral(uint256 amount) external',
+  'function openMarketOrder(uint256 pairIndex, bool isLong, uint256 leverage, uint256 quantity, uint256 maxSlippage, uint256 timestamp) external',
+])
+
+// Chainlink Price Feed ABI
+const CHAINLINK_ABI = parseAbi([
+  'function latestRoundData() external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)',
 ])
 
 // ============================================
@@ -41,20 +49,14 @@ const TRADING_ABI = parseAbi([
 // ============================================
 const PAIR_INDEX = BigInt(0) // BTC-USD
 const IS_LONG = true
-const LEVERAGE_MULTIPLIER = BigInt(10) // 10x
-const LEVERAGE_SCALED = LEVERAGE_MULTIPLIER * (BigInt(10) ** BigInt(18)) // 10e18
+const LEVERAGE = BigInt(10) // 10x (raw, not scaled)
 const COLLATERAL_USDC = BigInt(5_000_000) // $5 USDC in 6 decimals
 const MAX_SLIPPAGE = BigInt(100) // 1% = 100 basis points
-
-// Calculate quantity: $50 exposure at ~$92k BTC price
-// quantity = (collateral * leverage) / price = ($5 * 10) / $92,000 ≈ 0.000543 BTC
-// Scaled to 18 decimals
-const QUANTITY_SCALED = BigInt('543000000000000000') // ~0.000543 BTC in 18 decimals
 
 // ============================================
 // TYPES
 // ============================================
-type TradeState = 'idle' | 'switching' | 'simulating' | 'executing' | 'success' | 'error'
+type TradeState = 'idle' | 'switching' | 'fetching_price' | 'simulating' | 'executing' | 'success' | 'error'
 
 // ============================================
 // COMPONENT
@@ -68,6 +70,8 @@ export function OstiumTradeButton() {
   const [txHash, setTxHash] = useState<string | null>(null)
   const [usdcBalance, setUsdcBalance] = useState<string>('0')
   const [ethBalance, setEthBalance] = useState<string>('0')
+  const [btcPrice, setBtcPrice] = useState<string>('0')
+  const [quantity, setQuantity] = useState<string>('0')
   const [currentChain, setCurrentChain] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -81,7 +85,7 @@ export function OstiumTradeButton() {
   })
 
   // ============================================
-  // FETCH BALANCES
+  // FETCH BALANCES & BTC PRICE
   // ============================================
   useEffect(() => {
     const fetchData = async () => {
@@ -101,18 +105,34 @@ export function OstiumTradeButton() {
         const ethBal = await publicClient.getBalance({ address: smartWalletAddress })
         setEthBalance(formatUnits(ethBal, 18))
 
+        // BTC Price from Chainlink
+        const priceData = await publicClient.readContract({
+          address: CONTRACTS.CHAINLINK_BTC_USD,
+          abi: CHAINLINK_ABI,
+          functionName: 'latestRoundData',
+        })
+        const price = Number(priceData[1]) / 1e8 // Chainlink returns 8 decimals
+        setBtcPrice(price.toFixed(2))
+
+        // Calculate quantity: (collateral * leverage) / price, scaled to 18 decimals
+        // $5 * 10x = $50 exposure / $92,000 = 0.000543 BTC
+        const collateralUSD = 5 // $5
+        const exposure = collateralUSD * 10 // $50
+        const qty = (exposure / price) * 1e18
+        setQuantity(qty.toFixed(0))
+
         // Current chain
         if (smartWalletClient) {
           const chainId = await smartWalletClient.getChainId()
           setCurrentChain(chainId)
         }
       } catch (err) {
-        console.error('Failed to fetch balances:', err)
+        console.error('Failed to fetch data:', err)
       }
     }
 
     fetchData()
-    const interval = setInterval(fetchData, 10000)
+    const interval = setInterval(fetchData, 15000) // Update every 15s
     return () => clearInterval(interval)
   }, [smartWalletAddress, smartWalletClient, publicClient])
 
@@ -125,9 +145,11 @@ export function OstiumTradeButton() {
       smartWalletAddress,
       usdcBalance,
       ethBalance,
+      btcPrice,
+      quantity,
       currentChain,
     })
-  }, [privyReady, authenticated, smartWalletClient, smartWalletAddress, usdcBalance, ethBalance, currentChain])
+  }, [privyReady, authenticated, smartWalletClient, smartWalletAddress, usdcBalance, ethBalance, btcPrice, quantity, currentChain])
 
   // Copy address handler
   const copyAddress = async () => {
@@ -139,12 +161,12 @@ export function OstiumTradeButton() {
   }
 
   // ============================================
-  // EXECUTE BATCHED TRADE
+  // EXECUTE 4-CALL BATCHED TRADE
   // ============================================
   const executeTrade = useCallback(async () => {
     // Require smart wallet - NO EOA fallback
     if (!smartWalletClient || !smartWalletAddress) {
-      console.error('Smart wallet not ready. Please wait or re-login.')
+      setError('Smart wallet not ready. Please wait or re-login.')
       return
     }
 
@@ -157,57 +179,79 @@ export function OstiumTradeButton() {
       if (chainId !== ARBITRUM_CHAIN_ID) {
         setState('switching')
         console.log('🔄 Switching to Arbitrum...')
-        console.log('Switching to Arbitrum...')
         await smartWalletClient.switchChain({ id: ARBITRUM_CHAIN_ID })
         setCurrentChain(ARBITRUM_CHAIN_ID)
       }
 
-      // Step 2: Build the 3 batched calls
+      // Step 2: Fetch live BTC price for quantity calculation
+      setState('fetching_price')
+      console.log('📈 Fetching live BTC price...')
+      
+      const priceData = await publicClient.readContract({
+        address: CONTRACTS.CHAINLINK_BTC_USD,
+        abi: CHAINLINK_ABI,
+        functionName: 'latestRoundData',
+      })
+      const btcPriceUSD = Number(priceData[1]) / 1e8
+      console.log('💰 BTC Price:', btcPriceUSD.toFixed(2))
+
+      // Calculate quantity with 1% buffer for price movement
+      // quantity = (collateral * leverage) / price * 1e18
+      const collateralUSD = 5
+      const exposure = collateralUSD * 10 // $50
+      const quantityBTC = (exposure / btcPriceUSD) * 0.99 // 1% buffer
+      const quantityScaled = BigInt(Math.floor(quantityBTC * 1e18))
+      
+      console.log('📊 Calculated quantity:', quantityBTC.toFixed(8), 'BTC')
+      console.log('📊 Quantity (18 dec):', quantityScaled.toString())
+
+      // Step 3: Build the 4 batched calls
       setState('simulating')
       console.log('╔══════════════════════════════════════════════════╗')
-      console.log('║  BUILDING BATCHED OSTIUM TRADE (3 CALLS)         ║')
+      console.log('║  BUILDING 4-CALL BATCH (Ostium SDK Pattern)      ║')
       console.log('╚══════════════════════════════════════════════════╝')
       
       const timestamp = BigInt(Math.floor(Date.now() / 1000))
 
-      // Call 1: Approve USDC to STORAGE (not Trading!)
+      // Call 1: Approve USDC to STORAGE
       const approveData = encodeFunctionData({
         abi: ERC20_ABI,
         functionName: 'approve',
-        args: [CONTRACTS.OSTIUM_STORAGE, maxUint256], // STORAGE is the spender!
+        args: [CONTRACTS.OSTIUM_STORAGE, maxUint256],
       })
-      console.log('📝 Call 1: approve(Storage, infinite)')
-      console.log('   Spender:', CONTRACTS.OSTIUM_STORAGE)
+      console.log('📝 Call 1: approve(Storage, max)')
 
       // Call 2: Transfer USDC to STORAGE
       const transferData = encodeFunctionData({
         abi: ERC20_ABI,
         functionName: 'transfer',
-        args: [CONTRACTS.OSTIUM_STORAGE, COLLATERAL_USDC], // $5 USDC
+        args: [CONTRACTS.OSTIUM_STORAGE, COLLATERAL_USDC],
       })
       console.log('📝 Call 2: transfer(Storage, $5 USDC)')
-      console.log('   Amount:', formatUnits(COLLATERAL_USDC, 6), 'USDC')
 
-      // Call 3: Open Market Order on TRADING
+      // Call 3: Deposit Collateral to TRADING (registers balance)
+      const depositData = encodeFunctionData({
+        abi: TRADING_ABI,
+        functionName: 'depositCollateral',
+        args: [COLLATERAL_USDC],
+      })
+      console.log('📝 Call 3: depositCollateral($5 USDC) - CRITICAL STEP')
+
+      // Call 4: Open Market Order on TRADING
       const orderData = encodeFunctionData({
         abi: TRADING_ABI,
         functionName: 'openMarketOrder',
         args: [
           PAIR_INDEX,      // 0 = BTC-USD
           IS_LONG,         // true = long
-          LEVERAGE_SCALED, // 10e18 = 10x leverage
-          QUANTITY_SCALED, // ~0.000543 BTC (18 decimals)
+          LEVERAGE,        // 10 (raw, not scaled)
+          quantityScaled,  // Dynamic based on price
           MAX_SLIPPAGE,    // 100 = 1%
-          timestamp,       // current timestamp
+          timestamp,
         ],
       })
-      console.log('📝 Call 3: openMarketOrder')
-      console.log('   Pair: BTC-USD (0)')
-      console.log('   Direction:', IS_LONG ? 'LONG 🟢' : 'SHORT 🔴')
-      console.log('   Leverage:', LEVERAGE_MULTIPLIER.toString() + 'x')
-      console.log('   Quantity:', formatUnits(QUANTITY_SCALED, 18), 'BTC')
-      console.log('   Max Slippage:', MAX_SLIPPAGE.toString(), 'bps (1%)')
-      console.log('   Timestamp:', timestamp.toString())
+      console.log('📝 Call 4: openMarketOrder(BTC, LONG, 10x)')
+      console.log('   Quantity:', formatUnits(quantityScaled, 18), 'BTC')
 
       // Build calls array for batching
       const calls = [
@@ -223,21 +267,26 @@ export function OstiumTradeButton() {
         },
         {
           to: CONTRACTS.OSTIUM_TRADING,
+          data: depositData,
+          value: BigInt(0),
+        },
+        {
+          to: CONTRACTS.OSTIUM_TRADING,
           data: orderData,
           value: BigInt(0),
         },
       ]
 
-      console.log('🔍 Simulating batched transaction...')
-      console.log('Simulating transaction...')
+      console.log('🔍 Simulating 4-call batch...')
 
-      // Step 3: Execute the batched transaction
+      // Step 4: Execute the batched transaction
       setState('executing')
       console.log('╔══════════════════════════════════════════════════╗')
-      console.log('║  EXECUTING BATCHED USEROP (1 SIGNATURE)          ║')
+      console.log('║  EXECUTING 4-CALL USEROP (1 SIGNATURE)           ║')
       console.log('╚══════════════════════════════════════════════════╝')
       console.log('📍 Smart Wallet:', smartWalletAddress)
       console.log('🎯 Trade: BTC LONG 10x • $50 exposure')
+      console.log('📊 Qty:', formatUnits(quantityScaled, 18), 'BTC @ $' + btcPriceUSD.toFixed(0))
 
       // Send batched transaction via smart wallet
       const hash = await smartWalletClient.sendTransaction({
@@ -254,23 +303,24 @@ export function OstiumTradeButton() {
       // Try to decode error
       let errorMsg = 'Transaction failed'
       const msg = err.message?.toLowerCase() || ''
+      const shortMsg = err.shortMessage?.toLowerCase() || ''
       
       if (msg.includes('rejected') || msg.includes('denied')) {
         errorMsg = 'Transaction rejected by user'
       } else if (msg.includes('insufficient funds for gas') || msg.includes('insufficient funds')) {
         errorMsg = 'Insufficient ETH for gas. Add ETH to smart wallet.'
-      } else if (msg.includes('insufficient') && msg.includes('usdc')) {
+      } else if (msg.includes('insufficient') && (msg.includes('usdc') || msg.includes('balance'))) {
         errorMsg = 'Insufficient USDC balance. Need $5+ USDC.'
-      } else if (msg.includes('wrong spender') || msg.includes('allowance')) {
-        errorMsg = 'Allowance error: Approve must target Storage contract'
+      } else if (msg.includes('collateral') || shortMsg.includes('collateral')) {
+        errorMsg = 'Ostium: Collateral not deposited. depositCollateral may have failed.'
+      } else if (msg.includes('allowance')) {
+        errorMsg = 'USDC allowance not set. Approve step may have failed.'
       } else if (msg.includes('simulation') || msg.includes('revert')) {
-        // Try to extract more specific error
-        if (msg.includes('storage')) {
-          errorMsg = 'Storage contract rejected - check collateral deposit'
-        } else if (msg.includes('trading')) {
-          errorMsg = 'Trading contract rejected - check order params'
+        // Check for specific Ostium errors
+        if (msg.includes('0x')) {
+          errorMsg = 'Contract reverted (0x). Check: collateral deposited? leverage valid?'
         } else {
-          errorMsg = 'Simulation failed: ' + (err.shortMessage || err.message?.slice(0, 100))
+          errorMsg = 'Simulation failed: ' + (err.shortMessage || msg.slice(0, 100))
         }
       } else {
         errorMsg = err.shortMessage || err.message?.slice(0, 150) || 'Unknown error'
@@ -279,7 +329,7 @@ export function OstiumTradeButton() {
       setError(errorMsg)
       setState('error')
     }
-  }, [smartWalletClient, smartWalletAddress])
+  }, [smartWalletClient, smartWalletAddress, publicClient])
 
   // ============================================
   // RENDER STATES
@@ -378,10 +428,11 @@ export function OstiumTradeButton() {
   }
 
   // Ready to trade
-  const isLoading = ['switching', 'simulating', 'executing'].includes(state)
+  const isLoading = ['switching', 'fetching_price', 'simulating', 'executing'].includes(state)
   const chainLabel = currentChain === ARBITRUM_CHAIN_ID ? 'Arbitrum' : 'Other'
   const hasEnoughUSDC = parseFloat(usdcBalance) >= 5
   const hasEnoughETH = parseFloat(ethBalance) >= 0.00001
+  const qtyBTC = quantity ? (Number(quantity) / 1e18).toFixed(6) : '0'
 
   return (
     <div className="bg-[#111] border border-white/10 rounded-2xl p-5 space-y-4">
@@ -420,6 +471,22 @@ export function OstiumTradeButton() {
             </p>
           </div>
         </div>
+
+        {/* Live Price & Quantity */}
+        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/5">
+          <div>
+            <span className="text-white/40 text-xs">BTC Price</span>
+            <p className="text-sm font-medium text-white">
+              ${parseFloat(btcPrice).toLocaleString()}
+            </p>
+          </div>
+          <div>
+            <span className="text-white/40 text-xs">Quantity</span>
+            <p className="text-sm font-medium text-white">
+              {qtyBTC} BTC
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Warnings */}
@@ -452,7 +519,8 @@ export function OstiumTradeButton() {
           <>
             <Loader2 className="w-5 h-5 animate-spin" />
             {state === 'switching' && 'Switching to Arbitrum...'}
-            {state === 'simulating' && 'Simulating...'}
+            {state === 'fetching_price' && 'Fetching BTC price...'}
+            {state === 'simulating' && 'Simulating batch...'}
             {state === 'executing' && 'Confirm in wallet...'}
           </>
         ) : (
@@ -466,10 +534,10 @@ export function OstiumTradeButton() {
       {/* Batch Info */}
       <div className="text-center space-y-1">
         <p className="text-white/30 text-xs">
-          Batched: Approve Storage → Transfer → openMarketOrder
+          4-Call Batch: Approve → Transfer → Deposit → Order
         </p>
         <p className="text-green-400/50 text-xs">
-          ✓ 1 signature • 3 actions
+          ✓ 1 signature • 4 actions • Ostium SDK pattern
         </p>
       </div>
     </div>
