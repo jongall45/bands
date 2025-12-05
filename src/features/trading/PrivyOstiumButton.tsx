@@ -15,6 +15,7 @@ import { fetchPythPriceUpdate } from '@/lib/ostium/api'
 // ============================================
 const USDC_ADDRESS = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as const
 const OSTIUM_TRADING = '0x6D0bA1f9996DBD8885827e1b2e8f6593e7702411' as const
+const OSTIUM_STORAGE = '0xcCd5891083A8acD2074690F65d3024E7D13d66E7' as const // USDC must be approved here!
 const USDC_DECIMALS = 6
 
 // ERC20 ABI
@@ -127,7 +128,7 @@ export function PrivyOstiumButton({
         address: USDC_ADDRESS,
         abi: ERC20_ABI,
         functionName: 'allowance',
-        args: [address, OSTIUM_TRADING],
+        args: [address, OSTIUM_STORAGE], // Allowance must be to Storage!
       })
       
       // Fetch balance
@@ -207,13 +208,13 @@ export function PrivyOstiumButton({
         const approveData = encodeFunctionData({
           abi: ERC20_ABI,
           functionName: 'approve',
-          args: [OSTIUM_TRADING, parsedAmount],
+          args: [OSTIUM_STORAGE, parsedAmount], // Approve STORAGE, not Trading!
         })
 
         console.log('╔════════════════════════════════════════╗')
         console.log('║     STEP 1: APPROVE USDC               ║')
         console.log('╚════════════════════════════════════════╝')
-        console.log('📍 Spender:', OSTIUM_TRADING)
+        console.log('📍 Spender:', OSTIUM_STORAGE, '(Storage contract)')
         console.log('💰 Amount:', amountUSDC, 'USDC')
 
         const approvalHash = await provider.request({
