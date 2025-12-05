@@ -39,17 +39,17 @@ const TRADING_ABI = parseAbi([
 // ============================================
 // TRADE PARAMETERS
 // ============================================
-const PAIR_INDEX = 0n // BTC-USD
+const PAIR_INDEX = BigInt(0) // BTC-USD
 const IS_LONG = true
-const LEVERAGE_MULTIPLIER = 10n // 10x
-const LEVERAGE_SCALED = LEVERAGE_MULTIPLIER * (10n ** 18n) // 10e18
-const COLLATERAL_USDC = 5_000_000n // $5 USDC in 6 decimals
-const MAX_SLIPPAGE = 100n // 1% = 100 basis points
+const LEVERAGE_MULTIPLIER = BigInt(10) // 10x
+const LEVERAGE_SCALED = LEVERAGE_MULTIPLIER * (BigInt(10) ** BigInt(18)) // 10e18
+const COLLATERAL_USDC = BigInt(5_000_000) // $5 USDC in 6 decimals
+const MAX_SLIPPAGE = BigInt(100) // 1% = 100 basis points
 
 // Calculate quantity: $50 exposure at ~$92k BTC price
 // quantity = (collateral * leverage) / price = ($5 * 10) / $92,000 ≈ 0.000543 BTC
-// Scaled to 18 decimals: 543000000000000000n
-const QUANTITY_SCALED = 543_000_000_000_000_000n // ~0.000543 BTC in 18 decimals
+// Scaled to 18 decimals
+const QUANTITY_SCALED = BigInt('543000000000000000') // ~0.000543 BTC in 18 decimals
 
 // ============================================
 // TYPES
@@ -214,17 +214,17 @@ export function OstiumTradeButton() {
         {
           to: CONTRACTS.USDC,
           data: approveData,
-          value: 0n,
+          value: BigInt(0),
         },
         {
           to: CONTRACTS.USDC,
           data: transferData,
-          value: 0n,
+          value: BigInt(0),
         },
         {
           to: CONTRACTS.OSTIUM_TRADING,
           data: orderData,
-          value: 0n,
+          value: BigInt(0),
         },
       ]
 
