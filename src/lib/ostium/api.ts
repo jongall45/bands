@@ -112,57 +112,35 @@ export async function fetchPairPrice(pairIndex: number): Promise<PriceData | nul
 }
 
 /**
- * Fetch Pyth price update data from Hermes API
- * Uses multiple endpoints as fallback
+ * Fetch Pyth price update data via our server-side proxy
+ * This bypasses CORS/firewall issues on the client
  */
 export async function fetchPythPriceUpdate(pairIndex: number): Promise<`0x${string}`> {
-  const feedId = PYTH_FEED_IDS[pairIndex]
+  console.log('🔮 Fetching Pyth data via API proxy...')
   
-  if (!feedId) {
-    console.warn(`No Pyth feed ID for pair index ${pairIndex}`)
-    throw new Error('No Pyth feed ID for this pair')
-  }
-
-  // Try multiple endpoints
-  const endpoints = [
-    `https://hermes.pyth.network/v2/updates/price/latest?ids[]=0x${feedId}&encoding=hex&parsed=false`,
-    `https://xc-mainnet.pyth.network/api/latest_price_feeds?ids[]=${feedId}`,
-    `https://hermes.pyth.network/api/latest_price_feeds?ids[]=${feedId}`,
-  ]
-
-  for (const url of endpoints) {
-    try {
-      console.log('🔮 Trying Pyth endpoint:', url.split('?')[0])
-      const response = await fetch(url, { 
-        cache: 'no-store',
-        headers: { 'Accept': 'application/json' }
-      })
-      
-      if (!response.ok) continue
-      
-      const data = await response.json()
-      
-      // Handle v2 API format (binary.data)
-      if (data.binary?.data?.[0]) {
-        const hexData = data.binary.data[0]
-        console.log('🟢 Pyth VAA from v2 API, length:', hexData.length)
-        return (hexData.startsWith('0x') ? hexData : `0x${hexData}`) as `0x${string}`
-      }
-      
-      // Handle legacy format (vaa field)
-      if (data?.[0]?.vaa) {
-        const vaa = data[0].vaa
-        console.log('🟢 Pyth VAA from legacy API, length:', vaa.length)
-        return `0x${vaa}` as `0x${string}`
-      }
-      
-    } catch (error) {
-      console.warn('Endpoint failed:', url.split('?')[0], error)
-      continue
+  try {
+    // Use our server-side API proxy (bypasses client network issues)
+    const response = await fetch(`/api/pyth?pairIndex=${pairIndex}`, {
+      cache: 'no-store',
+    })
+    
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Pyth API proxy failed')
     }
+    
+    const result = await response.json()
+    
+    if (result.success && result.data) {
+      console.log('🟢 Pyth data received via proxy, source:', result.source, 'length:', result.data.length)
+      return result.data as `0x${string}`
+    }
+    
+    throw new Error('No data in Pyth response')
+  } catch (error: any) {
+    console.error('❌ Pyth fetch failed:', error)
+    throw new Error(error.message || 'Failed to fetch Pyth price data')
   }
-
-  throw new Error('All Pyth endpoints failed - check network connection')
 }
 
 /**
