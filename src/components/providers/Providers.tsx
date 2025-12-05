@@ -26,9 +26,6 @@ const wagmiConfig = createConfig({
   },
 })
 
-// ZeroDev project ID for smart wallets
-const ZERODEV_PROJECT_ID = '9be53a1b-f376-4354-8d0d-93f70c8ec214'
-
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
@@ -78,7 +75,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         // Login methods
         loginMethods: ['email', 'google', 'apple'],
         
-        // Embedded wallet config - creates standard EOA as signer for smart wallet
+        // Embedded wallet config - creates EOA as signer for smart wallet
         embeddedWallets: {
           ethereum: {
             createOnLogin: 'users-without-wallets',
@@ -90,19 +87,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
         supportedChains: [base, arbitrum],
       }}
     >
-      {/* Smart Wallets Provider - ZeroDev Kernel on Arbitrum */}
-      <SmartWalletsProvider
-        config={{
-          paymasterContext: {
-            mode: 'SPONSORED', // Gasless transactions when possible
-            calculateGasLimits: true,
-            expiryDuration: 300, // 5 minutes
-            sponsorshipInfo: {
-              webhookData: {},
-            },
-          },
-        }}
-      >
+      {/* SmartWalletsProvider enables ERC-4337 smart wallets via ZeroDev */}
+      <SmartWalletsProvider>
         <QueryClientProvider client={queryClient}>
           <WagmiProvider config={wagmiConfig}>
             <RelayKitProvider

@@ -15,6 +15,7 @@ const nextConfig: NextConfig = {
   },
   transpilePackages: [
     'porto',
+    '@privy-io/react-auth',
   ],
 };
 
