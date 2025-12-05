@@ -1,14 +1,14 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { usePrivy } from '@privy-io/react-auth'
-import { encodeFunctionData, parseUnits, formatUnits, createPublicClient, http } from 'viem'
+import { encodeFunctionData, parseUnits, formatUnits, createPublicClient, http, maxUint256 } from 'viem'
 import { arbitrum } from 'viem/chains'
-import { Loader2, Zap, ExternalLink, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Loader2, Zap, ExternalLink, AlertCircle, CheckCircle2, Wallet } from 'lucide-react'
 
 // ============================================
-// CONSTANTS (Arbitrum Only)
+// CONSTANTS (Arbitrum Only - Ostium)
 // ============================================
 const ARBITRUM_CHAIN_ID = 42161
 
@@ -49,6 +49,16 @@ const ERC20_ABI = [
     inputs: [{ name: 'account', type: 'address' }],
     outputs: [{ name: '', type: 'uint256' }],
   },
+  {
+    name: 'allowance',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'spender', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
 ] as const
 
 const OSTIUM_TRADING_ABI = [
@@ -83,12 +93,14 @@ interface Call {
 // COMPONENT
 // ============================================
 export function OstiumTradeButton() {
-  const { authenticated, login, logout } = usePrivy()
+  const { authenticated, ready: privyReady, login, user } = usePrivy()
   const { client: smartWalletClient } = useSmartWallets()
   
   const [state, setState] = useState<TradeState>('idle')
   const [error, setError] = useState<string | null>(null)
   const [txHash, setTxHash] = useState<string | null>(null)
+  const [usdcBalance, setUsdcBalance] = useState<string>('0')
+  const [currentChain, setCurrentChain] = useState<number | null>(null)
 
   // Trade parameters (fixed for BTC 10x Long $50 exposure)
   const COLLATERAL_USDC = '5' // $5 collateral
@@ -97,36 +109,82 @@ export function OstiumTradeButton() {
   const IS_LONG = true
   const SLIPPAGE_BPS = 100 // 1%
 
-  // Public client for reading/simulating
+  // Smart wallet address
+  const smartWalletAddress = smartWalletClient?.account?.address
+
+  // Public client for reading
   const publicClient = createPublicClient({
     chain: arbitrum,
     transport: http(),
   })
 
   // ============================================
+  // FETCH BALANCE & CHAIN
+  // ============================================
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!smartWalletAddress) return
+
+      try {
+        // Fetch USDC balance on Arbitrum
+        const balance = await publicClient.readContract({
+          address: CONTRACTS.USDC,
+          abi: ERC20_ABI,
+          functionName: 'balanceOf',
+          args: [smartWalletAddress],
+        })
+        setUsdcBalance(formatUnits(balance, 6))
+
+        // Get current chain
+        if (smartWalletClient) {
+          const chainId = await smartWalletClient.getChainId()
+          setCurrentChain(chainId)
+        }
+      } catch (err) {
+        console.error('Failed to fetch data:', err)
+      }
+    }
+
+    fetchData()
+    const interval = setInterval(fetchData, 10000) // Refresh every 10s
+    return () => clearInterval(interval)
+  }, [smartWalletAddress, smartWalletClient, publicClient])
+
+  // Debug logging
+  useEffect(() => {
+    console.log('🔐 Smart Wallet Status:', {
+      privyReady,
+      authenticated,
+      hasSmartWalletClient: !!smartWalletClient,
+      smartWalletAddress,
+      usdcBalance,
+      currentChain,
+      user: user?.id,
+    })
+  }, [privyReady, authenticated, smartWalletClient, smartWalletAddress, usdcBalance, currentChain, user])
+
+  // ============================================
   // BUILD BATCHED CALLS
   // ============================================
   const buildBatchedCalls = useCallback((): Call[] => {
     const collateralWei = parseUnits(COLLATERAL_USDC, 6) // 5e6
-    const approvalAmount = (collateralWei * BigInt(120)) / BigInt(100) // +20% buffer
     const leverageWei = BigInt(LEVERAGE) * BigInt(10 ** 18) // 10e18
-    const positionSize = parseUnits(COLLATERAL_USDC, 18) * BigInt(LEVERAGE) // $50 in 18 decimals
+    const positionSize = BigInt(542) * BigInt(10 ** 12) // ~$50 exposure at BTC price
     const timestamp = Math.floor(Date.now() / 1000)
 
     console.log('🔨 Building batched calls:')
-    console.log('   Collateral:', COLLATERAL_USDC, 'USDC (', collateralWei.toString(), ')')
-    console.log('   Leverage:', LEVERAGE, 'x (', leverageWei.toString(), ')')
+    console.log('   Collateral:', COLLATERAL_USDC, 'USDC')
+    console.log('   Leverage:', LEVERAGE, 'x')
     console.log('   Position Size:', positionSize.toString())
-    console.log('   Timestamp:', timestamp)
 
     return [
-      // 1. Approve USDC to Ostium Storage
+      // 1. Infinite approve USDC to Ostium Storage (one-time)
       {
         to: CONTRACTS.USDC,
         data: encodeFunctionData({
           abi: ERC20_ABI,
           functionName: 'approve',
-          args: [CONTRACTS.OSTIUM_STORAGE, approvalAmount],
+          args: [CONTRACTS.OSTIUM_STORAGE, maxUint256],
         }),
       },
       // 2. Transfer USDC to Ostium Storage
@@ -162,71 +220,55 @@ export function OstiumTradeButton() {
   // ============================================
   const simulateTransaction = useCallback(async (
     calls: Call[],
-    smartWalletAddress: `0x${string}`
+    walletAddress: `0x${string}`
   ): Promise<{ success: boolean; error?: string }> => {
-    console.log('🔬 Simulating batched transaction...')
+    console.log('🔬 Simulating transaction...')
 
-    // First check USDC balance
-    try {
-      const balance = await publicClient.readContract({
-        address: CONTRACTS.USDC,
-        abi: ERC20_ABI,
-        functionName: 'balanceOf',
-        args: [smartWalletAddress],
-      })
-      
-      const requiredAmount = parseUnits(COLLATERAL_USDC, 6)
-      console.log('   USDC Balance:', formatUnits(balance, 6))
-      console.log('   Required:', formatUnits(requiredAmount, 6))
-      
-      if (balance < requiredAmount) {
-        return {
-          success: false,
-          error: `Insufficient USDC. Have ${formatUnits(balance, 6)}, need ${COLLATERAL_USDC}`,
-        }
+    // Check USDC balance first
+    const balance = await publicClient.readContract({
+      address: CONTRACTS.USDC,
+      abi: ERC20_ABI,
+      functionName: 'balanceOf',
+      args: [walletAddress],
+    })
+    
+    const requiredAmount = parseUnits(COLLATERAL_USDC, 6)
+    if (balance < requiredAmount) {
+      return {
+        success: false,
+        error: `Insufficient USDC on Arbitrum. Have ${formatUnits(balance, 6)}, need ${COLLATERAL_USDC}. Fund your smart wallet: ${walletAddress}`,
       }
-    } catch (err) {
-      console.error('Balance check failed:', err)
     }
 
     // Simulate each call
     for (let i = 0; i < calls.length; i++) {
       const call = calls[i]
-      const callName = i === 0 ? 'Approve' : i === 1 ? 'Transfer' : 'OpenMarketOrder'
+      const callName = ['Approve', 'Transfer', 'OpenMarketOrder'][i]
       
       try {
         await publicClient.estimateGas({
-          account: smartWalletAddress,
+          account: walletAddress,
           to: call.to,
           data: call.data,
-          value: call.value,
         })
-        console.log(`   ✅ ${callName} simulation passed`)
+        console.log(`   ✅ ${callName} OK`)
       } catch (err: any) {
         const msg = err.message?.toLowerCase() || ''
-        console.error(`   ❌ ${callName} simulation failed:`, msg)
+        console.error(`   ❌ ${callName} failed:`, msg.slice(0, 200))
         
-        // Parse specific revert reasons
-        if (msg.includes('insufficient') || msg.includes('exceeds balance')) {
+        if (i < 2) continue // Approve/Transfer may fail in simulation but work in batch
+        
+        if (msg.includes('insufficient') || msg.includes('balance')) {
           return { success: false, error: 'Insufficient USDC balance' }
         }
-        if (msg.includes('slippage') || msg.includes('price')) {
-          return { success: false, error: 'Price moved too much - increase slippage' }
+        if (msg.includes('slippage')) {
+          return { success: false, error: 'Price moved - try increasing slippage' }
         }
-        if (msg.includes('paused') || msg.includes('disabled')) {
-          return { success: false, error: 'Ostium trading is currently paused' }
-        }
-        if (msg.includes('leverage')) {
-          return { success: false, error: 'Invalid leverage for this pair' }
+        if (msg.includes('paused')) {
+          return { success: false, error: 'Ostium trading paused' }
         }
         
-        // For approve/transfer failures, often means allowance issues which batch handles
-        if (i < 2) {
-          console.log(`   ⚠️ ${callName} may fail standalone but batch should handle it`)
-          continue
-        }
-        
-        return { success: false, error: `${callName} would revert: ${msg.slice(0, 100)}` }
+        return { success: false, error: `Trade would fail: ${msg.slice(0, 100)}` }
       }
     }
 
@@ -237,14 +279,8 @@ export function OstiumTradeButton() {
   // EXECUTE TRADE
   // ============================================
   const executeTrade = useCallback(async () => {
-    if (!smartWalletClient) {
-      setError('No smart wallet. Please log out and log back in.')
-      return
-    }
-
-    const smartWalletAddress = smartWalletClient.account?.address
-    if (!smartWalletAddress) {
-      setError('Smart wallet address not found')
+    if (!smartWalletClient || !smartWalletAddress) {
+      setError('Smart wallet not ready')
       return
     }
 
@@ -253,14 +289,12 @@ export function OstiumTradeButton() {
 
     try {
       // Step 1: Switch to Arbitrum if needed
-      const currentChainId = await smartWalletClient.getChainId()
-      console.log('📍 Current chain:', currentChainId)
-      
-      if (currentChainId !== ARBITRUM_CHAIN_ID) {
+      const chainId = await smartWalletClient.getChainId()
+      if (chainId !== ARBITRUM_CHAIN_ID) {
         setState('switching')
         console.log('🔄 Switching to Arbitrum...')
         await smartWalletClient.switchChain({ id: ARBITRUM_CHAIN_ID })
-        console.log('✅ Switched to Arbitrum')
+        setCurrentChain(ARBITRUM_CHAIN_ID)
       }
 
       // Step 2: Build batch
@@ -269,24 +303,19 @@ export function OstiumTradeButton() {
       // Step 3: Simulate
       setState('simulating')
       const simulation = await simulateTransaction(calls, smartWalletAddress)
-      
       if (!simulation.success) {
         setError(simulation.error || 'Simulation failed')
         setState('error')
         return
       }
 
-      // Step 4: Execute batched transaction
+      // Step 4: Execute
       setState('executing')
-      console.log('╔════════════════════════════════════════════╗')
-      console.log('║   EXECUTING BATCHED SMART WALLET ORDER     ║')
-      console.log('╚════════════════════════════════════════════╝')
-      console.log('📍 Smart Wallet:', smartWalletAddress)
-      console.log('🎯 Pair: BTC-USD')
-      console.log('📊 Direction: LONG 🟢')
-      console.log('💰 Collateral: $5 USDC')
-      console.log('⚡ Leverage: 10x')
-      console.log('📈 Exposure: $50 USD')
+      console.log('╔══════════════════════════════════════╗')
+      console.log('║  EXECUTING SMART WALLET TRADE        ║')
+      console.log('╚══════════════════════════════════════╝')
+      console.log('📍 Wallet:', smartWalletAddress)
+      console.log('🎯 BTC-USD LONG 10x • $50 exposure')
 
       const hash = await smartWalletClient.sendTransaction({
         calls: calls.map(c => ({
@@ -296,111 +325,98 @@ export function OstiumTradeButton() {
         })),
       })
 
-      console.log('✅ Transaction submitted!')
-      console.log('   Hash:', hash)
-
+      console.log('✅ Success! Hash:', hash)
       setTxHash(hash)
       setState('success')
 
     } catch (err: any) {
-      console.error('❌ Trade execution failed:', err)
+      console.error('❌ Trade failed:', err)
+      const msg = err.message?.toLowerCase() || ''
       
-      let errorMsg = err.message || 'Transaction failed'
-      const msg = errorMsg.toLowerCase()
-      
-      if (msg.includes('rejected') || msg.includes('denied') || msg.includes('cancelled')) {
-        errorMsg = 'Transaction rejected by user'
+      if (msg.includes('rejected') || msg.includes('denied')) {
+        setError('Transaction rejected')
       } else if (msg.includes('insufficient funds for gas')) {
-        errorMsg = 'Need ETH on Arbitrum for gas'
-      } else if (msg.includes('insufficient')) {
-        errorMsg = 'Insufficient USDC balance'
-      } else if (msg.includes('revert')) {
-        errorMsg = 'Transaction reverted - check parameters'
+        setError('Need ETH on Arbitrum for gas')
+      } else {
+        setError(err.message?.slice(0, 100) || 'Transaction failed')
       }
-      
-      setError(errorMsg)
       setState('error')
     }
-  }, [smartWalletClient, buildBatchedCalls, simulateTransaction])
+  }, [smartWalletClient, smartWalletAddress, buildBatchedCalls, simulateTransaction])
 
   // ============================================
-  // RENDER
+  // RENDER STATES
   // ============================================
 
-  // Debug: Log wallet status
-  console.log('🔐 Wallet Status:', {
-    authenticated,
-    hasSmartWalletClient: !!smartWalletClient,
-    smartWalletAddress: smartWalletClient?.account?.address,
-  })
-
-  // Not authenticated
-  if (!authenticated) {
+  // Privy not ready yet
+  if (!privyReady) {
     return (
-      <button
-        onClick={login}
-        className="w-full py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-green-500/25"
-      >
-        <Zap className="w-5 h-5" />
-        Connect to Trade BTC
-      </button>
+      <div className="bg-[#111] border border-white/10 rounded-2xl p-6">
+        <div className="flex items-center justify-center gap-3 text-white/50">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          <span>Loading...</span>
+        </div>
+      </div>
     )
   }
 
-  // No smart wallet - still initializing or needs re-login
-  if (!smartWalletClient) {
+  // Not logged in
+  if (!authenticated) {
     return (
-      <div className="space-y-3">
-        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 flex items-start gap-3">
-          <Loader2 className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5 animate-spin" />
-          <div>
-            <p className="text-yellow-400 font-medium">Initializing Smart Wallet...</p>
-            <p className="text-yellow-400/70 text-sm mt-1">
-              This may take a few seconds. If stuck, try logging out and back in.
-            </p>
-          </div>
+      <div className="bg-[#111] border border-white/10 rounded-2xl p-6 space-y-4">
+        <div className="text-center">
+          <Wallet className="w-10 h-10 text-white/30 mx-auto mb-3" />
+          <p className="text-white/60 text-sm">
+            Logging in creates your smart wallet automatically
+          </p>
         </div>
         <button
-          onClick={logout}
-          className="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors"
+          onClick={login}
+          className="w-full py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-xl transition-all"
         >
-          Log Out & Retry
+          Connect & Create Wallet
         </button>
       </div>
     )
   }
 
-  // Show smart wallet info
-  const smartWalletAddress = smartWalletClient.account?.address
+  // Waiting for smart wallet
+  if (!smartWalletClient || !smartWalletAddress) {
+    return (
+      <div className="bg-[#111] border border-white/10 rounded-2xl p-6">
+        <div className="flex items-center justify-center gap-3 text-yellow-400">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          <span>Creating smart wallet...</span>
+        </div>
+        <p className="text-white/40 text-xs text-center mt-2">
+          This happens automatically on first login
+        </p>
+      </div>
+    )
+  }
 
-  // Success state
+  // Success
   if (state === 'success' && txHash) {
     return (
-      <div className="space-y-4">
-        <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <CheckCircle2 className="w-5 h-5 text-green-400" />
-            <span className="text-green-400 font-bold">Trade Executed!</span>
+      <div className="bg-[#111] border border-green-500/30 rounded-2xl p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <CheckCircle2 className="w-6 h-6 text-green-400" />
+          <div>
+            <p className="text-green-400 font-bold">Trade Executed!</p>
+            <p className="text-green-400/60 text-sm">BTC Long 10x • $50 exposure</p>
           </div>
-          <p className="text-green-400/70 text-sm">
-            BTC Long 10x • $50 Exposure
-          </p>
-          <a
-            href={`https://arbiscan.io/tx/${txHash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-green-400 text-sm mt-3 hover:underline"
-          >
-            View on Arbiscan <ExternalLink className="w-3 h-3" />
-          </a>
         </div>
+        <a
+          href={`https://arbiscan.io/tx/${txHash}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 text-green-400 text-sm hover:underline"
+        >
+          View on Arbiscan <ExternalLink className="w-4 h-4" />
+        </a>
         <button
-          onClick={() => {
-            setState('idle')
-            setTxHash(null)
-            setError(null)
-          }}
-          className="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors"
+          onClick={() => { setState('idle'); setTxHash(null) }}
+          className="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl"
         >
           New Trade
         </button>
@@ -408,25 +424,20 @@ export function OstiumTradeButton() {
     )
   }
 
-  // Error state
+  // Error
   if (state === 'error' && error) {
     return (
-      <div className="space-y-4">
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <span className="text-red-400 font-medium">Trade Failed</span>
-              <p className="text-red-400/70 text-sm mt-1">{error}</p>
-            </div>
+      <div className="bg-[#111] border border-red-500/30 rounded-2xl p-6 space-y-4">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-red-400 font-medium">Trade Failed</p>
+            <p className="text-red-400/70 text-sm mt-1">{error}</p>
           </div>
         </div>
         <button
-          onClick={() => {
-            setState('idle')
-            setError(null)
-          }}
-          className="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors"
+          onClick={() => { setState('idle'); setError(null) }}
+          className="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl"
         >
           Try Again
         </button>
@@ -434,45 +445,65 @@ export function OstiumTradeButton() {
     )
   }
 
-  // Active states
+  // Ready to trade
   const isLoading = ['switching', 'simulating', 'executing'].includes(state)
-  const buttonText = {
-    idle: 'Long BTC 10x • $50',
-    switching: 'Switching to Arbitrum...',
-    simulating: 'Simulating...',
-    executing: 'Executing Trade...',
-    success: 'Success!',
-    error: 'Failed',
-  }[state]
+  const chainLabel = currentChain === ARBITRUM_CHAIN_ID ? 'Arbitrum' : 'Base'
+  const hasEnoughUSDC = parseFloat(usdcBalance) >= 5
 
   return (
-    <div className="space-y-3">
+    <div className="bg-[#111] border border-white/10 rounded-2xl p-5 space-y-4">
       {/* Smart Wallet Info */}
-      <div className="bg-white/5 rounded-xl p-3 text-xs">
-        <div className="flex items-center justify-between text-white/40">
-          <span>Smart Wallet</span>
-          <span className="font-mono text-white/60">
-            {smartWalletAddress?.slice(0, 6)}...{smartWalletAddress?.slice(-4)}
+      <div className="bg-white/5 rounded-xl p-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-white/40 text-xs">Smart Wallet</span>
+          <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full">
+            {chainLabel}
           </span>
         </div>
-        <p className="text-white/30 mt-1">
-          ⚠️ Fund this address with USDC on Arbitrum to trade
+        <p className="font-mono text-white text-sm">
+          {smartWalletAddress}
         </p>
+        <div className="flex items-center justify-between pt-2 border-t border-white/5">
+          <span className="text-white/40 text-xs">USDC (Arbitrum)</span>
+          <span className={`text-sm font-medium ${hasEnoughUSDC ? 'text-green-400' : 'text-red-400'}`}>
+            ${parseFloat(usdcBalance).toFixed(2)}
+          </span>
+        </div>
       </div>
 
+      {/* Low balance warning */}
+      {!hasEnoughUSDC && (
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3">
+          <p className="text-yellow-400 text-sm">
+            ⚠️ Need $5 USDC on Arbitrum to trade. Send USDC to your smart wallet above.
+          </p>
+        </div>
+      )}
+
+      {/* Trade Button */}
       <button
         onClick={executeTrade}
-        disabled={isLoading}
-        className="w-full py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:from-green-500/50 disabled:to-emerald-600/50 text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-green-500/25 disabled:shadow-none disabled:cursor-not-allowed"
+        disabled={isLoading || !hasEnoughUSDC}
+        className="w-full py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:from-gray-600 disabled:to-gray-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all disabled:cursor-not-allowed"
       >
         {isLoading ? (
-          <Loader2 className="w-5 h-5 animate-spin" />
+          <>
+            <Loader2 className="w-5 h-5 animate-spin" />
+            {state === 'switching' && 'Switching to Arbitrum...'}
+            {state === 'simulating' && 'Simulating...'}
+            {state === 'executing' && 'Confirming...'}
+          </>
         ) : (
-          <Zap className="w-5 h-5" />
+          <>
+            <Zap className="w-5 h-5" />
+            Long BTC 10x • $50
+          </>
         )}
-        {buttonText}
       </button>
+
+      <p className="text-white/30 text-xs text-center">
+        Batched: Approve → Transfer → Trade (1 signature)
+      </p>
     </div>
   )
 }
-
