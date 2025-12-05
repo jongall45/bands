@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { PrivyProvider } from '@privy-io/react-auth'
+import { SmartWalletsProvider } from '@privy-io/react-auth/smart-wallets'
 import { WagmiProvider, createConfig } from '@privy-io/wagmi'
 import { RelayKitProvider } from '@reservoir0x/relay-kit-ui'
 import { http } from 'viem'
@@ -24,6 +25,9 @@ const wagmiConfig = createConfig({
     [arbitrum.id]: http(),
   },
 })
+
+// ZeroDev project ID for smart wallets
+const ZERODEV_PROJECT_ID = '9be53a1b-f376-4354-8d0d-93f70c8ec214'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
@@ -74,35 +78,49 @@ export function Providers({ children }: { children: React.ReactNode }) {
         // Login methods
         loginMethods: ['email', 'google', 'apple'],
         
-        // Embedded wallet config - creates standard EOA
+        // Embedded wallet config - creates standard EOA as signer for smart wallet
         embeddedWallets: {
           ethereum: {
             createOnLogin: 'users-without-wallets',
           },
         },
         
-        // Chain config
-        defaultChain: base,
+        // Chain config - default to Arbitrum for Ostium trading
+        defaultChain: arbitrum,
         supportedChains: [base, arbitrum],
       }}
     >
-      <QueryClientProvider client={queryClient}>
-        <WagmiProvider config={wagmiConfig}>
-          <RelayKitProvider
-            options={{
-              appName: 'bands',
-              chains: [
-                { id: 8453, name: 'Base', displayName: 'Base' },
-                { id: 42161, name: 'Arbitrum One', displayName: 'Arbitrum' },
-              ],
-            }}
-          >
-            <PWALayout>
-              {children}
-            </PWALayout>
-          </RelayKitProvider>
-        </WagmiProvider>
-      </QueryClientProvider>
+      {/* Smart Wallets Provider - ZeroDev Kernel on Arbitrum */}
+      <SmartWalletsProvider
+        config={{
+          paymasterContext: {
+            mode: 'SPONSORED', // Gasless transactions when possible
+            calculateGasLimits: true,
+            expiryDuration: 300, // 5 minutes
+            sponsorshipInfo: {
+              webhookData: {},
+            },
+          },
+        }}
+      >
+        <QueryClientProvider client={queryClient}>
+          <WagmiProvider config={wagmiConfig}>
+            <RelayKitProvider
+              options={{
+                appName: 'bands',
+                chains: [
+                  { id: 8453, name: 'Base', displayName: 'Base' },
+                  { id: 42161, name: 'Arbitrum One', displayName: 'Arbitrum' },
+                ],
+              }}
+            >
+              <PWALayout>
+                {children}
+              </PWALayout>
+            </RelayKitProvider>
+          </WagmiProvider>
+        </QueryClientProvider>
+      </SmartWalletsProvider>
     </PrivyProvider>
   )
 }
