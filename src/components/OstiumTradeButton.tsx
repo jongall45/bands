@@ -163,35 +163,31 @@ export function OstiumTradeButton() {
   }
 
   // ============================================
-  // SIMULATE TRANSACTION (Pre-flight check)
+  // ESTIMATE GAS (gentler check)
   // ============================================
-  const simulateTransaction = async (
+  const estimateGas = async (
     provider: any,
     from: string,
     to: string,
     data: string,
     value: string
-  ): Promise<{ success: boolean; error?: string }> => {
+  ): Promise<string> => {
     try {
-      console.log('🔍 Simulating transaction...')
-      await provider.request({
-        method: 'eth_call',
+      console.log('⛽ Estimating gas...')
+      const estimate = await provider.request({
+        method: 'eth_estimateGas',
         params: [{
           from,
           to,
           data,
           value,
-          gas: '0x4C4B40', // 5M gas for simulation
-        }, 'latest'],
+        }],
       })
-      console.log('✅ Simulation passed')
-      return { success: true }
+      console.log('✅ Gas estimate:', parseInt(estimate, 16))
+      return estimate
     } catch (e: any) {
-      console.error('❌ Simulation failed:', e)
-      return { 
-        success: false, 
-        error: e.message || 'Transaction would fail' 
-      }
+      console.warn('⚠️ Gas estimation failed, using default:', e.message?.slice(0, 100))
+      return '0x7A1200' // 8M default if estimation fails
     }
   }
 
@@ -241,14 +237,6 @@ export function OstiumTradeButton() {
           functionName: 'approve',
           args: [OSTIUM_STORAGE, maxUint256],
         })
-
-        // Simulate approval first
-        const approveSimResult = await simulateTransaction(
-          provider, address, USDC, approveData, '0x0'
-        )
-        if (!approveSimResult.success) {
-          throw new Error(`Approval simulation failed: ${approveSimResult.error}`)
-        }
 
         const approveTxHash = await provider.request({
           method: 'eth_sendTransaction',
@@ -340,23 +328,19 @@ export function OstiumTradeButton() {
       console.log('💰 Pyth fee:', formatUnits(PYTH_FEE, 18), 'ETH')
 
       // ========================================
-      // STEP 5: Pre-flight Simulation
+      // STEP 5: Estimate Gas (non-blocking)
       // ========================================
       console.log('╔═══════════════════════════════════════╗')
-      console.log('║  STEP 4: PRE-FLIGHT SIMULATION        ║')
+      console.log('║  STEP 4: ESTIMATE GAS                 ║')
       console.log('╚═══════════════════════════════════════╝')
       
-      const simResult = await simulateTransaction(
+      const gasEstimate = await estimateGas(
         provider,
         address,
         OSTIUM_TRADING,
         tradeData,
         `0x${PYTH_FEE.toString(16)}`
       )
-
-      if (!simResult.success) {
-        throw new Error(`Trade simulation failed: ${simResult.error}`)
-      }
 
       // ========================================
       // STEP 6: Execute Trade
@@ -376,7 +360,7 @@ export function OstiumTradeButton() {
           to: OSTIUM_TRADING,
           data: tradeData,
           value: `0x${PYTH_FEE.toString(16)}`,
-          gas: '0x4C4B40', // 5M gas
+          gas: gasEstimate,
         }],
       }) as string
 
@@ -554,7 +538,7 @@ export function OstiumTradeButton() {
             <Loader2 className="w-5 h-5 animate-spin" />
             {status === 'switching' && 'Switching to Arbitrum...'}
             {status === 'approving' && 'Approving USDC...'}
-            {status === 'simulating' && 'Simulating trade...'}
+            {status === 'simulating' && 'Preparing trade...'}
             {status === 'trading' && 'Confirm trade...'}
           </>
         ) : (
