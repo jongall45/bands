@@ -224,48 +224,48 @@ export function OstiumTradeButton() {
         slippage: slippage.toString(),
       })
 
-      // Step 4: Build batched calls
+      // Step 4: Execute approve first (separate tx)
       setState('executing')
       console.log('╔══════════════════════════════════════╗')
-      console.log('║  EXECUTING SMART WALLET TRADE        ║')
+      console.log('║  STEP 1: APPROVING USDC              ║')
       console.log('╚══════════════════════════════════════╝')
 
-      const calls = [
-        // 1. Approve USDC to Ostium Trading contract
-        {
-          to: CONTRACTS.USDC,
-          data: encodeFunctionData({
-            abi: ERC20_ABI,
-            functionName: 'approve',
-            args: [CONTRACTS.OSTIUM_TRADING, maxUint256],
-          }),
-          value: BigInt(0),
-        },
-        // 2. Open trade with Pyth price data
-        {
-          to: CONTRACTS.OSTIUM_TRADING,
-          data: encodeFunctionData({
-            abi: OSTIUM_TRADING_ABI,
-            functionName: 'openTrade',
-            args: [
-              trade,
-              BigInt(ORDER_TYPE.MARKET), // 0 = market order
-              slippage,
-              priceUpdateData,
-              pythUpdateFee,
-            ],
-          }),
-          value: pythUpdateFee, // Send ETH for Pyth oracle fee
-        },
-      ]
+      // First: Approve USDC to Ostium Trading
+      const approveHash = await smartWalletClient.sendTransaction({
+        to: CONTRACTS.USDC,
+        data: encodeFunctionData({
+          abi: ERC20_ABI,
+          functionName: 'approve',
+          args: [CONTRACTS.OSTIUM_TRADING, maxUint256],
+        }),
+      })
+      console.log('✅ Approve tx:', approveHash)
 
+      // Wait a moment for approval to propagate
+      await new Promise(resolve => setTimeout(resolve, 2000))
+
+      console.log('╔══════════════════════════════════════╗')
+      console.log('║  STEP 2: OPENING TRADE               ║')
+      console.log('╚══════════════════════════════════════╝')
       console.log('📍 Wallet:', smartWalletAddress)
       console.log('🎯 BTC-USD LONG 10x • $50 exposure')
       console.log('💰 Pyth fee:', formatUnits(pythUpdateFee, 18), 'ETH')
 
-      // Execute batched transaction
+      // Second: Execute the trade
       const hash = await smartWalletClient.sendTransaction({
-        calls,
+        to: CONTRACTS.OSTIUM_TRADING,
+        data: encodeFunctionData({
+          abi: OSTIUM_TRADING_ABI,
+          functionName: 'openTrade',
+          args: [
+            trade,
+            BigInt(ORDER_TYPE.MARKET),
+            slippage,
+            priceUpdateData,
+            pythUpdateFee,
+          ],
+        }),
+        value: pythUpdateFee,
       })
 
       console.log('✅ Success! Hash:', hash)
