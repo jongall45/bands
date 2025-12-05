@@ -6,7 +6,6 @@ import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { encodeFunctionData, parseUnits, formatUnits, createPublicClient, http, parseAbi, maxUint256 } from 'viem'
 import { arbitrum } from 'viem/chains'
 import { Loader2, Zap, ExternalLink, AlertCircle, CheckCircle2, Wallet, Copy, Check } from 'lucide-react'
-import { toast } from 'sonner'
 
 // ============================================
 // CONSTANTS (Arbitrum - Ostium)
@@ -135,7 +134,7 @@ export function OstiumTradeButton() {
     if (!smartWalletAddress) return
     await navigator.clipboard.writeText(smartWalletAddress)
     setCopied(true)
-    toast.success('Address copied!')
+    console.log('Address copied!')
     setTimeout(() => setCopied(false), 2000)
   }
 
@@ -145,7 +144,7 @@ export function OstiumTradeButton() {
   const executeTrade = useCallback(async () => {
     // Require smart wallet - NO EOA fallback
     if (!smartWalletClient || !smartWalletAddress) {
-      toast.error('Smart wallet not ready. Please wait or re-login.')
+      console.error('Smart wallet not ready. Please wait or re-login.')
       return
     }
 
@@ -158,7 +157,7 @@ export function OstiumTradeButton() {
       if (chainId !== ARBITRUM_CHAIN_ID) {
         setState('switching')
         console.log('🔄 Switching to Arbitrum...')
-        toast.info('Switching to Arbitrum...')
+        console.log('Switching to Arbitrum...')
         await smartWalletClient.switchChain({ id: ARBITRUM_CHAIN_ID })
         setCurrentChain(ARBITRUM_CHAIN_ID)
       }
@@ -230,7 +229,7 @@ export function OstiumTradeButton() {
       ]
 
       console.log('🔍 Simulating batched transaction...')
-      toast.info('Simulating transaction...')
+      console.log('Simulating transaction...')
 
       // Step 3: Execute the batched transaction
       setState('executing')
@@ -246,7 +245,6 @@ export function OstiumTradeButton() {
       })
 
       console.log('✅ Success! UserOp Hash:', hash)
-      toast.success('Trade executed!')
       setTxHash(hash)
       setState('success')
 
@@ -279,7 +277,6 @@ export function OstiumTradeButton() {
       }
       
       setError(errorMsg)
-      toast.error(errorMsg)
       setState('error')
     }
   }, [smartWalletClient, smartWalletAddress])
