@@ -75,15 +75,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
         // Login methods
         loginMethods: ['email', 'google', 'apple'],
         
-        // Embedded wallet config - creates EOA as signer for smart wallet
+        // Embedded wallet config - creates EOA signer for smart wallet
         embeddedWallets: {
           ethereum: {
-            createOnLogin: 'users-without-wallets',
+            createOnLogin: 'all-users',
           },
         },
         
-        // Chain config - default to Arbitrum for Ostium trading
-        defaultChain: arbitrum,
+        // Chain config - default to Base, auto-switch to Arbitrum for Ostium
+        defaultChain: base,
         supportedChains: [base, arbitrum],
       }}
     >
