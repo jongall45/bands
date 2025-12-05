@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import { formatUnits } from 'viem'
 import { 
@@ -14,10 +14,10 @@ import {
   Check,
   TrendingUp,
   AlertTriangle,
+  Shield,
 } from 'lucide-react'
 import { useTradeEngine } from '@/features/ostium'
-import { OSTIUM_PAIRS, MIN_COLLATERAL_USD, DEFAULT_EXECUTION_FEE, MIN_ETH_FOR_GAS } from '@/lib/ostium/constants'
-import { useState } from 'react'
+import { OSTIUM_PAIRS, MIN_COLLATERAL_USD, MIN_ETH_FOR_GAS } from '@/lib/ostium/constants'
 
 // ============================================
 // DEFAULT TRADE PARAMS (BTC-USD, 10x, $5, 1%)
@@ -37,12 +37,15 @@ export function OstiumTradeButton() {
 
   const pair = OSTIUM_PAIRS[DEFAULT_PAIR_INDEX]
   
+  // Use smart wallet address if available, otherwise EOA
+  const displayAddress = engine.smartWalletAddress || engine.eoaAddress
+  
   // Derived state
   const usdcBalance = formatUnits(engine.balances.usdc, 6)
   const ethBalance = formatUnits(engine.balances.eth, 18)
   const hasEnoughUSDC = engine.balances.usdc >= BigInt(DEFAULT_COLLATERAL) * BigInt(1e6)
   const hasEnoughETH = engine.balances.eth >= MIN_ETH_FOR_GAS
-  const isLoading = ['building', 'simulating', 'sending'].includes(engine.state)
+  const isLoading = ['building', 'simulating', 'sending', 'polling'].includes(engine.state)
 
   // ============================================
   // HANDLERS
@@ -58,8 +61,8 @@ export function OstiumTradeButton() {
   }, [engine])
 
   const handleCopy = async () => {
-    if (!engine.walletAddress) return
-    await navigator.clipboard.writeText(engine.walletAddress)
+    if (!displayAddress) return
+    await navigator.clipboard.writeText(displayAddress)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -93,7 +96,7 @@ export function OstiumTradeButton() {
   // ============================================
   // RENDER: Wallet loading
   // ============================================
-  if (!engine.isReady || !engine.walletAddress) {
+  if (!engine.isReady || !displayAddress) {
     return (
       <div className="bg-[#111] border border-white/10 rounded-2xl p-6 text-center">
         <Loader2 className="w-6 h-6 animate-spin mx-auto text-yellow-400" />
@@ -167,19 +170,34 @@ export function OstiumTradeButton() {
           <Zap className="w-5 h-5 text-[#7C3AED]" />
           <span className="text-white font-semibold">Ostium Trade Engine</span>
         </div>
-        <span className="text-xs px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">
-          Arbitrum
-        </span>
+        <div className="flex items-center gap-2">
+          {engine.isSmartWalletReady && (
+            <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full flex items-center gap-1">
+              <Shield className="w-3 h-3" />
+              4337
+            </span>
+          )}
+          <span className="text-xs px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">
+            Arbitrum
+          </span>
+        </div>
       </div>
 
       {/* Wallet Info */}
       <div className="bg-white/5 rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-white/40 text-xs">Wallet</span>
+          <span className="text-white/40 text-xs">
+            {engine.isSmartWalletReady ? 'Smart Wallet' : 'Embedded Wallet'}
+          </span>
+          {engine.isSmartWalletReady && engine.eoaAddress && (
+            <span className="text-white/30 text-xs">
+              Signer: {engine.eoaAddress.slice(0, 6)}...{engine.eoaAddress.slice(-4)}
+            </span>
+          )}
         </div>
         
         <div className="flex items-center gap-2">
-          <p className="font-mono text-white text-sm flex-1 truncate">{engine.walletAddress}</p>
+          <p className="font-mono text-white text-sm flex-1 truncate">{displayAddress}</p>
           <button 
             onClick={handleCopy} 
             className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
@@ -249,6 +267,7 @@ export function OstiumTradeButton() {
             {engine.state === 'building' && 'Building transaction...'}
             {engine.state === 'simulating' && 'Simulating...'}
             {engine.state === 'sending' && 'Confirm in wallet...'}
+            {engine.state === 'polling' && 'Waiting for confirmation...'}
           </>
         ) : (
           <>
@@ -260,7 +279,9 @@ export function OstiumTradeButton() {
 
       {/* Info */}
       <p className="text-white/30 text-xs text-center">
-        Approve USDC → Execute Trade • Powered by Pyth Oracle
+        {engine.isSmartWalletReady 
+          ? 'Batched: Approve + Trade in one signature' 
+          : 'Sequential: Approve → Trade'}
       </p>
     </div>
   )

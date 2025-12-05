@@ -2,10 +2,13 @@ export {
   useTradeEngine,
   buildApprovalCall,
   buildOpenTradeCall,
-  type TradeState,
-  type TradeParams,
-  type TradeResult,
-  type WalletBalances,
-  type UseTradeEngineReturn,
+} from './tradeEngine'
+
+export type {
+  TradeState,
+  TradeParams,
+  TradeResult,
+  WalletBalances,
+  UseTradeEngineReturn,
 } from './tradeEngine'
 
