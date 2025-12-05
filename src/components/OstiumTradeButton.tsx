@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
-import { encodeFunctionData, formatUnits, createPublicClient, http, parseAbi, maxUint256 } from 'viem'
+import { encodeFunctionData, formatUnits, createPublicClient, http, parseAbi, maxUint256, createWalletClient, custom } from 'viem'
 import { arbitrum } from 'viem/chains'
 import { Loader2, Zap, ExternalLink, AlertCircle, CheckCircle2, Wallet, Copy, Check } from 'lucide-react'
 
@@ -12,7 +12,7 @@ import { Loader2, Zap, ExternalLink, AlertCircle, CheckCircle2, Wallet, Copy, Ch
 // ============================================
 const USDC = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as `0x${string}`
 const OSTIUM_TRADING = '0x6D0bA1f9996DBD8885827e1b2e8f6593e7702411' as `0x${string}`
-const OSTIUM_STORAGE = '0xcCd5891083A8acD2074690F65d3024E7D13d66E7' as `0x${string}` // Approve here!
+const OSTIUM_STORAGE = '0xcCd5891083A8acD2074690F65d3024E7D13d66E7' as `0x${string}` // USDC approved HERE
 
 // ============================================
 // ABIs
@@ -28,10 +28,10 @@ const TRADING_ABI = parseAbi([
 ])
 
 // ============================================
-// STATIC TRADE PARAMS (no price fetch needed)
+// STATIC TRADE PARAMS
 // ============================================
 const COLLATERAL = BigInt(5_000_000) // $5 USDC (6 decimals)
-const QUANTITY = BigInt('540000000000000000') // ~0.00054 BTC (static, works at any price)
+const QUANTITY = BigInt('540000000000000000') // ~0.00054 BTC
 const LEVERAGE = BigInt(10) // 10x raw
 const SLIPPAGE = BigInt(100) // 1%
 const PAIR_INDEX = BigInt(0) // BTC-USD
@@ -52,11 +52,15 @@ export function OstiumTradeButton() {
 
   const address = client?.account?.address
 
+  // Public client for reading
+  const publicClient = createPublicClient({ 
+    chain: arbitrum, 
+    transport: http('https://arb1.arbitrum.io/rpc') 
+  })
+
   // Fetch balances
   useEffect(() => {
     if (!address) return
-    
-    const publicClient = createPublicClient({ chain: arbitrum, transport: http() })
     
     const fetch = async () => {
       try {
@@ -78,7 +82,7 @@ export function OstiumTradeButton() {
     fetch()
     const interval = setInterval(fetch, 10000)
     return () => clearInterval(interval)
-  }, [address])
+  }, [address, publicClient])
 
   // Copy address
   const copy = async () => {
@@ -89,7 +93,7 @@ export function OstiumTradeButton() {
   }
 
   // ============================================
-  // EXECUTE TRADE - 3 CALLS, 1 SIGNATURE
+  // EXECUTE TRADE
   // ============================================
   const trade = useCallback(async () => {
     if (!client || !address) {
@@ -102,64 +106,55 @@ export function OstiumTradeButton() {
     setTxHash(null)
 
     try {
-      // STEP 0: Force switch to Arbitrum (42161)
+      // Force switch to Arbitrum
       const currentChainId = await client.getChainId()
       if (currentChainId !== 42161) {
-        console.log('🔄 Switching to Arbitrum (current:', currentChainId, ')...')
+        console.log('🔄 Switching to Arbitrum...')
         await client.switchChain({ id: 42161 })
-        // Wait for switch to complete
         await new Promise(r => setTimeout(r, 2000))
-        console.log('✅ Switched to Arbitrum!')
       }
 
       const timestamp = BigInt(Math.floor(Date.now() / 1000))
 
       console.log('╔═══════════════════════════════════════╗')
-      console.log('║  OSTIUM 3-CALL BATCH (1 SIGNATURE)    ║')
+      console.log('║  OSTIUM 3-CALL BATCH                  ║')
       console.log('╚═══════════════════════════════════════╝')
       console.log('Smart Wallet:', address)
-      console.log('Trade: BTC LONG 10x • $50 exposure')
+      console.log('Approving STORAGE:', OSTIUM_STORAGE)
 
-      // 3 calls batched into 1 UserOp
+      // Build call data with proper ABI encoding
+      const approveData = encodeFunctionData({
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [OSTIUM_STORAGE, maxUint256], // Approve STORAGE!
+      })
+
+      const transferData = encodeFunctionData({
+        abi: ERC20_ABI,
+        functionName: 'transfer',
+        args: [OSTIUM_STORAGE, COLLATERAL],
+      })
+
+      const orderData = encodeFunctionData({
+        abi: TRADING_ABI,
+        functionName: 'openMarketOrder',
+        args: [PAIR_INDEX, true, LEVERAGE, QUANTITY, SLIPPAGE, timestamp],
+      })
+
+      // 3-call batch
       const calls = [
-        // Call 1: Approve USDC to STORAGE
-        {
-          to: USDC,
-          data: encodeFunctionData({
-            abi: ERC20_ABI,
-            functionName: 'approve',
-            args: [OSTIUM_STORAGE, maxUint256],
-          }),
-          value: BigInt(0),
-        },
-        // Call 2: Transfer USDC to STORAGE
-        {
-          to: USDC,
-          data: encodeFunctionData({
-            abi: ERC20_ABI,
-            functionName: 'transfer',
-            args: [OSTIUM_STORAGE, COLLATERAL],
-          }),
-          value: BigInt(0),
-        },
-        // Call 3: Open Market Order on TRADING
-        {
-          to: OSTIUM_TRADING,
-          data: encodeFunctionData({
-            abi: TRADING_ABI,
-            functionName: 'openMarketOrder',
-            args: [PAIR_INDEX, true, LEVERAGE, QUANTITY, SLIPPAGE, timestamp],
-          }),
-          value: BigInt(0),
-        },
+        { to: USDC, data: approveData, value: BigInt(0) },
+        { to: USDC, data: transferData, value: BigInt(0) },
+        { to: OSTIUM_TRADING, data: orderData, value: BigInt(0) },
       ]
 
-      console.log('📝 Call 1: approve(Storage, max)')
-      console.log('📝 Call 2: transfer(Storage, $5)')
-      console.log('📝 Call 3: openMarketOrder(BTC, LONG, 10x)')
-      console.log('🚀 Sending batched UserOp...')
+      console.log('📝 Calls prepared:')
+      console.log('  1. approve(Storage, max)')
+      console.log('  2. transfer(Storage, $5)')
+      console.log('  3. openMarketOrder(BTC, LONG, 10x)')
+      console.log('🚀 Sending via smart wallet...')
 
-      // Execute via Pimlico bundler
+      // Send transaction
       const hash = await client.sendTransaction({ calls })
 
       console.log('✅ SUCCESS:', hash)
@@ -168,7 +163,6 @@ export function OstiumTradeButton() {
 
     } catch (e: any) {
       console.error('❌ TRADE FAILED:', e)
-      // Show FULL error for debugging
       setError(e.message || e.toString())
       setStatus('error')
     }
@@ -297,8 +291,8 @@ export function OstiumTradeButton() {
       {/* Warnings */}
       {(!hasUSDC || !hasETH) && (
         <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 text-yellow-400 text-sm">
-          {!hasUSDC && <p>⚠️ Need $5+ USDC</p>}
-          {!hasETH && <p>⚠️ Need ETH for gas</p>}
+          {!hasUSDC && <p>⚠️ Need $5+ USDC on Arbitrum</p>}
+          {!hasETH && <p>⚠️ Need ETH for gas on Arbitrum</p>}
         </div>
       )}
 
@@ -322,7 +316,7 @@ export function OstiumTradeButton() {
       </button>
 
       <p className="text-white/30 text-xs text-center">
-        1 signature • 3 calls batched • Ostium SDK flow
+        3 calls batched • Approve Storage → Transfer → Order
       </p>
     </div>
   )
