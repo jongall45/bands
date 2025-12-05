@@ -112,43 +112,57 @@ export async function fetchPairPrice(pairIndex: number): Promise<PriceData | nul
 }
 
 /**
- * Fetch Pyth price update data - uses xc-mainnet endpoint (no CORS)
- * This is the EXACT endpoint Ostium.com uses in production
+ * Fetch Pyth price update data from Hermes API
+ * Uses multiple endpoints as fallback
  */
 export async function fetchPythPriceUpdate(pairIndex: number): Promise<`0x${string}`> {
   const feedId = PYTH_FEED_IDS[pairIndex]
   
   if (!feedId) {
-    console.warn(`No Pyth feed ID for pair index ${pairIndex}, returning empty bytes`)
-    return '0x'
+    console.warn(`No Pyth feed ID for pair index ${pairIndex}`)
+    throw new Error('No Pyth feed ID for this pair')
   }
 
-  try {
-    // Use xc-mainnet.pyth.network - NO CORS issues (what Ostium.com uses)
-    const response = await fetch(
-      `https://xc-mainnet.pyth.network/api/latest_price_feeds?ids[]=${feedId}`,
-      { cache: 'no-store' }
-    )
-    
-    if (!response.ok) {
-      throw new Error(`Pyth API error: ${response.status}`)
+  // Try multiple endpoints
+  const endpoints = [
+    `https://hermes.pyth.network/v2/updates/price/latest?ids[]=0x${feedId}&encoding=hex&parsed=false`,
+    `https://xc-mainnet.pyth.network/api/latest_price_feeds?ids[]=${feedId}`,
+    `https://hermes.pyth.network/api/latest_price_feeds?ids[]=${feedId}`,
+  ]
+
+  for (const url of endpoints) {
+    try {
+      console.log('🔮 Trying Pyth endpoint:', url.split('?')[0])
+      const response = await fetch(url, { 
+        cache: 'no-store',
+        headers: { 'Accept': 'application/json' }
+      })
+      
+      if (!response.ok) continue
+      
+      const data = await response.json()
+      
+      // Handle v2 API format (binary.data)
+      if (data.binary?.data?.[0]) {
+        const hexData = data.binary.data[0]
+        console.log('🟢 Pyth VAA from v2 API, length:', hexData.length)
+        return (hexData.startsWith('0x') ? hexData : `0x${hexData}`) as `0x${string}`
+      }
+      
+      // Handle legacy format (vaa field)
+      if (data?.[0]?.vaa) {
+        const vaa = data[0].vaa
+        console.log('🟢 Pyth VAA from legacy API, length:', vaa.length)
+        return `0x${vaa}` as `0x${string}`
+      }
+      
+    } catch (error) {
+      console.warn('Endpoint failed:', url.split('?')[0], error)
+      continue
     }
-    
-    const data = await response.json()
-    
-    // Get the VAA (Verified Action Approval) from the response
-    if (data && data[0] && data[0].vaa) {
-      const vaa = data[0].vaa
-      console.log('🟢 Fetched Pyth VAA from xc-mainnet, length:', vaa.length)
-      return `0x${vaa}` as `0x${string}`
-    }
-    
-    console.warn('No VAA in Pyth response')
-    return '0x'
-  } catch (error) {
-    console.error('Failed to fetch Pyth price update:', error)
-    return '0x'
   }
+
+  throw new Error('All Pyth endpoints failed - check network connection')
 }
 
 /**

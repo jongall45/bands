@@ -216,8 +216,19 @@ export function OstiumTradeButton() {
       console.log('╚═══════════════════════════════════════╝')
       
       console.log('🔮 Fetching Pyth price update...')
-      const priceUpdateData = await fetchPythPriceUpdate(0)
-      console.log('✅ Pyth data received, length:', priceUpdateData.length)
+      let priceUpdateData: `0x${string}`
+      try {
+        priceUpdateData = await fetchPythPriceUpdate(0)
+        console.log('✅ Pyth data received, length:', priceUpdateData.length)
+        
+        // Validate we got real data (not just 0x)
+        if (priceUpdateData.length < 10) {
+          throw new Error('Pyth data too short - fetch may have failed')
+        }
+      } catch (pythError: any) {
+        console.error('❌ Pyth fetch failed:', pythError)
+        throw new Error('Failed to get price data. Check network connection and try again.')
+      }
 
       // Step 4: Build and send trade
       const slippage = calculateSlippage(DEFAULT_SLIPPAGE_BPS)
