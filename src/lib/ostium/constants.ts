@@ -1,9 +1,15 @@
 // Ostium contract addresses on Arbitrum One Mainnet
 export const OSTIUM_CONTRACTS = {
   TRADING: '0x6D0bA1f9996DBD8885827e1b2e8f6593e7702411' as const,
-  TRADING_STORAGE: '0x51a1CeB83b83F1985a81C295d1917adEF8C2028f' as const,
+  TRADING_STORAGE: '0xcCd5891083A8acD2074690F65d3024E7D13d66E7' as const, // USDC must be approved here
   USDC: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as const,
 }
+
+// Default execution fee for Pyth oracle (0.0005 ETH)
+export const DEFAULT_EXECUTION_FEE = BigInt(500000000000000) // 0.0005 ETH
+
+// Minimum ETH required for gas + execution fee
+export const MIN_ETH_FOR_GAS = BigInt(1000000000000000) // 0.001 ETH
 
 // API endpoints
 export const OSTIUM_API = {
