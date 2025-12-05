@@ -7,6 +7,7 @@ import { encodeFunctionData, parseUnits, formatUnits, createPublicClient, http, 
 import { arbitrum } from 'viem/chains'
 import { Loader2, Zap, ExternalLink, AlertCircle, CheckCircle2, Wallet, Copy, Check } from 'lucide-react'
 import { fetchPythPriceUpdate } from '@/lib/ostium/api'
+import { ORDER_TYPE, calculateSlippage, DEFAULT_SLIPPAGE_BPS } from '@/lib/ostium/constants'
 
 // ============================================
 // CONSTANTS (Arbitrum Only - Ostium)
@@ -99,7 +100,6 @@ export function OstiumTradeButton() {
   const LEVERAGE = 10 // 10x leverage = $50 exposure
   const PAIR_INDEX = 0 // BTC-USD
   const IS_LONG = true
-  const SLIPPAGE_PERCENT = 1 // 1%
 
   // Smart wallet address
   const smartWalletAddress = smartWalletClient?.account?.address
@@ -195,24 +195,24 @@ export function OstiumTradeButton() {
       const priceUpdateData = await fetchPythPriceUpdate(PAIR_INDEX)
       console.log('✅ Price update received, length:', priceUpdateData.length)
 
-      // Step 3: Build trade parameters
-      const collateralWei = parseUnits(COLLATERAL_USDC, 6) // 5e6
-      const leverageWei = BigInt(LEVERAGE) * BigInt(10 ** 10) // 10e10 (Ostium uses 10 decimals for leverage)
-      const slippageWei = BigInt(SLIPPAGE_PERCENT) * BigInt(10 ** 10) // 1e10 (1%)
+      // Step 3: Build trade parameters (matching working Ostium integration)
+      const collateralWei = parseUnits(COLLATERAL_USDC, 6) // 5e6 = $5 USDC
+      const leverageValue = BigInt(LEVERAGE) // Just 10, NOT multiplied
+      const slippage = calculateSlippage(DEFAULT_SLIPPAGE_BPS) // 50 bps = 500_000_000
       const pythUpdateFee = BigInt(100000000000000) // 0.0001 ETH
 
-      // Trade struct
+      // Trade struct - matches Ostium contract exactly
       const trade = {
         trader: smartWalletAddress,
         pairIndex: BigInt(PAIR_INDEX),
         index: BigInt(0),
         initialPosToken: BigInt(0),
         positionSizeUSDC: collateralWei,
-        openPrice: BigInt(0), // Market order - price determined at execution
+        openPrice: BigInt(0), // 0 for market orders
         buy: IS_LONG,
-        leverage: leverageWei,
-        tp: BigInt(0), // No take profit
-        sl: BigInt(0), // No stop loss
+        leverage: leverageValue,
+        tp: BigInt(0),
+        sl: BigInt(0),
       }
 
       console.log('📦 Trade struct:', {
@@ -220,7 +220,8 @@ export function OstiumTradeButton() {
         pairIndex: trade.pairIndex.toString(),
         positionSizeUSDC: formatUnits(trade.positionSizeUSDC, 6) + ' USDC',
         buy: trade.buy ? 'LONG' : 'SHORT',
-        leverage: (Number(trade.leverage) / 1e10) + 'x',
+        leverage: trade.leverage.toString() + 'x',
+        slippage: slippage.toString(),
       })
 
       // Step 4: Build batched calls
@@ -248,8 +249,8 @@ export function OstiumTradeButton() {
             functionName: 'openTrade',
             args: [
               trade,
-              BigInt(0), // orderType: 0 = market order
-              slippageWei,
+              BigInt(ORDER_TYPE.MARKET), // 0 = market order
+              slippage,
               priceUpdateData,
               pythUpdateFee,
             ],
