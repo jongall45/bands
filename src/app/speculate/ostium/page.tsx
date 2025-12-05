@@ -8,6 +8,7 @@ import { BridgeToArbitrumModal } from '@/components/bridge/BridgeToArbitrumModal
 import { SwapForGasModal } from '@/components/bridge/SwapForGasModal'
 import { OstiumMarketSelector } from '@/components/ostium/MarketSelector'
 import { OstiumTradePanel } from '@/components/ostium/TradePanel'
+import { OstiumTradeButton } from '@/components/OstiumTradeButton'
 import { OSTIUM_PAIRS, type OstiumPair } from '@/lib/ostium/constants'
 import { ArrowLeft, RefreshCw, AlertCircle, ArrowRightLeft, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
@@ -136,30 +137,10 @@ export default function OstiumTradingPage() {
           </div>
         </div>
 
-        {/* No Balance Warning */}
-        {!hasArbitrumUsdc && (
-          <div className="px-4 py-3">
-            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
-                <div>
-                  <h3 className="text-yellow-400 font-medium text-sm mb-1">
-                    Bridge USDC to Trade
-                  </h3>
-                  <p className="text-yellow-400/60 text-xs mb-2">
-                    Ostium requires USDC on Arbitrum. Bridge your Base USDC to start trading.
-                  </p>
-                  <button
-                    onClick={() => setShowBridgeModal(true)}
-                    className="bg-yellow-500 hover:bg-yellow-600 text-black font-semibold text-xs px-3 py-1.5 rounded-lg transition-colors"
-                  >
-                    Bridge Now
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Smart Wallet Quick Trade */}
+        <div className="px-4 py-3">
+          <OstiumTradeButton />
+        </div>
 
         {/* Market Selector */}
         <OstiumMarketSelector 
