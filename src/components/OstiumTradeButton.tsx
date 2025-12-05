@@ -102,6 +102,16 @@ export function OstiumTradeButton() {
     setTxHash(null)
 
     try {
+      // STEP 0: Force switch to Arbitrum (42161)
+      const currentChainId = await client.getChainId()
+      if (currentChainId !== 42161) {
+        console.log('🔄 Switching to Arbitrum (current:', currentChainId, ')...')
+        await client.switchChain({ id: 42161 })
+        // Wait for switch to complete
+        await new Promise(r => setTimeout(r, 2000))
+        console.log('✅ Switched to Arbitrum!')
+      }
+
       const timestamp = BigInt(Math.floor(Date.now() / 1000))
 
       console.log('╔═══════════════════════════════════════╗')
