@@ -327,6 +327,13 @@ export function OstiumTradeButton() {
   // RENDER
   // ============================================
 
+  // Debug: Log wallet status
+  console.log('🔐 Wallet Status:', {
+    authenticated,
+    hasSmartWalletClient: !!smartWalletClient,
+    smartWalletAddress: smartWalletClient?.account?.address,
+  })
+
   // Not authenticated
   if (!authenticated) {
     return (
@@ -340,16 +347,16 @@ export function OstiumTradeButton() {
     )
   }
 
-  // No smart wallet - user needs to re-login
+  // No smart wallet - still initializing or needs re-login
   if (!smartWalletClient) {
     return (
       <div className="space-y-3">
         <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+          <Loader2 className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5 animate-spin" />
           <div>
-            <p className="text-yellow-400 font-medium">Smart Wallet Required</p>
+            <p className="text-yellow-400 font-medium">Initializing Smart Wallet...</p>
             <p className="text-yellow-400/70 text-sm mt-1">
-              Log out and back in to create your smart wallet for trading.
+              This may take a few seconds. If stuck, try logging out and back in.
             </p>
           </div>
         </div>
@@ -357,11 +364,14 @@ export function OstiumTradeButton() {
           onClick={logout}
           className="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors"
         >
-          Log Out & Reconnect
+          Log Out & Retry
         </button>
       </div>
     )
   }
+
+  // Show smart wallet info
+  const smartWalletAddress = smartWalletClient.account?.address
 
   // Success state
   if (state === 'success' && txHash) {
@@ -436,18 +446,33 @@ export function OstiumTradeButton() {
   }[state]
 
   return (
-    <button
-      onClick={executeTrade}
-      disabled={isLoading}
-      className="w-full py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:from-green-500/50 disabled:to-emerald-600/50 text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-green-500/25 disabled:shadow-none disabled:cursor-not-allowed"
-    >
-      {isLoading ? (
-        <Loader2 className="w-5 h-5 animate-spin" />
-      ) : (
-        <Zap className="w-5 h-5" />
-      )}
-      {buttonText}
-    </button>
+    <div className="space-y-3">
+      {/* Smart Wallet Info */}
+      <div className="bg-white/5 rounded-xl p-3 text-xs">
+        <div className="flex items-center justify-between text-white/40">
+          <span>Smart Wallet</span>
+          <span className="font-mono text-white/60">
+            {smartWalletAddress?.slice(0, 6)}...{smartWalletAddress?.slice(-4)}
+          </span>
+        </div>
+        <p className="text-white/30 mt-1">
+          ⚠️ Fund this address with USDC on Arbitrum to trade
+        </p>
+      </div>
+
+      <button
+        onClick={executeTrade}
+        disabled={isLoading}
+        className="w-full py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:from-green-500/50 disabled:to-emerald-600/50 text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-green-500/25 disabled:shadow-none disabled:cursor-not-allowed"
+      >
+        {isLoading ? (
+          <Loader2 className="w-5 h-5 animate-spin" />
+        ) : (
+          <Zap className="w-5 h-5" />
+        )}
+        {buttonText}
+      </button>
+    </div>
   )
 }
 
