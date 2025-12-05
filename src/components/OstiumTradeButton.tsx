@@ -123,35 +123,29 @@ export function OstiumTradeButton() {
       console.log('Approving STORAGE:', OSTIUM_STORAGE)
 
       // Build call data with proper ABI encoding
+      // Approve Storage - openMarketOrder will pull USDC via transferFrom
       const approveData = encodeFunctionData({
         abi: ERC20_ABI,
         functionName: 'approve',
-        args: [OSTIUM_STORAGE, maxUint256], // Approve STORAGE!
+        args: [OSTIUM_STORAGE, maxUint256],
       })
 
-      const transferData = encodeFunctionData({
-        abi: ERC20_ABI,
-        functionName: 'transfer',
-        args: [OSTIUM_STORAGE, COLLATERAL],
-      })
-
+      // openMarketOrder pulls USDC internally - no manual transfer needed!
       const orderData = encodeFunctionData({
         abi: TRADING_ABI,
         functionName: 'openMarketOrder',
         args: [PAIR_INDEX, true, LEVERAGE, QUANTITY, SLIPPAGE, timestamp],
       })
 
-      // 3-call batch
+      // 2-call batch (no manual transfer - contract handles it)
       const calls = [
         { to: USDC, data: approveData, value: BigInt(0) },
-        { to: USDC, data: transferData, value: BigInt(0) },
         { to: OSTIUM_TRADING, data: orderData, value: BigInt(0) },
       ]
 
       console.log('📝 Calls prepared:')
       console.log('  1. approve(Storage, max)')
-      console.log('  2. transfer(Storage, $5)')
-      console.log('  3. openMarketOrder(BTC, LONG, 10x)')
+      console.log('  2. openMarketOrder(BTC, LONG, 10x) - pulls USDC internally')
       console.log('🚀 Sending via smart wallet...')
 
       // Send transaction
@@ -316,7 +310,7 @@ export function OstiumTradeButton() {
       </button>
 
       <p className="text-white/30 text-xs text-center">
-        3 calls batched • Approve Storage → Transfer → Order
+        2 calls batched • Approve → openMarketOrder
       </p>
     </div>
   )
