@@ -5,7 +5,7 @@ import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { usePrivy } from '@privy-io/react-auth'
 import { encodeFunctionData, parseUnits, formatUnits, createPublicClient, http, maxUint256 } from 'viem'
 import { arbitrum } from 'viem/chains'
-import { Loader2, Zap, ExternalLink, AlertCircle, CheckCircle2, Wallet } from 'lucide-react'
+import { Loader2, Zap, ExternalLink, AlertCircle, CheckCircle2, Wallet, Copy, Check } from 'lucide-react'
 
 // ============================================
 // CONSTANTS (Arbitrum Only - Ostium)
@@ -101,6 +101,7 @@ export function OstiumTradeButton() {
   const [txHash, setTxHash] = useState<string | null>(null)
   const [usdcBalance, setUsdcBalance] = useState<string>('0')
   const [currentChain, setCurrentChain] = useState<number | null>(null)
+  const [copied, setCopied] = useState(false)
 
   // Trade parameters (fixed for BTC 10x Long $50 exposure)
   const COLLATERAL_USDC = '5' // $5 collateral
@@ -445,6 +446,14 @@ export function OstiumTradeButton() {
     )
   }
 
+  // Copy address handler
+  const copyAddress = async () => {
+    if (!smartWalletAddress) return
+    await navigator.clipboard.writeText(smartWalletAddress)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   // Ready to trade
   const isLoading = ['switching', 'simulating', 'executing'].includes(state)
   const chainLabel = currentChain === ARBITRUM_CHAIN_ID ? 'Arbitrum' : 'Base'
@@ -453,16 +462,32 @@ export function OstiumTradeButton() {
   return (
     <div className="bg-[#111] border border-white/10 rounded-2xl p-5 space-y-4">
       {/* Smart Wallet Info */}
-      <div className="bg-white/5 rounded-xl p-4 space-y-2">
+      <div className="bg-white/5 rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-white/40 text-xs">Smart Wallet</span>
-          <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full">
+          <span className="text-xs px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">
             {chainLabel}
           </span>
         </div>
-        <p className="font-mono text-white text-sm">
-          {smartWalletAddress}
-        </p>
+        
+        {/* Address with copy button */}
+        <div className="flex items-center gap-2">
+          <p className="font-mono text-white text-sm flex-1 truncate">
+            {smartWalletAddress}
+          </p>
+          <button
+            onClick={copyAddress}
+            className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors flex-shrink-0"
+            title="Copy address"
+          >
+            {copied ? (
+              <Check className="w-4 h-4 text-green-400" />
+            ) : (
+              <Copy className="w-4 h-4 text-white/60" />
+            )}
+          </button>
+        </div>
+
         <div className="flex items-center justify-between pt-2 border-t border-white/5">
           <span className="text-white/40 text-xs">USDC (Arbitrum)</span>
           <span className={`text-sm font-medium ${hasEnoughUSDC ? 'text-green-400' : 'text-red-400'}`}>
@@ -471,12 +496,28 @@ export function OstiumTradeButton() {
         </div>
       </div>
 
-      {/* Low balance warning */}
+      {/* Low balance warning with clear instructions */}
       {!hasEnoughUSDC && (
-        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3">
-          <p className="text-yellow-400 text-sm">
-            ⚠️ Need $5 USDC on Arbitrum to trade. Send USDC to your smart wallet above.
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 space-y-3">
+          <p className="text-yellow-400 text-sm font-medium">
+            ⚠️ Need $5 USDC on Arbitrum to trade
           </p>
+          <div className="text-yellow-400/70 text-xs space-y-2">
+            <p>To fund your smart wallet:</p>
+            <ol className="list-decimal list-inside space-y-1 ml-1">
+              <li>Copy the address above</li>
+              <li>Go to <a href="https://app.uniswap.org" target="_blank" rel="noopener noreferrer" className="underline">Uniswap</a> or your exchange</li>
+              <li>Send USDC on <strong>Arbitrum</strong> to your smart wallet</li>
+            </ol>
+          </div>
+          <a
+            href={`https://arbiscan.io/address/${smartWalletAddress}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-yellow-400 text-xs hover:underline"
+          >
+            View on Arbiscan <ExternalLink className="w-3 h-3" />
+          </a>
         </div>
       )}
 
