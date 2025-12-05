@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { usePrivy } from '@privy-io/react-auth'
-import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
-import { encodeFunctionData, formatUnits, createPublicClient, http, maxUint256 } from 'viem'
+import { usePrivy, useWallets } from '@privy-io/react-auth'
+import { formatUnits, createPublicClient, http, encodeFunctionData, maxUint256 } from 'viem'
 import { arbitrum } from 'viem/chains'
 import { Loader2, Zap, ExternalLink, AlertCircle, CheckCircle2, Wallet, Copy, Check } from 'lucide-react'
 import { fetchPythPriceUpdate } from '@/lib/ostium/api'
@@ -15,6 +14,7 @@ import { calculateSlippage, DEFAULT_SLIPPAGE_BPS } from '@/lib/ostium/constants'
 const USDC = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as `0x${string}`
 const OSTIUM_TRADING = '0x6D0bA1f9996DBD8885827e1b2e8f6593e7702411' as `0x${string}`
 const OSTIUM_STORAGE = '0xcCd5891083A8acD2074690F65d3024E7D13d66E7' as `0x${string}`
+const ARBITRUM_CHAIN_ID = '0xa4b1' // 42161 in hex
 
 // ============================================
 // ABIs
@@ -37,14 +37,23 @@ const ERC20_ABI = [
     inputs: [{ name: 'account', type: 'address' }],
     outputs: [{ name: '', type: 'uint256' }],
   },
+  {
+    name: 'allowance',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'spender', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
 ] as const
 
-// Correct Ostium openTrade ABI (from working PrivyOstiumButton)
 const OSTIUM_TRADING_ABI = [
   {
     name: 'openTrade',
     type: 'function',
-    stateMutability: 'payable', // Needs ETH for Pyth fee
+    stateMutability: 'payable',
     inputs: [
       {
         name: '_trade',
@@ -74,34 +83,37 @@ const OSTIUM_TRADING_ABI = [
 // ============================================
 // TRADE PARAMS
 // ============================================
-const COLLATERAL = BigInt(5_000_000) // $5 USDC (6 decimals)
-const LEVERAGE = BigInt(10) // 10x
+const COLLATERAL = BigInt(5_000_000) // $5 USDC
+const LEVERAGE = BigInt(10)
 const PAIR_INDEX = BigInt(0) // BTC-USD
 const ORDER_TYPE_MARKET = BigInt(0)
 const PYTH_FEE = BigInt(100000000000000) // 0.0001 ETH
 
 // ============================================
-// COMPONENT
+// COMPONENT - Uses EMBEDDED WALLET directly (like Ostium's working flow)
 // ============================================
 export function OstiumTradeButton() {
   const { authenticated, ready, login } = usePrivy()
-  const { client } = useSmartWallets()
+  const { wallets } = useWallets()
   
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [status, setStatus] = useState<'idle' | 'switching' | 'approving' | 'trading' | 'success' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [txHash, setTxHash] = useState<string | null>(null)
   const [balance, setBalance] = useState('0')
   const [ethBalance, setEthBalance] = useState('0')
+  const [allowance, setAllowance] = useState<bigint>(BigInt(0))
   const [copied, setCopied] = useState(false)
 
-  const address = client?.account?.address
+  // Get embedded wallet (EOA) - NOT smart wallet
+  const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
+  const address = embeddedWallet?.address as `0x${string}` | undefined
 
   const publicClient = createPublicClient({ 
     chain: arbitrum, 
     transport: http('https://arb1.arbitrum.io/rpc') 
   })
 
-  // Fetch balances
+  // Fetch balances and allowance
   useEffect(() => {
     if (!address) return
     
@@ -117,8 +129,16 @@ export function OstiumTradeButton() {
         
         const eth = await publicClient.getBalance({ address })
         setEthBalance(formatUnits(eth, 18))
+
+        const allow = await publicClient.readContract({
+          address: USDC,
+          abi: ERC20_ABI,
+          functionName: 'allowance',
+          args: [address, OSTIUM_STORAGE],
+        })
+        setAllowance(allow)
       } catch (e) {
-        console.error('Balance fetch error:', e)
+        console.error('Fetch error:', e)
       }
     }
     
@@ -135,66 +155,94 @@ export function OstiumTradeButton() {
   }
 
   // ============================================
-  // EXECUTE TRADE
+  // EXECUTE TRADE - Direct EOA transactions (like Ostium's working flow)
   // ============================================
   const trade = useCallback(async () => {
-    if (!client || !address) {
-      setError('Smart wallet not ready')
+    if (!embeddedWallet || !address) {
+      setError('Wallet not ready')
       return
     }
 
-    setStatus('loading')
     setError(null)
     setTxHash(null)
 
     try {
-      // Switch to Arbitrum
-      const currentChainId = await client.getChainId()
-      if (currentChainId !== 42161) {
+      const provider = await embeddedWallet.getEthereumProvider()
+
+      // Step 1: Switch to Arbitrum
+      const currentChainId = await provider.request({ method: 'eth_chainId' })
+      if (currentChainId !== ARBITRUM_CHAIN_ID) {
+        setStatus('switching')
         console.log('🔄 Switching to Arbitrum...')
-        await client.switchChain({ id: 42161 })
+        await provider.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: ARBITRUM_CHAIN_ID }],
+        })
         await new Promise(r => setTimeout(r, 2000))
       }
 
-      // Fetch Pyth price update
+      // Step 2: Check allowance and approve if needed
+      if (allowance < COLLATERAL) {
+        setStatus('approving')
+        console.log('╔═══════════════════════════════════════╗')
+        console.log('║  STEP 1: APPROVING USDC               ║')
+        console.log('╚═══════════════════════════════════════╝')
+
+        const approveData = encodeFunctionData({
+          abi: ERC20_ABI,
+          functionName: 'approve',
+          args: [OSTIUM_STORAGE, maxUint256],
+        })
+
+        const approveTxHash = await provider.request({
+          method: 'eth_sendTransaction',
+          params: [{
+            from: address,
+            to: USDC,
+            data: approveData,
+          }],
+        })
+
+        console.log('✅ Approve tx:', approveTxHash)
+        
+        // Wait for approval to confirm
+        await new Promise(r => setTimeout(r, 3000))
+      }
+
+      // Step 3: Fetch Pyth price update
+      setStatus('trading')
+      console.log('╔═══════════════════════════════════════╗')
+      console.log('║  STEP 2: EXECUTING TRADE              ║')
+      console.log('╚═══════════════════════════════════════╝')
+      
       console.log('🔮 Fetching Pyth price update...')
-      const priceUpdateData = await fetchPythPriceUpdate(0) // BTC-USD
+      const priceUpdateData = await fetchPythPriceUpdate(0)
       console.log('✅ Pyth data received, length:', priceUpdateData.length)
 
-      // Calculate slippage
+      // Step 4: Build and send trade
       const slippage = calculateSlippage(DEFAULT_SLIPPAGE_BPS)
-
-      // Build trade struct (matching working PrivyOstiumButton)
+      
       const tradeStruct = {
         trader: address,
         pairIndex: PAIR_INDEX,
         index: BigInt(0),
         initialPosToken: BigInt(0),
         positionSizeUSDC: COLLATERAL,
-        openPrice: BigInt(0), // Market order
-        buy: true, // Long
+        openPrice: BigInt(0),
+        buy: true,
         leverage: LEVERAGE,
         tp: BigInt(0),
         sl: BigInt(0),
       }
 
-      console.log('╔═══════════════════════════════════════╗')
-      console.log('║  OSTIUM TRADE (2 CALLS)               ║')
-      console.log('╚═══════════════════════════════════════╝')
-      console.log('Trader:', address)
-      console.log('Collateral: $5 USDC')
-      console.log('Leverage: 10x')
-      console.log('Direction: LONG')
-      console.log('Pyth Fee:', formatUnits(PYTH_FEE, 18), 'ETH')
-
-      // Encode approve call
-      const approveData = encodeFunctionData({
-        abi: ERC20_ABI,
-        functionName: 'approve',
-        args: [OSTIUM_STORAGE, maxUint256],
+      console.log('📦 Trade struct:', {
+        trader: tradeStruct.trader,
+        pairIndex: tradeStruct.pairIndex.toString(),
+        positionSizeUSDC: formatUnits(tradeStruct.positionSizeUSDC, 6) + ' USDC',
+        buy: 'LONG',
+        leverage: tradeStruct.leverage.toString() + 'x',
       })
 
-      // Encode openTrade call (with Pyth data!)
       const tradeData = encodeFunctionData({
         abi: OSTIUM_TRADING_ABI,
         functionName: 'openTrade',
@@ -207,21 +255,21 @@ export function OstiumTradeButton() {
         ],
       })
 
-      // 2-call batch with ETH value for Pyth fee
-      const calls = [
-        { to: USDC, data: approveData, value: BigInt(0) },
-        { to: OSTIUM_TRADING, data: tradeData, value: PYTH_FEE }, // ETH for Pyth!
-      ]
+      console.log('🚀 Sending trade transaction...')
 
-      console.log('📝 Calls:')
-      console.log('  1. approve(Storage, max)')
-      console.log('  2. openTrade() + 0.0001 ETH for Pyth')
-      console.log('🚀 Sending...')
+      const tradeTxHash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{
+          from: address,
+          to: OSTIUM_TRADING,
+          data: tradeData,
+          value: `0x${PYTH_FEE.toString(16)}`, // 0.0001 ETH for Pyth
+          gas: '0x4C4B40', // 5,000,000 gas limit
+        }],
+      }) as string
 
-      const hash = await client.sendTransaction({ calls })
-
-      console.log('✅ SUCCESS:', hash)
-      setTxHash(hash)
+      console.log('✅ Trade tx:', tradeTxHash)
+      setTxHash(tradeTxHash)
       setStatus('success')
 
     } catch (e: any) {
@@ -229,7 +277,7 @@ export function OstiumTradeButton() {
       setError(e.message || e.toString())
       setStatus('error')
     }
-  }, [client, address])
+  }, [embeddedWallet, address, allowance])
 
   // ============================================
   // RENDER
@@ -246,7 +294,7 @@ export function OstiumTradeButton() {
     return (
       <div className="bg-[#111] border border-white/10 rounded-2xl p-6 space-y-4">
         <Wallet className="w-10 h-10 text-white/30 mx-auto" />
-        <p className="text-white/60 text-sm text-center">Login creates your smart wallet</p>
+        <p className="text-white/60 text-sm text-center">Login to start trading</p>
         <button
           onClick={login}
           className="w-full py-4 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl"
@@ -257,11 +305,11 @@ export function OstiumTradeButton() {
     )
   }
 
-  if (!client || !address) {
+  if (!embeddedWallet || !address) {
     return (
       <div className="bg-[#111] border border-white/10 rounded-2xl p-6 text-center">
         <Loader2 className="w-6 h-6 animate-spin mx-auto text-yellow-400" />
-        <p className="text-yellow-400 mt-2">Creating smart wallet...</p>
+        <p className="text-yellow-400 mt-2">Loading wallet...</p>
       </div>
     )
   }
@@ -315,14 +363,16 @@ export function OstiumTradeButton() {
   }
 
   const hasUSDC = parseFloat(balance) >= 5
-  const hasETH = parseFloat(ethBalance) >= 0.0002 // Need ETH for gas + Pyth fee
+  const hasETH = parseFloat(ethBalance) >= 0.0002
+  const needsApproval = allowance < COLLATERAL
+  const isLoading = ['switching', 'approving', 'trading'].includes(status)
 
   return (
     <div className="bg-[#111] border border-white/10 rounded-2xl p-5 space-y-4">
       {/* Wallet Info */}
       <div className="bg-white/5 rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-white/40 text-xs">Smart Wallet</span>
+          <span className="text-white/40 text-xs">Embedded Wallet (EOA)</span>
           <span className="text-xs px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">
             Arbitrum
           </span>
@@ -349,26 +399,35 @@ export function OstiumTradeButton() {
             </p>
           </div>
         </div>
+
+        <div className="pt-2 border-t border-white/5">
+          <span className="text-white/40 text-xs">Allowance: </span>
+          <span className={`text-xs ${needsApproval ? 'text-yellow-400' : 'text-green-400'}`}>
+            {needsApproval ? 'Needs approval' : 'Approved ✓'}
+          </span>
+        </div>
       </div>
 
       {/* Warnings */}
       {(!hasUSDC || !hasETH) && (
         <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 text-yellow-400 text-sm">
           {!hasUSDC && <p>⚠️ Need $5+ USDC on Arbitrum</p>}
-          {!hasETH && <p>⚠️ Need ~0.0002 ETH for gas + Pyth fee</p>}
+          {!hasETH && <p>⚠️ Need ~0.0002 ETH for gas + Pyth</p>}
         </div>
       )}
 
       {/* Trade Button */}
       <button
         onClick={trade}
-        disabled={status === 'loading' || !hasUSDC || !hasETH}
+        disabled={isLoading || !hasUSDC || !hasETH}
         className="w-full py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:from-gray-600 disabled:to-gray-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 disabled:cursor-not-allowed"
       >
-        {status === 'loading' ? (
+        {isLoading ? (
           <>
             <Loader2 className="w-5 h-5 animate-spin" />
-            Confirm in wallet...
+            {status === 'switching' && 'Switching to Arbitrum...'}
+            {status === 'approving' && 'Approving USDC...'}
+            {status === 'trading' && 'Confirm trade...'}
           </>
         ) : (
           <>
@@ -379,7 +438,7 @@ export function OstiumTradeButton() {
       </button>
 
       <p className="text-white/30 text-xs text-center">
-        2 calls: Approve → openTrade (with Pyth data)
+        {needsApproval ? 'Approve → Trade (2 txns)' : 'Direct trade (1 txn)'}
       </p>
     </div>
   )
