@@ -153,7 +153,6 @@ export default function OstiumTradingPage() {
             symbol={selectedPair.symbol}
             currentPrice={price?.mid || 0}
             isMarketOpen={price?.isMarketOpen ?? true}
-            change24h={price?.change24h || 0}
           />
         </div>
 
