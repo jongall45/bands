@@ -3,21 +3,21 @@
 import { useState, useCallback, useEffect } from 'react'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
-import { 
-  encodeFunctionData, 
-  parseUnits, 
-  formatUnits, 
+import {
+  encodeFunctionData,
+  parseUnits,
+  formatUnits,
   maxUint256,
   createPublicClient,
   http,
   type PublicClient,
   decodeFunctionResult,
   decodeErrorResult,
+  zeroAddress,
 } from 'viem'
 import { arbitrum } from 'viem/chains'
-import { OSTIUM_CONTRACTS, ORDER_TYPE, calculateSlippage, DEFAULT_SLIPPAGE_BPS, DEFAULT_EXECUTION_FEE, MIN_ETH_FOR_GAS } from '@/lib/ostium/constants'
+import { OSTIUM_CONTRACTS, ORDER_TYPE, calculateSlippage, DEFAULT_SLIPPAGE_BPS, MIN_ETH_FOR_GAS } from '@/lib/ostium/constants'
 import { OSTIUM_TRADING_ABI, ERC20_ABI } from '@/lib/ostium/abi'
-import { fetchPythPriceUpdate } from '@/lib/ostium/api'
 
 // ============================================
 // TYPES
@@ -37,7 +37,6 @@ export interface TradeParams {
   collateralUSDC: string // Human-readable string e.g. "5"
   leverage: number
   slippageBps?: number
-  executionFee?: bigint
 }
 
 export interface TradeResult {
@@ -120,21 +119,25 @@ export function buildOpenTradeCall(
   collateralWei: bigint,
   leverage: number,
   slippageBps: number,
-  priceUpdateData: `0x${string}`,
-  executionFee: bigint = DEFAULT_EXECUTION_FEE,
 ) {
   // Build trade struct matching Ostium's exact specification
-  const trade = {
-    trader,
-    pairIndex: BigInt(pairIndex),
-    index: BigInt(0),
-    initialPosToken: BigInt(0),
-    positionSizeUSDC: collateralWei,
-    openPrice: BigInt(0), // Market order - price determined at execution
-    buy: isLong,
-    leverage: BigInt(leverage),
-    tp: BigInt(0), // No take profit
-    sl: BigInt(0), // No stop loss
+  // Verified from implementation contract: 0x64c06a9ac454de566d4bb1b3d5a57aae4004c522
+  const tradeStruct = {
+    collateral: collateralWei,           // uint256 - USDC amount in 6 decimals
+    openPrice: BigInt(0),                // uint256 - 0 for market orders
+    tp: BigInt(0),                       // uint256 - take profit (0 = disabled)
+    sl: BigInt(0),                       // uint256 - stop loss (0 = disabled)
+    trader,                              // address
+    leverage,                            // uint32 - e.g., 10 for 10x
+    pairIndex,                           // uint16
+    index: 0,                            // uint8 - 0 for new position
+    buy: isLong,                         // bool - true = long
+  }
+
+  // BuilderFee struct - no referrer
+  const builderFee = {
+    builder: zeroAddress,
+    builderFee: 0,
   }
 
   const slippage = calculateSlippage(slippageBps)
@@ -145,14 +148,13 @@ export function buildOpenTradeCall(
       abi: OSTIUM_TRADING_ABI,
       functionName: 'openTrade',
       args: [
-        trade,
-        BigInt(ORDER_TYPE.MARKET),
+        tradeStruct,
+        builderFee,
+        ORDER_TYPE.MARKET,
         slippage,
-        priceUpdateData,
-        executionFee,
       ],
     }),
-    value: executionFee,
+    value: BigInt(0), // Function is nonpayable
   }
 }
 
@@ -300,7 +302,6 @@ export function useTradeEngine(): UseTradeEngineReturn {
       collateralUSDC,
       leverage,
       slippageBps = DEFAULT_SLIPPAGE_BPS,
-      executionFee = DEFAULT_EXECUTION_FEE,
     } = params
 
     // Reset state
@@ -320,7 +321,6 @@ export function useTradeEngine(): UseTradeEngineReturn {
       log.data('Collateral', collateralUSDC + ' USDC')
       log.data('Leverage', leverage + 'x')
       log.data('Slippage', slippageBps + ' bps')
-      log.data('Execution Fee', formatUnits(executionFee, 18) + ' ETH')
 
       // ========================================
       // STEP 1: Validate balances
@@ -339,19 +339,9 @@ export function useTradeEngine(): UseTradeEngineReturn {
       log.success(`ETH balance OK: ${formatUnits(balances.eth, 18)}`)
 
       // ========================================
-      // STEP 2: Fetch Pyth price update
+      // STEP 2: Build calls
       // ========================================
-      log.step(2, 'Fetching Pyth oracle data...')
-      const priceUpdateData = await fetchPythPriceUpdate(pairIndex)
-      if (!priceUpdateData || priceUpdateData.length < 10) {
-        throw new Error('Failed to get Pyth price data')
-      }
-      log.success(`Pyth data received: ${priceUpdateData.length} bytes`)
-
-      // ========================================
-      // STEP 3: Build calls
-      // ========================================
-      log.step(3, 'Building transaction calls...')
+      log.step(2, 'Building transaction calls...')
       const needsApproval = balances.allowance < collateralWei
       log.data('Needs Approval', needsApproval)
 
@@ -362,9 +352,7 @@ export function useTradeEngine(): UseTradeEngineReturn {
         isLong,
         collateralWei,
         leverage,
-        slippageBps,
-        priceUpdateData,
-        executionFee
+        slippageBps
       )
 
       log.success('Calls built:')
@@ -373,9 +361,9 @@ export function useTradeEngine(): UseTradeEngineReturn {
       log.data('Trade value', formatUnits(tradeCall.value, 18) + ' ETH')
 
       // ========================================
-      // STEP 4: Pre-flight simulation
+      // STEP 3: Pre-flight simulation
       // ========================================
-      log.step(4, 'Running pre-flight simulation...')
+      log.step(3, 'Running pre-flight simulation...')
       setState('simulating')
 
       if (needsApproval) {
@@ -398,9 +386,9 @@ export function useTradeEngine(): UseTradeEngineReturn {
       }
 
       // ========================================
-      // STEP 5: Execute via Smart Wallet or EOA
+      // STEP 4: Execute via Smart Wallet or EOA
       // ========================================
-      log.step(5, 'Executing transaction...')
+      log.step(4, 'Executing transaction...')
       setState('sending')
 
       let finalTxHash: string

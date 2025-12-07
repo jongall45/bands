@@ -5,11 +5,8 @@ export const OSTIUM_CONTRACTS = {
   USDC: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as const,
 }
 
-// Default execution fee for Pyth oracle (0.0005 ETH)
-export const DEFAULT_EXECUTION_FEE = BigInt(500000000000000) // 0.0005 ETH
-
-// Minimum ETH required for gas + execution fee
-export const MIN_ETH_FOR_GAS = BigInt(1000000000000000) // 0.001 ETH
+// Minimum ETH required for gas (smart wallet handles gas via paymaster)
+export const MIN_ETH_FOR_GAS = BigInt(100000000000000) // 0.0001 ETH (reduced since using paymaster)
 
 // API endpoints
 export const OSTIUM_API = {
@@ -60,10 +57,13 @@ export type OstiumCategory = 'crypto' | 'forex' | 'commodity' | 'stock' | 'index
 // Minimum collateral (USDC)
 export const MIN_COLLATERAL_USD = 5
 
-// Slippage calculation: basisPoints * 1e7
-// 0.5% = 50 bps = 50 * 10_000_000 = 500_000_000
+// Slippage calculation: Ostium uses 1e10 precision
+// 0.5% = 0.005 * 1e10 = 50_000_000_000
+// basisPoints: 50 bps = 0.5% = 50/10000 = 0.005
 export function calculateSlippage(basisPoints: number): bigint {
-  return BigInt(basisPoints) * BigInt(10_000_000)
+  // Convert basis points to 1e10 precision
+  // bps / 10000 * 1e10 = bps * 1e6
+  return BigInt(basisPoints) * BigInt(1_000_000)
 }
 
 // Default slippage: 0.5% (50 basis points)

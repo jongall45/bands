@@ -28,7 +28,6 @@ import {
   type OstiumOrderBatchParams
 } from '@/lib/ostium/smartWallet'
 import { OSTIUM_PAIRS } from '@/lib/ostium/constants'
-import { fetchPythPriceUpdate } from '@/lib/ostium/api'
 
 // ============================================
 // TYPES
@@ -216,16 +215,10 @@ export function SmartWalletOstiumOrder({
     setState('checking')
 
     try {
-      // Fetch Pyth price update data first
-      console.log('🔮 Fetching Pyth price update data...')
-      const priceUpdateData = await fetchPythPriceUpdate(pairIndex)
-      console.log('✅ Pyth data received, length:', priceUpdateData.length)
-
-      // Build full params with trader address and price data
+      // Build full params with trader address
       const batchParams: OstiumOrderBatchParams = {
         ...baseParams,
         traderAddress: smartWalletAddress,
-        priceUpdateData,
       }
 
       // Simulate first (returns the batch)

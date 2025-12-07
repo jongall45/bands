@@ -3,11 +3,10 @@
 import { useState, useEffect } from 'react'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { arbitrum } from 'viem/chains'
-import { encodeFunctionData, parseUnits, formatUnits, maxUint256 } from 'viem'
+import { encodeFunctionData, parseUnits, formatUnits, maxUint256, zeroAddress } from 'viem'
 import { Loader2, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react'
 import { OSTIUM_TRADING_ABI, ERC20_ABI } from '@/lib/ostium/abi'
-import { OSTIUM_CONTRACTS, ORDER_TYPE, calculateSlippage, DEFAULT_SLIPPAGE_BPS, DEFAULT_EXECUTION_FEE } from '@/lib/ostium/constants'
-import { fetchPythPriceUpdate } from '@/lib/ostium/api'
+import { OSTIUM_CONTRACTS, ORDER_TYPE, calculateSlippage, DEFAULT_SLIPPAGE_BPS } from '@/lib/ostium/constants'
 
 interface SmartWalletTradeButtonProps {
   pairIndex: number
@@ -120,35 +119,36 @@ export function OstiumTradeButton({
       console.log('Collateral:', collateralUSDC, 'USDC')
       console.log('Leverage:', leverage, 'x')
 
-      // Fetch Pyth price update
-      console.log('🔮 Fetching Pyth price update...')
-      const priceUpdateData = await fetchPythPriceUpdate(pairIndex)
-      console.log('✅ Pyth data received, length:', priceUpdateData.length)
+      // Calculate slippage (Ostium uses 1e10 precision)
+      const slippageP = calculateSlippage(DEFAULT_SLIPPAGE_BPS)
+      console.log('📉 Slippage:', slippageP.toString(), `(${DEFAULT_SLIPPAGE_BPS} bps)`)
 
-      // Calculate slippage
-      const slippagePrice = calculateSlippage(DEFAULT_SLIPPAGE_BPS)
-      console.log('📉 Slippage:', slippagePrice.toString())
+      // Build trade struct - MUST match Ostium's exact field order
+      // Verified from implementation contract: 0x64c06a9ac454de566d4bb1b3d5a57aae4004c522
+      const tradeStruct = {
+        collateral: collateralWei,           // uint256 - USDC amount in 6 decimals
+        openPrice: BigInt(0),                // uint256 - 0 for market orders
+        tp: BigInt(0),                       // uint256 - take profit (0 = disabled)
+        sl: BigInt(0),                       // uint256 - stop loss (0 = disabled)
+        trader: smartWalletAddress,          // address
+        leverage: leverage,                  // uint32 - e.g., 10 for 10x
+        pairIndex: pairIndex,                // uint16
+        index: 0,                            // uint8 - 0 for new position
+        buy: isLong,                         // bool - true = long
+      }
 
-      // Build trade struct
-      const trade = {
-        trader: smartWalletAddress,
-        pairIndex: BigInt(pairIndex),
-        index: BigInt(0),
-        initialPosToken: BigInt(0),
-        positionSizeUSDC: collateralWei,
-        openPrice: BigInt(0), // Market order - determined at execution
-        buy: isLong,
-        leverage: BigInt(leverage),
-        tp: BigInt(0),
-        sl: BigInt(0),
+      // BuilderFee struct - no referrer for now
+      const builderFee = {
+        builder: zeroAddress,                // address - no builder/referrer
+        builderFee: 0,                       // uint32 - 0 bps
       }
 
       console.log('📦 Trade struct:', {
-        trader: trade.trader,
-        pairIndex: trade.pairIndex.toString(),
-        positionSizeUSDC: trade.positionSizeUSDC.toString(),
-        buy: trade.buy,
-        leverage: trade.leverage.toString(),
+        collateral: tradeStruct.collateral.toString(),
+        trader: tradeStruct.trader,
+        leverage: tradeStruct.leverage,
+        pairIndex: tradeStruct.pairIndex,
+        buy: tradeStruct.buy,
       })
 
       // Build calls array
@@ -168,7 +168,7 @@ export function OstiumTradeButton({
         })
       }
 
-      // Add openTrade call
+      // Add openTrade call - using verified ABI from Ostium contract
       console.log('📝 Adding openTrade call...')
       calls.push({
         to: OSTIUM_CONTRACTS.TRADING as `0x${string}`,
@@ -176,14 +176,13 @@ export function OstiumTradeButton({
           abi: OSTIUM_TRADING_ABI,
           functionName: 'openTrade',
           args: [
-            trade,
-            BigInt(ORDER_TYPE.MARKET),
-            slippagePrice,
-            priceUpdateData,
-            DEFAULT_EXECUTION_FEE,
+            tradeStruct,      // Trade struct
+            builderFee,       // BuilderFee struct
+            ORDER_TYPE.MARKET,// uint8 orderType (0 = MARKET)
+            slippageP,        // uint256 slippage in 1e10 precision
           ],
         }),
-        value: DEFAULT_EXECUTION_FEE, // ETH for Pyth oracle fee
+        value: BigInt(0), // Function is nonpayable
       })
 
       console.log('🚀 Sending batched transaction via smart wallet...')

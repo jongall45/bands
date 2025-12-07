@@ -3,12 +3,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useWallets } from '@privy-io/react-auth'
 import { usePublicClient } from 'wagmi'
-import { parseUnits, encodeFunctionData, formatUnits } from 'viem'
+import { parseUnits, encodeFunctionData, formatUnits, zeroAddress } from 'viem'
 import { arbitrum } from 'viem/chains'
 import { Loader2, TrendingUp, TrendingDown, Check, AlertCircle, Lock } from 'lucide-react'
 import { OSTIUM_TRADING_ABI } from '@/lib/ostium/abi'
 import { ORDER_TYPE, calculateSlippage, DEFAULT_SLIPPAGE_BPS } from '@/lib/ostium/constants'
-import { fetchPythPriceUpdate } from '@/lib/ostium/api'
 
 // ============================================
 // CONSTANTS (Arbitrum)
@@ -246,50 +245,46 @@ export function PrivyOstiumButton({
       console.log('💰 Collateral:', amountUSDC, 'USDC')
       console.log('⚡ Leverage:', leverage, 'x')
 
-      // Fetch Pyth price update
-      console.log('🔮 Fetching Pyth price update...')
-      const priceUpdateData = await fetchPythPriceUpdate(pairIndex)
-      console.log('✅ Price update received, length:', priceUpdateData.length)
+      // Calculate slippage (Ostium uses 1e10 precision)
+      const slippageP = calculateSlippage(DEFAULT_SLIPPAGE_BPS)
+      console.log('📉 Slippage:', slippageP.toString(), `(${DEFAULT_SLIPPAGE_BPS} bps)`)
 
-      // Calculate slippage
-      const slippagePrice = calculateSlippage(DEFAULT_SLIPPAGE_BPS)
-      console.log('📉 Slippage price:', slippagePrice.toString())
+      // Build trade struct - verified from Ostium implementation contract
+      const tradeStruct = {
+        collateral: parsedAmount,              // uint256 - USDC amount in 6 decimals
+        openPrice: BigInt(0),                  // uint256 - 0 for market orders
+        tp: BigInt(0),                         // uint256 - take profit (0 = disabled)
+        sl: BigInt(0),                         // uint256 - stop loss (0 = disabled)
+        trader: address,                       // address
+        leverage,                              // uint32 - e.g., 10 for 10x
+        pairIndex,                             // uint16
+        index: 0,                              // uint8 - 0 for new position
+        buy: isLong,                           // bool - true = long
+      }
 
-      // Pyth update fee
-      const pythUpdateFee = BigInt(100000000000000) // 0.0001 ETH
-
-      // Build trade struct
-      const trade = {
-        trader: address,
-        pairIndex: BigInt(pairIndex),
-        index: BigInt(0),
-        initialPosToken: BigInt(0),
-        positionSizeUSDC: parsedAmount,
-        openPrice: BigInt(0),
-        buy: isLong,
-        leverage: BigInt(leverage),
-        tp: BigInt(0),
-        sl: BigInt(0),
+      // BuilderFee struct - no referrer
+      const builderFee = {
+        builder: zeroAddress,
+        builderFee: 0,
       }
 
       console.log('📦 Trade struct:', {
-        trader: trade.trader,
-        pairIndex: trade.pairIndex.toString(),
-        positionSizeUSDC: trade.positionSizeUSDC.toString(),
-        buy: trade.buy,
-        leverage: trade.leverage.toString(),
+        collateral: tradeStruct.collateral.toString(),
+        trader: tradeStruct.trader,
+        leverage: tradeStruct.leverage,
+        pairIndex: tradeStruct.pairIndex,
+        buy: tradeStruct.buy,
       })
 
-      // Encode openTrade call
+      // Encode openTrade call - using verified ABI from Ostium contract
       const tradeData = encodeFunctionData({
         abi: OSTIUM_TRADING_ABI,
         functionName: 'openTrade',
         args: [
-          trade,
-          BigInt(ORDER_TYPE.MARKET),
-          slippagePrice,
-          priceUpdateData,
-          pythUpdateFee,
+          tradeStruct,
+          builderFee,
+          ORDER_TYPE.MARKET,
+          slippageP,
         ],
       })
 
@@ -301,7 +296,6 @@ export function PrivyOstiumButton({
           from: address,
           to: OSTIUM_TRADING,
           data: tradeData,
-          value: `0x${pythUpdateFee.toString(16)}`,
           gas: '0x4C4B40', // 5,000,000 gas limit
         }],
       }) as string

@@ -3,12 +3,12 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useWallets } from '@privy-io/react-auth'
 import { usePublicClient } from 'wagmi'
-import { parseUnits, encodeFunctionData, maxUint256 } from 'viem'
+import { parseUnits, encodeFunctionData, maxUint256, zeroAddress } from 'viem'
 import { arbitrum } from 'wagmi/chains'
-import { 
-  OSTIUM_CONTRACTS, 
-  ORDER_TYPE, 
-  calculateSlippage, 
+import {
+  OSTIUM_CONTRACTS,
+  ORDER_TYPE,
+  calculateSlippage,
   DEFAULT_SLIPPAGE_BPS,
 } from '@/lib/ostium/constants'
 import { OSTIUM_TRADING_ABI, ERC20_ABI } from '@/lib/ostium/abi'
@@ -245,68 +245,61 @@ export function useOstiumTrade() {
       const priceData = await fetchPairPrice(pairIndex)
       console.log('🔵 Current price:', priceData?.price)
 
-      // Fetch Pyth price update data
-      console.log('🟡 Fetching Pyth price update data...')
-      const priceUpdateData = await fetchPythPriceUpdate(pairIndex)
-      console.log('🔵 Price update data length:', priceUpdateData.length)
+      // Calculate slippage (Ostium uses 1e10 precision)
+      const slippageP = calculateSlippage(slippageBps)
 
-      // Pyth update requires a small ETH fee (typically 1 wei per price update)
-      // Add a buffer to be safe - 0.0001 ETH should be more than enough
-      const pythUpdateFee = BigInt(100000000000000) // 0.0001 ETH in wei
-
-      // Build trade struct
-      const trade = {
-        trader: address,
-        pairIndex: BigInt(pairIndex),
-        index: BigInt(0),
-        initialPosToken: BigInt(0),
-        positionSizeUSDC: collateralWei,
-        openPrice: BigInt(0), // 0 for market orders
-        buy: isLong,
-        leverage: BigInt(leverage),
-        tp: BigInt(0),
-        sl: BigInt(0),
+      // Build trade struct - verified from Ostium implementation contract
+      const tradeStruct = {
+        collateral: collateralWei,           // uint256 - USDC amount in 6 decimals
+        openPrice: BigInt(0),                // uint256 - 0 for market orders
+        tp: BigInt(0),                       // uint256 - take profit (0 = disabled)
+        sl: BigInt(0),                       // uint256 - stop loss (0 = disabled)
+        trader: address,                     // address
+        leverage,                            // uint32 - e.g., 10 for 10x
+        pairIndex,                           // uint16
+        index: 0,                            // uint8 - 0 for new position
+        buy: isLong,                         // bool - true = long
       }
 
-      const slippage = calculateSlippage(slippageBps)
+      // BuilderFee struct - no referrer
+      const builderFee = {
+        builder: zeroAddress,
+        builderFee: 0,
+      }
 
       console.log('======================================')
       console.log('🔵 TRADE STRUCT')
       console.log('======================================')
-      console.log('trader:', trade.trader)
-      console.log('pairIndex:', trade.pairIndex.toString())
-      console.log('positionSizeUSDC:', trade.positionSizeUSDC.toString())
-      console.log('buy (isLong):', trade.buy)
-      console.log('leverage:', trade.leverage.toString())
-      console.log('slippage:', slippage.toString())
-      console.log('pythUpdateFee (ETH):', (Number(pythUpdateFee) / 1e18).toFixed(6))
-      console.log('priceUpdateData:', priceUpdateData.slice(0, 50) + '...')
+      console.log('trader:', tradeStruct.trader)
+      console.log('collateral:', tradeStruct.collateral.toString())
+      console.log('buy (isLong):', tradeStruct.buy)
+      console.log('leverage:', tradeStruct.leverage)
+      console.log('pairIndex:', tradeStruct.pairIndex)
+      console.log('slippage:', slippageP.toString())
       console.log('======================================')
 
-      // Encode the trade call
+      // Encode the trade call - using verified ABI from Ostium contract
       const calldata = encodeFunctionData({
         abi: OSTIUM_TRADING_ABI,
         functionName: 'openTrade',
         args: [
-          trade,
-          BigInt(ORDER_TYPE.MARKET),
-          slippage,
-          priceUpdateData,
-          pythUpdateFee, // executionFee - pass the same value as msg.value
+          tradeStruct,
+          builderFee,
+          ORDER_TYPE.MARKET,
+          slippageP,
         ],
       })
 
       console.log('🟢 Encoded calldata length:', calldata.length)
       console.log('🟡 Executing trade on Arbitrum...')
 
-      // Execute with generous gas limit and Pyth update fee
+      // Execute with generous gas limit (no ETH needed - function is nonpayable)
       const hash = await provider.request({
         method: 'eth_sendTransaction',
         params: [{
           from: address,
           to: OSTIUM_CONTRACTS.TRADING,
           data: calldata,
-          value: `0x${pythUpdateFee.toString(16)}`, // Send ETH for Pyth fee
           gas: '0x2DC6C0', // 3,000,000 gas
         }],
       }) as `0x${string}`
