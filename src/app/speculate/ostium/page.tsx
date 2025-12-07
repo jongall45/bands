@@ -164,16 +164,18 @@ export default function OstiumTradingPage() {
           onSelectPair={setSelectedPair}
         />
 
-        {/* TradingView Chart */}
-        <div className="py-2 border-b border-white/[0.04] bg-black/20">
-          <TradingViewChart
-            symbol={selectedPair.symbol}
-            currentPrice={price?.mid || 0}
-            isMarketOpen={price?.isMarketOpen ?? true}
-            entryPrice={activePosition?.entryPrice}
-            liquidationPrice={activePosition?.liquidationPrice}
-            isLong={activePosition?.isLong}
-          />
+        {/* TradingView Chart - Stealth Black Card */}
+        <div className="mx-4 my-3 rounded-2xl bg-[#0d0d0d] border border-white/[0.06] overflow-hidden shadow-xl shadow-black/50">
+          <div className="p-3">
+            <TradingViewChart
+              symbol={selectedPair.symbol}
+              currentPrice={price?.mid || 0}
+              isMarketOpen={price?.isMarketOpen ?? true}
+              entryPrice={activePosition?.entryPrice}
+              liquidationPrice={activePosition?.liquidationPrice}
+              isLong={activePosition?.isLong}
+            />
+          </div>
         </div>
 
         {/* Tabs */}
@@ -226,8 +228,8 @@ export default function OstiumTradingPage() {
           </button>
         </div>
 
-        {/* Tab Content - with proper scroll and bottom padding for nav */}
-        <div className="flex-1 overflow-y-auto bg-black/20 pb-24">
+        {/* Tab Content - stealth black with proper scroll */}
+        <div className="flex-1 overflow-y-auto bg-[#0a0a0a]/80 pb-24">
           {activeTab === 'trade' && <OstiumTradePanel pair={selectedPair} />}
           {activeTab === 'positions' && <OstiumPositions />}
           {activeTab === 'history' && <TradeHistory />}
@@ -286,25 +288,25 @@ export default function OstiumTradingPage() {
           will-change: transform, border-radius;
         }
 
-        /* Lava blob 1 - top left */
+        /* Lava blob 1 - top left - subtle */
         .ostium-gradient-bg::before {
           width: 70vmax;
           height: 70vmax;
-          background: radial-gradient(circle at 30% 30%, #FF6B00 0%, #FF8533 40%, rgba(255, 133, 51, 0.3) 70%, transparent 100%);
+          background: radial-gradient(circle at 30% 30%, #FF6B00 0%, #FF8533 40%, rgba(255, 133, 51, 0.2) 70%, transparent 100%);
           top: -20%;
           left: -20%;
-          opacity: 0.6;
+          opacity: 0.25;
           animation: lavaOrange1 35s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
 
-        /* Lava blob 2 - bottom right */
+        /* Lava blob 2 - bottom right - subtle */
         .ostium-gradient-bg::after {
           width: 60vmax;
           height: 60vmax;
-          background: radial-gradient(circle at 70% 70%, #CC5500 0%, #FF6B00 40%, rgba(255, 107, 0, 0.3) 70%, transparent 100%);
+          background: radial-gradient(circle at 70% 70%, #CC5500 0%, #FF6B00 40%, rgba(255, 107, 0, 0.2) 70%, transparent 100%);
           bottom: -15%;
           right: -15%;
-          opacity: 0.55;
+          opacity: 0.2;
           animation: lavaOrange2 40s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
 
@@ -362,20 +364,20 @@ export default function OstiumTradingPage() {
         .ostium-page .lava-blob-1 {
           width: 45vmax;
           height: 45vmax;
-          background: radial-gradient(circle at 50% 50%, #FF8533 0%, #FFAA66 45%, rgba(255, 170, 102, 0.2) 75%, transparent 100%);
+          background: radial-gradient(circle at 50% 50%, #FF8533 0%, #FFAA66 45%, rgba(255, 170, 102, 0.15) 75%, transparent 100%);
           top: 25%;
           right: 5%;
-          opacity: 0.45;
+          opacity: 0.15;
           animation: lavaOrange3 28s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
 
         .ostium-page .lava-blob-2 {
           width: 50vmax;
           height: 50vmax;
-          background: radial-gradient(circle at 40% 60%, #FF9955 0%, #FFBB88 45%, rgba(255, 187, 136, 0.2) 75%, transparent 100%);
+          background: radial-gradient(circle at 40% 60%, #FF9955 0%, #FFBB88 45%, rgba(255, 187, 136, 0.15) 75%, transparent 100%);
           top: 55%;
           left: -5%;
-          opacity: 0.4;
+          opacity: 0.12;
           animation: lavaOrange4 32s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
 

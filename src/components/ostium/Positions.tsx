@@ -1,14 +1,78 @@
 'use client'
 
+import { useState } from 'react'
+import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { useOstiumPositions, type OstiumPosition } from '@/hooks/useOstiumPositions'
-import { useOstiumTrade } from '@/hooks/useOstiumTrade'
 import { useOstiumPrices } from '@/hooks/useOstiumPrices'
+import { arbitrum } from 'viem/chains'
+import { encodeFunctionData } from 'viem'
+import { OSTIUM_CONTRACTS } from '@/lib/ostium/constants'
+import { OSTIUM_TRADING_ABI } from '@/lib/ostium/abi'
+import { fetchPythPriceUpdate } from '@/lib/ostium/api'
 import { Loader2, X, TrendingUp, TrendingDown, Clock } from 'lucide-react'
 
 export function OstiumPositions() {
-  const { data: positions, isLoading } = useOstiumPositions()
+  const { data: positions, isLoading, refetch } = useOstiumPositions()
   const { data: prices } = useOstiumPrices()
-  const { closePosition, isPending } = useOstiumTrade()
+  const { client } = useSmartWallets()
+  const [closingIndex, setClosingIndex] = useState<number | null>(null)
+
+  const closePosition = async (position: OstiumPosition) => {
+    if (!client) {
+      console.error('Smart wallet not ready')
+      return
+    }
+
+    setClosingIndex(position.index)
+
+    try {
+      // Switch to Arbitrum if needed
+      const chainId = await client.getChainId()
+      if (chainId !== arbitrum.id) {
+        console.log('🔄 Switching to Arbitrum...')
+        await client.switchChain({ id: arbitrum.id })
+      }
+
+      console.log('╔═══════════════════════════════════════════╗')
+      console.log('║  CLOSING POSITION VIA SMART WALLET        ║')
+      console.log('╚═══════════════════════════════════════════╝')
+      console.log('Pair Index:', position.pairId)
+      console.log('Position Index:', position.index)
+      console.log('Symbol:', position.symbol)
+
+      // Fetch Pyth price update data
+      const priceUpdateData = await fetchPythPriceUpdate(position.pairId)
+      console.log('📊 Pyth data fetched, length:', priceUpdateData.length)
+
+      // Encode closeTradeMarket call
+      const calldata = encodeFunctionData({
+        abi: OSTIUM_TRADING_ABI,
+        functionName: 'closeTradeMarket',
+        args: [BigInt(position.pairId), BigInt(position.index), priceUpdateData],
+      })
+
+      console.log('🚀 Sending close position via smart wallet...')
+
+      const hash = await client.sendTransaction({
+        calls: [{
+          to: OSTIUM_CONTRACTS.TRADING as `0x${string}`,
+          data: calldata,
+          value: BigInt(0),
+        }],
+      })
+
+      console.log('✅ Close position tx:', hash)
+      console.log('🔗 Arbiscan:', `https://arbiscan.io/tx/${hash}`)
+
+      // Refetch positions after a delay
+      setTimeout(() => refetch(), 3000)
+    } catch (error: any) {
+      console.error('❌ Close position failed:', error)
+      alert(`Failed to close position: ${error.message}`)
+    } finally {
+      setClosingIndex(null)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -35,7 +99,7 @@ export function OstiumPositions() {
   const enrichedPositions = positions.map(pos => {
     const currentPrice = prices?.find(p => p.pairId === pos.pairId)?.mid || pos.entryPrice
     const priceDiff = currentPrice - pos.entryPrice
-    const pnlRaw = pos.isLong 
+    const pnlRaw = pos.isLong
       ? priceDiff * pos.collateral * pos.leverage / pos.entryPrice
       : -priceDiff * pos.collateral * pos.leverage / pos.entryPrice
     const pnlPercent = (pnlRaw / pos.collateral) * 100
@@ -48,8 +112,8 @@ export function OstiumPositions() {
         <PositionCard
           key={`${position.pairId}-${position.index}`}
           position={position}
-          onClose={() => closePosition(position.pairId, position.index)}
-          isClosing={isPending}
+          onClose={() => closePosition(position)}
+          isClosing={closingIndex === position.index}
         />
       ))}
     </div>
