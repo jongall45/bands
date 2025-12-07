@@ -1,5 +1,6 @@
-// Ostium Trading Contract ABI - Verified from Arbiscan implementation contract
-// Implementation: 0x64c06a9ac454de566d4bb1b3d5a57aae4004c522
+// Ostium Trading Contract ABI - Verified from official repo
+// https://github.com/0xOstium/smart-contracts-public/blob/main/src/interfaces/IOstiumTradingStorage.sol
+// Function selector for openTrade: 0x712dc77d
 export const OSTIUM_TRADING_ABI = [
   {
     name: 'openTrade',
@@ -10,12 +11,12 @@ export const OSTIUM_TRADING_ABI = [
         name: 't',
         type: 'tuple',
         components: [
-          { name: 'collateral', type: 'uint256' },    // USDC amount in 6 decimals
-          { name: 'openPrice', type: 'uint256' },     // 0 for market orders
-          { name: 'tp', type: 'uint256' },            // Take profit price (0 to disable)
-          { name: 'sl', type: 'uint256' },            // Stop loss price (0 to disable)
+          { name: 'collateral', type: 'uint256' },    // PRECISION_6 (USDC amount)
+          { name: 'openPrice', type: 'uint192' },     // PRECISION_18 (0 for market orders)
+          { name: 'tp', type: 'uint192' },            // PRECISION_18 (take profit, 0 to disable)
+          { name: 'sl', type: 'uint192' },            // PRECISION_18 (stop loss, 0 to disable)
           { name: 'trader', type: 'address' },        // Trader address
-          { name: 'leverage', type: 'uint32' },       // Leverage (e.g., 10 for 10x)
+          { name: 'leverage', type: 'uint32' },       // PRECISION_2 (e.g., 10 for 10x)
           { name: 'pairIndex', type: 'uint16' },      // Pair index
           { name: 'index', type: 'uint8' },           // Position index (0 for new)
           { name: 'buy', type: 'bool' },              // true = long, false = short
@@ -26,7 +27,7 @@ export const OSTIUM_TRADING_ABI = [
         type: 'tuple',
         components: [
           { name: 'builder', type: 'address' },       // Builder/referrer address (can be zero)
-          { name: 'builderFee', type: 'uint32' },     // Builder fee in bps (can be 0)
+          { name: 'builderFee', type: 'uint32' },     // PRECISION_6 (can be 0)
         ],
       },
       { name: 'orderType', type: 'uint8' },           // 0 = MARKET, 1 = LIMIT, etc.
