@@ -36,6 +36,7 @@ export function TradingViewChart({
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const isDisposedRef = useRef<boolean>(false)
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>('15m')
   const [candleData, setCandleData] = useState<CandlestickData[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -76,10 +77,18 @@ export function TradingViewChart({
   useEffect(() => {
     if (!chartContainerRef.current || candleData.length === 0) return
 
+    // Reset disposed flag
+    isDisposedRef.current = false
+
     // Clear existing chart
     if (chartRef.current) {
-      chartRef.current.remove()
+      try {
+        chartRef.current.remove()
+      } catch (e) {
+        // Chart already disposed
+      }
       chartRef.current = null
+      candleSeriesRef.current = null
     }
 
     // Create chart with dark theme
@@ -173,11 +182,15 @@ export function TradingViewChart({
 
     // Handle resize
     const handleResize = () => {
-      if (chartContainerRef.current && chart) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: chartContainerRef.current.clientHeight,
-        })
+      if (chartContainerRef.current && chartRef.current && !isDisposedRef.current) {
+        try {
+          chartRef.current.applyOptions({
+            width: chartContainerRef.current.clientWidth,
+            height: chartContainerRef.current.clientHeight,
+          })
+        } catch (e) {
+          // Chart might be disposed
+        }
       }
     }
 
@@ -186,21 +199,32 @@ export function TradingViewChart({
 
     return () => {
       window.removeEventListener('resize', handleResize)
-      chart.remove()
+      isDisposedRef.current = true
+      candleSeriesRef.current = null
+      try {
+        chart.remove()
+      } catch (e) {
+        // Chart already disposed
+      }
+      chartRef.current = null
     }
   }, [candleData, entryPrice, liquidationPrice])
 
   // Update last candle with current price (real-time update)
   useEffect(() => {
-    if (candleSeriesRef.current && candleData.length > 0 && currentPrice > 0) {
-      const lastCandle = candleData[candleData.length - 1]
-      candleSeriesRef.current.update({
-        time: lastCandle.time,
-        open: lastCandle.open,
-        high: Math.max(lastCandle.high, currentPrice),
-        low: Math.min(lastCandle.low, currentPrice),
-        close: currentPrice,
-      })
+    if (candleSeriesRef.current && candleData.length > 0 && currentPrice > 0 && !isDisposedRef.current) {
+      try {
+        const lastCandle = candleData[candleData.length - 1]
+        candleSeriesRef.current.update({
+          time: lastCandle.time,
+          open: lastCandle.open,
+          high: Math.max(lastCandle.high, currentPrice),
+          low: Math.min(lastCandle.low, currentPrice),
+          close: currentPrice,
+        })
+      } catch (e) {
+        // Chart might be disposed during update
+      }
     }
   }, [currentPrice, candleData])
 
