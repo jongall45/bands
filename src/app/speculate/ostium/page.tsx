@@ -164,18 +164,16 @@ export default function OstiumTradingPage() {
           onSelectPair={setSelectedPair}
         />
 
-        {/* TradingView Chart - Stealth Black Card */}
-        <div className="mx-4 my-3 rounded-2xl bg-[#0d0d0d] border border-white/[0.06] overflow-hidden shadow-xl shadow-black/50">
-          <div className="p-3">
-            <TradingViewChart
-              symbol={selectedPair.symbol}
-              currentPrice={price?.mid || 0}
-              isMarketOpen={price?.isMarketOpen ?? true}
-              entryPrice={activePosition?.entryPrice}
-              liquidationPrice={activePosition?.liquidationPrice}
-              isLong={activePosition?.isLong}
-            />
-          </div>
+        {/* TradingView Chart - Full width to match other UI */}
+        <div className="bg-[#0d0d0d]/90 border-y border-white/[0.06]">
+          <TradingViewChart
+            symbol={selectedPair.symbol}
+            currentPrice={price?.mid || 0}
+            isMarketOpen={price?.isMarketOpen ?? true}
+            entryPrice={activePosition?.entryPrice}
+            liquidationPrice={activePosition?.liquidationPrice}
+            isLong={activePosition?.isLong}
+          />
         </div>
 
         {/* Tabs */}
@@ -259,10 +257,10 @@ export default function OstiumTradingPage() {
         />
       </div>
 
-      {/* Ostium Orange Lava Lamp Styling - matches bands home page */}
+      {/* Ostium Orange/White Lava Lamp Styling - matches bands home page */}
       <style jsx global>{`
         .ostium-page {
-          background: #0a0a0a;
+          background: #F4F4F5;
           position: relative;
           overflow-x: hidden;
         }
@@ -288,25 +286,25 @@ export default function OstiumTradingPage() {
           will-change: transform, border-radius;
         }
 
-        /* Lava blob 1 - top left - subtle */
+        /* Lava blob 1 - top left */
         .ostium-gradient-bg::before {
           width: 70vmax;
           height: 70vmax;
-          background: radial-gradient(circle at 30% 30%, #FF6B00 0%, #FF8533 40%, rgba(255, 133, 51, 0.2) 70%, transparent 100%);
+          background: radial-gradient(circle at 30% 30%, #FF6B00 0%, #FF8533 40%, rgba(255, 133, 51, 0.3) 70%, transparent 100%);
           top: -20%;
           left: -20%;
-          opacity: 0.25;
+          opacity: 0.7;
           animation: lavaOrange1 35s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
 
-        /* Lava blob 2 - bottom right - subtle */
+        /* Lava blob 2 - bottom right */
         .ostium-gradient-bg::after {
           width: 60vmax;
           height: 60vmax;
-          background: radial-gradient(circle at 70% 70%, #CC5500 0%, #FF6B00 40%, rgba(255, 107, 0, 0.2) 70%, transparent 100%);
+          background: radial-gradient(circle at 70% 70%, #CC5500 0%, #FF6B00 40%, rgba(255, 107, 0, 0.3) 70%, transparent 100%);
           bottom: -15%;
           right: -15%;
-          opacity: 0.2;
+          opacity: 0.6;
           animation: lavaOrange2 40s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
 
@@ -364,20 +362,20 @@ export default function OstiumTradingPage() {
         .ostium-page .lava-blob-1 {
           width: 45vmax;
           height: 45vmax;
-          background: radial-gradient(circle at 50% 50%, #FF8533 0%, #FFAA66 45%, rgba(255, 170, 102, 0.15) 75%, transparent 100%);
+          background: radial-gradient(circle at 50% 50%, #FF8533 0%, #FFAA66 45%, rgba(255, 170, 102, 0.2) 75%, transparent 100%);
           top: 25%;
           right: 5%;
-          opacity: 0.15;
+          opacity: 0.55;
           animation: lavaOrange3 28s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
 
         .ostium-page .lava-blob-2 {
           width: 50vmax;
           height: 50vmax;
-          background: radial-gradient(circle at 40% 60%, #FF9955 0%, #FFBB88 45%, rgba(255, 187, 136, 0.15) 75%, transparent 100%);
+          background: radial-gradient(circle at 40% 60%, #FF9955 0%, #FFBB88 45%, rgba(255, 187, 136, 0.2) 75%, transparent 100%);
           top: 55%;
           left: -5%;
-          opacity: 0.12;
+          opacity: 0.5;
           animation: lavaOrange4 32s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
 

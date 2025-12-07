@@ -5,7 +5,7 @@ import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { useOstiumPositions, type OstiumPosition } from '@/hooks/useOstiumPositions'
 import { useOstiumPrices } from '@/hooks/useOstiumPrices'
 import { arbitrum } from 'viem/chains'
-import { encodeFunctionData } from 'viem'
+import { encodeFunctionData, parseEther } from 'viem'
 import { OSTIUM_CONTRACTS } from '@/lib/ostium/constants'
 import { OSTIUM_TRADING_ABI } from '@/lib/ostium/abi'
 import { fetchPythPriceUpdate } from '@/lib/ostium/api'
@@ -53,11 +53,13 @@ export function OstiumPositions() {
 
       console.log('🚀 Sending close position via smart wallet...')
 
+      // Close trade - needs ETH for Pyth oracle update fee
+      // Ostium's closeTradeMarket is payable and forwards ETH to Pyth
       const hash = await client.sendTransaction({
         calls: [{
           to: OSTIUM_CONTRACTS.TRADING as `0x${string}`,
           data: calldata,
-          value: BigInt(0),
+          value: parseEther('0.0001'), // ~$0.25 for Pyth fee
         }],
       })
 
