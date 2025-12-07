@@ -87,8 +87,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
         supportedChains: [base, arbitrum],
       }}
     >
-      {/* SmartWalletsProvider enables ERC-4337 smart wallets via ZeroDev */}
-      <SmartWalletsProvider>
+      {/* SmartWalletsProvider enables ERC-4337 smart wallets via Pimlico */}
+      <SmartWalletsProvider
+        config={{
+          paymasterContext: {
+            sponsorshipPolicyId: 'sp_foamy_morph',
+          },
+        }}
+      >
         <QueryClientProvider client={queryClient}>
           <WagmiProvider config={wagmiConfig}>
             <RelayKitProvider
