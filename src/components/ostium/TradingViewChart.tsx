@@ -12,12 +12,29 @@ interface TradingViewChartProps {
   isMarketOpen?: boolean
 }
 
-// Generate mock OHLC data (in production, fetch from API)
-function generateCandlestickData(currentPrice: number, timeframe: string): CandlestickData[] {
+// Seeded random generator for consistent chart data
+function seededRandom(seed: number): () => number {
+  return () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff
+    return seed / 0x7fffffff
+  }
+}
+
+// Generate stable OHLC data using seeded random
+function generateCandlestickData(currentPrice: number, timeframe: string, symbol: string): CandlestickData[] {
   if (currentPrice <= 0) return []
 
+  // Create a seed based on symbol and timeframe (stable across renders)
+  let seed = 0
+  for (let i = 0; i < symbol.length; i++) {
+    seed += symbol.charCodeAt(i) * (i + 1)
+  }
+  seed += timeframe.length * 1000
+  const random = seededRandom(seed)
+
   const data: CandlestickData[] = []
-  const now = Math.floor(Date.now() / 1000)
+  // Use a fixed reference time (start of the current hour) to prevent chart flickering
+  const now = Math.floor(Date.now() / 3600000) * 3600
 
   // Timeframe intervals in seconds
   const intervals: Record<string, number> = {
@@ -43,16 +60,16 @@ function generateCandlestickData(currentPrice: number, timeframe: string): Candl
   }
   const volatility = currentPrice * (volatilityMap[timeframe] || 0.003)
 
-  let price = currentPrice * (1 + (Math.random() - 0.5) * 0.03)
+  let price = currentPrice * (1 + (random() - 0.5) * 0.03)
 
   for (let i = candles; i > 0; i--) {
     const time = (now - i * interval) as Time
 
-    // Generate OHLC
+    // Generate OHLC with seeded random
     const open = price
-    const change = (Math.random() - 0.5) * volatility * 2
-    const high = Math.max(open, open + change) + Math.random() * volatility * 0.5
-    const low = Math.min(open, open + change) - Math.random() * volatility * 0.5
+    const change = (random() - 0.5) * volatility * 2
+    const high = Math.max(open, open + change) + random() * volatility * 0.5
+    const low = Math.min(open, open + change) - random() * volatility * 0.5
     const close = open + change
 
     // Trend towards current price
@@ -95,9 +112,9 @@ export function TradingViewChart({
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>('15m')
 
-  // Generate data based on timeframe
+  // Generate data based on timeframe (stable across renders)
   const candleData = useMemo(() => {
-    return generateCandlestickData(currentPrice, selectedTimeframe)
+    return generateCandlestickData(currentPrice, selectedTimeframe, symbol)
   }, [currentPrice, selectedTimeframe, symbol])
 
   // Create chart
@@ -168,11 +185,11 @@ export function TradingViewChart({
       candleSeries.setData(candleData)
     }
 
-    // Add entry price line
+    // Add entry price line (white for visibility)
     if (entryPrice && entryPrice > 0) {
       candleSeries.createPriceLine({
         price: entryPrice,
-        color: '#3b82f6',
+        color: '#ffffff',
         lineWidth: 2,
         lineStyle: 2, // Dashed
         axisLabelVisible: true,
@@ -292,7 +309,7 @@ export function TradingViewChart({
           {entryPrice && entryPrice > 0 && (
             <div className="text-center">
               <p className="text-white/40 text-xs">Entry</p>
-              <p className="text-blue-400 font-mono text-sm">${formatPrice(entryPrice)}</p>
+              <p className="text-white font-mono text-sm">${formatPrice(entryPrice)}</p>
             </div>
           )}
           <div className="text-center">

@@ -77,8 +77,10 @@ export default function OstiumTradingPage() {
 
   return (
     <div className="ostium-page min-h-screen flex flex-col">
-      {/* Orange Gradient Background */}
+      {/* Lava Lamp Background */}
       <div className="ostium-gradient-bg" />
+      <div className="lava-blob lava-blob-1" />
+      <div className="lava-blob lava-blob-2" />
 
       <div className="max-w-[430px] mx-auto w-full flex-1 flex flex-col relative z-10">
         {/* Header */}
@@ -224,8 +226,8 @@ export default function OstiumTradingPage() {
           </button>
         </div>
 
-        {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto bg-black/20">
+        {/* Tab Content - with proper scroll and bottom padding for nav */}
+        <div className="flex-1 overflow-y-auto bg-black/20 pb-24">
           {activeTab === 'trade' && <OstiumTradePanel pair={selectedPair} />}
           {activeTab === 'positions' && <OstiumPositions />}
           {activeTab === 'history' && <TradeHistory />}
@@ -255,40 +257,171 @@ export default function OstiumTradingPage() {
         />
       </div>
 
-      {/* Ostium Orange Gradient Styling */}
+      {/* Ostium Orange Lava Lamp Styling - matches bands home page */}
       <style jsx global>{`
         .ostium-page {
-          background: #000;
+          background: #0a0a0a;
           position: relative;
           overflow-x: hidden;
         }
 
+        /* === LAVA LAMP CONTAINER === */
         .ostium-gradient-bg {
           position: fixed;
           top: 0;
           left: 0;
-          right: 0;
-          bottom: 0;
-          pointer-events: none;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
           z-index: 0;
-          background:
-            radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255, 107, 0, 0.15) 0%, transparent 50%),
-            radial-gradient(ellipse 60% 40% at 100% 0%, rgba(255, 107, 0, 0.1) 0%, transparent 40%),
-            radial-gradient(ellipse 50% 30% at 0% 100%, rgba(255, 68, 68, 0.08) 0%, transparent 40%),
-            linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 100%);
+          filter: blur(60px);
+          pointer-events: none;
         }
 
-        /* Override green accents with orange for Ostium */
-        .ostium-page .bg-green-500 {
-          background-color: #FF6B00 !important;
+        .ostium-gradient-bg::before,
+        .ostium-gradient-bg::after {
+          content: '';
+          position: absolute;
+          mix-blend-mode: normal;
+          will-change: transform, border-radius;
         }
 
-        .ostium-page .hover\:bg-green-600:hover {
-          background-color: #FF8533 !important;
+        /* Lava blob 1 - top left */
+        .ostium-gradient-bg::before {
+          width: 70vmax;
+          height: 70vmax;
+          background: radial-gradient(circle at 30% 30%, #FF6B00 0%, #FF8533 40%, rgba(255, 133, 51, 0.3) 70%, transparent 100%);
+          top: -20%;
+          left: -20%;
+          opacity: 0.6;
+          animation: lavaOrange1 35s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
 
-        .ostium-page .shadow-green-500\/20 {
-          --tw-shadow-color: rgba(255, 107, 0, 0.2) !important;
+        /* Lava blob 2 - bottom right */
+        .ostium-gradient-bg::after {
+          width: 60vmax;
+          height: 60vmax;
+          background: radial-gradient(circle at 70% 70%, #CC5500 0%, #FF6B00 40%, rgba(255, 107, 0, 0.3) 70%, transparent 100%);
+          bottom: -15%;
+          right: -15%;
+          opacity: 0.55;
+          animation: lavaOrange2 40s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+
+        @keyframes lavaOrange1 {
+          0%, 100% {
+            transform: translate(0, 0) scale(1);
+            border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+          }
+          20% {
+            transform: translate(8vw, 5vh) scale(1.08);
+            border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
+          }
+          40% {
+            transform: translate(3vw, 12vh) scale(0.95);
+            border-radius: 50% 60% 30% 60% / 30% 70% 40% 50%;
+          }
+          60% {
+            transform: translate(-5vw, 8vh) scale(1.12);
+            border-radius: 40% 60% 60% 40% / 70% 30% 50% 60%;
+          }
+          80% {
+            transform: translate(-2vw, 2vh) scale(1.02);
+            border-radius: 55% 45% 40% 60% / 45% 55% 60% 40%;
+          }
+        }
+
+        @keyframes lavaOrange2 {
+          0%, 100% {
+            transform: translate(0, 0) scale(1);
+            border-radius: 40% 60% 60% 40% / 70% 30% 50% 60%;
+          }
+          25% {
+            transform: translate(-6vw, -8vh) scale(1.15);
+            border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+          }
+          50% {
+            transform: translate(-3vw, -15vh) scale(0.9);
+            border-radius: 50% 60% 30% 60% / 30% 70% 40% 50%;
+          }
+          75% {
+            transform: translate(5vw, -5vh) scale(1.1);
+            border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
+          }
+        }
+
+        /* Additional lava blobs using nested divs */
+        .ostium-page .lava-blob {
+          position: fixed;
+          mix-blend-mode: normal;
+          will-change: transform, border-radius;
+          pointer-events: none;
+          filter: blur(60px);
+        }
+
+        .ostium-page .lava-blob-1 {
+          width: 45vmax;
+          height: 45vmax;
+          background: radial-gradient(circle at 50% 50%, #FF8533 0%, #FFAA66 45%, rgba(255, 170, 102, 0.2) 75%, transparent 100%);
+          top: 25%;
+          right: 5%;
+          opacity: 0.45;
+          animation: lavaOrange3 28s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+
+        .ostium-page .lava-blob-2 {
+          width: 50vmax;
+          height: 50vmax;
+          background: radial-gradient(circle at 40% 60%, #FF9955 0%, #FFBB88 45%, rgba(255, 187, 136, 0.2) 75%, transparent 100%);
+          top: 55%;
+          left: -5%;
+          opacity: 0.4;
+          animation: lavaOrange4 32s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+
+        @keyframes lavaOrange3 {
+          0%, 100% {
+            transform: translate(0, 0) scale(1);
+            border-radius: 50% 60% 30% 60% / 30% 70% 40% 50%;
+          }
+          30% {
+            transform: translate(-12vw, 10vh) scale(1.25);
+            border-radius: 60% 40% 70% 30% / 40% 60% 50% 70%;
+          }
+          60% {
+            transform: translate(-8vw, -8vh) scale(0.85);
+            border-radius: 40% 70% 50% 60% / 70% 40% 60% 30%;
+          }
+        }
+
+        @keyframes lavaOrange4 {
+          0%, 100% {
+            transform: translate(0, 0) scale(1);
+            border-radius: 70% 30% 50% 60% / 40% 70% 30% 60%;
+          }
+          35% {
+            transform: translate(10vw, -6vh) scale(1.15);
+            border-radius: 45% 55% 65% 35% / 55% 45% 35% 65%;
+          }
+          70% {
+            transform: translate(15vw, 5vh) scale(0.9);
+            border-radius: 30% 70% 60% 40% / 60% 30% 70% 40%;
+          }
+        }
+
+        /* Grain overlay */
+        .ostium-page::after {
+          content: '';
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          pointer-events: none;
+          z-index: 10000;
+          opacity: 0.04;
+          mix-blend-mode: overlay;
+          background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
         }
 
         /* Keep trade button colors (green for long, red for short) */
