@@ -344,24 +344,24 @@ export function useTradeEngine(): UseTradeEngineReturn {
       log.success(`ETH balance OK: ${formatUnits(balances.eth, 18)}`)
 
       // ========================================
-      // STEP 2: Fetch current price
+      // STEP 2: Fetch current price via API proxy
       // ========================================
       log.step(2, 'Fetching current price...')
-      const pair = OSTIUM_PAIRS.find(p => p.id === pairIndex)
-      if (!pair) {
-        throw new Error(`Unknown pair index: ${pairIndex}`)
-      }
 
-      const priceResponse = await fetch(OSTIUM_API.PRICES)
+      // Use our API proxy to avoid CORS issues
+      const priceResponse = await fetch('/api/ostium/prices')
+      if (!priceResponse.ok) {
+        throw new Error('Price API unavailable')
+      }
       const prices = await priceResponse.json()
-      const priceData = prices.find((p: any) => p.from === pair.from && p.to === pair.to)
+      const priceData = prices.find((p: any) => p.pairId === pairIndex)
 
       if (!priceData?.mid || priceData.mid <= 0) {
         throw new Error('Unable to fetch current price')
       }
 
       const currentPrice = priceData.mid
-      log.success(`Current ${pair.symbol} price: $${currentPrice}`)
+      log.success(`Current ${priceData.symbol} price: $${currentPrice}`)
 
       // ========================================
       // STEP 3: Build calls

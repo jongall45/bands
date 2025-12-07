@@ -173,23 +173,22 @@ export function PrivyOstiumButton({
     }
   }, [parsedAmount, address, fetchAllowanceAndBalance])
 
-  // Fetch current price from Ostium API
+  // Fetch current price via API proxy (avoids CORS issues)
   useEffect(() => {
     const fetchPrice = async () => {
       try {
-        const pair = OSTIUM_PAIRS.find(p => p.id === pairIndex)
-        if (!pair) return
+        // Use our API proxy to avoid CORS issues
+        const response = await fetch('/api/ostium/prices')
+        if (!response.ok) throw new Error('Price fetch failed')
 
-        const response = await fetch(OSTIUM_API.PRICES)
         const prices = await response.json()
 
-        const priceData = prices.find((p: any) =>
-          p.from === pair.from && p.to === pair.to
-        )
+        // Find matching price by pairId
+        const priceData = prices.find((p: any) => p.pairId === pairIndex)
 
         if (priceData?.mid) {
           setCurrentPrice(priceData.mid)
-          console.log(`📊 Current ${pair.symbol} price: $${priceData.mid}`)
+          console.log(`📊 Current ${priceData.symbol} price: $${priceData.mid}`)
         }
       } catch (e) {
         console.error('Price fetch failed:', e)
