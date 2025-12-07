@@ -16,7 +16,7 @@ import {
   zeroAddress,
 } from 'viem'
 import { arbitrum } from 'viem/chains'
-import { OSTIUM_CONTRACTS, ORDER_TYPE, calculateSlippage, DEFAULT_SLIPPAGE_BPS, MIN_ETH_FOR_GAS } from '@/lib/ostium/constants'
+import { OSTIUM_CONTRACTS, ORDER_TYPE, calculateSlippage, DEFAULT_SLIPPAGE_BPS, MIN_ETH_FOR_GAS, OSTIUM_API, OSTIUM_PAIRS } from '@/lib/ostium/constants'
 import { OSTIUM_TRADING_ABI, ERC20_ABI } from '@/lib/ostium/abi'
 
 // ============================================
@@ -119,14 +119,18 @@ export function buildOpenTradeCall(
   collateralWei: bigint,
   leverage: number,
   slippageBps: number,
+  currentPrice: number, // Current market price
 ) {
+  // Convert price to 18 decimal precision (PRECISION_18)
+  const openPriceWei = BigInt(Math.floor(currentPrice * 1e18))
+
   // Build trade struct matching Ostium's exact specification
   // Verified from implementation contract: 0x64c06a9ac454de566d4bb1b3d5a57aae4004c522
   const tradeStruct = {
     collateral: collateralWei,           // uint256 - USDC amount in 6 decimals
-    openPrice: BigInt(0),                // uint256 - 0 for market orders
-    tp: BigInt(0),                       // uint256 - take profit (0 = disabled)
-    sl: BigInt(0),                       // uint256 - stop loss (0 = disabled)
+    openPrice: openPriceWei,             // uint192 - current price in 18 decimals
+    tp: BigInt(0),                       // uint192 - take profit (0 = disabled)
+    sl: BigInt(0),                       // uint192 - stop loss (0 = disabled)
     trader,                              // address
     leverage,                            // uint32 - e.g., 10 for 10x
     pairIndex,                           // uint16
@@ -140,6 +144,7 @@ export function buildOpenTradeCall(
     builderFee: 0,
   }
 
+  // Slippage in basis points (PERCENT_BASE = 10000 = 100%)
   const slippage = calculateSlippage(slippageBps)
 
   return {
@@ -339,9 +344,29 @@ export function useTradeEngine(): UseTradeEngineReturn {
       log.success(`ETH balance OK: ${formatUnits(balances.eth, 18)}`)
 
       // ========================================
-      // STEP 2: Build calls
+      // STEP 2: Fetch current price
       // ========================================
-      log.step(2, 'Building transaction calls...')
+      log.step(2, 'Fetching current price...')
+      const pair = OSTIUM_PAIRS.find(p => p.id === pairIndex)
+      if (!pair) {
+        throw new Error(`Unknown pair index: ${pairIndex}`)
+      }
+
+      const priceResponse = await fetch(OSTIUM_API.PRICES)
+      const prices = await priceResponse.json()
+      const priceData = prices.find((p: any) => p.from === pair.from && p.to === pair.to)
+
+      if (!priceData?.mid || priceData.mid <= 0) {
+        throw new Error('Unable to fetch current price')
+      }
+
+      const currentPrice = priceData.mid
+      log.success(`Current ${pair.symbol} price: $${currentPrice}`)
+
+      // ========================================
+      // STEP 3: Build calls
+      // ========================================
+      log.step(3, 'Building transaction calls...')
       const needsApproval = balances.allowance < collateralWei
       log.data('Needs Approval', needsApproval)
 
@@ -352,7 +377,8 @@ export function useTradeEngine(): UseTradeEngineReturn {
         isLong,
         collateralWei,
         leverage,
-        slippageBps
+        slippageBps,
+        currentPrice
       )
 
       log.success('Calls built:')
@@ -361,9 +387,9 @@ export function useTradeEngine(): UseTradeEngineReturn {
       log.data('Trade value', formatUnits(tradeCall.value, 18) + ' ETH')
 
       // ========================================
-      // STEP 3: Pre-flight simulation
+      // STEP 4: Pre-flight simulation
       // ========================================
-      log.step(3, 'Running pre-flight simulation...')
+      log.step(4, 'Running pre-flight simulation...')
       setState('simulating')
 
       if (needsApproval) {
@@ -386,9 +412,9 @@ export function useTradeEngine(): UseTradeEngineReturn {
       }
 
       // ========================================
-      // STEP 4: Execute via Smart Wallet or EOA
+      // STEP 5: Execute via Smart Wallet or EOA
       // ========================================
-      log.step(4, 'Executing transaction...')
+      log.step(5, 'Executing transaction...')
       setState('sending')
 
       let finalTxHash: string

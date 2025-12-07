@@ -57,13 +57,13 @@ export type OstiumCategory = 'crypto' | 'forex' | 'commodity' | 'stock' | 'index
 // Minimum collateral (USDC)
 export const MIN_COLLATERAL_USD = 5
 
-// Slippage calculation: Ostium uses 1e10 precision
-// 0.5% = 0.005 * 1e10 = 50_000_000_000
-// basisPoints: 50 bps = 0.5% = 50/10000 = 0.005
+// Slippage calculation: Ostium uses basis points precision (PERCENT_BASE = 10000 = 100%)
+// 0.5% = 50 basis points
+// slippageP must be > 0 and < PERCENT_BASE (10000)
 export function calculateSlippage(basisPoints: number): bigint {
-  // Convert basis points to 1e10 precision
-  // bps / 10000 * 1e10 = bps * 1e6
-  return BigInt(basisPoints) * BigInt(1_000_000)
+  // Slippage is just the basis points value directly
+  // e.g., 50 bps (0.5%) => 50
+  return BigInt(basisPoints)
 }
 
 // Default slippage: 0.5% (50 basis points)

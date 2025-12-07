@@ -31,7 +31,7 @@ export const OSTIUM_TRADING_ABI = [
         ],
       },
       { name: 'orderType', type: 'uint8' },           // 0 = MARKET, 1 = LIMIT, etc.
-      { name: 'slippageP', type: 'uint256' },         // Slippage in 1e10 precision
+      { name: 'slippageP', type: 'uint256' },         // Slippage in basis points (50 = 0.5%)
     ],
     outputs: [],
   },

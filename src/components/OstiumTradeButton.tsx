@@ -6,7 +6,7 @@ import { arbitrum } from 'viem/chains'
 import { encodeFunctionData, parseUnits, formatUnits, maxUint256, zeroAddress } from 'viem'
 import { Loader2, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react'
 import { OSTIUM_TRADING_ABI, ERC20_ABI } from '@/lib/ostium/abi'
-import { OSTIUM_CONTRACTS, ORDER_TYPE, calculateSlippage, DEFAULT_SLIPPAGE_BPS } from '@/lib/ostium/constants'
+import { OSTIUM_CONTRACTS, ORDER_TYPE, calculateSlippage, DEFAULT_SLIPPAGE_BPS, OSTIUM_PAIRS, OSTIUM_API } from '@/lib/ostium/constants'
 
 interface SmartWalletTradeButtonProps {
   pairIndex: number
@@ -32,6 +32,7 @@ export function OstiumTradeButton({
   const [error, setError] = useState<string | null>(null)
   const [balance, setBalance] = useState<string>('0')
   const [allowance, setAllowance] = useState<bigint>(BigInt(0))
+  const [currentPrice, setCurrentPrice] = useState<number>(0)
 
   const ready = !!client
   const smartWalletAddress = client?.account?.address
@@ -93,9 +94,44 @@ export function OstiumTradeButton({
     return () => clearInterval(interval)
   }, [client?.account?.address])
 
+  // Fetch current price from Ostium API
+  useEffect(() => {
+    const fetchPrice = async () => {
+      try {
+        // Get the pair info to match from/to in API response
+        const pair = OSTIUM_PAIRS.find(p => p.id === pairIndex)
+        if (!pair) return
+
+        const response = await fetch(OSTIUM_API.PRICES)
+        const prices = await response.json()
+
+        // Find matching price by from/to currency pair
+        const priceData = prices.find((p: any) =>
+          p.from === pair.from && p.to === pair.to
+        )
+
+        if (priceData?.mid) {
+          setCurrentPrice(priceData.mid)
+          console.log(`📊 Current ${pair.symbol} price: $${priceData.mid}`)
+        }
+      } catch (e) {
+        console.error('Price fetch failed:', e)
+      }
+    }
+
+    fetchPrice()
+    const interval = setInterval(fetchPrice, 5000) // Update price every 5 seconds
+    return () => clearInterval(interval)
+  }, [pairIndex])
+
   const trade = async () => {
     if (!ready || !client || !smartWalletAddress) {
       setError('Smart wallet not ready. Make sure Pimlico is configured in Privy Dashboard.')
+      return
+    }
+
+    if (currentPrice <= 0) {
+      setError('Unable to fetch current price. Please try again.')
       return
     }
 
@@ -118,18 +154,24 @@ export function OstiumTradeButton({
       console.log('Direction:', isLong ? 'LONG 🟢' : 'SHORT 🔴')
       console.log('Collateral:', collateralUSDC, 'USDC')
       console.log('Leverage:', leverage, 'x')
+      console.log('Current Price:', currentPrice)
 
-      // Calculate slippage (Ostium uses 1e10 precision)
+      // Calculate slippage (Ostium uses basis points, PERCENT_BASE = 10000)
       const slippageP = calculateSlippage(DEFAULT_SLIPPAGE_BPS)
-      console.log('📉 Slippage:', slippageP.toString(), `(${DEFAULT_SLIPPAGE_BPS} bps)`)
+      console.log('📉 Slippage:', slippageP.toString(), `(${DEFAULT_SLIPPAGE_BPS} bps = ${DEFAULT_SLIPPAGE_BPS / 100}%)`)
+
+      // Convert price to 18 decimal precision (PRECISION_18)
+      // Price from API is like 91283.09, need to multiply by 1e18
+      const openPriceWei = BigInt(Math.floor(currentPrice * 1e18))
+      console.log('📊 Open Price (18 dec):', openPriceWei.toString())
 
       // Build trade struct - MUST match Ostium's exact field order
       // Verified from implementation contract: 0x64c06a9ac454de566d4bb1b3d5a57aae4004c522
       const tradeStruct = {
         collateral: collateralWei,           // uint256 - USDC amount in 6 decimals
-        openPrice: BigInt(0),                // uint256 - 0 for market orders
-        tp: BigInt(0),                       // uint256 - take profit (0 = disabled)
-        sl: BigInt(0),                       // uint256 - stop loss (0 = disabled)
+        openPrice: openPriceWei,             // uint192 - current price in 18 decimals
+        tp: BigInt(0),                       // uint192 - take profit (0 = disabled)
+        sl: BigInt(0),                       // uint192 - stop loss (0 = disabled)
         trader: smartWalletAddress,          // address
         leverage: leverage,                  // uint32 - e.g., 10 for 10x
         pairIndex: pairIndex,                // uint16
@@ -145,6 +187,7 @@ export function OstiumTradeButton({
 
       console.log('📦 Trade struct:', {
         collateral: tradeStruct.collateral.toString(),
+        openPrice: tradeStruct.openPrice.toString(),
         trader: tradeStruct.trader,
         leverage: tradeStruct.leverage,
         pairIndex: tradeStruct.pairIndex,
@@ -179,7 +222,7 @@ export function OstiumTradeButton({
             tradeStruct,      // Trade struct
             builderFee,       // BuilderFee struct
             ORDER_TYPE.MARKET,// uint8 orderType (0 = MARKET)
-            slippageP,        // uint256 slippage in 1e10 precision
+            slippageP,        // uint256 slippage in basis points (50 = 0.5%)
           ],
         }),
         value: BigInt(0), // Function is nonpayable

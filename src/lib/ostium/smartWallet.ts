@@ -86,7 +86,7 @@ export const OSTIUM_TRADING_ABI = [
         ],
       },
       { name: 'orderType', type: 'uint8' },           // 0 = MARKET, 1 = LIMIT, etc.
-      { name: 'slippageP', type: 'uint256' },         // Slippage in 1e10 precision
+      { name: 'slippageP', type: 'uint256' },         // Slippage in basis points (50 = 0.5%)
     ],
     outputs: [],
   },
@@ -105,6 +105,7 @@ export interface OstiumOrderParams {
 
 export interface OstiumOrderBatchParams extends OstiumOrderParams {
   traderAddress: `0x${string}`
+  currentPrice: number // Current market price (e.g., 91283.09)
 }
 
 export interface BatchedTransaction {
@@ -145,14 +146,14 @@ export function encodeTransfer(to: `0x${string}`, amount: bigint): `0x${string}`
  * @param trade - Trade struct with all position details (verified from Ostium contract)
  * @param builderFee - BuilderFee struct for referrals (can be zero)
  * @param orderType - 0 for MARKET, 1 for LIMIT, 2 for STOP
- * @param slippage - Slippage in 1e10 precision (50 bps = 50_000_000)
+ * @param slippage - Slippage in basis points (50 bps = 0.5%)
  */
 export function encodeOpenTrade(
   trade: {
     collateral: bigint        // uint256 - USDC amount in 6 decimals
-    openPrice: bigint         // uint256 - 0 for market orders
-    tp: bigint                // uint256 - take profit (0 = disabled)
-    sl: bigint                // uint256 - stop loss (0 = disabled)
+    openPrice: bigint         // uint192 - current price in 18 decimals (required for all orders)
+    tp: bigint                // uint192 - take profit (0 = disabled)
+    sl: bigint                // uint192 - stop loss (0 = disabled)
     trader: `0x${string}`     // address
     leverage: number          // uint32
     pairIndex: number         // uint16
@@ -184,7 +185,7 @@ export function encodeOpenTrade(
  * The Trading contract pulls USDC from your wallet via transferFrom on Storage contract.
  */
 export function buildOstiumOrderBatch(params: OstiumOrderBatchParams): BatchedTransaction[] {
-  const { pairIndex, isLong, leverage, collateralUSDC, slippageBps, traderAddress } = params
+  const { pairIndex, isLong, leverage, collateralUSDC, slippageBps, traderAddress, currentPrice } = params
 
   // Parse collateral to 6 decimals (USDC)
   const collateralWei = parseUnits(collateralUSDC, 6)
@@ -192,15 +193,20 @@ export function buildOstiumOrderBatch(params: OstiumOrderBatchParams): BatchedTr
   // Approval amount with 50% buffer to avoid edge cases
   const approvalAmount = (collateralWei * BigInt(150)) / BigInt(100)
 
-  // Slippage in 1e10 precision: bps / 10000 * 1e10 = bps * 1e6
-  const slippage = BigInt(slippageBps) * BigInt(1_000_000)
+  // Slippage in basis points (PERCENT_BASE = 10000 = 100%)
+  // e.g., 50 bps = 0.5%
+  const slippage = BigInt(slippageBps)
+
+  // Convert price to 18 decimal precision (PRECISION_18)
+  // Price from API is like 91283.09, need to multiply by 1e18
+  const openPriceWei = BigInt(Math.floor(currentPrice * 1e18))
 
   // Build trade struct - verified from Ostium implementation contract
   const trade = {
     collateral: collateralWei,        // uint256 - USDC amount in 6 decimals
-    openPrice: BigInt(0),             // uint256 - 0 for market orders
-    tp: BigInt(0),                    // uint256 - take profit (0 = disabled)
-    sl: BigInt(0),                    // uint256 - stop loss (0 = disabled)
+    openPrice: openPriceWei,          // uint192 - current price in 18 decimals
+    tp: BigInt(0),                    // uint192 - take profit (0 = disabled)
+    sl: BigInt(0),                    // uint192 - stop loss (0 = disabled)
     trader: traderAddress,            // address
     leverage,                         // uint32
     pairIndex,                        // uint16
@@ -221,6 +227,8 @@ export function buildOstiumOrderBatch(params: OstiumOrderBatchParams): BatchedTr
   console.log('   Collateral:', collateralUSDC, 'USDC')
   console.log('   Collateral Wei (6 dec):', collateralWei.toString())
   console.log('   Leverage:', leverage, 'x')
+  console.log('   Current Price:', currentPrice)
+  console.log('   Open Price (18 dec):', openPriceWei.toString())
   console.log('   Slippage:', slippageBps, 'bps =', slippage.toString())
 
   return [

@@ -7,7 +7,7 @@ import { parseUnits, encodeFunctionData, formatUnits, zeroAddress } from 'viem'
 import { arbitrum } from 'viem/chains'
 import { Loader2, TrendingUp, TrendingDown, Check, AlertCircle, Lock } from 'lucide-react'
 import { OSTIUM_TRADING_ABI } from '@/lib/ostium/abi'
-import { ORDER_TYPE, calculateSlippage, DEFAULT_SLIPPAGE_BPS } from '@/lib/ostium/constants'
+import { ORDER_TYPE, calculateSlippage, DEFAULT_SLIPPAGE_BPS, OSTIUM_PAIRS, OSTIUM_API } from '@/lib/ostium/constants'
 
 // ============================================
 // CONSTANTS (Arbitrum)
@@ -98,6 +98,7 @@ export function PrivyOstiumButton({
   const [txHash, setTxHash] = useState<string | null>(null)
   const [allowance, setAllowance] = useState<bigint | null>(null)
   const [balance, setBalance] = useState<bigint | null>(null)
+  const [currentPrice, setCurrentPrice] = useState<number>(0)
 
   // Parse amount
   const parsedAmount = useMemo(() => {
@@ -172,11 +173,45 @@ export function PrivyOstiumButton({
     }
   }, [parsedAmount, address, fetchAllowanceAndBalance])
 
+  // Fetch current price from Ostium API
+  useEffect(() => {
+    const fetchPrice = async () => {
+      try {
+        const pair = OSTIUM_PAIRS.find(p => p.id === pairIndex)
+        if (!pair) return
+
+        const response = await fetch(OSTIUM_API.PRICES)
+        const prices = await response.json()
+
+        const priceData = prices.find((p: any) =>
+          p.from === pair.from && p.to === pair.to
+        )
+
+        if (priceData?.mid) {
+          setCurrentPrice(priceData.mid)
+          console.log(`📊 Current ${pair.symbol} price: $${priceData.mid}`)
+        }
+      } catch (e) {
+        console.error('Price fetch failed:', e)
+      }
+    }
+
+    fetchPrice()
+    const interval = setInterval(fetchPrice, 5000)
+    return () => clearInterval(interval)
+  }, [pairIndex])
+
   // ============================================
   // EXECUTE FULL FLOW: APPROVE → TRADE (automatic)
   // ============================================
   const executeFullFlow = useCallback(async () => {
     if (!embeddedWallet || !address) return
+
+    if (currentPrice <= 0) {
+      setErrorMessage('Unable to fetch current price. Please try again.')
+      setState('error')
+      return
+    }
 
     setErrorMessage(null)
 
@@ -245,16 +280,21 @@ export function PrivyOstiumButton({
       console.log('💰 Collateral:', amountUSDC, 'USDC')
       console.log('⚡ Leverage:', leverage, 'x')
 
-      // Calculate slippage (Ostium uses 1e10 precision)
+      // Calculate slippage (Ostium uses basis points, PERCENT_BASE = 10000 = 100%)
       const slippageP = calculateSlippage(DEFAULT_SLIPPAGE_BPS)
-      console.log('📉 Slippage:', slippageP.toString(), `(${DEFAULT_SLIPPAGE_BPS} bps)`)
+      console.log('📉 Slippage:', slippageP.toString(), `(${DEFAULT_SLIPPAGE_BPS} bps = ${DEFAULT_SLIPPAGE_BPS / 100}%)`)
+
+      // Convert price to 18 decimal precision (PRECISION_18)
+      const openPriceWei = BigInt(Math.floor(currentPrice * 1e18))
+      console.log('📊 Current Price:', currentPrice)
+      console.log('📊 Open Price (18 dec):', openPriceWei.toString())
 
       // Build trade struct - verified from Ostium implementation contract
       const tradeStruct = {
         collateral: parsedAmount,              // uint256 - USDC amount in 6 decimals
-        openPrice: BigInt(0),                  // uint256 - 0 for market orders
-        tp: BigInt(0),                         // uint256 - take profit (0 = disabled)
-        sl: BigInt(0),                         // uint256 - stop loss (0 = disabled)
+        openPrice: openPriceWei,               // uint192 - current price in 18 decimals
+        tp: BigInt(0),                         // uint192 - take profit (0 = disabled)
+        sl: BigInt(0),                         // uint192 - stop loss (0 = disabled)
         trader: address,                       // address
         leverage,                              // uint32 - e.g., 10 for 10x
         pairIndex,                             // uint16
@@ -270,6 +310,7 @@ export function PrivyOstiumButton({
 
       console.log('📦 Trade struct:', {
         collateral: tradeStruct.collateral.toString(),
+        openPrice: tradeStruct.openPrice.toString(),
         trader: tradeStruct.trader,
         leverage: tradeStruct.leverage,
         pairIndex: tradeStruct.pairIndex,
@@ -311,7 +352,7 @@ export function PrivyOstiumButton({
       setState('error')
       onError?.(error.message)
     }
-  }, [embeddedWallet, address, allowance, parsedAmount, amountUSDC, pairIndex, pairSymbol, leverage, isLong, onSuccess, onError])
+  }, [embeddedWallet, address, allowance, parsedAmount, amountUSDC, pairIndex, pairSymbol, leverage, isLong, currentPrice, onSuccess, onError])
 
 
   // ============================================

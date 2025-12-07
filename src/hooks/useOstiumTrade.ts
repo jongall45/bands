@@ -241,19 +241,28 @@ export function useOstiumTrade() {
         throw new Error('Failed to switch to Arbitrum')
       }
 
-      // Fetch latest price for logging
+      // Fetch latest price for the trade
       const priceData = await fetchPairPrice(pairIndex)
-      console.log('🔵 Current price:', priceData?.price)
+      const currentPrice = priceData?.price || 0
+      console.log('🔵 Current price:', currentPrice)
 
-      // Calculate slippage (Ostium uses 1e10 precision)
+      if (currentPrice <= 0) {
+        throw new Error('Unable to fetch current price')
+      }
+
+      // Calculate slippage (Ostium uses basis points, PERCENT_BASE = 10000 = 100%)
       const slippageP = calculateSlippage(slippageBps)
+
+      // Convert price to 18 decimal precision (PRECISION_18)
+      const openPriceWei = BigInt(Math.floor(currentPrice * 1e18))
+      console.log('🔵 Open price (18 dec):', openPriceWei.toString())
 
       // Build trade struct - verified from Ostium implementation contract
       const tradeStruct = {
         collateral: collateralWei,           // uint256 - USDC amount in 6 decimals
-        openPrice: BigInt(0),                // uint256 - 0 for market orders
-        tp: BigInt(0),                       // uint256 - take profit (0 = disabled)
-        sl: BigInt(0),                       // uint256 - stop loss (0 = disabled)
+        openPrice: openPriceWei,             // uint192 - current price in 18 decimals
+        tp: BigInt(0),                       // uint192 - take profit (0 = disabled)
+        sl: BigInt(0),                       // uint192 - stop loss (0 = disabled)
         trader: address,                     // address
         leverage,                            // uint32 - e.g., 10 for 10x
         pairIndex,                           // uint16
@@ -272,10 +281,11 @@ export function useOstiumTrade() {
       console.log('======================================')
       console.log('trader:', tradeStruct.trader)
       console.log('collateral:', tradeStruct.collateral.toString())
+      console.log('openPrice:', tradeStruct.openPrice.toString())
       console.log('buy (isLong):', tradeStruct.buy)
       console.log('leverage:', tradeStruct.leverage)
       console.log('pairIndex:', tradeStruct.pairIndex)
-      console.log('slippage:', slippageP.toString())
+      console.log('slippage (bps):', slippageP.toString())
       console.log('======================================')
 
       // Encode the trade call - using verified ABI from Ostium contract

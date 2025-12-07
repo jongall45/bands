@@ -27,7 +27,7 @@ import {
   type OstiumOrderParams,
   type OstiumOrderBatchParams
 } from '@/lib/ostium/smartWallet'
-import { OSTIUM_PAIRS } from '@/lib/ostium/constants'
+import { OSTIUM_PAIRS, OSTIUM_API } from '@/lib/ostium/constants'
 
 // ============================================
 // TYPES
@@ -76,6 +76,7 @@ export function SmartWalletOstiumOrder({
   // Balances
   const [usdcBalance, setUsdcBalance] = useState<string>('0')
   const [ethBalance, setEthBalance] = useState<string>('0')
+  const [currentPrice, setCurrentPrice] = useState<number>(0)
   
   // Get the embedded wallet (EOA signer for smart wallet)
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
@@ -125,6 +126,31 @@ export function SmartWalletOstiumOrder({
       fetchBalances()
     }
   }, [smartWalletAddress, fetchBalances])
+
+  // Fetch current price from Ostium API
+  useEffect(() => {
+    const fetchPrice = async () => {
+      try {
+        const response = await fetch(OSTIUM_API.PRICES)
+        const prices = await response.json()
+
+        const priceData = prices.find((p: any) =>
+          p.from === pair.from && p.to === pair.to
+        )
+
+        if (priceData?.mid) {
+          setCurrentPrice(priceData.mid)
+          console.log(`📊 Current ${pair.symbol} price: $${priceData.mid}`)
+        }
+      } catch (e) {
+        console.error('Price fetch failed:', e)
+      }
+    }
+
+    fetchPrice()
+    const interval = setInterval(fetchPrice, 5000)
+    return () => clearInterval(interval)
+  }, [pair])
 
   // ============================================
   // SIMULATE TRANSACTION
@@ -211,14 +237,20 @@ export function SmartWalletOstiumOrder({
       return
     }
 
+    if (currentPrice <= 0) {
+      setError('Unable to fetch current price. Please try again.')
+      return
+    }
+
     setError(null)
     setState('checking')
 
     try {
-      // Build full params with trader address
+      // Build full params with trader address and current price
       const batchParams: OstiumOrderBatchParams = {
         ...baseParams,
         traderAddress: smartWalletAddress,
+        currentPrice,
       }
 
       // Simulate first (returns the batch)
