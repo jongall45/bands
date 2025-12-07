@@ -12,7 +12,7 @@ import { useOstiumPrice } from '@/hooks/useOstiumPrices'
 import { OSTIUM_CONTRACTS, MIN_COLLATERAL_USD } from '@/lib/ostium/constants'
 import { ERC20_ABI } from '@/lib/ostium/abi'
 import { SwapForGasModal } from '@/components/bridge/SwapForGasModal'
-import { PrivyOstiumButton } from '@/features/trading/PrivyOstiumButton'
+import { OstiumTradeButton } from '@/components/OstiumTradeButton'
 
 // Pair type for props
 interface OstiumPairType {
@@ -338,16 +338,17 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
         </div>
       )}
 
-      {/* Privy Trade Button - Handles Approve + Trade with Privy Wallet */}
-      {isConnected && hasEnoughGas && isMarketOpen && collateralNum > 0 && meetsMinimum && collateralNum <= balance ? (
-        <PrivyOstiumButton
+      {/* Smart Wallet Trade Button - Uses ERC-4337 via Pimlico (like Ostium) */}
+      {isConnected && isMarketOpen && collateralNum > 0 && meetsMinimum ? (
+        <OstiumTradeButton
           pairIndex={pair.id}
           pairSymbol={pair.symbol}
           isLong={isLong}
-          amountUSDC={collateral}
+          collateralUSDC={collateral}
           leverage={leverage}
           onSuccess={() => {
             refetchBalance()
+            refetchEthBalance()
           }}
         />
       ) : (
@@ -357,12 +358,8 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
         >
           {!isConnected ? (
             'Connect Wallet'
-          ) : !hasEnoughGas ? (
-            '⛽ Need ETH for Gas'
           ) : !isMarketOpen ? (
             'Market Closed'
-          ) : collateralNum > balance ? (
-            'Insufficient Balance'
           ) : collateralNum > 0 && !meetsMinimum ? (
             `Minimum $${MIN_COLLATERAL_USD} Required`
           ) : (
