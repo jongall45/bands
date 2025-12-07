@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { createChart, ColorType, CrosshairMode, IChartApi, ISeriesApi, CandlestickData, Time } from 'lightweight-charts'
 
 interface TradingViewChartProps {
@@ -12,91 +12,17 @@ interface TradingViewChartProps {
   isMarketOpen?: boolean
 }
 
-// Seeded random generator for consistent chart data
-function seededRandom(seed: number): () => number {
-  return () => {
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff
-    return seed / 0x7fffffff
-  }
-}
-
-// Generate stable OHLC data using seeded random
-function generateCandlestickData(currentPrice: number, timeframe: string, symbol: string): CandlestickData[] {
-  if (currentPrice <= 0) return []
-
-  // Create a seed based on symbol and timeframe (stable across renders)
-  let seed = 0
-  for (let i = 0; i < symbol.length; i++) {
-    seed += symbol.charCodeAt(i) * (i + 1)
-  }
-  seed += timeframe.length * 1000
-  const random = seededRandom(seed)
-
-  const data: CandlestickData[] = []
-  // Use a fixed reference time (start of the current hour) to prevent chart flickering
-  const now = Math.floor(Date.now() / 3600000) * 3600
-
-  // Timeframe intervals in seconds
-  const intervals: Record<string, number> = {
-    '1m': 60,
-    '5m': 300,
-    '15m': 900,
-    '1h': 3600,
-    '4h': 14400,
-    '1D': 86400,
-  }
-
-  const interval = intervals[timeframe] || 900
-  const candles = 100
-
-  // Volatility based on timeframe
-  const volatilityMap: Record<string, number> = {
-    '1m': 0.001,
-    '5m': 0.002,
-    '15m': 0.003,
-    '1h': 0.005,
-    '4h': 0.01,
-    '1D': 0.02,
-  }
-  const volatility = currentPrice * (volatilityMap[timeframe] || 0.003)
-
-  let price = currentPrice * (1 + (random() - 0.5) * 0.03)
-
-  for (let i = candles; i > 0; i--) {
-    const time = (now - i * interval) as Time
-
-    // Generate OHLC with seeded random
-    const open = price
-    const change = (random() - 0.5) * volatility * 2
-    const high = Math.max(open, open + change) + random() * volatility * 0.5
-    const low = Math.min(open, open + change) - random() * volatility * 0.5
-    const close = open + change
-
-    // Trend towards current price
-    if (i < 20) {
-      price += (currentPrice - price) * 0.05
-    } else {
-      price = close
-    }
-
-    data.push({
-      time,
-      open,
-      high,
-      low,
-      close,
-    })
-  }
-
-  // Last candle is current price
-  const lastCandle = data[data.length - 1]
-  if (lastCandle) {
-    lastCandle.close = currentPrice
-    lastCandle.high = Math.max(lastCandle.high, currentPrice)
-    lastCandle.low = Math.min(lastCandle.low, currentPrice)
-  }
-
-  return data
+interface CandleResponse {
+  symbol: string
+  timeframe: string
+  candles: Array<{
+    time: number
+    open: number
+    high: number
+    low: number
+    close: number
+  }>
+  error?: string
 }
 
 export function TradingViewChart({
@@ -111,35 +37,70 @@ export function TradingViewChart({
   const chartRef = useRef<IChartApi | null>(null)
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>('15m')
+  const [candleData, setCandleData] = useState<CandlestickData[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
-  // Generate data based on timeframe (stable across renders)
-  const candleData = useMemo(() => {
-    return generateCandlestickData(currentPrice, selectedTimeframe, symbol)
-  }, [currentPrice, selectedTimeframe, symbol])
+  // Fetch real candle data from API
+  const fetchCandles = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      const response = await fetch(`/api/ostium/candles?symbol=${symbol}&timeframe=${selectedTimeframe}&limit=100`)
+      const data: CandleResponse = await response.json()
+
+      if (data.candles && data.candles.length > 0) {
+        const formattedCandles: CandlestickData[] = data.candles.map(c => ({
+          time: c.time as Time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+        }))
+        setCandleData(formattedCandles)
+      }
+    } catch (error) {
+      console.error('Failed to fetch candles:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [symbol, selectedTimeframe])
+
+  // Fetch candles on mount and when symbol/timeframe changes
+  useEffect(() => {
+    fetchCandles()
+    // Refresh candles every 30 seconds
+    const interval = setInterval(fetchCandles, 30000)
+    return () => clearInterval(interval)
+  }, [fetchCandles])
 
   // Create chart
   useEffect(() => {
-    if (!chartContainerRef.current) return
+    if (!chartContainerRef.current || candleData.length === 0) return
 
-    // Create chart
+    // Clear existing chart
+    if (chartRef.current) {
+      chartRef.current.remove()
+      chartRef.current = null
+    }
+
+    // Create chart with dark theme
     const chart = createChart(chartContainerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
         textColor: 'rgba(255, 255, 255, 0.5)',
       },
       grid: {
-        vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
-        horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
+        vertLines: { color: 'rgba(255, 255, 255, 0.03)' },
+        horzLines: { color: 'rgba(255, 255, 255, 0.03)' },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
         vertLine: {
-          color: 'rgba(255, 107, 0, 0.3)',
+          color: 'rgba(255, 107, 0, 0.4)',
           width: 1,
           style: 2,
         },
         horzLine: {
-          color: 'rgba(255, 107, 0, 0.3)',
+          color: 'rgba(255, 107, 0, 0.4)',
           width: 1,
           style: 2,
         },
@@ -181,15 +142,13 @@ export function TradingViewChart({
     candleSeriesRef.current = candleSeries
 
     // Set data
-    if (candleData.length > 0) {
-      candleSeries.setData(candleData)
-    }
+    candleSeries.setData(candleData)
 
-    // Add entry price line (white for visibility)
+    // Add entry price line (white/gray dashed)
     if (entryPrice && entryPrice > 0) {
       candleSeries.createPriceLine({
         price: entryPrice,
-        color: '#ffffff',
+        color: 'rgba(255, 255, 255, 0.8)',
         lineWidth: 2,
         lineStyle: 2, // Dashed
         axisLabelVisible: true,
@@ -197,7 +156,7 @@ export function TradingViewChart({
       })
     }
 
-    // Add liquidation price line
+    // Add liquidation price line (red dashed)
     if (liquidationPrice && liquidationPrice > 0) {
       candleSeries.createPriceLine({
         price: liquidationPrice,
@@ -231,15 +190,16 @@ export function TradingViewChart({
     }
   }, [candleData, entryPrice, liquidationPrice])
 
-  // Update data when price changes
+  // Update last candle with current price (real-time update)
   useEffect(() => {
-    if (candleSeriesRef.current && candleData.length > 0) {
+    if (candleSeriesRef.current && candleData.length > 0 && currentPrice > 0) {
       const lastCandle = candleData[candleData.length - 1]
       candleSeriesRef.current.update({
-        ...lastCandle,
-        close: currentPrice,
+        time: lastCandle.time,
+        open: lastCandle.open,
         high: Math.max(lastCandle.high, currentPrice),
         low: Math.min(lastCandle.low, currentPrice),
+        close: currentPrice,
       })
     }
   }, [currentPrice, candleData])
@@ -298,10 +258,17 @@ export function TradingViewChart({
       </div>
 
       {/* Chart Container */}
-      <div
-        ref={chartContainerRef}
-        className="w-full h-[200px] md:h-[250px]"
-      />
+      <div className="relative">
+        {isLoading && candleData.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/20 z-10">
+            <div className="w-6 h-6 border-2 border-[#FF6B00] border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
+        <div
+          ref={chartContainerRef}
+          className="w-full h-[200px] md:h-[250px]"
+        />
+      </div>
 
       {/* Price Markers (if in position) */}
       {(entryPrice || liquidationPrice) && (
