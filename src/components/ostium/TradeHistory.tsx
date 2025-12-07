@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
+import { useQuery } from '@tanstack/react-query'
 import {
   Clock, TrendingUp, TrendingDown, ExternalLink,
   CheckCircle, XCircle, Loader2, RefreshCw
@@ -9,63 +10,38 @@ import {
 
 interface TradeRecord {
   id: string
-  txHash: string
-  pairSymbol: string
   pairId: number
-  isLong: boolean
+  symbol: string
+  index: number
   collateral: number
   leverage: number
+  isLong: boolean
   entryPrice: number
-  timestamp: number
-  status: 'success' | 'failed' | 'pending'
-  type: 'open' | 'close'
+  closePrice: number | null
+  pnl: number | null
+  isOpen: boolean
+  openTime: number
+  closeTime: number | null
+  type: 'open' | 'closed'
 }
 
-// Store trades in localStorage (in production, use a proper backend)
-const STORAGE_KEY = 'ostium_trades'
-
-export function getStoredTrades(address: string): TradeRecord[] {
-  if (typeof window === 'undefined') return []
-  const stored = localStorage.getItem(`${STORAGE_KEY}_${address.toLowerCase()}`)
-  return stored ? JSON.parse(stored) : []
-}
-
-export function addTradeRecord(address: string, trade: Omit<TradeRecord, 'id'>) {
-  if (typeof window === 'undefined') return
-  const trades = getStoredTrades(address)
-  const newTrade = { ...trade, id: `${trade.txHash}_${Date.now()}` }
-  trades.unshift(newTrade) // Add to beginning
-  // Keep only last 50 trades
-  const trimmed = trades.slice(0, 50)
-  localStorage.setItem(`${STORAGE_KEY}_${address.toLowerCase()}`, JSON.stringify(trimmed))
+async function fetchTradeHistory(address: string): Promise<TradeRecord[]> {
+  const response = await fetch(`/api/ostium/history?address=${address}`)
+  if (!response.ok) throw new Error('Failed to fetch history')
+  return response.json()
 }
 
 export function TradeHistory() {
   const { client } = useSmartWallets()
-  const [trades, setTrades] = useState<TradeRecord[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-
   const smartWalletAddress = client?.account?.address
 
-  useEffect(() => {
-    if (!smartWalletAddress) {
-      setIsLoading(false)
-      return
-    }
-
-    // Load stored trades
-    const storedTrades = getStoredTrades(smartWalletAddress)
-    setTrades(storedTrades)
-    setIsLoading(false)
-
-    // Poll for updates
-    const interval = setInterval(() => {
-      const updated = getStoredTrades(smartWalletAddress)
-      setTrades(updated)
-    }, 5000)
-
-    return () => clearInterval(interval)
-  }, [smartWalletAddress])
+  const { data: trades, isLoading, refetch } = useQuery({
+    queryKey: ['ostium-history', smartWalletAddress],
+    queryFn: () => fetchTradeHistory(smartWalletAddress!),
+    enabled: !!smartWalletAddress,
+    refetchInterval: 30000, // Refresh every 30 seconds
+    staleTime: 10000,
+  })
 
   const formatTime = (timestamp: number) => {
     const diff = Date.now() - timestamp
@@ -87,7 +63,7 @@ export function TradeHistory() {
   if (isLoading) {
     return (
       <div className="p-8 flex flex-col items-center justify-center gap-3">
-        <Loader2 className="w-6 h-6 text-white/20 animate-spin" />
+        <Loader2 className="w-6 h-6 text-[#FF6B00] animate-spin" />
         <p className="text-white/40 text-sm">Loading history...</p>
       </div>
     )
@@ -104,7 +80,7 @@ export function TradeHistory() {
     )
   }
 
-  if (trades.length === 0) {
+  if (!trades || trades.length === 0) {
     return (
       <div className="p-8 text-center">
         <div className="w-16 h-16 bg-white/[0.03] rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -118,13 +94,16 @@ export function TradeHistory() {
 
   return (
     <div className="p-4 space-y-3">
-      {/* Refresh hint */}
+      {/* Header */}
       <div className="flex items-center justify-between text-white/30 text-xs px-1">
         <span>{trades.length} trades</span>
-        <div className="flex items-center gap-1">
+        <button
+          onClick={() => refetch()}
+          className="flex items-center gap-1 hover:text-white/50 transition-colors"
+        >
           <RefreshCw className="w-3 h-3" />
-          <span>Updates live</span>
-        </div>
+          <span>Refresh</span>
+        </button>
       </div>
 
       {/* Trades list */}
@@ -146,20 +125,25 @@ export function TradeHistory() {
               </div>
               <div>
                 <p className="text-white font-medium">
-                  {trade.type === 'open' ? 'Opened' : 'Closed'} {trade.pairSymbol}
+                  {trade.isOpen ? 'Opened' : 'Closed'} {trade.symbol}
                 </p>
                 <p className="text-white/40 text-xs">
-                  {trade.leverage}x {trade.isLong ? 'Long' : 'Short'} · {formatTime(trade.timestamp)}
+                  {trade.leverage}x {trade.isLong ? 'Long' : 'Short'} · {formatTime(trade.openTime)}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              {trade.status === 'success' ? (
-                <CheckCircle className="w-4 h-4 text-green-400" />
-              ) : trade.status === 'failed' ? (
-                <XCircle className="w-4 h-4 text-red-400" />
+            <div className="flex flex-col items-end gap-1">
+              {trade.isOpen ? (
+                <span className="text-[#FF6B00] text-xs font-medium px-2 py-0.5 bg-[#FF6B00]/10 rounded">
+                  Active
+                </span>
               ) : (
-                <Loader2 className="w-4 h-4 text-white/40 animate-spin" />
+                <CheckCircle className="w-4 h-4 text-green-400" />
+              )}
+              {trade.pnl !== null && !trade.isOpen && (
+                <span className={`text-xs font-mono ${trade.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {trade.pnl >= 0 ? '+' : ''}${trade.pnl.toFixed(2)}
+                </span>
               )}
             </div>
           </div>
@@ -179,17 +163,34 @@ export function TradeHistory() {
             </div>
           </div>
 
-          <a
-            href={`https://arbiscan.io/tx/${trade.txHash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-1.5 w-full py-2 bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] rounded-lg text-white/40 hover:text-white/60 text-xs transition-colors"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            View on Arbiscan
-          </a>
+          {trade.closePrice && (
+            <div className="mb-3 pt-2 border-t border-white/[0.06]">
+              <div className="flex justify-between text-sm">
+                <span className="text-white/40">Close Price</span>
+                <span className="text-white font-mono">${formatPrice(trade.closePrice)}</span>
+              </div>
+            </div>
+          )}
         </div>
       ))}
     </div>
   )
+}
+
+// Keep the local storage functions for recording new trades
+const STORAGE_KEY = 'ostium_trades'
+
+export function getStoredTrades(address: string): any[] {
+  if (typeof window === 'undefined') return []
+  const stored = localStorage.getItem(`${STORAGE_KEY}_${address.toLowerCase()}`)
+  return stored ? JSON.parse(stored) : []
+}
+
+export function addTradeRecord(address: string, trade: any) {
+  if (typeof window === 'undefined') return
+  const trades = getStoredTrades(address)
+  const newTrade = { ...trade, id: `${trade.txHash}_${Date.now()}` }
+  trades.unshift(newTrade)
+  const trimmed = trades.slice(0, 50)
+  localStorage.setItem(`${STORAGE_KEY}_${address.toLowerCase()}`, JSON.stringify(trimmed))
 }
