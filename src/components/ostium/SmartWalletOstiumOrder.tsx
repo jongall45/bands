@@ -18,15 +18,17 @@ import {
   Settings,
   ChevronDown
 } from 'lucide-react'
-import { 
-  CONTRACTS, 
+import {
+  CONTRACTS,
   ERC20_ABI,
-  buildOstiumOrderBatch, 
-  calculateExposure, 
+  buildOstiumOrderBatch,
+  calculateExposure,
   validateOrderParams,
-  type OstiumOrderParams 
+  type OstiumOrderParams,
+  type OstiumOrderBatchParams
 } from '@/lib/ostium/smartWallet'
 import { OSTIUM_PAIRS } from '@/lib/ostium/constants'
+import { fetchPythPriceUpdate } from '@/lib/ostium/api'
 
 // ============================================
 // TYPES
@@ -128,7 +130,7 @@ export function SmartWalletOstiumOrder({
   // ============================================
   // SIMULATE TRANSACTION
   // ============================================
-  const simulateTransaction = useCallback(async (params: OstiumOrderParams) => {
+  const simulateTransaction = useCallback(async (params: OstiumOrderBatchParams) => {
     if (!smartWalletClient || !smartWalletAddress) {
       throw new Error('Smart wallet not ready')
     }
@@ -137,9 +139,9 @@ export function SmartWalletOstiumOrder({
     console.log('🔬 Simulating batched transaction...')
 
     try {
-      // Build the batched transactions
+      // Build the batched transactions (now includes Pyth data)
       const batch = buildOstiumOrderBatch(params)
-      
+
       // Simulate each transaction to catch errors early
       for (const tx of batch) {
         try {
@@ -151,7 +153,7 @@ export function SmartWalletOstiumOrder({
           })
         } catch (simError: any) {
           const msg = simError.message?.toLowerCase() || ''
-          
+
           if (msg.includes('insufficient') || msg.includes('balance')) {
             throw new Error('Insufficient USDC balance')
           }
@@ -159,15 +161,16 @@ export function SmartWalletOstiumOrder({
             throw new Error('Price moved too much - increase slippage')
           }
           if (msg.includes('allowance')) {
-            throw new Error('Approval issue - will be fixed in batch')
+            // This is expected for simulation since approval hasn't happened yet
+            console.warn('Allowance warning - will be fixed in batch')
+          } else {
+            console.warn('Simulation warning:', simError.message)
           }
-          
-          console.warn('Simulation warning:', simError.message)
         }
       }
 
       console.log('✅ Simulation passed')
-      return true
+      return batch
     } catch (err: any) {
       console.error('❌ Simulation failed:', err)
       throw err
@@ -194,7 +197,7 @@ export function SmartWalletOstiumOrder({
       return
     }
 
-    const params: OstiumOrderParams = {
+    const baseParams: OstiumOrderParams = {
       pairIndex,
       isLong,
       leverage,
@@ -203,7 +206,7 @@ export function SmartWalletOstiumOrder({
     }
 
     // Validate
-    const validation = validateOrderParams(params)
+    const validation = validateOrderParams(baseParams)
     if (!validation.valid) {
       setError(validation.error || 'Invalid parameters')
       return
@@ -213,12 +216,21 @@ export function SmartWalletOstiumOrder({
     setState('checking')
 
     try {
-      // Simulate first
-      await simulateTransaction(params)
-      setState('ready')
+      // Fetch Pyth price update data first
+      console.log('🔮 Fetching Pyth price update data...')
+      const priceUpdateData = await fetchPythPriceUpdate(pairIndex)
+      console.log('✅ Pyth data received, length:', priceUpdateData.length)
 
-      // Build the batch
-      const batch = buildOstiumOrderBatch(params)
+      // Build full params with trader address and price data
+      const batchParams: OstiumOrderBatchParams = {
+        ...baseParams,
+        traderAddress: smartWalletAddress,
+        priceUpdateData,
+      }
+
+      // Simulate first (returns the batch)
+      const batch = await simulateTransaction(batchParams)
+      setState('ready')
 
       console.log('╔════════════════════════════════════════════╗')
       console.log('║   EXECUTING BATCHED SMART WALLET ORDER     ║')
@@ -231,6 +243,7 @@ export function SmartWalletOstiumOrder({
       console.log('📈 Exposure:', calculateExposure(collateral, leverage), 'USD')
       console.log('📉 Slippage:', slippageBps / 100, '%')
       console.log('📦 Transactions in batch:', batch.length)
+      console.log('💵 Approval target: OSTIUM_STORAGE (correct)')
 
       setState('executing')
 
@@ -245,7 +258,7 @@ export function SmartWalletOstiumOrder({
 
       console.log('✅ UserOperation submitted!')
       console.log('   Transaction Hash:', hash)
-      
+
       setTxHash(hash)
       setState('success')
       onSuccess?.(hash)
@@ -255,10 +268,10 @@ export function SmartWalletOstiumOrder({
 
     } catch (err: any) {
       console.error('❌ Order execution failed:', err)
-      
+
       let errorMsg = err.message || 'Transaction failed'
       const msg = errorMsg.toLowerCase()
-      
+
       if (msg.includes('insufficient') || msg.includes('balance')) {
         errorMsg = 'Insufficient USDC balance in smart wallet'
       } else if (msg.includes('rejected') || msg.includes('denied')) {
@@ -267,21 +280,23 @@ export function SmartWalletOstiumOrder({
         errorMsg = 'Slippage too high - try increasing slippage tolerance'
       } else if (msg.includes('revert')) {
         errorMsg = 'Transaction would fail - check parameters'
+      } else if (msg.includes('pyth') || msg.includes('price')) {
+        errorMsg = 'Failed to fetch price data - please try again'
       }
-      
+
       setError(errorMsg)
       setState('error')
       onError?.(errorMsg)
     }
   }, [
-    smartWalletClient, 
-    smartWalletAddress, 
-    collateral, 
-    usdcBalance, 
-    pairIndex, 
-    isLong, 
-    leverage, 
-    slippageBps, 
+    smartWalletClient,
+    smartWalletAddress,
+    collateral,
+    usdcBalance,
+    pairIndex,
+    isLong,
+    leverage,
+    slippageBps,
     pair.symbol,
     simulateTransaction,
     fetchBalances,
@@ -569,7 +584,7 @@ export function SmartWalletOstiumOrder({
 
       {/* Info */}
       <p className="text-white/30 text-xs text-center">
-        Batched UserOp: Approve → Transfer → Trade
+        Batched UserOp: Approve (Storage) → openTrade
       </p>
     </div>
   )

@@ -53,21 +53,35 @@ export const ERC20_ABI = [
   },
 ] as const
 
-// Ostium Trading ABI - openMarketOrder function
+// Ostium Trading ABI - openTrade function (correct function name)
 export const OSTIUM_TRADING_ABI = [
   {
-    name: 'openMarketOrder',
+    name: 'openTrade',
     type: 'function',
-    stateMutability: 'nonpayable',
+    stateMutability: 'payable', // Must be payable for Pyth oracle fees
     inputs: [
-      { name: 'pairIndex', type: 'uint256' },
-      { name: 'isLong', type: 'bool' },
-      { name: 'leverage', type: 'uint256' },
-      { name: 'quantity', type: 'uint256' },
-      { name: 'maxSlippage', type: 'uint256' },
-      { name: 'timestamp', type: 'uint256' },
+      {
+        name: '_trade',
+        type: 'tuple',
+        components: [
+          { name: 'trader', type: 'address' },
+          { name: 'pairIndex', type: 'uint256' },
+          { name: 'index', type: 'uint256' },
+          { name: 'initialPosToken', type: 'uint256' },
+          { name: 'positionSizeUSDC', type: 'uint256' },
+          { name: 'openPrice', type: 'uint256' },
+          { name: 'buy', type: 'bool' },
+          { name: 'leverage', type: 'uint256' },
+          { name: 'tp', type: 'uint256' },
+          { name: 'sl', type: 'uint256' },
+        ],
+      },
+      { name: '_orderType', type: 'uint256' },
+      { name: '_slippage', type: 'uint256' },
+      { name: '_priceUpdateData', type: 'bytes' },
+      { name: '_executionFee', type: 'uint256' },
     ],
-    outputs: [],
+    outputs: [{ name: '', type: 'bytes32' }],
   },
 ] as const
 
@@ -80,6 +94,11 @@ export interface OstiumOrderParams {
   leverage: number // e.g., 10 for 10x
   collateralUSDC: string // e.g., "5" for $5
   slippageBps: number // e.g., 100 for 1%
+}
+
+export interface OstiumOrderBatchParams extends OstiumOrderParams {
+  traderAddress: `0x${string}`
+  priceUpdateData: `0x${string}`
 }
 
 export interface BatchedTransaction {
@@ -115,96 +134,107 @@ export function encodeTransfer(to: `0x${string}`, amount: bigint): `0x${string}`
 }
 
 /**
- * Encode openMarketOrder call
- * 
- * @param pairIndex - Trading pair index (0 = BTC-USD)
- * @param isLong - True for long, false for short
- * @param leverage - Leverage in 18 decimals (e.g., 10e18 for 10x)
- * @param quantity - Position size in 18 decimals
- * @param maxSlippage - Max slippage (100 = 1%, 50 = 0.5%)
- * @param timestamp - Current Unix timestamp
+ * Encode openTrade call
+ *
+ * @param trade - Trade struct with all position details
+ * @param orderType - 0 for MARKET, 1 for LIMIT, 2 for STOP
+ * @param slippage - Slippage in format: basisPoints * 10_000_000 (50 bps = 500_000_000)
+ * @param priceUpdateData - Pyth oracle price update data
+ * @param executionFee - ETH fee for Pyth oracle (typically 0.0001 ETH)
  */
-export function encodeOpenMarketOrder(
-  pairIndex: number,
-  isLong: boolean,
-  leverage: bigint,
-  quantity: bigint,
-  maxSlippage: number,
-  timestamp: number
+export function encodeOpenTrade(
+  trade: {
+    trader: `0x${string}`
+    pairIndex: bigint
+    index: bigint
+    initialPosToken: bigint
+    positionSizeUSDC: bigint
+    openPrice: bigint
+    buy: boolean
+    leverage: bigint
+    tp: bigint
+    sl: bigint
+  },
+  orderType: bigint,
+  slippage: bigint,
+  priceUpdateData: `0x${string}`,
+  executionFee: bigint
 ): `0x${string}` {
   return encodeFunctionData({
     abi: OSTIUM_TRADING_ABI,
-    functionName: 'openMarketOrder',
-    args: [
-      BigInt(pairIndex),
-      isLong,
-      leverage,
-      quantity,
-      BigInt(maxSlippage),
-      BigInt(timestamp),
-    ],
+    functionName: 'openTrade',
+    args: [trade, orderType, slippage, priceUpdateData, executionFee],
   })
 }
 
 /**
  * Build batched transactions for opening an Ostium position
- * 
- * This creates 3 transactions to be batched in a single UserOperation:
- * 1. USDC.approve(Ostium Storage, amount + 20% buffer)
- * 2. USDC.transfer(Ostium Storage, collateral amount)
- * 3. Ostium Trading.openMarketOrder(...)
+ *
+ * This creates 2 transactions to be batched in a single UserOperation:
+ * 1. USDC.approve(Ostium Storage, amount with buffer)
+ * 2. Ostium Trading.openTrade(...) - Trading contract handles USDC transfer internally
+ *
+ * CRITICAL: Approval must go to OSTIUM_STORAGE, NOT OSTIUM_TRADING!
+ * The Trading contract pulls USDC from your wallet via transferFrom on Storage contract.
  */
-export function buildOstiumOrderBatch(params: OstiumOrderParams): BatchedTransaction[] {
-  const { pairIndex, isLong, leverage, collateralUSDC, slippageBps } = params
-  
+export function buildOstiumOrderBatch(params: OstiumOrderBatchParams): BatchedTransaction[] {
+  const { pairIndex, isLong, leverage, collateralUSDC, slippageBps, traderAddress, priceUpdateData } = params
+
   // Parse collateral to 6 decimals (USDC)
   const collateralWei = parseUnits(collateralUSDC, 6)
-  
-  // Approval amount with 20% buffer
-  const approvalAmount = (collateralWei * BigInt(120)) / BigInt(100)
-  
-  // Calculate position size in 18 decimals
-  // Position size = collateral * leverage
-  const collateral18 = parseUnits(collateralUSDC, 18)
-  const leverageWei = BigInt(leverage) * BigInt(10 ** 18)
-  const positionSize = (collateral18 * BigInt(leverage))
-  
-  // Current timestamp
-  const timestamp = Math.floor(Date.now() / 1000)
-  
+
+  // Approval amount with 50% buffer to avoid edge cases
+  const approvalAmount = (collateralWei * BigInt(150)) / BigInt(100)
+
+  // Execution fee for Pyth oracle (0.0001 ETH)
+  const executionFee = BigInt(100000000000000)
+
+  // Slippage: basisPoints * 10_000_000 (e.g., 100 bps = 1% = 1_000_000_000)
+  const slippage = BigInt(slippageBps) * BigInt(10_000_000)
+
+  // Build trade struct
+  const trade = {
+    trader: traderAddress,
+    pairIndex: BigInt(pairIndex),
+    index: BigInt(0), // 0 for new position
+    initialPosToken: BigInt(0), // 0 for new position
+    positionSizeUSDC: collateralWei, // Collateral in 6 decimals
+    openPrice: BigInt(0), // 0 for market orders (price determined at execution)
+    buy: isLong,
+    leverage: BigInt(leverage),
+    tp: BigInt(0), // No take profit
+    sl: BigInt(0), // No stop loss
+  }
+
   console.log('🔨 Building Ostium order batch:')
+  console.log('   Trader:', traderAddress)
   console.log('   Pair Index:', pairIndex)
   console.log('   Direction:', isLong ? 'LONG' : 'SHORT')
   console.log('   Collateral:', collateralUSDC, 'USDC')
   console.log('   Collateral Wei (6 dec):', collateralWei.toString())
   console.log('   Leverage:', leverage, 'x')
-  console.log('   Leverage Wei (18 dec):', leverageWei.toString())
-  console.log('   Position Size (18 dec):', positionSize.toString())
-  console.log('   Slippage:', slippageBps / 100, '%')
-  console.log('   Timestamp:', timestamp)
+  console.log('   Slippage:', slippageBps, 'bps =', slippage.toString())
+  console.log('   Execution Fee:', executionFee.toString(), 'wei (0.0001 ETH)')
+  console.log('   Price Update Data Length:', priceUpdateData.length)
 
   return [
-    // 1. Approve USDC to Ostium Storage
+    // 1. Approve USDC to Ostium Storage (Trading contract pulls via transferFrom)
     {
       to: CONTRACTS.USDC,
       data: encodeApprove(CONTRACTS.OSTIUM_STORAGE, approvalAmount),
+      value: BigInt(0),
     },
-    // 2. Transfer USDC to Ostium Storage
-    {
-      to: CONTRACTS.USDC,
-      data: encodeTransfer(CONTRACTS.OSTIUM_STORAGE, collateralWei),
-    },
-    // 3. Open market order on Ostium Trading
+    // 2. Open trade on Ostium Trading (sends ETH for Pyth fee)
     {
       to: CONTRACTS.OSTIUM_TRADING,
-      data: encodeOpenMarketOrder(
-        pairIndex,
-        isLong,
-        leverageWei,
-        positionSize,
-        slippageBps,
-        timestamp
+      data: encodeOpenTrade(
+        trade,
+        BigInt(0), // MARKET order type
+        slippage,
+        priceUpdateData,
+        executionFee
       ),
+      value: executionFee, // ETH for Pyth oracle fee
     },
   ]
 }

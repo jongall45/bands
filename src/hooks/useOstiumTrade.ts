@@ -34,7 +34,7 @@ export type TradeStep = 'idle' | 'checking' | 'approving' | 'trading' | 'success
 
 /**
  * Hook for Ostium trading with proper approve-then-trade pattern
- * CRITICAL: Approval goes to TRADING contract (not TRADING_STORAGE)
+ * CRITICAL: Approval goes to TRADING_STORAGE contract (Trading pulls USDC via transferFrom)
  */
 export function useOstiumTrade() {
   const { wallets } = useWallets()
@@ -57,22 +57,22 @@ export function useOstiumTrade() {
   }, [embeddedWallet])
 
   /**
-   * Fetch current allowance for TRADING contract
+   * Fetch current allowance for TRADING_STORAGE contract
    */
   const refetchAllowance = useCallback(async () => {
     if (!address || !publicClient) return BigInt(0)
-    
+
     try {
       const result = await publicClient.readContract({
         address: OSTIUM_CONTRACTS.USDC,
         abi: ERC20_ABI,
         functionName: 'allowance',
-        // CRITICAL: Spender is TRADING contract
-        args: [address, OSTIUM_CONTRACTS.TRADING],
+        // CRITICAL: Spender is TRADING_STORAGE - Trading contract pulls USDC via transferFrom on Storage
+        args: [address, OSTIUM_CONTRACTS.TRADING_STORAGE],
       })
       const currentAllowance = result as bigint
       setAllowance(currentAllowance)
-      console.log('🔵 USDC Allowance for TRADING:', currentAllowance.toString())
+      console.log('🔵 USDC Allowance for TRADING_STORAGE:', currentAllowance.toString())
       return currentAllowance
     } catch (e) {
       console.error('Error fetching allowance:', e)
@@ -119,7 +119,8 @@ export function useOstiumTrade() {
   }, [])
 
   /**
-   * Approve USDC for TRADING contract (MaxUint256)
+   * Approve USDC for TRADING_STORAGE contract (MaxUint256)
+   * CRITICAL: Trading contract pulls USDC via transferFrom on Storage contract
    */
   const approveUSDC = useCallback(async (): Promise<`0x${string}` | null> => {
     if (!embeddedWallet || !address || !publicClient) {
@@ -132,23 +133,23 @@ export function useOstiumTrade() {
 
     try {
       const provider = await embeddedWallet.getEthereumProvider() as PrivyProvider
-      
+
       if (!await ensureArbitrumChain(provider)) {
         throw new Error('Failed to switch to Arbitrum')
       }
 
-      // Encode approve for TRADING contract with MaxUint256
+      // Encode approve for TRADING_STORAGE contract with MaxUint256
       const calldata = encodeFunctionData({
         abi: ERC20_ABI,
         functionName: 'approve',
-        args: [OSTIUM_CONTRACTS.TRADING, maxUint256],
+        args: [OSTIUM_CONTRACTS.TRADING_STORAGE, maxUint256],
       })
 
       console.log('======================================')
       console.log('🟡 APPROVAL TRANSACTION')
       console.log('======================================')
       console.log('USDC Contract:', OSTIUM_CONTRACTS.USDC)
-      console.log('Spender (TRADING):', OSTIUM_CONTRACTS.TRADING)
+      console.log('Spender (TRADING_STORAGE):', OSTIUM_CONTRACTS.TRADING_STORAGE)
       console.log('Amount: MaxUint256 (infinite)')
       console.log('======================================')
 
@@ -174,7 +175,7 @@ export function useOstiumTrade() {
 
       // Refetch allowance
       const newAllowance = await refetchAllowance()
-      console.log('🟢 USDC Allowance for TRADING:', newAllowance.toString())
+      console.log('🟢 USDC Allowance for TRADING_STORAGE:', newAllowance.toString())
 
       // Reset to idle - approval complete, now ready to trade
       setStep('idle')

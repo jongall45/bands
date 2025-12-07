@@ -13,7 +13,8 @@ import { fetchPythPriceUpdate } from '@/lib/ostium/api'
 // CONSTANTS (Arbitrum)
 // ============================================
 const USDC_ADDRESS = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as const
-const OSTIUM_SPENDER = '0x6D0bA1f9996DBD8885827e1b2e8f6593e7702411' as const
+const OSTIUM_TRADING = '0x6D0bA1f9996DBD8885827e1b2e8f6593e7702411' as const
+const OSTIUM_STORAGE = '0xcCd5891083A8acD2074690F65d3024E7D13d66E7' as const // USDC must be approved HERE!
 const USDC_DECIMALS = 6 // CRITICAL: USDC uses 6 decimals, NOT 18
 
 // ERC20 ABI for allowance & approve
@@ -109,7 +110,7 @@ export function OstiumExecutionButton({
     address: USDC_ADDRESS,
     abi: ERC20_ABI,
     functionName: 'allowance',
-    args: address ? [address, OSTIUM_SPENDER] : undefined,
+    args: address ? [address, OSTIUM_STORAGE] : undefined, // CRITICAL: Check allowance for STORAGE, not Trading!
     chainId: arbitrum.id,
     query: {
       enabled: !!address && parsedAmount > BigInt(0),
@@ -169,7 +170,8 @@ export function OstiumExecutionButton({
       console.log('======================================')
       console.log('User Address:', address)
       console.log('USDC Contract:', USDC_ADDRESS)
-      console.log('Ostium Spender:', OSTIUM_SPENDER)
+      console.log('Ostium Storage (approval target):', OSTIUM_STORAGE)
+      console.log('Ostium Trading (trade target):', OSTIUM_TRADING)
       console.log('Required Amount (human):', amountUSDC, 'USDC')
       console.log('Required Amount (wei, 6 dec):', parsedAmount.toString())
       console.log('Current Allowance (wei):', currentAllowance?.toString() ?? 'Loading...')
@@ -280,23 +282,23 @@ export function OstiumExecutionButton({
   // ============================================
   const handleApprove = useCallback(() => {
     if (!address) return
-    
+
     setErrorMessage(null)
-    
+
     console.log('======================================')
     console.log('🟡 INITIATING APPROVAL TRANSACTION')
     console.log('======================================')
     console.log('USDC Contract:', USDC_ADDRESS)
-    console.log('Spender (Ostium):', OSTIUM_SPENDER)
+    console.log('Spender (Ostium Storage):', OSTIUM_STORAGE)
     console.log('Amount to Approve:', parsedAmount.toString(), '(6 decimals)')
     console.log('======================================')
 
-    // Approve the exact required amount (user can re-approve for more later)
+    // Approve USDC to STORAGE contract (Trading contract pulls from Storage via transferFrom)
     writeApprove({
       address: USDC_ADDRESS,
       abi: ERC20_ABI,
       functionName: 'approve',
-      args: [OSTIUM_SPENDER, parsedAmount],
+      args: [OSTIUM_STORAGE, parsedAmount],
       chainId: arbitrum.id,
     })
   }, [address, parsedAmount, writeApprove])
@@ -354,9 +356,9 @@ export function OstiumExecutionButton({
       console.log('  slippage:', slippage.toString())
       console.log('  pythUpdateFee:', pythUpdateFee.toString(), 'wei')
 
-      // Execute trade with gas buffer
+      // Execute trade with gas buffer - call openTrade on TRADING contract
       writeTrade({
-        address: OSTIUM_SPENDER,
+        address: OSTIUM_TRADING,
         abi: OSTIUM_TRADING_ABI,
         functionName: 'openTrade',
         args: [
@@ -589,5 +591,5 @@ export function OstiumExecutionButton({
   )
 }
 
-export { USDC_ADDRESS, OSTIUM_SPENDER, USDC_DECIMALS }
+export { USDC_ADDRESS, OSTIUM_TRADING, OSTIUM_STORAGE, USDC_DECIMALS }
 
