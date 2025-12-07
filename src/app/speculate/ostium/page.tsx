@@ -8,7 +8,6 @@ import { BridgeToArbitrumModal } from '@/components/bridge/BridgeToArbitrumModal
 import { SwapForGasModal } from '@/components/bridge/SwapForGasModal'
 import { OstiumMarketSelector } from '@/components/ostium/MarketSelector'
 import { OstiumTradePanel } from '@/components/ostium/TradePanel'
-import { OstiumTradeButton } from '@/components/OstiumTradeButton'
 import { OSTIUM_PAIRS, type OstiumPair } from '@/lib/ostium/constants'
 import { ArrowLeft, RefreshCw, AlertCircle, ArrowRightLeft, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
@@ -135,11 +134,6 @@ export default function OstiumTradingPage() {
               </button>
             </div>
           </div>
-        </div>
-
-        {/* Smart Wallet Quick Trade */}
-        <div className="px-4 py-3">
-          <OstiumTradeButton />
         </div>
 
         {/* Market Selector */}

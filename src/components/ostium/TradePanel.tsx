@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import { useAccount, useReadContract, useBalance } from 'wagmi'
+import { useWallets } from '@privy-io/react-auth'
+import { useReadContract, useBalance } from 'wagmi'
 import { formatUnits } from 'viem'
 import { arbitrum } from 'wagmi/chains'
-import { 
-  TrendingUp, TrendingDown, Info, AlertCircle, ChevronDown, Fuel, ExternalLink 
+import {
+  TrendingUp, TrendingDown, Info, AlertCircle, ChevronDown, Fuel, ExternalLink
 } from 'lucide-react'
 import { useOstiumPrice } from '@/hooks/useOstiumPrices'
 import { OSTIUM_CONTRACTS, MIN_COLLATERAL_USD } from '@/lib/ostium/constants'
@@ -38,7 +39,12 @@ interface TradePanelProps {
 }
 
 export function OstiumTradePanel({ pair }: TradePanelProps) {
-  const { address, isConnected } = useAccount()
+  // Use Privy embedded wallet directly for better compatibility
+  const { wallets } = useWallets()
+  const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
+  const address = embeddedWallet?.address as `0x${string}` | undefined
+  const isConnected = !!embeddedWallet && !!address
+
   const { price, isLoading: priceLoading } = useOstiumPrice(pair.id)
 
   const [isLong, setIsLong] = useState(true)
