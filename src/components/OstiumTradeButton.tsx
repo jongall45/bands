@@ -7,6 +7,8 @@ import { encodeFunctionData, parseUnits, formatUnits, maxUint256, zeroAddress } 
 import { Loader2, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react'
 import { OSTIUM_TRADING_ABI, ERC20_ABI } from '@/lib/ostium/abi'
 import { OSTIUM_CONTRACTS, ORDER_TYPE, calculateSlippage, DEFAULT_SLIPPAGE_BPS, OSTIUM_PAIRS, OSTIUM_API } from '@/lib/ostium/constants'
+import { TransactionSuccessModal } from '@/components/ostium/TransactionSuccessModal'
+import { addTradeRecord } from '@/components/ostium/TradeHistory'
 
 interface SmartWalletTradeButtonProps {
   pairIndex: number
@@ -33,6 +35,8 @@ export function OstiumTradeButton({
   const [balance, setBalance] = useState<string>('0')
   const [allowance, setAllowance] = useState<bigint>(BigInt(0))
   const [currentPrice, setCurrentPrice] = useState<number>(0)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [lastTxHash, setLastTxHash] = useState<string>('')
 
   const ready = !!client
   const smartWalletAddress = client?.account?.address
@@ -233,6 +237,26 @@ export function OstiumTradeButton({
       console.log('✅ Transaction submitted:', hash)
       console.log('🔗 Arbiscan:', `https://arbiscan.io/tx/${hash}`)
 
+      // Show success modal
+      setLastTxHash(hash)
+      setShowSuccessModal(true)
+
+      // Record trade in history
+      if (smartWalletAddress) {
+        addTradeRecord(smartWalletAddress, {
+          txHash: hash,
+          pairSymbol: pairSymbol,
+          pairId: pairIndex,
+          isLong: isLong,
+          collateral: collateralNum,
+          leverage: leverage,
+          entryPrice: currentPrice,
+          timestamp: Date.now(),
+          status: 'success',
+          type: 'open',
+        })
+      }
+
       onSuccess?.(hash)
     } catch (e: any) {
       console.error('❌ Trade failed:', e)
@@ -326,6 +350,18 @@ export function OstiumTradeButton({
       <p className="text-white/30 text-xs text-center">
         Batched: Approve + Trade (1 signature via ERC-4337)
       </p>
+
+      {/* Success Modal */}
+      <TransactionSuccessModal
+        isOpen={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        txHash={lastTxHash}
+        pairSymbol={pairSymbol}
+        isLong={isLong}
+        collateral={collateralUSDC}
+        leverage={leverage}
+        entryPrice={currentPrice}
+      />
     </div>
   )
 }
