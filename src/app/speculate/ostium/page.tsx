@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { BottomNav } from '@/components/ui/BottomNav'
@@ -12,6 +12,7 @@ import { OstiumPositions } from '@/components/ostium/Positions'
 import { TradeHistory } from '@/components/ostium/TradeHistory'
 import { PriceChart } from '@/components/ostium/PriceChart'
 import { useOstiumPrice } from '@/hooks/useOstiumPrices'
+import { useOstiumPositions } from '@/hooks/useOstiumPositions'
 import { OSTIUM_PAIRS, type OstiumPair } from '@/lib/ostium/constants'
 import { ArrowLeft, RefreshCw, ArrowRightLeft, ExternalLink, Wallet } from 'lucide-react'
 import Link from 'next/link'
@@ -29,6 +30,13 @@ export default function OstiumTradingPage() {
   const [activeTab, setActiveTab] = useState<TabType>('trade')
 
   const { price } = useOstiumPrice(selectedPair.id)
+  const { data: positions } = useOstiumPositions()
+
+  // Find active position for the selected pair (if any)
+  const activePosition = useMemo(() => {
+    if (!positions) return null
+    return positions.find(p => p.pairId === selectedPair.id)
+  }, [positions, selectedPair.id])
 
   const hasArbitrumUsdc = parseFloat(balances.usdcArb) > 0
   const hasArbitrumEth = parseFloat(balances.ethArb) > 0.0001
@@ -153,7 +161,9 @@ export default function OstiumTradingPage() {
             symbol={selectedPair.symbol}
             currentPrice={price?.mid || 0}
             isMarketOpen={price?.isMarketOpen ?? true}
-            change24h={price?.change24h || 0}
+            entryPrice={activePosition?.entryPrice}
+            liquidationPrice={activePosition?.liquidationPrice}
+            isLong={activePosition?.isLong}
           />
         </div>
 
