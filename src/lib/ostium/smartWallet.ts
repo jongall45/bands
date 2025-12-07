@@ -208,7 +208,7 @@ export function buildOstiumOrderBatch(params: OstiumOrderBatchParams): BatchedTr
     tp: BigInt(0),                    // uint192 - take profit (0 = disabled)
     sl: BigInt(0),                    // uint192 - stop loss (0 = disabled)
     trader: traderAddress,            // address
-    leverage,                         // uint32
+    leverage: leverage * 100,         // uint32 - PRECISION_2 (10x = 1000)
     pairIndex,                        // uint16
     index: 0,                         // uint8 - 0 for new position
     buy: isLong,                      // bool
