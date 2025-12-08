@@ -353,7 +353,7 @@ export function useOstiumTrade() {
       }
 
       // Convert price to PRECISION_18 (price is in USD, multiply by 1e18)
-      const marketPrice = BigInt(Math.floor(priceData.mid * 1e18))
+      const marketPrice = BigInt(Math.floor(priceData.price * 1e18))
       
       // Close 100% of position, slippage 0.5% (50 basis points in PRECISION_4 = 500000)
       const closePercentage = 10000 // 100%
