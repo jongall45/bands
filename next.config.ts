@@ -20,6 +20,16 @@ const nextConfig: NextConfig = {
         hostname: 'flagcdn.com',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'upload.wikimedia.org',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'companiesmarketcap.com',
+        pathname: '/**',
+      },
     ],
   },
   webpack: (config, { isServer }) => {

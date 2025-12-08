@@ -65,8 +65,8 @@ function AssetIcon({ pair, size = 'md' }: { pair: OstiumPair; size?: 'sm' | 'md'
   const imgSize = size === 'sm' ? 22 : 26
   const textSize = size === 'sm' ? 'text-xs' : 'text-sm'
 
-  // Check if we have an external icon URL (not local /icons/)
-  const hasExternalIcon = pair.icon && !pair.icon.startsWith('/icons/')
+  // Check if we have a valid external icon URL (not local /icons/ and not empty)
+  const hasExternalIcon = pair.icon && pair.icon.length > 0 && !pair.icon.startsWith('/')
 
   if (hasExternalIcon && !imgError) {
     return (

@@ -2,8 +2,9 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { useWallets } from '@privy-io/react-auth'
-import { useReadContract, useBalance } from 'wagmi'
-import { formatUnits } from 'viem'
+import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
+import { useBalance } from 'wagmi'
+import { formatUnits, encodeFunctionData } from 'viem'
 import { arbitrum } from 'wagmi/chains'
 import {
   TrendingUp, TrendingDown, Info, AlertCircle, ChevronDown, Fuel, ExternalLink
@@ -39,11 +40,14 @@ interface TradePanelProps {
 }
 
 export function OstiumTradePanel({ pair }: TradePanelProps) {
-  // Use Privy embedded wallet directly for better compatibility
+  // Use smart wallet for trading
+  const { client } = useSmartWallets()
+  const smartWalletAddress = client?.account?.address as `0x${string}` | undefined
+
+  // Also get embedded wallet for fallback display
   const { wallets } = useWallets()
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
-  const address = embeddedWallet?.address as `0x${string}` | undefined
-  const isConnected = !!embeddedWallet && !!address
+  const isConnected = !!smartWalletAddress || !!embeddedWallet?.address
 
   const { price, isLoading: priceLoading } = useOstiumPrice(pair.id)
 
@@ -54,6 +58,7 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
   const [takeProfit, setTakeProfit] = useState('')
   const [stopLoss, setStopLoss] = useState('')
   const [showGasSwap, setShowGasSwap] = useState(false)
+  const [smartWalletBalance, setSmartWalletBalance] = useState<number>(0)
 
   // Get max leverage for this pair's category
   const maxLeverage = pair.maxLeverage || MAX_LEVERAGE[pair.category] || 50
@@ -69,24 +74,56 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
     }
   }, [pair.id, pair.category, pair.maxLeverage, leverage])
 
-  // Fetch USDC balance on Arbitrum
-  const { data: usdcBalance, refetch: refetchBalance } = useReadContract({
-    address: OSTIUM_CONTRACTS.USDC,
-    abi: ERC20_ABI,
-    functionName: 'balanceOf',
-    args: address ? [address] : undefined,
-    chainId: arbitrum.id,
-  })
+  // Fetch USDC balance from smart wallet
+  useEffect(() => {
+    if (!smartWalletAddress) {
+      setSmartWalletBalance(0)
+      return
+    }
+
+    const fetchBalance = async () => {
+      try {
+        const response = await fetch('https://arb1.arbitrum.io/rpc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'eth_call',
+            params: [{
+              to: OSTIUM_CONTRACTS.USDC,
+              data: encodeFunctionData({
+                abi: ERC20_ABI,
+                functionName: 'balanceOf',
+                args: [smartWalletAddress],
+              }),
+            }, 'latest'],
+          }),
+        })
+        const result = await response.json()
+        if (result.result) {
+          const balance = parseFloat(formatUnits(BigInt(result.result), 6))
+          setSmartWalletBalance(balance)
+        }
+      } catch (e) {
+        console.error('Failed to fetch smart wallet balance:', e)
+      }
+    }
+
+    fetchBalance()
+    const interval = setInterval(fetchBalance, 10000)
+    return () => clearInterval(interval)
+  }, [smartWalletAddress])
 
   // Check ETH balance on Arbitrum for gas
   const { data: ethBalanceData, refetch: refetchEthBalance } = useBalance({
-    address,
+    address: smartWalletAddress,
     chainId: arbitrum.id,
   })
-  
+
   const hasEnoughGas = ethBalanceData && parseFloat(ethBalanceData.formatted) > 0.0001
 
-  const balance = usdcBalance ? parseFloat(formatUnits(usdcBalance, 6)) : 0
+  const balance = smartWalletBalance
   const currentPrice = price?.mid || 0
   const isMarketOpen = price?.isMarketOpen ?? false
   const collateralNum = parseFloat(collateral || '0')
@@ -205,7 +242,7 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
           />
           <button
             onClick={() => setCollateral(Math.floor(balance).toString())}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#ef4444] text-xs font-semibold hover:text-[#ef4444]/80 transition-colors"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#FF6B00] text-xs font-semibold hover:text-[#FF6B00]/80 transition-colors"
           >
             MAX
           </button>
@@ -215,9 +252,9 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
           {[25, 50, 100, 250].map(amount => (
             <button
               key={amount}
-              onClick={() => setCollateral(Math.min(amount, balance).toString())}
+              onClick={() => setCollateral(amount.toString())}
               disabled={balance < amount}
-              className="flex-1 py-1.5 bg-[#080808] hover:bg-[#101010] disabled:opacity-30 border border-white/[0.05] rounded-lg text-white/50 text-xs font-medium transition-colors"
+              className="flex-1 py-1.5 bg-[#080808] hover:bg-[#101010] disabled:opacity-30 disabled:cursor-not-allowed border border-white/[0.05] hover:border-[#FF6B00]/30 rounded-lg text-white/50 hover:text-[#FF6B00] text-xs font-medium transition-colors"
             >
               ${amount}
             </button>
@@ -349,7 +386,6 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
           collateralUSDC={collateral}
           leverage={leverage}
           onSuccess={() => {
-            refetchBalance()
             refetchEthBalance()
           }}
         />
@@ -387,7 +423,6 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
         onClose={() => setShowGasSwap(false)}
         onSuccess={() => {
           setShowGasSwap(false)
-          refetchBalance()
           refetchEthBalance()
         }}
         suggestedAmount="1"
