@@ -346,12 +346,23 @@ export function useOstiumTrade() {
         throw new Error('Failed to switch to Arbitrum')
       }
 
-      const priceUpdateData = await fetchPythPriceUpdate(pairIndex)
+      // Fetch current price for the pair
+      const priceData = await fetchPairPrice(pairIndex)
+      if (!priceData) {
+        throw new Error('Failed to fetch current price')
+      }
+
+      // Convert price to PRECISION_18 (price is in USD, multiply by 1e18)
+      const marketPrice = BigInt(Math.floor(priceData.mid * 1e18))
+      
+      // Close 100% of position, slippage 0.5% (50 basis points in PRECISION_4 = 500000)
+      const closePercentage = 10000 // 100%
+      const slippageP = 500000 // 0.5% in PRECISION_4 format
 
       const calldata = encodeFunctionData({
         abi: OSTIUM_TRADING_ABI,
         functionName: 'closeTradeMarket',
-        args: [BigInt(pairIndex), BigInt(positionIndex), priceUpdateData],
+        args: [pairIndex, positionIndex, closePercentage, marketPrice, slippageP],
       })
 
       const hash = await provider.request({
