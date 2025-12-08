@@ -111,8 +111,8 @@ export async function GET(request: NextRequest) {
         rawValue: rawPriceStr,
         rawValueLength: rawPriceStr.length,
         parsedPrice: entryPrice,
-        expectedRange: category === 'stock' || category === 'index'
-          ? 'Stock/Index: $50-$50000'
+        expectedRange: category === 'stock'
+          ? 'Stock: $50-$50000'
           : category === 'crypto'
             ? 'Crypto: $0.0001-$150000'
             : 'Other: $0.5-$10000',
