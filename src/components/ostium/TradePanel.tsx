@@ -128,7 +128,7 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
   const meetsMinimum = collateralNum >= MIN_COLLATERAL_USD
 
   return (
-    <div className="p-3 space-y-3 pb-32">
+    <div className="p-3 space-y-3 pb-4">
       {/* No ETH for Gas Warning - Compact */}
       {!hasEnoughGas && (
         <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
@@ -256,8 +256,8 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
           onChange={(e) => setLeverage(parseInt(e.target.value))}
           className="w-full h-1.5 bg-[#080808] rounded-full appearance-none cursor-pointer
             [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4
-            [&::-webkit-slider-thumb]:bg-[#ef4444] [&::-webkit-slider-thumb]:rounded-full
-            [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-[#ef4444]/30
+            [&::-webkit-slider-thumb]:bg-[#FF6B00] [&::-webkit-slider-thumb]:rounded-full
+            [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-[#FF6B00]/30
             [&::-webkit-slider-thumb]:cursor-pointer"
         />
         <div className="flex justify-between text-white/30 text-[10px]">

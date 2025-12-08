@@ -18,6 +18,41 @@ const CATEGORIES: { id: OstiumCategory | null; label: string; icon: typeof Build
   { id: 'commodity', label: 'Commodities', icon: Droplet },
 ]
 
+// Ticker colors for visual distinction
+const TICKER_COLORS: Record<string, { bg: string; text: string }> = {
+  // Crypto
+  'BTC': { bg: 'bg-orange-500/20', text: 'text-orange-400' },
+  'ETH': { bg: 'bg-purple-500/20', text: 'text-purple-400' },
+  'SOL': { bg: 'bg-gradient-to-br from-purple-500/20 to-green-500/20', text: 'text-green-400' },
+  // Stocks
+  'AAPL': { bg: 'bg-white/10', text: 'text-white' },
+  'MSFT': { bg: 'bg-blue-500/20', text: 'text-blue-400' },
+  'GOOG': { bg: 'bg-red-500/20', text: 'text-red-400' },
+  'AMZN': { bg: 'bg-orange-500/20', text: 'text-orange-400' },
+  'NVDA': { bg: 'bg-green-500/20', text: 'text-green-400' },
+  'META': { bg: 'bg-blue-500/20', text: 'text-blue-400' },
+  'TSLA': { bg: 'bg-red-500/20', text: 'text-red-400' },
+  // Indices
+  'SPX': { bg: 'bg-blue-500/20', text: 'text-blue-400' },
+  'NDX': { bg: 'bg-cyan-500/20', text: 'text-cyan-400' },
+  'DJI': { bg: 'bg-indigo-500/20', text: 'text-indigo-400' },
+  // Forex
+  'EUR': { bg: 'bg-blue-500/20', text: 'text-blue-400' },
+  'GBP': { bg: 'bg-purple-500/20', text: 'text-purple-400' },
+  'JPY': { bg: 'bg-red-500/20', text: 'text-red-400' },
+  'AUD': { bg: 'bg-yellow-500/20', text: 'text-yellow-400' },
+  // Commodities
+  'XAU': { bg: 'bg-yellow-500/20', text: 'text-yellow-400' },
+  'XAG': { bg: 'bg-gray-300/20', text: 'text-gray-300' },
+  'WTI': { bg: 'bg-amber-700/20', text: 'text-amber-500' },
+}
+
+// Get ticker styling
+function getTickerStyle(symbol: string) {
+  const ticker = symbol.split('-')[0]
+  return TICKER_COLORS[ticker] || { bg: 'bg-white/[0.08]', text: 'text-white' }
+}
+
 export function OstiumMarketSelector({ selectedPair, onSelectPair }: MarketSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -46,11 +81,16 @@ export function OstiumMarketSelector({ selectedPair, onSelectPair }: MarketSelec
         className="w-full px-4 py-3 flex items-center justify-between bg-[#0a0a0a] rounded-[20px] border border-white/[0.06] shadow-2xl"
       >
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-[#ef4444]/20 to-orange-500/20 rounded-xl flex items-center justify-center">
-            <span className="text-white font-bold text-sm">
-              {selectedPair.symbol.split('-')[0].slice(0, 3)}
-            </span>
-          </div>
+          {(() => {
+            const style = getTickerStyle(selectedPair.symbol)
+            return (
+              <div className={`w-10 h-10 ${style.bg} rounded-xl flex items-center justify-center`}>
+                <span className={`${style.text} font-bold text-sm`}>
+                  {selectedPair.symbol.split('-')[0].slice(0, 3)}
+                </span>
+              </div>
+            )
+          })()}
           <div className="text-left">
             <div className="flex items-center gap-2">
               <p className="text-white font-semibold">{selectedPair.symbol}</p>
@@ -70,7 +110,7 @@ export function OstiumMarketSelector({ selectedPair, onSelectPair }: MarketSelec
               {price?.isMarketOpen ? 'Live' : 'Closed'}
             </p>
           </div>
-          <ChevronDown className={`w-5 h-5 text-white/40 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`w-5 h-5 text-[#FF6B00] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </div>
       </button>
 
@@ -166,7 +206,8 @@ export function OstiumMarketSelector({ selectedPair, onSelectPair }: MarketSelec
 
 function MarketRow({ pair, isSelected, onClick }: { pair: OstiumPair; isSelected: boolean; onClick: () => void }) {
   const { price } = useOstiumPrice(pair.id)
-  
+  const style = getTickerStyle(pair.symbol)
+
   const formatPrice = (p: number | undefined) => {
     if (!p || p === 0) return '---'
     if (pair.category === 'forex') return p.toFixed(4)
@@ -182,8 +223,8 @@ function MarketRow({ pair, isSelected, onClick }: { pair: OstiumPair; isSelected
       }`}
     >
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 bg-white/[0.05] rounded-lg flex items-center justify-center">
-          <span className="text-white font-bold text-xs">
+        <div className={`w-9 h-9 ${style.bg} rounded-lg flex items-center justify-center`}>
+          <span className={`${style.text} font-bold text-xs`}>
             {pair.symbol.split('-')[0].slice(0, 3)}
           </span>
         </div>
