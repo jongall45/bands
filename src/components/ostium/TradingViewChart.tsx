@@ -238,38 +238,38 @@ export function TradingViewChart({
   const timeframes = ['1m', '5m', '15m', '1h', '4h', '1D']
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 p-3">
       {/* Price Header */}
-      <div className="px-4 flex items-center justify-between">
+      <div className="flex items-center justify-between">
         <div>
-          <p className="text-white/40 text-sm">{symbol}</p>
+          <p className="text-white/40 text-xs">{symbol}</p>
           <div className="flex items-baseline gap-2">
-            <h2 className="text-3xl font-bold text-white font-mono">
+            <h2 className="text-2xl font-bold text-white font-mono">
               ${formatPrice(currentPrice)}
             </h2>
             <div className="flex items-center gap-1">
               {isMarketOpen ? (
                 <>
-                  <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                  <span className="text-green-400 text-xs">Live</span>
+                  <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+                  <span className="text-green-400 text-[10px]">Live</span>
                 </>
               ) : (
                 <>
-                  <span className="w-2 h-2 bg-yellow-400 rounded-full" />
-                  <span className="text-yellow-400 text-xs">Closed</span>
+                  <span className="w-1.5 h-1.5 bg-yellow-400 rounded-full" />
+                  <span className="text-yellow-400 text-[10px]">Closed</span>
                 </>
               )}
             </div>
           </div>
         </div>
 
-        {/* Timeframe Selector */}
-        <div className="flex gap-1">
+        {/* Timeframe Selector - more compact */}
+        <div className="flex gap-0.5">
           {timeframes.map(tf => (
             <button
               key={tf}
               onClick={() => setSelectedTimeframe(tf)}
-              className={`px-2 py-1 rounded text-xs font-medium transition-all ${
+              className={`px-1.5 py-1 rounded text-[10px] font-medium transition-all ${
                 selectedTimeframe === tf
                   ? 'bg-[#FF6B00] text-white'
                   : 'bg-white/5 text-white/40 hover:text-white/60'
@@ -282,35 +282,35 @@ export function TradingViewChart({
       </div>
 
       {/* Chart Container */}
-      <div className="relative">
+      <div className="relative rounded-xl overflow-hidden bg-[#080808]">
         {isLoading && candleData.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/20 z-10">
-            <div className="w-6 h-6 border-2 border-[#FF6B00] border-t-transparent rounded-full animate-spin" />
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10">
+            <div className="w-5 h-5 border-2 border-[#FF6B00] border-t-transparent rounded-full animate-spin" />
           </div>
         )}
         <div
           ref={chartContainerRef}
-          className="w-full h-[200px] md:h-[250px]"
+          className="w-full h-[180px]"
         />
       </div>
 
       {/* Price Markers (if in position) */}
       {(entryPrice || liquidationPrice) && (
-        <div className="flex justify-around px-4 py-2 bg-white/[0.02] rounded-xl mx-4">
+        <div className="flex justify-around py-2 bg-[#080808] rounded-xl">
           {entryPrice && entryPrice > 0 && (
             <div className="text-center">
-              <p className="text-white/40 text-xs">Entry</p>
-              <p className="text-white font-mono text-sm">${formatPrice(entryPrice)}</p>
+              <p className="text-white/40 text-[10px]">Entry</p>
+              <p className="text-white font-mono text-xs">${formatPrice(entryPrice)}</p>
             </div>
           )}
           <div className="text-center">
-            <p className="text-white/40 text-xs">Current</p>
-            <p className="text-white font-mono text-sm">${formatPrice(currentPrice)}</p>
+            <p className="text-white/40 text-[10px]">Current</p>
+            <p className="text-white font-mono text-xs">${formatPrice(currentPrice)}</p>
           </div>
           {liquidationPrice && liquidationPrice > 0 && (
             <div className="text-center">
-              <p className="text-white/40 text-xs">Liq. Price</p>
-              <p className="text-red-400 font-mono text-sm">${formatPrice(liquidationPrice)}</p>
+              <p className="text-white/40 text-[10px]">Liq. Price</p>
+              <p className="text-red-400 font-mono text-xs">${formatPrice(liquidationPrice)}</p>
             </div>
           )}
         </div>

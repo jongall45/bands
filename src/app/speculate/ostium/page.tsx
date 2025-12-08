@@ -164,8 +164,8 @@ export default function OstiumTradingPage() {
           onSelectPair={setSelectedPair}
         />
 
-        {/* TradingView Chart - Full width to match other UI */}
-        <div className="bg-[#0d0d0d]/90 border-y border-white/[0.06]">
+        {/* TradingView Chart - Rounded card with darker background */}
+        <div className="mx-3 mt-3 bg-[#050505] rounded-2xl border border-white/[0.04] overflow-hidden">
           <TradingViewChart
             symbol={selectedPair.symbol}
             currentPrice={price?.mid || 0}
@@ -226,8 +226,8 @@ export default function OstiumTradingPage() {
           </button>
         </div>
 
-        {/* Tab Content - stealth black with proper scroll */}
-        <div className="flex-1 overflow-y-auto bg-[#0a0a0a]/80 pb-24">
+        {/* Tab Content - darker stealth black with proper scroll */}
+        <div className="flex-1 overflow-y-auto bg-[#050505]/90 pb-24">
           {activeTab === 'trade' && <OstiumTradePanel pair={selectedPair} />}
           {activeTab === 'positions' && <OstiumPositions />}
           {activeTab === 'history' && <TradeHistory />}
