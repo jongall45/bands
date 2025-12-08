@@ -3,12 +3,19 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { createChart, ColorType, CrosshairMode, IChartApi, ISeriesApi, CandlestickData, Time } from 'lightweight-charts'
 
+interface Position {
+  pairId: number
+  entryPrice: number
+  liquidationPrice: number
+  isLong: boolean
+  leverage: number
+  collateral: number
+}
+
 interface TradingViewChartProps {
   symbol: string
   currentPrice: number
-  entryPrice?: number
-  liquidationPrice?: number
-  isLong?: boolean
+  positions?: Position[]
   isMarketOpen?: boolean
 }
 
@@ -28,9 +35,7 @@ interface CandleResponse {
 export function TradingViewChart({
   symbol,
   currentPrice,
-  entryPrice,
-  liquidationPrice,
-  isLong = true,
+  positions = [],
   isMarketOpen = true,
 }: TradingViewChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
@@ -67,7 +72,6 @@ export function TradingViewChart({
   // Fetch candles on mount and when symbol/timeframe changes
   useEffect(() => {
     fetchCandles()
-    // Refresh candles every 10 seconds for faster updates
     const interval = setInterval(fetchCandles, 10000)
     return () => clearInterval(interval)
   }, [fetchCandles])
@@ -144,29 +148,32 @@ export function TradingViewChart({
     // Set data
     candleSeries.setData(candleData)
 
-    // Add entry price line (white/gray dashed)
-    if (entryPrice && entryPrice > 0) {
-      candleSeries.createPriceLine({
-        price: entryPrice,
-        color: 'rgba(255, 255, 255, 0.8)',
-        lineWidth: 2,
-        lineStyle: 2, // Dashed
-        axisLabelVisible: true,
-        title: 'ENTRY',
-      })
-    }
+    // Add price lines for ALL positions (not just one)
+    positions.forEach((position, index) => {
+      // Entry price line (white dashed)
+      if (position.entryPrice && position.entryPrice > 0) {
+        candleSeries.createPriceLine({
+          price: position.entryPrice,
+          color: 'rgba(255, 255, 255, 0.8)',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: positions.length > 1 ? `ENTRY ${index + 1}` : 'ENTRY',
+        })
+      }
 
-    // Add liquidation price line (red dashed)
-    if (liquidationPrice && liquidationPrice > 0) {
-      candleSeries.createPriceLine({
-        price: liquidationPrice,
-        color: '#ef4444',
-        lineWidth: 2,
-        lineStyle: 2,
-        axisLabelVisible: true,
-        title: 'LIQ',
-      })
-    }
+      // Liquidation price line (red dashed)
+      if (position.liquidationPrice && position.liquidationPrice > 0) {
+        candleSeries.createPriceLine({
+          price: position.liquidationPrice,
+          color: '#ef4444',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: positions.length > 1 ? `LIQ ${index + 1}` : 'LIQ',
+        })
+      }
+    })
 
     // Fit content
     chart.timeScale().fitContent()
@@ -188,7 +195,7 @@ export function TradingViewChart({
       window.removeEventListener('resize', handleResize)
       chart.remove()
     }
-  }, [candleData, entryPrice, liquidationPrice])
+  }, [candleData, positions])
 
   // Update last candle with current price (real-time update)
   useEffect(() => {
@@ -239,7 +246,7 @@ export function TradingViewChart({
           </div>
         </div>
 
-        {/* Timeframe Selector - more compact */}
+        {/* Timeframe Selector */}
         <div className="flex gap-0.5">
           {timeframes.map(tf => (
             <button
@@ -270,25 +277,25 @@ export function TradingViewChart({
         />
       </div>
 
-      {/* Price Markers (if in position) */}
-      {(entryPrice || liquidationPrice) && (
-        <div className="flex justify-around py-2 bg-[#080808] rounded-xl">
-          {entryPrice && entryPrice > 0 && (
-            <div className="text-center">
-              <p className="text-white/40 text-[10px]">Entry</p>
-              <p className="text-white font-mono text-xs">${formatPrice(entryPrice)}</p>
+      {/* Position Summary - Show all positions */}
+      {positions.length > 0 && (
+        <div className="grid grid-cols-3 gap-2 py-2 bg-[#080808] rounded-xl px-3">
+          {positions.map((pos, i) => (
+            <div key={i} className="text-center">
+              <p className="text-white/40 text-[10px]">Entry {positions.length > 1 ? i + 1 : ''}</p>
+              <p className="text-white font-mono text-xs">${formatPrice(pos.entryPrice)}</p>
             </div>
-          )}
+          ))}
           <div className="text-center">
             <p className="text-white/40 text-[10px]">Current</p>
             <p className="text-white font-mono text-xs">${formatPrice(currentPrice)}</p>
           </div>
-          {liquidationPrice && liquidationPrice > 0 && (
-            <div className="text-center">
-              <p className="text-white/40 text-[10px]">Liq. Price</p>
-              <p className="text-red-400 font-mono text-xs">${formatPrice(liquidationPrice)}</p>
+          {positions.map((pos, i) => (
+            <div key={`liq-${i}`} className="text-center">
+              <p className="text-white/40 text-[10px]">Liq. {positions.length > 1 ? i + 1 : ''}</p>
+              <p className="text-red-400 font-mono text-xs">${formatPrice(pos.liquidationPrice)}</p>
             </div>
-          )}
+          ))}
         </div>
       )}
     </div>
