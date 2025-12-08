@@ -5,10 +5,9 @@ import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { useOstiumPositions, type OstiumPosition } from '@/hooks/useOstiumPositions'
 import { useOstiumPrices } from '@/hooks/useOstiumPrices'
 import { arbitrum } from 'viem/chains'
-import { encodeFunctionData, parseEther } from 'viem'
-import { OSTIUM_CONTRACTS } from '@/lib/ostium/constants'
+import { encodeFunctionData } from 'viem'
+import { OSTIUM_CONTRACTS, DEFAULT_SLIPPAGE_BPS } from '@/lib/ostium/constants'
 import { OSTIUM_TRADING_ABI } from '@/lib/ostium/abi'
-import { fetchPythPriceUpdate } from '@/lib/ostium/api'
 import { Loader2, X, TrendingUp, TrendingDown, Clock } from 'lucide-react'
 
 export function OstiumPositions() {
@@ -23,6 +22,12 @@ export function OstiumPositions() {
       return
     }
 
+    const smartWalletAddress = client.account?.address
+    if (!smartWalletAddress) {
+      console.error('Smart wallet address not available')
+      return
+    }
+
     setClosingIndex(position.index)
 
     try {
@@ -33,33 +38,69 @@ export function OstiumPositions() {
         await client.switchChain({ id: arbitrum.id })
       }
 
-      console.log('╔═══════════════════════════════════════════╗')
-      console.log('║  CLOSING POSITION VIA SMART WALLET        ║')
-      console.log('╚═══════════════════════════════════════════╝')
+      // Get current price for market close
+      const currentPriceData = prices?.find(p => p.pairId === position.pairId)
+      const currentPrice = currentPriceData?.mid || position.currentPrice || position.entryPrice
+
+      if (!currentPrice || currentPrice <= 0) {
+        throw new Error('Unable to fetch current price for market close')
+      }
+
+      console.log('╔═══════════════════════════════════════════════════════════╗')
+      console.log('║  CLOSING POSITION VIA SMART WALLET                        ║')
+      console.log('╚═══════════════════════════════════════════════════════════╝')
+      console.log('Smart Wallet:', smartWalletAddress)
       console.log('Pair Index:', position.pairId)
       console.log('Position Index:', position.index)
       console.log('Symbol:', position.symbol)
+      console.log('Direction:', position.isLong ? 'LONG' : 'SHORT')
+      console.log('Collateral:', position.collateral, 'USDC')
+      console.log('Entry Price:', position.entryPrice)
+      console.log('Current Price:', currentPrice)
 
-      // Fetch Pyth price update data
-      const priceUpdateData = await fetchPythPriceUpdate(position.pairId)
-      console.log('📊 Pyth data fetched, length:', priceUpdateData.length)
+      // Convert price to 18 decimal precision (PRECISION_18)
+      const marketPriceWei = BigInt(Math.floor(currentPrice * 1e18))
+      console.log('📊 Market Price (18 dec):', marketPriceWei.toString())
 
-      // Encode closeTradeMarket call
+      // closeTradeMarket params:
+      // - pairIndex: uint16 - trading pair
+      // - index: uint8 - position index for this trader
+      // - closePercentage: uint16 - 10000 = 100% close
+      // - marketPrice: uint192 - current price in 18 decimals
+      // - slippageP: uint32 - slippage in basis points (50 = 0.5%)
+      const closePercentage = 10000 // 100% - close entire position
+      const slippageP = DEFAULT_SLIPPAGE_BPS // 50 = 0.5%
+
+      console.log('📦 Close params:', {
+        pairIndex: position.pairId,
+        index: position.index,
+        closePercentage,
+        marketPrice: marketPriceWei.toString(),
+        slippageP,
+      })
+
+      // Encode closeTradeMarket call with correct parameters
       const calldata = encodeFunctionData({
         abi: OSTIUM_TRADING_ABI,
         functionName: 'closeTradeMarket',
-        args: [BigInt(position.pairId), BigInt(position.index), priceUpdateData],
+        args: [
+          position.pairId,           // uint16 pairIndex
+          position.index,            // uint8 index
+          closePercentage,           // uint16 closePercentage (10000 = 100%)
+          marketPriceWei,            // uint192 marketPrice
+          slippageP,                 // uint32 slippageP
+        ],
       })
 
+      console.log('📝 Calldata encoded, length:', calldata.length)
       console.log('🚀 Sending close position via smart wallet...')
 
-      // Close trade - needs ETH for Pyth oracle update fee
-      // Ostium's closeTradeMarket is payable and forwards ETH to Pyth
+      // Close trade - nonpayable function
       const hash = await client.sendTransaction({
         calls: [{
           to: OSTIUM_CONTRACTS.TRADING as `0x${string}`,
           data: calldata,
-          value: parseEther('0.0001'), // ~$0.25 for Pyth fee
+          value: BigInt(0), // Function is nonpayable
         }],
       })
 
@@ -70,7 +111,26 @@ export function OstiumPositions() {
       setTimeout(() => refetch(), 3000)
     } catch (error: any) {
       console.error('❌ Close position failed:', error)
-      alert(`Failed to close position: ${error.message}`)
+
+      // Extract useful error message
+      let errorMsg = 'Unknown error'
+      if (error.shortMessage) {
+        errorMsg = error.shortMessage
+      } else if (error.message) {
+        errorMsg = error.message
+      }
+
+      // Check for common issues
+      if (errorMsg.includes('reverted during simulation')) {
+        console.error('📋 Simulation revert - possible causes:')
+        console.error('  1. Position may already be closed')
+        console.error('  2. Position index may be incorrect')
+        console.error('  3. Insufficient ETH for Pyth oracle fee')
+        console.error('  4. Contract may require different parameters')
+        errorMsg = 'Transaction simulation failed. Position may already be closed or parameters are incorrect.'
+      }
+
+      alert(`Failed to close position: ${errorMsg}`)
     } finally {
       setClosingIndex(null)
     }
