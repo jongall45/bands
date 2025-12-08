@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // Query all trades (open and closed) for the trader
+    // Include various PnL fields since different subgraph versions may use different names
     const query = `
       query trades($trader: Bytes!) {
         trades(
@@ -69,31 +70,59 @@ export async function GET(request: NextRequest) {
       const pairId = parseInt(trade.pair?.id || '0')
       const pair = OSTIUM_PAIRS.find(p => p.id === pairId)
       const symbol = pair?.symbol || `${trade.pair?.from || 'UNKNOWN'}-${trade.pair?.to || 'USD'}`
-      const category = pair?.category || 'crypto'
 
       const collateral = parseFloat(trade.collateral) / 1e6
       const leverage = parseFloat(trade.leverage) / 100
 
-      // Price precision varies by asset type
-      const rawEntryPrice = parseFloat(trade.openPrice)
-      const rawClosePrice = trade.closePrice ? parseFloat(trade.closePrice) : null
-
-      // Helper to parse price based on category
-      // Non-crypto assets (stocks, forex, commodities) may use different precision
-      const parsePrice = (raw: number) => {
-        if (category !== 'crypto') {
-          const price10 = raw / 1e10
-          const price18 = raw / 1e18
-          return (price10 > 0.01 && price10 < 1000000) ? price10 : price18
+      // According to Ostium SDK, ALL prices use 18 decimals (PRECISION_18)
+      // Parse price using BigInt for precision
+      const parsePrice = (rawStr: string | null | undefined): number | null => {
+        if (!rawStr || rawStr === '0') return null
+        try {
+          const rawBigInt = BigInt(rawStr)
+          const wholePart = rawBigInt / BigInt(1e18)
+          const fractionalPart = rawBigInt % BigInt(1e18)
+          return Number(wholePart) + Number(fractionalPart) / 1e18
+        } catch {
+          const parsed = parseFloat(rawStr)
+          return parsed > 0 ? parsed / 1e18 : null
         }
-        return raw / 1e18
       }
 
-      const entryPrice = parsePrice(rawEntryPrice)
-      const closePrice = rawClosePrice ? parsePrice(rawClosePrice) : null
+      const entryPrice = parsePrice(trade.openPrice) || 0
+      const closePrice = parsePrice(trade.closePrice)
 
-      // PnL comes in USDC (6 decimals)
-      const pnl = trade.pnl ? parseFloat(trade.pnl) / 1e6 : null
+      // PnL from subgraph - check if it's in USDC decimals (6) or raw
+      // Also check for realized PnL fields that subgraph might use
+      let pnl: number | null = null
+      if (trade.pnl && trade.pnl !== '0') {
+        // PnL is typically in USDC (6 decimals)
+        pnl = parseFloat(trade.pnl) / 1e6
+      } else if (trade.realizedPnl && trade.realizedPnl !== '0') {
+        // Some subgraphs use realizedPnl
+        pnl = parseFloat(trade.realizedPnl) / 1e6
+      }
+
+      // Fallback: Calculate PnL if we have close price but no PnL from subgraph
+      // PnL = (closePrice - entryPrice) / entryPrice * collateral * leverage (for longs)
+      // PnL = (entryPrice - closePrice) / entryPrice * collateral * leverage (for shorts)
+      if (pnl === null && closePrice && entryPrice > 0 && !trade.isOpen) {
+        const priceDiff = trade.isBuy
+          ? (closePrice - entryPrice)
+          : (entryPrice - closePrice)
+        pnl = (priceDiff / entryPrice) * collateral * leverage
+      }
+
+      // Debug logging
+      console.log(`History ${symbol}:`, {
+        rawOpenPrice: trade.openPrice,
+        rawClosePrice: trade.closePrice,
+        rawPnl: trade.pnl,
+        parsedEntryPrice: entryPrice,
+        parsedClosePrice: closePrice,
+        parsedPnl: pnl,
+        isOpen: trade.isOpen,
+      })
 
       return {
         id: trade.tradeID,
