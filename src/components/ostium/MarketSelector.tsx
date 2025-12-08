@@ -8,6 +8,8 @@ import { ChevronDown, Search, DollarSign, Building2, BarChart3, Coins, Droplet, 
 interface MarketSelectorProps {
   selectedPair: OstiumPair
   onSelectPair: (pair: OstiumPair) => void
+  onClose?: () => void
+  isModal?: boolean
 }
 
 const CATEGORIES: { id: OstiumCategory | null; label: string; icon: typeof Building2 }[] = [
@@ -53,11 +55,105 @@ function getTickerStyle(symbol: string) {
   return TICKER_COLORS[ticker] || { bg: 'bg-white/[0.08]', text: 'text-white' }
 }
 
-export function OstiumMarketSelector({ selectedPair, onSelectPair }: MarketSelectorProps) {
-  const [isOpen, setIsOpen] = useState(false)
+export function OstiumMarketSelector({ selectedPair, onSelectPair, onClose, isModal = false }: MarketSelectorProps) {
   const [search, setSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<OstiumCategory | null>('stock')
   const { price } = useOstiumPrice(selectedPair.id)
+
+  // If modal mode, render just the dropdown content
+  if (isModal) {
+    const filteredPairs = OSTIUM_PAIRS.filter(pair => {
+      const matchesSearch = pair.symbol.toLowerCase().includes(search.toLowerCase()) ||
+                            pair.name.toLowerCase().includes(search.toLowerCase())
+      const matchesCategory = !selectedCategory || pair.category === selectedCategory
+      return matchesSearch && matchesCategory
+    })
+
+    return (
+      <>
+        <div
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+          onClick={onClose}
+        />
+        <div className="fixed inset-x-3 top-[100px] bottom-[100px] z-50 bg-[#0a0a0a] border border-white/[0.06] rounded-[20px] shadow-2xl overflow-hidden flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b border-white/[0.06]">
+            <span className="text-white font-semibold">Select Market</span>
+            <button
+              onClick={onClose}
+              className="text-white/40 hover:text-white/60 p-1"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Search */}
+          <div className="p-3 border-b border-white/[0.06]">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search markets..."
+                className="w-full pl-10 pr-4 py-2.5 bg-white/[0.03] border border-[#FF6B00]/30 rounded-xl text-white text-sm outline-none focus:border-[#FF6B00]/60 transition-colors"
+                autoFocus
+              />
+            </div>
+          </div>
+
+          {/* Categories */}
+          <div className="flex gap-2 p-3 overflow-x-auto border-b border-white/[0.06]">
+            <button
+              onClick={() => setSelectedCategory(null)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs whitespace-nowrap transition-all ${
+                selectedCategory === null
+                  ? 'bg-[#FF6B00] text-white'
+                  : 'bg-white/[0.05] text-white/60 hover:text-white hover:bg-white/[0.08]'
+              }`}
+            >
+              All
+            </button>
+            {CATEGORIES.map(cat => (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs whitespace-nowrap transition-all ${
+                  selectedCategory === cat.id
+                    ? 'bg-[#FF6B00] text-white'
+                    : 'bg-white/[0.05] text-white/60 hover:text-white hover:bg-white/[0.08]'
+                }`}
+              >
+                <cat.icon className="w-3 h-3" />
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Market List */}
+          <div className="flex-1 overflow-y-auto">
+            {filteredPairs.length === 0 ? (
+              <div className="p-8 text-center text-white/40">
+                No markets found
+              </div>
+            ) : (
+              filteredPairs.map(pair => (
+                <MarketRow
+                  key={pair.id}
+                  pair={pair}
+                  isSelected={selectedPair.id === pair.id}
+                  onClick={() => onSelectPair(pair)}
+                />
+              ))
+            )}
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  // Non-modal mode (original behavior)
+  const [isOpen, setIsOpen] = useState(false)
 
   const filteredPairs = OSTIUM_PAIRS.filter(pair => {
     const matchesSearch = pair.symbol.toLowerCase().includes(search.toLowerCase()) ||

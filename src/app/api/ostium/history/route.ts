@@ -69,11 +69,30 @@ export async function GET(request: NextRequest) {
       const pairId = parseInt(trade.pair?.id || '0')
       const pair = OSTIUM_PAIRS.find(p => p.id === pairId)
       const symbol = pair?.symbol || `${trade.pair?.from || 'UNKNOWN'}-${trade.pair?.to || 'USD'}`
+      const category = pair?.category || 'crypto'
 
       const collateral = parseFloat(trade.collateral) / 1e6
       const leverage = parseFloat(trade.leverage) / 100
-      const entryPrice = parseFloat(trade.openPrice) / 1e18
-      const closePrice = trade.closePrice ? parseFloat(trade.closePrice) / 1e18 : null
+
+      // Price precision varies by asset type
+      const rawEntryPrice = parseFloat(trade.openPrice)
+      const rawClosePrice = trade.closePrice ? parseFloat(trade.closePrice) : null
+
+      // Helper to parse price based on category
+      // Non-crypto assets (stocks, forex, commodities) may use different precision
+      const parsePrice = (raw: number) => {
+        if (category !== 'crypto') {
+          const price10 = raw / 1e10
+          const price18 = raw / 1e18
+          return (price10 > 0.01 && price10 < 1000000) ? price10 : price18
+        }
+        return raw / 1e18
+      }
+
+      const entryPrice = parsePrice(rawEntryPrice)
+      const closePrice = rawClosePrice ? parsePrice(rawClosePrice) : null
+
+      // PnL comes in USDC (6 decimals)
       const pnl = trade.pnl ? parseFloat(trade.pnl) / 1e6 : null
 
       return {
