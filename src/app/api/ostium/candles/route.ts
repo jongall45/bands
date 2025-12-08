@@ -218,7 +218,7 @@ export async function GET(request: NextRequest) {
 
     if (category === 'crypto') {
       candles = await fetchCryptoCandles(symbol, timeframe, limit)
-    } else if (category === 'stock' || category === 'index') {
+    } else if (category === 'stock') {
       candles = await fetchStockCandles(symbol, timeframe, limit)
     } else {
       // Forex and commodities - try API first, then generate
