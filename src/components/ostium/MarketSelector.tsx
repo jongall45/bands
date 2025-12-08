@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { OSTIUM_PAIRS, type OstiumPair, type OstiumCategory } from '@/lib/ostium/constants'
 import { useOstiumPrice, useOstiumPrices } from '@/hooks/useOstiumPrices'
 import { ChevronDown, Search, DollarSign, Building2, BarChart3, Coins, Droplet, X } from 'lucide-react'
@@ -20,7 +21,7 @@ const CATEGORIES: { id: OstiumCategory | null; label: string; icon: typeof Build
   { id: 'commodity', label: 'Commodities', icon: Droplet },
 ]
 
-// Ticker colors for visual distinction
+// Fallback ticker colors when icon fails to load
 const TICKER_COLORS: Record<string, { bg: string; text: string }> = {
   // Crypto
   'BTC': { bg: 'bg-orange-500/20', text: 'text-orange-400' },
@@ -49,10 +50,48 @@ const TICKER_COLORS: Record<string, { bg: string; text: string }> = {
   'WTI': { bg: 'bg-amber-700/20', text: 'text-amber-500' },
 }
 
-// Get ticker styling
+// Get ticker styling (for fallback)
 function getTickerStyle(symbol: string) {
   const ticker = symbol.split('-')[0]
   return TICKER_COLORS[ticker] || { bg: 'bg-white/[0.08]', text: 'text-white' }
+}
+
+// Asset icon component with fallback to colored text
+function AssetIcon({ pair, size = 'md' }: { pair: OstiumPair; size?: 'sm' | 'md' }) {
+  const [imgError, setImgError] = useState(false)
+  const style = getTickerStyle(pair.symbol)
+
+  const sizeClasses = size === 'sm' ? 'w-9 h-9' : 'w-10 h-10'
+  const imgSize = size === 'sm' ? 22 : 26
+  const textSize = size === 'sm' ? 'text-xs' : 'text-sm'
+
+  // Check if we have an external icon URL (not local /icons/)
+  const hasExternalIcon = pair.icon && !pair.icon.startsWith('/icons/')
+
+  if (hasExternalIcon && !imgError) {
+    return (
+      <div className={`${sizeClasses} rounded-xl flex items-center justify-center overflow-hidden bg-white/[0.05]`}>
+        <Image
+          src={pair.icon!}
+          alt={pair.name}
+          width={imgSize}
+          height={imgSize}
+          className="object-contain"
+          onError={() => setImgError(true)}
+          unoptimized
+        />
+      </div>
+    )
+  }
+
+  // Fallback to colored text icon
+  return (
+    <div className={`${sizeClasses} ${style.bg} rounded-xl flex items-center justify-center`}>
+      <span className={`${style.text} font-bold ${textSize}`}>
+        {pair.symbol.split('-')[0].slice(0, 3)}
+      </span>
+    </div>
+  )
 }
 
 export function OstiumMarketSelector({ selectedPair, onSelectPair, onClose, isModal = false }: MarketSelectorProps) {
@@ -177,16 +216,7 @@ export function OstiumMarketSelector({ selectedPair, onSelectPair, onClose, isMo
         className="w-full px-4 py-3 flex items-center justify-between bg-[#0a0a0a] rounded-[20px] border border-white/[0.06] shadow-2xl"
       >
         <div className="flex items-center gap-3">
-          {(() => {
-            const style = getTickerStyle(selectedPair.symbol)
-            return (
-              <div className={`w-10 h-10 ${style.bg} rounded-xl flex items-center justify-center`}>
-                <span className={`${style.text} font-bold text-sm`}>
-                  {selectedPair.symbol.split('-')[0].slice(0, 3)}
-                </span>
-              </div>
-            )
-          })()}
+          <AssetIcon pair={selectedPair} size="md" />
           <div className="text-left">
             <div className="flex items-center gap-2">
               <p className="text-white font-semibold">{selectedPair.symbol}</p>
@@ -302,7 +332,6 @@ export function OstiumMarketSelector({ selectedPair, onSelectPair, onClose, isMo
 
 function MarketRow({ pair, isSelected, onClick }: { pair: OstiumPair; isSelected: boolean; onClick: () => void }) {
   const { price } = useOstiumPrice(pair.id)
-  const style = getTickerStyle(pair.symbol)
 
   const formatPrice = (p: number | undefined) => {
     if (!p || p === 0) return '---'
@@ -319,11 +348,7 @@ function MarketRow({ pair, isSelected, onClick }: { pair: OstiumPair; isSelected
       }`}
     >
       <div className="flex items-center gap-3">
-        <div className={`w-9 h-9 ${style.bg} rounded-lg flex items-center justify-center`}>
-          <span className={`${style.text} font-bold text-xs`}>
-            {pair.symbol.split('-')[0].slice(0, 3)}
-          </span>
-        </div>
+        <AssetIcon pair={pair} size="sm" />
         <div className="text-left">
           <div className="flex items-center gap-2">
             <p className="text-white font-medium text-sm">{pair.symbol}</p>

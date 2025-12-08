@@ -14,7 +14,8 @@ export function OstiumPositions() {
   const { data: positions, isLoading, refetch } = useOstiumPositions()
   const { data: prices } = useOstiumPrices()
   const { client } = useSmartWallets()
-  const [closingIndex, setClosingIndex] = useState<number | null>(null)
+  // Track closing state with both pairId and index to handle multiple positions
+  const [closingKey, setClosingKey] = useState<string | null>(null)
 
   const closePosition = async (position: OstiumPosition) => {
     if (!client) {
@@ -28,7 +29,8 @@ export function OstiumPositions() {
       return
     }
 
-    setClosingIndex(position.index)
+    const positionKey = `${position.pairId}-${position.index}`
+    setClosingKey(positionKey)
 
     try {
       // Switch to Arbitrum if needed
@@ -132,7 +134,7 @@ export function OstiumPositions() {
 
       alert(`Failed to close position: ${errorMsg}`)
     } finally {
-      setClosingIndex(null)
+      setClosingKey(null)
     }
   }
 
@@ -159,31 +161,58 @@ export function OstiumPositions() {
 
   // Enrich positions with current prices
   const enrichedPositions = positions.map(pos => {
-    const currentPrice = prices?.find(p => p.pairId === pos.pairId)?.mid || pos.entryPrice
-    const priceDiff = currentPrice - pos.entryPrice
+    const livePrice = prices?.find(p => p.pairId === pos.pairId)?.mid
+    const currentPrice = livePrice || pos.entryPrice
+
+    // Check if entry price seems wrong (more than 50x different from current price)
+    // This indicates a potential data issue from the subgraph
+    const priceRatio = currentPrice / pos.entryPrice
+    const hasInvalidEntryPrice = livePrice && pos.entryPrice > 0 && (priceRatio > 50 || priceRatio < 0.02)
+
+    // If entry price is invalid, use live price as a fallback for PnL calculation
+    // This prevents showing crazy PnL percentages like +4975484%
+    const effectiveEntryPrice = hasInvalidEntryPrice ? currentPrice : pos.entryPrice
+
+    const priceDiff = currentPrice - effectiveEntryPrice
     const pnlRaw = pos.isLong
-      ? priceDiff * pos.collateral * pos.leverage / pos.entryPrice
-      : -priceDiff * pos.collateral * pos.leverage / pos.entryPrice
+      ? priceDiff * pos.collateral * pos.leverage / effectiveEntryPrice
+      : -priceDiff * pos.collateral * pos.leverage / effectiveEntryPrice
     const pnlPercent = (pnlRaw / pos.collateral) * 100
-    return { ...pos, currentPrice, pnl: pnlRaw, pnlPercent }
+
+    return {
+      ...pos,
+      currentPrice,
+      pnl: pnlRaw,
+      pnlPercent,
+      hasInvalidEntryPrice, // Flag for UI to show warning
+      displayEntryPrice: hasInvalidEntryPrice ? currentPrice : pos.entryPrice,
+    }
   })
 
   return (
     <div className="p-4 space-y-3">
-      {enrichedPositions.map((position) => (
-        <PositionCard
-          key={`${position.pairId}-${position.index}`}
-          position={position}
-          onClose={() => closePosition(position)}
-          isClosing={closingIndex === position.index}
-        />
-      ))}
+      {enrichedPositions.map((position) => {
+        const positionKey = `${position.pairId}-${position.index}`
+        return (
+          <PositionCard
+            key={positionKey}
+            position={position}
+            onClose={() => closePosition(position)}
+            isClosing={closingKey === positionKey}
+          />
+        )
+      })}
     </div>
   )
 }
 
+interface EnrichedPosition extends OstiumPosition {
+  hasInvalidEntryPrice?: boolean
+  displayEntryPrice?: number
+}
+
 interface PositionCardProps {
-  position: OstiumPosition
+  position: EnrichedPosition
   onClose: () => void
   isClosing: boolean
 }
@@ -204,14 +233,16 @@ function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
 
   return (
     <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4 relative overflow-hidden">
-      {/* PnL Background Gradient */}
-      <div 
-        className={`absolute inset-0 opacity-10 ${
-          position.pnl >= 0 
-            ? 'bg-gradient-to-r from-green-500 to-transparent' 
-            : 'bg-gradient-to-r from-red-500 to-transparent'
-        }`} 
-      />
+      {/* PnL Background Gradient - only show if entry price is valid */}
+      {!position.hasInvalidEntryPrice && (
+        <div
+          className={`absolute inset-0 opacity-10 ${
+            position.pnl >= 0
+              ? 'bg-gradient-to-r from-green-500 to-transparent'
+              : 'bg-gradient-to-r from-red-500 to-transparent'
+          }`}
+        />
+      )}
 
       {/* Header */}
       <div className="flex items-center justify-between mb-3 relative">
@@ -233,14 +264,30 @@ function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
           </div>
         </div>
         <div className="text-right">
-          <p className={`font-mono font-semibold text-lg ${position.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {position.pnl >= 0 ? '+' : ''}${position.pnl.toFixed(2)}
-          </p>
-          <p className={`text-xs font-medium ${position.pnlPercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {position.pnlPercent >= 0 ? '+' : ''}{position.pnlPercent.toFixed(2)}%
-          </p>
+          {position.hasInvalidEntryPrice ? (
+            <>
+              <p className="font-mono font-semibold text-lg text-white/40">---</p>
+              <p className="text-xs font-medium text-white/30">P&L unavailable</p>
+            </>
+          ) : (
+            <>
+              <p className={`font-mono font-semibold text-lg ${position.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {position.pnl >= 0 ? '+' : ''}${position.pnl.toFixed(2)}
+              </p>
+              <p className={`text-xs font-medium ${position.pnlPercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {position.pnlPercent >= 0 ? '+' : ''}{position.pnlPercent.toFixed(2)}%
+              </p>
+            </>
+          )}
         </div>
       </div>
+
+      {/* Invalid Entry Price Warning */}
+      {position.hasInvalidEntryPrice && (
+        <div className="mb-3 px-2 py-1.5 bg-yellow-500/10 border border-yellow-500/20 rounded-lg flex items-center gap-2 relative">
+          <span className="text-yellow-400 text-xs">⚠️ Entry price data unavailable</span>
+        </div>
+      )}
 
       {/* Details Grid */}
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-4 text-sm relative">
@@ -254,7 +301,9 @@ function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
         </div>
         <div className="flex justify-between">
           <span className="text-white/40">Entry</span>
-          <span className="text-white font-mono">${formatPrice(position.entryPrice)}</span>
+          <span className={`font-mono ${position.hasInvalidEntryPrice ? 'text-yellow-400' : 'text-white'}`}>
+            {position.hasInvalidEntryPrice ? '---' : `$${formatPrice(position.displayEntryPrice || position.entryPrice)}`}
+          </span>
         </div>
         <div className="flex justify-between">
           <span className="text-white/40">Mark</span>
