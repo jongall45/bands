@@ -101,6 +101,7 @@ export function useAuth() {
   return {
     // State
     isReady: ready,
+    isLoading: !ready, // Auth is loading until ready
     isAuthenticated: authenticated,
     isConnected: authenticated && isConnected,
     user,
