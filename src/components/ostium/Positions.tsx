@@ -17,7 +17,7 @@ export function OstiumPositions() {
   // Track closing state with both pairId and index to handle multiple positions
   const [closingKey, setClosingKey] = useState<string | null>(null)
 
-  const closePosition = async (position: OstiumPosition) => {
+  const closePosition = async (position: OstiumPosition, closePercent: number = 100) => {
     if (!client) {
       console.error('Smart wallet not ready')
       return
@@ -48,32 +48,34 @@ export function OstiumPositions() {
         throw new Error('Unable to fetch current price for market close')
       }
 
-      console.log('╔═══════════════════════════════════════════════════════════╗')
-      console.log('║  CLOSING POSITION VIA SMART WALLET                        ║')
-      console.log('╚═══════════════════════════════════════════════════════════╝')
-      console.log('Smart Wallet:', smartWalletAddress)
-      console.log('Pair Index:', position.pairId)
-      console.log('Position Index:', position.index)
-      console.log('Symbol:', position.symbol)
-      console.log('Direction:', position.isLong ? 'LONG' : 'SHORT')
-      console.log('Collateral:', position.collateral, 'USDC')
-      console.log('Entry Price:', position.entryPrice)
-      console.log('Current Price:', currentPrice)
+      // Calculate close percentage (10000 = 100%)
+      const closePercentage = Math.round(closePercent * 100)
+      const expectedReturn = (position.collateral * closePercent) / 100
+
+      console.log('╔═══════════════════════════════════════════════════════════════════════════╗')
+      console.log('║  CLOSING POSITION VIA SMART WALLET                                        ║')
+      console.log('╚═══════════════════════════════════════════════════════════════════════════╝')
+      console.log('📍 Smart Wallet:', smartWalletAddress)
+      console.log('📊 Position Details:')
+      console.log('   - Pair Index (pairId):', position.pairId)
+      console.log('   - Position Index:', position.index)
+      console.log('   - Symbol:', position.symbol)
+      console.log('   - Direction:', position.isLong ? 'LONG' : 'SHORT')
+      console.log('   - Total Collateral:', position.collateral, 'USDC')
+      console.log('   - Leverage:', position.leverage, 'x')
+      console.log('   - Entry Price:', position.entryPrice)
+      console.log('   - Current Price:', currentPrice)
+      console.log('💰 Close Amount:')
+      console.log('   - Close Percentage:', closePercent, '%', `(${closePercentage}/10000)`)
+      console.log('   - Expected Return:', expectedReturn.toFixed(2), 'USDC (before PnL)')
 
       // Convert price to 18 decimal precision (PRECISION_18)
       const marketPriceWei = BigInt(Math.floor(currentPrice * 1e18))
       console.log('📊 Market Price (18 dec):', marketPriceWei.toString())
 
-      // closeTradeMarket params:
-      // - pairIndex: uint16 - trading pair
-      // - index: uint8 - position index for this trader
-      // - closePercentage: uint16 - 10000 = 100% close
-      // - marketPrice: uint192 - current price in 18 decimals
-      // - slippageP: uint32 - slippage in basis points (50 = 0.5%)
-      const closePercentage = 10000 // 100% - close entire position
       const slippageP = DEFAULT_SLIPPAGE_BPS // 50 = 0.5%
 
-      console.log('📦 Close params:', {
+      console.log('📦 Contract Call Parameters:', {
         pairIndex: position.pairId,
         index: position.index,
         closePercentage,
@@ -94,7 +96,8 @@ export function OstiumPositions() {
         ],
       })
 
-      console.log('📝 Calldata encoded, length:', calldata.length)
+      console.log('📝 Calldata:', calldata)
+      console.log('📝 Calldata length:', calldata.length)
       console.log('🚀 Sending close position via smart wallet...')
 
       // Close trade - nonpayable function
@@ -197,7 +200,7 @@ export function OstiumPositions() {
           <PositionCard
             key={positionKey}
             position={position}
-            onClose={() => closePosition(position)}
+            onClose={(percent) => closePosition(position, percent)}
             isClosing={closingKey === positionKey}
           />
         )
@@ -213,11 +216,13 @@ interface EnrichedPosition extends OstiumPosition {
 
 interface PositionCardProps {
   position: EnrichedPosition
-  onClose: () => void
+  onClose: (percent: number) => void
   isClosing: boolean
 }
 
 function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
+  const [showCloseOptions, setShowCloseOptions] = useState(false)
+
   const formatPrice = (p: number) => {
     return p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   }
@@ -230,6 +235,8 @@ function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
     if (hours > 0) return `${hours}h ago`
     return `${minutes}m ago`
   }
+
+  const closePercentages = [25, 50, 75, 100]
 
   return (
     <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4 relative overflow-hidden">
@@ -327,24 +334,55 @@ function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
         </div>
       )}
 
-      {/* Close Button */}
-      <button
-        onClick={onClose}
-        disabled={isClosing}
-        className="w-full py-2.5 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-xl text-white/60 hover:text-white text-sm font-medium transition-all flex items-center justify-center gap-2 relative"
-      >
-        {isClosing ? (
-          <>
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Closing...
-          </>
-        ) : (
-          <>
-            <X className="w-4 h-4" />
-            Close Position
-          </>
-        )}
-      </button>
+      {/* Close Position Section */}
+      {isClosing ? (
+        <div className="w-full py-2.5 bg-white/[0.05] border border-white/[0.08] rounded-xl text-white/60 text-sm font-medium flex items-center justify-center gap-2 relative">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Closing...
+        </div>
+      ) : showCloseOptions ? (
+        <div className="space-y-2 relative">
+          <p className="text-white/40 text-xs text-center">Close how much?</p>
+          <div className="grid grid-cols-4 gap-2">
+            {closePercentages.map((pct) => (
+              <button
+                key={pct}
+                onClick={() => {
+                  onClose(pct)
+                  setShowCloseOptions(false)
+                }}
+                className={`py-2 rounded-lg text-xs font-semibold transition-all ${
+                  pct === 100
+                    ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30'
+                    : 'bg-[#FF6B00]/20 hover:bg-[#FF6B00]/30 text-[#FF6B00] border border-[#FF6B00]/30'
+                }`}
+              >
+                {pct}%
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setShowCloseOptions(false)}
+            className="w-full py-1.5 text-white/40 hover:text-white/60 text-xs transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowCloseOptions(true)}
+          className="w-full py-2.5 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-xl text-white/60 hover:text-white text-sm font-medium transition-all flex items-center justify-center gap-2 relative"
+        >
+          <X className="w-4 h-4" />
+          Close Position
+        </button>
+      )}
+
+      {/* Debug info (position index) - small footer */}
+      <div className="mt-2 pt-2 border-t border-white/[0.04] text-[10px] text-white/20 font-mono flex justify-between relative">
+        <span>idx: {position.index}</span>
+        <span>pair: {position.pairId}</span>
+      </div>
     </div>
   )
 }

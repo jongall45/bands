@@ -20,11 +20,67 @@ import { useOstiumPositions } from '@/hooks/useOstiumPositions'
 import { OSTIUM_PAIRS, type OstiumPair } from '@/lib/ostium/constants'
 import { ArrowLeft, RefreshCw, ArrowRightLeft, ExternalLink, Wallet, ChevronDown } from 'lucide-react'
 import Link from 'next/link'
+import Image from 'next/image'
 
 // USDC on Arbitrum
 const USDC_ARBITRUM = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'
 
 type TabType = 'trade' | 'positions' | 'history'
+
+// Ticker colors for fallback icons
+const TICKER_COLORS: Record<string, { bg: string; text: string }> = {
+  BTC: { bg: 'bg-orange-500/20', text: 'text-orange-400' },
+  ETH: { bg: 'bg-purple-500/20', text: 'text-purple-400' },
+  SOL: { bg: 'bg-gradient-to-br from-purple-500/20 to-green-500/20', text: 'text-green-400' },
+  AAPL: { bg: 'bg-white/10', text: 'text-white' },
+  MSFT: { bg: 'bg-blue-500/20', text: 'text-blue-400' },
+  GOOG: { bg: 'bg-red-500/20', text: 'text-red-400' },
+  NVDA: { bg: 'bg-green-500/20', text: 'text-green-400' },
+  SPX: { bg: 'bg-blue-500/20', text: 'text-blue-400' },
+  NDX: { bg: 'bg-cyan-500/20', text: 'text-cyan-400' },
+  XAU: { bg: 'bg-yellow-500/20', text: 'text-yellow-400' },
+}
+
+// Pair icon with fallback to colored text
+function PairIcon({ pair, size = 40 }: { pair: OstiumPair; size?: number }) {
+  const [imgError, setImgError] = useState(false)
+  const ticker = pair.symbol.split('-')[0]
+  const style = TICKER_COLORS[ticker] || { bg: 'bg-[#FF6B00]/20', text: 'text-[#FF6B00]' }
+
+  // Only try to load external icons (not empty or local paths)
+  const hasIcon = pair.icon && pair.icon.length > 0 && !pair.icon.startsWith('/')
+
+  if (hasIcon && !imgError) {
+    return (
+      <div
+        className="rounded-xl flex items-center justify-center overflow-hidden bg-white/[0.05]"
+        style={{ width: size, height: size }}
+      >
+        <Image
+          src={pair.icon}
+          alt={pair.name}
+          width={size - 8}
+          height={size - 8}
+          className="object-contain"
+          onError={() => setImgError(true)}
+          unoptimized
+        />
+      </div>
+    )
+  }
+
+  // Fallback to colored text
+  return (
+    <div
+      className={`${style.bg} rounded-xl flex items-center justify-center`}
+      style={{ width: size, height: size }}
+    >
+      <span className={`${style.text} font-bold text-sm`}>
+        {ticker.slice(0, 3)}
+      </span>
+    </div>
+  )
+}
 
 export default function OstiumTradingPage() {
   const { isAuthenticated, isConnected, balances, refetchBalances, isLoading: authLoading } = useAuth()
@@ -190,11 +246,7 @@ export default function OstiumTradingPage() {
               className="w-full px-4 py-3 flex items-center justify-between hover:bg-white/[0.02] transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#FF6B00]/20 rounded-xl flex items-center justify-center">
-                  <span className="text-[#FF6B00] font-bold text-sm">
-                    {selectedPair.symbol.split('-')[0].slice(0, 3)}
-                  </span>
-                </div>
+                <PairIcon pair={selectedPair} size={40} />
                 <div className="text-left">
                   <div className="flex items-center gap-2">
                     <p className="text-white font-semibold">{selectedPair.symbol}</p>
