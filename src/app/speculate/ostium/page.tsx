@@ -20,7 +20,7 @@ import Link from 'next/link'
 type TabType = 'trade' | 'positions' | 'history'
 
 export default function OstiumTradingPage() {
-  const { isAuthenticated, isConnected, balances, refetchBalances } = useAuth()
+  const { isAuthenticated, isConnected, balances, refetchBalances, isLoading: authLoading } = useAuth()
   const router = useRouter()
   const [showBridgeModal, setShowBridgeModal] = useState(false)
   const [showGasModal, setShowGasModal] = useState(false)
@@ -50,11 +50,12 @@ export default function OstiumTradingPage() {
     }
   }, [isAuthenticated, isConnected])
 
+  // Only redirect if auth is fully loaded AND user is not authenticated
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!authLoading && !isAuthenticated) {
       router.push('/')
     }
-  }, [isAuthenticated, router])
+  }, [authLoading, isAuthenticated, router])
 
   // Auto-show bridge modal if user has no Arbitrum USDC
   useEffect(() => {
@@ -66,7 +67,7 @@ export default function OstiumTradingPage() {
     }
   }, [isLoading, isConnected, hasArbitrumUsdc, hasCheckedBalance])
 
-  if (!isAuthenticated || isLoading) {
+  if (authLoading || !isAuthenticated || isLoading) {
     return (
       <div className="ostium-page min-h-screen flex items-center justify-center">
         <div className="ostium-gradient-bg" />
