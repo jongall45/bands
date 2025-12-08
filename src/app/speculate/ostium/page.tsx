@@ -166,72 +166,66 @@ export default function OstiumTradingPage() {
         />
 
         {/* TradingView Chart - Rounded card with darker background */}
-        <div className="mx-3 mt-3 bg-[#050505] rounded-2xl border border-white/[0.04] overflow-hidden">
+        <div className="mx-3 mt-3 bg-[#0a0a0a] rounded-[20px] border border-white/[0.06] overflow-hidden shadow-2xl">
           <TradingViewChart
             symbol={selectedPair.symbol}
             currentPrice={price?.mid || 0}
             isMarketOpen={price?.isMarketOpen ?? true}
-            entryPrice={activePosition?.entryPrice}
-            liquidationPrice={activePosition?.liquidationPrice}
-            isLong={activePosition?.isLong}
+            positions={positions?.filter(p => p.pairId === selectedPair.id)}
           />
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-white/[0.06] bg-black/40 backdrop-blur-sm sticky top-[60px] z-20">
-          <button
-            onClick={() => setActiveTab('trade')}
-            className={`flex-1 py-3 text-sm font-medium transition-colors relative ${
-              activeTab === 'trade'
-                ? 'text-white'
-                : 'text-white/40 hover:text-white/60'
-            }`}
-          >
-            Trade
-            {activeTab === 'trade' && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FF6B00]" />
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('positions')}
-            className={`flex-1 py-3 text-sm font-medium transition-colors relative ${
-              activeTab === 'positions'
-                ? 'text-white'
-                : 'text-white/40 hover:text-white/60'
-            }`}
-          >
-            <span className="flex items-center justify-center gap-1.5">
-              Positions
-              {positionCount > 0 && (
-                <span className="bg-[#FF6B00] text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                  {positionCount}
+        {/* Trade/Positions/History Card - Frosted Glass Rounded Pill */}
+        <div className="mx-3 mt-3 mb-24 bg-[#0a0a0a]/95 backdrop-blur-xl rounded-[20px] border border-white/[0.06] overflow-hidden shadow-2xl">
+          {/* Tabs - Pill Style */}
+          <div className="p-2 border-b border-white/[0.04]">
+            <div className="flex bg-[#141414] rounded-2xl p-1">
+              <button
+                onClick={() => setActiveTab('trade')}
+                className={`flex-1 py-2.5 text-sm font-medium transition-all rounded-xl ${
+                  activeTab === 'trade'
+                    ? 'bg-[#1a1a1a] text-white shadow-lg'
+                    : 'text-white/40 hover:text-white/60'
+                }`}
+              >
+                Trade
+              </button>
+              <button
+                onClick={() => setActiveTab('positions')}
+                className={`flex-1 py-2.5 text-sm font-medium transition-all rounded-xl ${
+                  activeTab === 'positions'
+                    ? 'bg-[#1a1a1a] text-white shadow-lg'
+                    : 'text-white/40 hover:text-white/60'
+                }`}
+              >
+                <span className="flex items-center justify-center gap-1.5">
+                  Positions
+                  {positionCount > 0 && (
+                    <span className="bg-[#FF6B00] text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold min-w-[18px]">
+                      {positionCount}
+                    </span>
+                  )}
                 </span>
-              )}
-            </span>
-            {activeTab === 'positions' && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FF6B00]" />
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`flex-1 py-3 text-sm font-medium transition-colors relative ${
-              activeTab === 'history'
-                ? 'text-white'
-                : 'text-white/40 hover:text-white/60'
-            }`}
-          >
-            History
-            {activeTab === 'history' && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FF6B00]" />
-            )}
-          </button>
-        </div>
+              </button>
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`flex-1 py-2.5 text-sm font-medium transition-all rounded-xl ${
+                  activeTab === 'history'
+                    ? 'bg-[#1a1a1a] text-white shadow-lg'
+                    : 'text-white/40 hover:text-white/60'
+                }`}
+              >
+                History
+              </button>
+            </div>
+          </div>
 
-        {/* Tab Content - darker stealth black with proper scroll */}
-        <div className="flex-1 overflow-y-auto bg-[#050505]/90 pb-24">
-          {activeTab === 'trade' && <OstiumTradePanel pair={selectedPair} />}
-          {activeTab === 'positions' && <OstiumPositions />}
-          {activeTab === 'history' && <TradeHistory />}
+          {/* Tab Content */}
+          <div className="max-h-[50vh] overflow-y-auto">
+            {activeTab === 'trade' && <OstiumTradePanel pair={selectedPair} />}
+            {activeTab === 'positions' && <OstiumPositions />}
+            {activeTab === 'history' && <TradeHistory />}
+          </div>
         </div>
 
         <BottomNav />
