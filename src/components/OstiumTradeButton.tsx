@@ -245,15 +245,12 @@ export function OstiumTradeButton({
       if (smartWalletAddress) {
         addTradeRecord(smartWalletAddress, {
           txHash: hash,
-          pairSymbol: pairSymbol,
+          symbol: pairSymbol,
           pairId: pairIndex,
           isLong: isLong,
           collateral: collateralNum,
           leverage: leverage,
           entryPrice: currentPrice,
-          timestamp: Date.now(),
-          status: 'success',
-          type: 'open',
         })
       }
 
