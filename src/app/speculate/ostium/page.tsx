@@ -3,6 +3,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
+import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
+import { useBalance } from 'wagmi'
+import { arbitrum } from 'viem/chains'
+import { formatUnits } from 'viem'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { BridgeToArbitrumModal } from '@/components/bridge/BridgeToArbitrumModal'
 import { SwapForGasModal } from '@/components/bridge/SwapForGasModal'
@@ -17,10 +21,14 @@ import { OSTIUM_PAIRS, type OstiumPair } from '@/lib/ostium/constants'
 import { ArrowLeft, RefreshCw, ArrowRightLeft, ExternalLink, Wallet } from 'lucide-react'
 import Link from 'next/link'
 
+// USDC on Arbitrum
+const USDC_ARBITRUM = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'
+
 type TabType = 'trade' | 'positions' | 'history'
 
 export default function OstiumTradingPage() {
   const { isAuthenticated, isConnected, balances, refetchBalances, isLoading: authLoading } = useAuth()
+  const { client } = useSmartWallets()
   const router = useRouter()
   const [showBridgeModal, setShowBridgeModal] = useState(false)
   const [showGasModal, setShowGasModal] = useState(false)
@@ -28,6 +36,33 @@ export default function OstiumTradingPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [selectedPair, setSelectedPair] = useState<OstiumPair>(OSTIUM_PAIRS[0]) // BTC-USD
   const [activeTab, setActiveTab] = useState<TabType>('trade')
+
+  // Smart wallet address (this is the actual trading wallet on Arbitrum)
+  const smartWalletAddress = client?.account?.address
+
+  // Fetch smart wallet balances on Arbitrum
+  const { data: smartWalletEth, refetch: refetchSmartEth } = useBalance({
+    address: smartWalletAddress,
+    chainId: arbitrum.id,
+  })
+
+  const { data: smartWalletUsdc, refetch: refetchSmartUsdc } = useBalance({
+    address: smartWalletAddress,
+    chainId: arbitrum.id,
+    token: USDC_ARBITRUM as `0x${string}`,
+  })
+
+  // Format smart wallet balances
+  const smartBalances = {
+    eth: smartWalletEth ? formatUnits(smartWalletEth.value, 18) : '0',
+    usdc: smartWalletUsdc ? formatUnits(smartWalletUsdc.value, 6) : '0',
+  }
+
+  const refetchSmartBalances = () => {
+    refetchSmartEth()
+    refetchSmartUsdc()
+    refetchBalances() // Also refetch EOA balances for bridge
+  }
 
   const { price } = useOstiumPrice(selectedPair.id)
   const { data: positions } = useOstiumPositions()
@@ -41,8 +76,9 @@ export default function OstiumTradingPage() {
   // Count total open positions
   const positionCount = positions?.length || 0
 
-  const hasArbitrumUsdc = parseFloat(balances.usdcArb) > 0
-  const hasArbitrumEth = parseFloat(balances.ethArb) > 0.0001
+  // Use smart wallet balances for Arbitrum checks
+  const hasArbitrumUsdc = parseFloat(smartBalances.usdc) > 0
+  const hasArbitrumEth = parseFloat(smartBalances.eth) > 0.0001
 
   useEffect(() => {
     if (isAuthenticated && isConnected) {
@@ -127,14 +163,21 @@ export default function OstiumTradingPage() {
         <div className="bg-black/40 backdrop-blur-sm border-b border-white/[0.04] px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              {/* USDC Balance */}
+              {/* Smart Wallet Label + Balances */}
               <div>
                 <span className="text-white/40 text-xs flex items-center gap-1">
                   <Wallet className="w-3 h-3" />
-                  Smart Wallet
+                  Smart Wallet (ARB)
                 </span>
-                <div className="text-white font-bold">
-                  ${parseFloat(balances.usdcArb).toFixed(2)}
+                <div className="flex items-center gap-3">
+                  {/* USDC Balance */}
+                  <div className="text-white font-bold">
+                    ${parseFloat(smartBalances.usdc).toFixed(2)}
+                  </div>
+                  {/* ETH Balance */}
+                  <div className="text-white/60 text-sm font-mono">
+                    {parseFloat(smartBalances.eth).toFixed(4)} ETH
+                  </div>
                 </div>
               </div>
             </div>
@@ -235,7 +278,7 @@ export default function OstiumTradingPage() {
           isOpen={showBridgeModal}
           onClose={() => setShowBridgeModal(false)}
           onSuccess={() => {
-            refetchBalances()
+            refetchSmartBalances()
             setShowBridgeModal(false)
           }}
         />
@@ -245,7 +288,7 @@ export default function OstiumTradingPage() {
           isOpen={showGasModal}
           onClose={() => setShowGasModal(false)}
           onSuccess={() => {
-            refetchBalances()
+            refetchSmartBalances()
             setShowGasModal(false)
           }}
           suggestedAmount="1"
