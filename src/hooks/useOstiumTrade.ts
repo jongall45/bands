@@ -329,8 +329,14 @@ export function useOstiumTrade() {
 
   /**
    * Close an open position
+   * NOTE: The actual close implementation is in Positions.tsx which uses the smart wallet.
+   * This function is kept for backwards compatibility but may not work correctly.
    */
-  const closePosition = useCallback(async (pairIndex: number, positionIndex: number): Promise<`0x${string}` | null> => {
+  const closePosition = useCallback(async (
+    pairIndex: number,
+    positionIndex: number,
+    currentPrice: number = 0
+  ): Promise<`0x${string}` | null> => {
     if (!address || !embeddedWallet) {
       setErrorMessage('Wallet not connected')
       return null
@@ -346,23 +352,20 @@ export function useOstiumTrade() {
         throw new Error('Failed to switch to Arbitrum')
       }
 
-      // Fetch current price for the pair
-      const priceData = await fetchPairPrice(pairIndex)
-      if (!priceData) {
-        throw new Error('Failed to fetch current price')
-      }
-
-      // Convert price to PRECISION_18 (price is in USD, multiply by 1e18)
-      const marketPrice = BigInt(Math.floor(priceData.price * 1e18))
-      
-      // Close 100% of position, slippage 0.5% (50 basis points in PRECISION_4 = 500000)
-      const closePercentage = 10000 // 100%
-      const slippageP = 500000 // 0.5% in PRECISION_4 format
+      // closeTradeMarket params:
+      // - pairIndex: uint16
+      // - index: uint8
+      // - closePercentage: uint16 (10000 = 100%)
+      // - marketPrice: uint192 (PRECISION_18)
+      // - slippageP: uint32 (50 = 0.5%)
+      const closePercentage = 10000 // 100% close
+      const marketPriceWei = BigInt(Math.floor(currentPrice * 1e18))
+      const slippageP = 100 // 1% slippage
 
       const calldata = encodeFunctionData({
         abi: OSTIUM_TRADING_ABI,
         functionName: 'closeTradeMarket',
-        args: [pairIndex, positionIndex, closePercentage, marketPrice, slippageP],
+        args: [pairIndex, positionIndex, closePercentage, marketPriceWei, slippageP],
       })
 
       const hash = await provider.request({

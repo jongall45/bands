@@ -209,7 +209,7 @@ export function TradeHistory() {
                   {trade.symbol}
                 </p>
                 <p className="text-white/40 text-[10px]">
-                  {trade.leverage}x {trade.isLong ? 'Long' : 'Short'} · {formatTime(trade.openTime)}
+                  {trade.leverage || 1}x {trade.isLong ? 'Long' : 'Short'} · {formatTime(trade.openTime || Date.now())}
                 </p>
               </div>
             </div>
@@ -224,9 +224,9 @@ export function TradeHistory() {
                   Closed
                 </span>
               )}
-              {trade.pnl !== null && !trade.isOpen && (
-                <span className={`text-xs font-mono ${trade.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  {trade.pnl >= 0 ? '+' : ''}${trade.pnl.toFixed(2)}
+              {trade.pnl != null && !trade.isOpen && (
+                <span className={`text-xs font-mono ${(trade.pnl || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {(trade.pnl || 0) >= 0 ? '+' : ''}${(trade.pnl || 0).toFixed(2)}
                 </span>
               )}
             </div>
@@ -235,15 +235,15 @@ export function TradeHistory() {
           <div className="grid grid-cols-3 gap-2 text-xs">
             <div>
               <p className="text-white/30 text-[10px]">Size</p>
-              <p className="text-white font-mono">${(trade.collateral * trade.leverage).toFixed(2)}</p>
+              <p className="text-white font-mono">${((trade.collateral || 0) * (trade.leverage || 1)).toFixed(2)}</p>
             </div>
             <div>
               <p className="text-white/30 text-[10px]">Collateral</p>
-              <p className="text-white font-mono">${trade.collateral.toFixed(2)}</p>
+              <p className="text-white font-mono">${(trade.collateral || 0).toFixed(2)}</p>
             </div>
             <div>
               <p className="text-white/30 text-[10px]">Entry</p>
-              <p className="text-white font-mono">${formatPrice(trade.entryPrice)}</p>
+              <p className="text-white font-mono">${formatPrice(trade.entryPrice || 0)}</p>
             </div>
           </div>
 

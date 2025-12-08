@@ -39,11 +39,11 @@ export function OstiumMarketSelector({ selectedPair, onSelectPair }: MarketSelec
   }
 
   return (
-    <div className="relative">
+    <div className="relative mx-3 mt-3">
       {/* Selected Market Display */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-4 py-3 flex items-center justify-between bg-[#0a0a0a] border-b border-white/[0.06]"
+        className="w-full px-4 py-3 flex items-center justify-between bg-[#0a0a0a] rounded-[20px] border border-white/[0.06] shadow-2xl"
       >
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-[#ef4444]/20 to-orange-500/20 rounded-xl flex items-center justify-center">
@@ -81,7 +81,7 @@ export function OstiumMarketSelector({ selectedPair, onSelectPair }: MarketSelec
             className="fixed inset-0 z-40 bg-black/50" 
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute top-full left-0 right-0 z-50 bg-[#111111] border border-white/[0.08] rounded-b-2xl shadow-2xl max-h-[70vh] overflow-hidden">
+          <div className="absolute top-full left-0 right-0 z-50 mt-2 bg-[#0a0a0a] border border-white/[0.06] rounded-[20px] shadow-2xl max-h-[70vh] overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between p-3 border-b border-white/[0.06]">
               <span className="text-white font-medium">Select Market</span>

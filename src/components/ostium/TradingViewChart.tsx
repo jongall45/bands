@@ -45,6 +45,9 @@ export function TradingViewChart({
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>('15m')
   const [candleData, setCandleData] = useState<CandlestickData[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const isInitializedRef = useRef(false)
+  const currentSymbolRef = useRef(symbol)
+  const currentTimeframeRef = useRef(selectedTimeframe)
 
   // Fetch real candle data from API
   const fetchCandles = useCallback(async () => {
@@ -77,23 +80,12 @@ export function TradingViewChart({
     return () => clearInterval(interval)
   }, [fetchCandles])
 
-  // Create chart
+  // Create chart ONCE
   useEffect(() => {
-    if (!chartContainerRef.current || candleData.length === 0) return
+    if (!chartContainerRef.current) return
 
     // Reset disposed flag
     isDisposedRef.current = false
-
-    // Clear existing chart
-    if (chartRef.current) {
-      try {
-        chartRef.current.remove()
-      } catch (e) {
-        // Chart already disposed
-      }
-      chartRef.current = null
-      candleSeriesRef.current = null
-    }
 
     // Create chart with dark theme
     const chart = createChart(chartContainerRef.current, {
@@ -124,19 +116,25 @@ export function TradingViewChart({
           top: 0.1,
           bottom: 0.2,
         },
+        autoScale: true,
       },
       timeScale: {
         borderColor: 'rgba(255, 255, 255, 0.1)',
         timeVisible: true,
         secondsVisible: false,
+        rightOffset: 12, // Allow scrolling into future
+        barSpacing: 6,
       },
       handleScroll: {
         mouseWheel: true,
         pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: true,
       },
       handleScale: {
         mouseWheel: true,
         pinch: true,
+        axisPressedMouseMove: true,
       },
     })
 
@@ -153,39 +151,6 @@ export function TradingViewChart({
     })
 
     candleSeriesRef.current = candleSeries
-
-    // Set data
-    candleSeries.setData(candleData)
-
-    // Add price lines for ALL positions (not just one)
-    positions.forEach((position, index) => {
-      // Entry price line (white dashed)
-      if (position.entryPrice && position.entryPrice > 0) {
-        candleSeries.createPriceLine({
-          price: position.entryPrice,
-          color: 'rgba(255, 255, 255, 0.8)',
-          lineWidth: 2,
-          lineStyle: 2,
-          axisLabelVisible: true,
-          title: positions.length > 1 ? `ENTRY ${index + 1}` : 'ENTRY',
-        })
-      }
-
-      // Liquidation price line (red dashed)
-      if (position.liquidationPrice && position.liquidationPrice > 0) {
-        candleSeries.createPriceLine({
-          price: position.liquidationPrice,
-          color: '#ef4444',
-          lineWidth: 2,
-          lineStyle: 2,
-          axisLabelVisible: true,
-          title: positions.length > 1 ? `LIQ ${index + 1}` : 'LIQ',
-        })
-      }
-    })
-
-    // Fit content
-    chart.timeScale().fitContent()
 
     // Handle resize
     const handleResize = () => {
@@ -214,8 +179,82 @@ export function TradingViewChart({
         // Chart already disposed
       }
       chartRef.current = null
+      isInitializedRef.current = false
     }
-  }, [candleData, positions])
+  }, []) // Only run once on mount
+
+  // Update data when candles change
+  useEffect(() => {
+    if (!candleSeriesRef.current || candleData.length === 0) return
+
+    const symbolChanged = currentSymbolRef.current !== symbol
+    const timeframeChanged = currentTimeframeRef.current !== selectedTimeframe
+
+    // Set data
+    candleSeriesRef.current.setData(candleData)
+
+    // Only fit content on initial load or when symbol/timeframe changes
+    if (!isInitializedRef.current || symbolChanged || timeframeChanged) {
+      chartRef.current?.timeScale().fitContent()
+      isInitializedRef.current = true
+      currentSymbolRef.current = symbol
+      currentTimeframeRef.current = selectedTimeframe
+    }
+  }, [candleData, symbol, selectedTimeframe])
+
+  // Update price lines when positions change
+  useEffect(() => {
+    if (!candleSeriesRef.current || !chartRef.current) return
+
+    // Remove existing price lines by recreating the series
+    // This is a workaround since lightweight-charts doesn't have removePriceLine
+    const chart = chartRef.current
+    const oldSeries = candleSeriesRef.current
+
+    // Create new series
+    const newSeries = chart.addCandlestickSeries({
+      upColor: '#22c55e',
+      downColor: '#ef4444',
+      borderUpColor: '#22c55e',
+      borderDownColor: '#ef4444',
+      wickUpColor: '#22c55e',
+      wickDownColor: '#ef4444',
+    })
+
+    // Copy data
+    if (candleData.length > 0) {
+      newSeries.setData(candleData)
+    }
+
+    // Add price lines for ALL positions
+    positions.forEach((position, index) => {
+      if (position.entryPrice && position.entryPrice > 0) {
+        newSeries.createPriceLine({
+          price: position.entryPrice,
+          color: 'rgba(255, 255, 255, 0.8)',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: positions.length > 1 ? `ENTRY ${index + 1}` : 'ENTRY',
+        })
+      }
+
+      if (position.liquidationPrice && position.liquidationPrice > 0) {
+        newSeries.createPriceLine({
+          price: position.liquidationPrice,
+          color: '#ef4444',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: positions.length > 1 ? `LIQ ${index + 1}` : 'LIQ',
+        })
+      }
+    })
+
+    // Remove old series and update ref
+    chart.removeSeries(oldSeries)
+    candleSeriesRef.current = newSeries
+  }, [positions, candleData])
 
   // Update last candle with current price (real-time update)
   useEffect(() => {
