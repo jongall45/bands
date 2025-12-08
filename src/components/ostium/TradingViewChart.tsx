@@ -68,8 +68,8 @@ export function TradingViewChart({
   // Fetch candles on mount and when symbol/timeframe changes
   useEffect(() => {
     fetchCandles()
-    // Refresh candles every 30 seconds
-    const interval = setInterval(fetchCandles, 30000)
+    // Refresh candles every 10 seconds for faster updates
+    const interval = setInterval(fetchCandles, 10000)
     return () => clearInterval(interval)
   }, [fetchCandles])
 

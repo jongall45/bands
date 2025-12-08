@@ -40,9 +40,11 @@ export const OSTIUM_TRADING_ABI = [
     type: 'function',
     stateMutability: 'nonpayable',
     inputs: [
-      { name: '_pairIndex', type: 'uint256' },
-      { name: '_index', type: 'uint256' },
-      { name: '_priceUpdateData', type: 'bytes' },
+      { name: 'pairIndex', type: 'uint16' },       // Trading pair identifier
+      { name: 'index', type: 'uint8' },            // Position index for trader
+      { name: 'closePercentage', type: 'uint16' }, // 10000 = 100% close
+      { name: 'marketPrice', type: 'uint192' },    // Current price (PRECISION_18)
+      { name: 'slippageP', type: 'uint32' },       // Slippage (PRECISION_4, 50 = 0.5%)
     ],
     outputs: [],
   },
