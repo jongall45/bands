@@ -94,14 +94,15 @@ export default function OstiumTradingPage() {
   }, [authLoading, isAuthenticated, router])
 
   // Auto-show bridge modal if user has no Arbitrum USDC
+  // IMPORTANT: Only show after smart wallet balance is actually loaded (not undefined)
   useEffect(() => {
-    if (!isLoading && isConnected && !hasCheckedBalance) {
+    if (!isLoading && isConnected && !hasCheckedBalance && smartWalletUsdc !== undefined) {
       setHasCheckedBalance(true)
       if (!hasArbitrumUsdc) {
         setShowBridgeModal(true)
       }
     }
-  }, [isLoading, isConnected, hasArbitrumUsdc, hasCheckedBalance])
+  }, [isLoading, isConnected, hasArbitrumUsdc, hasCheckedBalance, smartWalletUsdc])
 
   if (authLoading || !isAuthenticated || isLoading) {
     return (
@@ -120,47 +121,52 @@ export default function OstiumTradingPage() {
       <div className="lava-blob lava-blob-2" />
 
       <div className="max-w-[430px] mx-auto w-full flex-1 flex flex-col relative z-10">
-        {/* Header */}
-        <header
-          className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between bg-black/60 backdrop-blur-xl sticky top-0 z-30"
-          style={{ paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))' }}
-        >
-          <div className="flex items-center gap-3">
-            <Link href="/speculate" className="text-white/60 hover:text-white transition-colors">
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            {/* Ostium Logo */}
-            <div className="w-9 h-9 bg-[#FF6B00] rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-[#FF6B00]/20">
-              <svg viewBox="0 0 100 100" className="w-5 h-5" fill="none">
-                <path d="M35 15 C15 15 15 85 35 85" stroke="black" strokeWidth="9" strokeLinecap="round" fill="none"/>
-                <path d="M35 15 C55 15 55 85 35 85" stroke="black" strokeWidth="9" strokeLinecap="round" fill="none"/>
-                <path d="M65 15 C45 15 45 85 65 85" stroke="black" strokeWidth="9" strokeLinecap="round" fill="none"/>
-                <path d="M65 15 C85 15 85 85 65 85" stroke="black" strokeWidth="9" strokeLinecap="round" fill="none"/>
-              </svg>
+        {/* Header - Dark Rounded Card */}
+        <div className="p-3" style={{ paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))' }}>
+          <header className="px-4 py-3 flex items-center justify-between bg-[#0a0a0a] rounded-[20px] border border-white/[0.06] shadow-2xl">
+            <div className="flex items-center gap-3">
+              <Link href="/speculate" className="text-white/60 hover:text-white transition-colors">
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
+              {/* Ostium Logo - Actual Logo */}
+              <div className="w-10 h-10 bg-[#FF6B00] rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-[#FF6B00]/30">
+                <svg viewBox="0 0 100 100" className="w-6 h-6" fill="none">
+                  {/* Left bracket )( */}
+                  <path d="M25 10 Q50 50 25 90" stroke="black" strokeWidth="10" strokeLinecap="round" fill="none"/>
+                  <path d="M40 10 Q15 50 40 90" stroke="black" strokeWidth="10" strokeLinecap="round" fill="none"/>
+                  {/* Right bracket )( */}
+                  <path d="M60 10 Q85 50 60 90" stroke="black" strokeWidth="10" strokeLinecap="round" fill="none"/>
+                  <path d="M75 10 Q50 50 75 90" stroke="black" strokeWidth="10" strokeLinecap="round" fill="none"/>
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-white font-semibold flex items-center gap-2">
+                  Ostium
+                  {/* Arbitrum Badge - Blue with logo */}
+                  <span className="text-[10px] bg-[#12AAFF]/20 text-[#12AAFF] px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <svg viewBox="0 0 28 28" className="w-3 h-3" fill="currentColor">
+                      <path d="M14 0C6.268 0 0 6.268 0 14s6.268 14 14 14 14-6.268 14-14S21.732 0 14 0zm6.12 19.537l-1.744 2.99a.9.9 0 01-.771.443H10.39a.896.896 0 01-.77-.442l-1.745-2.99a.9.9 0 010-.906l5.357-9.19a.9.9 0 011.541 0l5.357 9.19a.9.9 0 01-.01.905z"/>
+                    </svg>
+                    Arbitrum
+                  </span>
+                </h1>
+                <p className="text-white/40 text-xs">Stocks, Forex, Commodities & More</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-white font-semibold flex items-center gap-2">
-                Ostium
-                <span className="text-xs bg-[#FF6B00]/20 text-[#FF6B00] px-2 py-0.5 rounded-full">
-                  Arbitrum
-                </span>
-              </h1>
-              <p className="text-white/40 text-xs">Stocks, Forex, Commodities & More</p>
-            </div>
-          </div>
-          <a
-            href="https://app.ostium.com/trade"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-white/40 hover:text-[#FF6B00] transition-colors p-2"
-            title="Open full Ostium app"
-          >
-            <ExternalLink className="w-4 h-4" />
-          </a>
-        </header>
+            <a
+              href="https://app.ostium.com/trade"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-white/40 hover:text-[#FF6B00] transition-colors p-2"
+              title="Open full Ostium app"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </a>
+          </header>
+        </div>
 
-        {/* Smart Wallet Balance Bar */}
-        <div className="bg-black/40 backdrop-blur-sm border-b border-white/[0.04] px-4 py-3">
+        {/* Smart Wallet Balance Bar - Rounded Card */}
+        <div className="mx-3 mt-2 px-4 py-3 bg-[#0a0a0a]/80 backdrop-blur-sm rounded-[16px] border border-white/[0.06]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               {/* Smart Wallet Label + Balances */}

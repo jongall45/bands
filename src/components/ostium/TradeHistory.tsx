@@ -90,7 +90,7 @@ export function TradeHistory() {
   const primaryAddress = smartWalletAddress || embeddedAddress
 
   // Fetch from API
-  const { data: apiTrades, isLoading, refetch } = useQuery({
+  const { data: apiTrades, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['ostium-history', primaryAddress],
     queryFn: () => fetchTradeHistory(primaryAddress!),
     enabled: !!primaryAddress,
@@ -180,93 +180,119 @@ export function TradeHistory() {
         <span>{trades.length} trade{trades.length !== 1 ? 's' : ''}</span>
         <button
           onClick={() => refetch()}
-          className="flex items-center gap-1 hover:text-white/50 transition-colors"
+          disabled={isFetching}
+          className="flex items-center gap-1 hover:text-white/50 transition-colors disabled:opacity-50"
         >
-          <RefreshCw className="w-3 h-3" />
-          <span>Refresh</span>
+          <RefreshCw className={`w-3 h-3 ${isFetching ? 'animate-spin' : ''}`} />
+          <span>{isFetching ? 'Loading...' : 'Refresh'}</span>
         </button>
       </div>
 
       {/* Trades list */}
-      {trades.map((trade) => (
-        <div
-          key={trade.id}
-          className="bg-[#141414] border border-white/[0.04] rounded-xl p-3"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                trade.isLong ? 'bg-green-500/20' : 'bg-red-500/20'
-              }`}>
-                {trade.isLong ? (
-                  <TrendingUp className="w-4 h-4 text-green-400" />
+      {trades.map((trade) => {
+        const pnl = trade.pnl || 0
+        const collateral = trade.collateral || 0
+        const pnlPercent = collateral > 0 ? (pnl / collateral) * 100 : 0
+        const isProfitable = pnl >= 0
+
+        return (
+          <div
+            key={trade.id}
+            className="bg-[#141414] border border-white/[0.04] rounded-xl p-3"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                  trade.isLong ? 'bg-green-500/20' : 'bg-red-500/20'
+                }`}>
+                  {trade.isLong ? (
+                    <TrendingUp className="w-4 h-4 text-green-400" />
+                  ) : (
+                    <TrendingDown className="w-4 h-4 text-red-400" />
+                  )}
+                </div>
+                <div>
+                  <p className="text-white font-medium text-sm">
+                    {trade.leverage || 1}x {trade.isLong ? 'Long' : 'Short'}
+                  </p>
+                  <p className="text-white/40 text-[10px]">
+                    {formatTime(trade.openTime || Date.now())}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-0.5">
+                {trade.isOpen ? (
+                  <span className="text-[#FF6B00] text-[10px] font-medium px-1.5 py-0.5 bg-[#FF6B00]/10 rounded">
+                    Active
+                  </span>
                 ) : (
-                  <TrendingDown className="w-4 h-4 text-red-400" />
+                  <span className="text-green-400 text-[10px] font-medium px-1.5 py-0.5 bg-green-500/10 rounded flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" />
+                    Closed
+                  </span>
                 )}
               </div>
-              <div>
-                <p className="text-white font-medium text-sm">
-                  {trade.symbol}
-                </p>
-                <p className="text-white/40 text-[10px]">
-                  {trade.leverage || 1}x {trade.isLong ? 'Long' : 'Short'} · {formatTime(trade.openTime || Date.now())}
-                </p>
+            </div>
+
+            {/* Trade details - different layout for open vs closed */}
+            {trade.isOpen ? (
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <div>
+                  <p className="text-white/30 text-[10px]">Size</p>
+                  <p className="text-white font-mono">${((trade.collateral || 0) * (trade.leverage || 1)).toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="text-white/30 text-[10px]">Collateral</p>
+                  <p className="text-white font-mono">${(trade.collateral || 0).toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="text-white/30 text-[10px]">Entry</p>
+                  <p className="text-white font-mono">${formatPrice(trade.entryPrice || 0)}</p>
+                </div>
               </div>
-            </div>
-            <div className="flex flex-col items-end gap-0.5">
-              {trade.isOpen ? (
-                <span className="text-[#FF6B00] text-[10px] font-medium px-1.5 py-0.5 bg-[#FF6B00]/10 rounded">
-                  Active
-                </span>
-              ) : (
-                <span className="text-green-400 text-[10px] font-medium px-1.5 py-0.5 bg-green-500/10 rounded flex items-center gap-1">
-                  <CheckCircle className="w-3 h-3" />
-                  Closed
-                </span>
-              )}
-              {trade.pnl != null && !trade.isOpen && (
-                <span className={`text-xs font-mono ${(trade.pnl || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  {(trade.pnl || 0) >= 0 ? '+' : ''}${(trade.pnl || 0).toFixed(2)}
-                </span>
-              )}
-            </div>
+            ) : (
+              <>
+                {/* Closed trade details: Entry, Exit, PnL */}
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <p className="text-white/30 text-[10px]">Entry</p>
+                    <p className="text-white font-mono">${formatPrice(trade.entryPrice || 0)}</p>
+                  </div>
+                  <div>
+                    <p className="text-white/30 text-[10px]">Exit</p>
+                    <p className="text-white font-mono">${formatPrice(trade.closePrice || 0)}</p>
+                  </div>
+                  <div>
+                    <p className="text-white/30 text-[10px]">Gain/Loss</p>
+                    <p className={`font-mono font-semibold ${isProfitable ? 'text-green-400' : 'text-red-400'}`}>
+                      {isProfitable ? '+' : ''}{pnlPercent.toFixed(1)}%
+                    </p>
+                  </div>
+                </div>
+                {/* PnL row */}
+                <div className="mt-2 pt-2 border-t border-white/[0.04] flex items-center justify-between">
+                  <span className="text-white/40 text-xs">P&L</span>
+                  <span className={`font-mono font-semibold ${isProfitable ? 'text-green-400' : 'text-red-400'}`}>
+                    {isProfitable ? '+' : ''}${pnl.toFixed(2)}
+                  </span>
+                </div>
+              </>
+            )}
+
+            {trade.txHash && (
+              <a
+                href={`https://arbiscan.io/tx/${trade.txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 pt-2 border-t border-white/[0.04] flex items-center justify-center gap-1 text-[10px] text-white/30 hover:text-[#FF6B00] transition-colors"
+              >
+                <ExternalLink className="w-3 h-3" />
+                View on Arbiscan
+              </a>
+            )}
           </div>
-
-          <div className="grid grid-cols-3 gap-2 text-xs">
-            <div>
-              <p className="text-white/30 text-[10px]">Size</p>
-              <p className="text-white font-mono">${((trade.collateral || 0) * (trade.leverage || 1)).toFixed(2)}</p>
-            </div>
-            <div>
-              <p className="text-white/30 text-[10px]">Collateral</p>
-              <p className="text-white font-mono">${(trade.collateral || 0).toFixed(2)}</p>
-            </div>
-            <div>
-              <p className="text-white/30 text-[10px]">Entry</p>
-              <p className="text-white font-mono">${formatPrice(trade.entryPrice || 0)}</p>
-            </div>
-          </div>
-
-          {trade.closePrice && (
-            <div className="mt-2 pt-2 border-t border-white/[0.04] flex justify-between text-xs">
-              <span className="text-white/30">Close</span>
-              <span className="text-white font-mono">${formatPrice(trade.closePrice)}</span>
-            </div>
-          )}
-
-          {trade.txHash && (
-            <a
-              href={`https://arbiscan.io/tx/${trade.txHash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 pt-2 border-t border-white/[0.04] flex items-center justify-center gap-1 text-[10px] text-white/30 hover:text-[#FF6B00] transition-colors"
-            >
-              <ExternalLink className="w-3 h-3" />
-              View on Arbiscan
-            </a>
-          )}
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
