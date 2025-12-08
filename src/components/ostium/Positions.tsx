@@ -167,7 +167,7 @@ export function OstiumPositions() {
     // Check if entry price seems wrong (more than 50x different from current price)
     // This indicates a potential data issue from the subgraph
     const priceRatio = currentPrice / pos.entryPrice
-    const hasInvalidEntryPrice = livePrice && pos.entryPrice > 0 && (priceRatio > 50 || priceRatio < 0.02)
+    const hasInvalidEntryPrice = !!(livePrice && pos.entryPrice > 0 && (priceRatio > 50 || priceRatio < 0.02))
 
     // If entry price is invalid, use live price as a fallback for PnL calculation
     // This prevents showing crazy PnL percentages like +4975484%
