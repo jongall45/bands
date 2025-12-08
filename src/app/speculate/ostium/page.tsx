@@ -18,7 +18,7 @@ import { TradingViewChart } from '@/components/ostium/TradingViewChart'
 import { useOstiumPrice } from '@/hooks/useOstiumPrices'
 import { useOstiumPositions } from '@/hooks/useOstiumPositions'
 import { OSTIUM_PAIRS, type OstiumPair } from '@/lib/ostium/constants'
-import { ArrowLeft, RefreshCw, ArrowRightLeft, ExternalLink, Wallet } from 'lucide-react'
+import { ArrowLeft, RefreshCw, ArrowRightLeft, ExternalLink, Wallet, ChevronDown } from 'lucide-react'
 import Link from 'next/link'
 
 // USDC on Arbitrum
@@ -36,6 +36,7 @@ export default function OstiumTradingPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [selectedPair, setSelectedPair] = useState<OstiumPair>(OSTIUM_PAIRS[0]) // BTC-USD
   const [activeTab, setActiveTab] = useState<TabType>('trade')
+  const [showMarketSelector, setShowMarketSelector] = useState(false)
 
   // Smart wallet address (this is the actual trading wallet on Arbitrum)
   const smartWalletAddress = client?.account?.address
@@ -121,98 +122,116 @@ export default function OstiumTradingPage() {
       <div className="lava-blob lava-blob-2" />
 
       <div className="max-w-[430px] mx-auto w-full flex-1 flex flex-col relative z-10">
-        {/* Header - Dark Rounded Card */}
+        {/* Unified Header Card - combines logo, balance, and market selector */}
         <div className="p-3" style={{ paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))' }}>
-          <header className="px-4 py-3 flex items-center justify-between bg-[#0a0a0a] rounded-[20px] border border-white/[0.06] shadow-2xl">
-            <div className="flex items-center gap-3">
-              <Link href="/speculate" className="text-white/60 hover:text-white transition-colors">
-                <ArrowLeft className="w-5 h-5" />
-              </Link>
-              {/* Ostium Logo - Actual Logo */}
-              <div className="w-10 h-10 bg-[#FF6B00] rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-[#FF6B00]/30">
-                <svg viewBox="0 0 100 100" className="w-6 h-6" fill="none">
-                  {/* Left bracket )( */}
-                  <path d="M25 10 Q50 50 25 90" stroke="black" strokeWidth="10" strokeLinecap="round" fill="none"/>
-                  <path d="M40 10 Q15 50 40 90" stroke="black" strokeWidth="10" strokeLinecap="round" fill="none"/>
-                  {/* Right bracket )( */}
-                  <path d="M60 10 Q85 50 60 90" stroke="black" strokeWidth="10" strokeLinecap="round" fill="none"/>
-                  <path d="M75 10 Q50 50 75 90" stroke="black" strokeWidth="10" strokeLinecap="round" fill="none"/>
-                </svg>
-              </div>
-              <div>
-                <h1 className="text-white font-semibold flex items-center gap-2">
-                  Ostium
-                  {/* Arbitrum Badge - Blue with logo */}
-                  <span className="text-[10px] bg-[#12AAFF]/20 text-[#12AAFF] px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <svg viewBox="0 0 28 28" className="w-3 h-3" fill="currentColor">
-                      <path d="M14 0C6.268 0 0 6.268 0 14s6.268 14 14 14 14-6.268 14-14S21.732 0 14 0zm6.12 19.537l-1.744 2.99a.9.9 0 01-.771.443H10.39a.896.896 0 01-.77-.442l-1.745-2.99a.9.9 0 010-.906l5.357-9.19a.9.9 0 011.541 0l5.357 9.19a.9.9 0 01-.01.905z"/>
-                    </svg>
-                    Arbitrum
-                  </span>
-                </h1>
-                <p className="text-white/40 text-xs">Stocks, Forex, Commodities & More</p>
-              </div>
-            </div>
-            <a
-              href="https://app.ostium.com/trade"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-white/40 hover:text-[#FF6B00] transition-colors p-2"
-              title="Open full Ostium app"
-            >
-              <ExternalLink className="w-4 h-4" />
-            </a>
-          </header>
-        </div>
-
-        {/* Smart Wallet Balance Bar - Rounded Card */}
-        <div className="mx-3 mt-2 px-4 py-3 bg-[#0a0a0a]/80 backdrop-blur-sm rounded-[16px] border border-white/[0.06]">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              {/* Smart Wallet Label + Balances */}
-              <div>
-                <span className="text-white/40 text-xs flex items-center gap-1">
-                  <Wallet className="w-3 h-3" />
-                  Smart Wallet (ARB)
-                </span>
-                <div className="flex items-center gap-3">
-                  {/* USDC Balance */}
-                  <div className="text-white font-bold">
-                    ${parseFloat(smartBalances.usdc).toFixed(2)}
-                  </div>
-                  {/* ETH Balance */}
-                  <div className="text-white/60 text-sm font-mono">
-                    {parseFloat(smartBalances.eth).toFixed(4)} ETH
+          <div className="bg-[#0a0a0a] rounded-[20px] border border-white/[0.06] shadow-2xl overflow-hidden">
+            {/* Top Row: Logo + Balance + Bridge */}
+            <div className="px-4 py-3 flex items-center justify-between border-b border-white/[0.04]">
+              <div className="flex items-center gap-3">
+                <Link href="/speculate" className="text-white/60 hover:text-white transition-colors">
+                  <ArrowLeft className="w-5 h-5" />
+                </Link>
+                {/* Ostium Logo */}
+                <div className="w-9 h-9 bg-[#FF6B00] rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-[#FF6B00]/30">
+                  <svg viewBox="0 0 100 100" className="w-5 h-5" fill="none">
+                    <path d="M25 10 Q50 50 25 90" stroke="black" strokeWidth="10" strokeLinecap="round" fill="none"/>
+                    <path d="M40 10 Q15 50 40 90" stroke="black" strokeWidth="10" strokeLinecap="round" fill="none"/>
+                    <path d="M60 10 Q85 50 60 90" stroke="black" strokeWidth="10" strokeLinecap="round" fill="none"/>
+                    <path d="M75 10 Q50 50 75 90" stroke="black" strokeWidth="10" strokeLinecap="round" fill="none"/>
+                  </svg>
+                </div>
+                <div>
+                  <h1 className="text-white font-semibold text-sm flex items-center gap-2">
+                    Ostium
+                    <span className="text-[9px] bg-[#12AAFF]/20 text-[#12AAFF] px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                      <svg viewBox="0 0 28 28" className="w-2.5 h-2.5" fill="currentColor">
+                        <path d="M14 0C6.268 0 0 6.268 0 14s6.268 14 14 14 14-6.268 14-14S21.732 0 14 0zm6.12 19.537l-1.744 2.99a.9.9 0 01-.771.443H10.39a.896.896 0 01-.77-.442l-1.745-2.99a.9.9 0 010-.906l5.357-9.19a.9.9 0 011.541 0l5.357 9.19a.9.9 0 01-.01.905z"/>
+                      </svg>
+                      ARB
+                    </span>
+                  </h1>
+                  <div className="flex items-center gap-2 text-white/60 text-xs">
+                    <Wallet className="w-3 h-3" />
+                    <span className="font-bold text-white">${parseFloat(smartBalances.usdc).toFixed(2)}</span>
+                    <span className="font-mono">{parseFloat(smartBalances.eth).toFixed(4)} ETH</span>
                   </div>
                 </div>
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {/* Gas Button - always visible when ETH is low */}
-              {!hasArbitrumEth && (
+              <div className="flex items-center gap-2">
+                {!hasArbitrumEth && (
+                  <button
+                    onClick={() => setShowGasModal(true)}
+                    className="px-2 py-1.5 bg-[#FF6B00] hover:bg-[#FF8533] rounded-lg text-white text-[10px] font-semibold transition-colors"
+                  >
+                    ⛽ Gas
+                  </button>
+                )}
                 <button
-                  onClick={() => setShowGasModal(true)}
-                  className="flex items-center gap-1.5 bg-[#FF6B00] hover:bg-[#FF8533] px-3 py-1.5 rounded-lg text-white text-xs font-semibold transition-colors shadow-lg shadow-[#FF6B00]/20"
+                  onClick={() => setShowBridgeModal(true)}
+                  className="flex items-center gap-1 bg-[#FF6B00] hover:bg-[#FF8533] px-2.5 py-1.5 rounded-lg text-white text-[10px] font-semibold transition-colors"
                 >
-                  ⛽ Get Gas
+                  <ArrowRightLeft className="w-3 h-3" />
+                  Bridge
                 </button>
-              )}
-              <button
-                onClick={() => setShowBridgeModal(true)}
-                className="flex items-center gap-1.5 bg-white/[0.05] hover:bg-white/[0.08] px-3 py-1.5 rounded-lg text-white/60 text-xs transition-colors border border-white/[0.06]"
-              >
-                <ArrowRightLeft className="w-3.5 h-3.5" />
-                Bridge
-              </button>
+                <a
+                  href="https://app.ostium.com/trade"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-white/40 hover:text-[#FF6B00] transition-colors p-1"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              </div>
             </div>
+
+            {/* Market Selector Row */}
+            <button
+              onClick={() => setShowMarketSelector(true)}
+              className="w-full px-4 py-3 flex items-center justify-between hover:bg-white/[0.02] transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-[#FF6B00]/20 rounded-xl flex items-center justify-center">
+                  <span className="text-[#FF6B00] font-bold text-sm">
+                    {selectedPair.symbol.split('-')[0].slice(0, 3)}
+                  </span>
+                </div>
+                <div className="text-left">
+                  <div className="flex items-center gap-2">
+                    <p className="text-white font-semibold">{selectedPair.symbol}</p>
+                    {price?.isMarketOpen && (
+                      <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+                    )}
+                  </div>
+                  <p className="text-white/40 text-xs">{selectedPair.name}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <p className="text-white font-mono text-lg">
+                    ${price?.mid ? (price.mid < 10 ? price.mid.toFixed(4) : price.mid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : '---'}
+                  </p>
+                  <p className={`text-xs ${price?.isMarketOpen ? 'text-green-400' : 'text-white/30'}`}>
+                    {price?.isMarketOpen ? 'Live' : 'Closed'}
+                  </p>
+                </div>
+                <ChevronDown className="w-5 h-5 text-[#FF6B00]" />
+              </div>
+            </button>
           </div>
         </div>
 
-        {/* Market Selector */}
-        <OstiumMarketSelector
-          selectedPair={selectedPair}
-          onSelectPair={setSelectedPair}
-        />
+        {/* Market Selector Modal */}
+        {showMarketSelector && (
+          <OstiumMarketSelector
+            selectedPair={selectedPair}
+            onSelectPair={(pair) => {
+              setSelectedPair(pair)
+              setShowMarketSelector(false)
+            }}
+            onClose={() => setShowMarketSelector(false)}
+            isModal={true}
+          />
+        )}
 
         {/* TradingView Chart - Rounded card with darker background */}
         <div className="mx-3 mt-3 bg-[#0a0a0a] rounded-[20px] border border-white/[0.06] overflow-hidden shadow-2xl">

@@ -70,12 +70,35 @@ export async function GET(request: NextRequest) {
       const pairId = parseInt(trade.pair?.id || '0')
       const pair = OSTIUM_PAIRS.find(p => p.id === pairId)
       const symbol = pair?.symbol || `${trade.pair?.from || 'UNKNOWN'}-${trade.pair?.to || 'USD'}`
+      const category = pair?.category || 'crypto'
 
       // Parse values - Ostium uses various precision levels
       const collateral = parseFloat(trade.collateral) / 1e6 // USDC 6 decimals
       const leverage = parseFloat(trade.leverage) / 100 // PRECISION_2
-      const entryPrice = parseFloat(trade.openPrice) / 1e18 // PRECISION_18
+
+      // Price precision varies by asset type in Ostium
+      // Crypto uses 18 decimals, but stocks/forex/commodities may use 10 decimals
+      const rawPrice = parseFloat(trade.openPrice)
+      let entryPrice: number
+
+      // For non-crypto assets, try 10 decimal precision first
+      // If the result seems unreasonable (< $0.01 or > $1M), try 18 decimals
+      if (category !== 'crypto') {
+        const price10 = rawPrice / 1e10
+        const price18 = rawPrice / 1e18
+        // Use whichever gives a more reasonable price for the asset type
+        if (price10 > 0.01 && price10 < 1000000) {
+          entryPrice = price10
+        } else {
+          entryPrice = price18
+        }
+      } else {
+        entryPrice = rawPrice / 1e18
+      }
+
       const isLong = trade.isBuy
+
+      console.log(`Position ${symbol}: raw=${rawPrice}, entry=${entryPrice}, category=${category}`)
 
       // Calculate liquidation price (simplified - ~90% loss threshold)
       const liqDistance = entryPrice / leverage * 0.9
