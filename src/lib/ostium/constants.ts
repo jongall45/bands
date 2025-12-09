@@ -41,33 +41,46 @@ const STOCK_ICONS: Record<string, string> = {
   NVDA: 'https://companiesmarketcap.com/img/company-logos/64/NVDA.webp',
 }
 
-// Trading pairs with their indices (from/to used to match API responses)
+// Trading pairs with their CORRECT indices from Ostium API
+// Source: https://metadata-backend.ostium.io/PricePublish/latest-prices
+// IMPORTANT: These indices MUST match the contract's pairIndex exactly!
 export const OSTIUM_PAIRS = [
-  { id: 0, symbol: 'BTC-USD', name: 'Bitcoin', category: 'crypto', maxLeverage: 100, from: 'BTC', to: 'USD', icon: `${CRYPTO_ICON_BASE}/1/small/bitcoin.png` },
-  { id: 1, symbol: 'ETH-USD', name: 'Ethereum', category: 'crypto', maxLeverage: 100, from: 'ETH', to: 'USD', icon: `${CRYPTO_ICON_BASE}/279/small/ethereum.png` },
-  { id: 2, symbol: 'SOL-USD', name: 'Solana', category: 'crypto', maxLeverage: 75, from: 'SOL', to: 'USD', icon: `${CRYPTO_ICON_BASE}/4128/small/solana.png` },
-  { id: 3, symbol: 'DOGE-USD', name: 'Dogecoin', category: 'crypto', maxLeverage: 50, from: 'DOGE', to: 'USD', icon: `${CRYPTO_ICON_BASE}/5/small/dogecoin.png` },
-  { id: 4, symbol: 'PEPE-USD', name: 'Pepe', category: 'crypto', maxLeverage: 50, from: 'PEPE', to: 'USD', icon: `${CRYPTO_ICON_BASE}/29850/small/pepe-token.jpeg` },
-  { id: 5, symbol: 'XAU-USD', name: 'Gold', category: 'commodity', maxLeverage: 100, from: 'XAU', to: 'USD', icon: '' },
-  { id: 6, symbol: 'XAG-USD', name: 'Silver', category: 'commodity', maxLeverage: 50, from: 'XAG', to: 'USD', icon: '' },
-  { id: 7, symbol: 'WTI-USD', name: 'Crude Oil', category: 'commodity', maxLeverage: 50, from: 'CL', to: 'USD', icon: '' },
-  { id: 8, symbol: 'COPPER-USD', name: 'Copper', category: 'commodity', maxLeverage: 50, from: 'HG', to: 'USD', icon: '' },
-  { id: 9, symbol: 'NAT_GAS-USD', name: 'Natural Gas', category: 'commodity', maxLeverage: 25, from: 'NG', to: 'USD', icon: '' },
-  { id: 10, symbol: 'EUR-USD', name: 'Euro', category: 'forex', maxLeverage: 100, from: 'EUR', to: 'USD', icon: 'https://flagcdn.com/w40/eu.png' },
-  { id: 11, symbol: 'GBP-USD', name: 'British Pound', category: 'forex', maxLeverage: 100, from: 'GBP', to: 'USD', icon: 'https://flagcdn.com/w40/gb.png' },
-  { id: 12, symbol: 'USD-JPY', name: 'Japanese Yen', category: 'forex', maxLeverage: 100, from: 'USD', to: 'JPY', icon: 'https://flagcdn.com/w40/jp.png' },
-  { id: 13, symbol: 'AUD-USD', name: 'Australian Dollar', category: 'forex', maxLeverage: 100, from: 'AUD', to: 'USD', icon: 'https://flagcdn.com/w40/au.png' },
-  { id: 14, symbol: 'USD-CAD', name: 'Canadian Dollar', category: 'forex', maxLeverage: 100, from: 'USD', to: 'CAD', icon: 'https://flagcdn.com/w40/ca.png' },
-  { id: 15, symbol: 'USD-CHF', name: 'Swiss Franc', category: 'forex', maxLeverage: 100, from: 'USD', to: 'CHF', icon: 'https://flagcdn.com/w40/ch.png' },
+  // Forex pairs (0-7)
+  { id: 0, symbol: 'EUR-USD', name: 'Euro', category: 'forex', maxLeverage: 100, from: 'EUR', to: 'USD', icon: 'https://flagcdn.com/w40/eu.png' },
+  { id: 1, symbol: 'GBP-USD', name: 'British Pound', category: 'forex', maxLeverage: 100, from: 'GBP', to: 'USD', icon: 'https://flagcdn.com/w40/gb.png' },
+  { id: 2, symbol: 'USD-JPY', name: 'Japanese Yen', category: 'forex', maxLeverage: 100, from: 'USD', to: 'JPY', icon: 'https://flagcdn.com/w40/jp.png' },
+  { id: 4, symbol: 'USD-CAD', name: 'Canadian Dollar', category: 'forex', maxLeverage: 100, from: 'USD', to: 'CAD', icon: 'https://flagcdn.com/w40/ca.png' },
+  { id: 5, symbol: 'AUD-USD', name: 'Australian Dollar', category: 'forex', maxLeverage: 100, from: 'AUD', to: 'USD', icon: 'https://flagcdn.com/w40/au.png' },
+  { id: 7, symbol: 'USD-CHF', name: 'Swiss Franc', category: 'forex', maxLeverage: 100, from: 'USD', to: 'CHF', icon: 'https://flagcdn.com/w40/ch.png' },
+
+  // Commodities (8-13)
+  { id: 8, symbol: 'XAG-USD', name: 'Silver', category: 'commodity', maxLeverage: 50, from: 'XAG', to: 'USD', icon: '' },
+  { id: 9, symbol: 'XAU-USD', name: 'Gold', category: 'commodity', maxLeverage: 100, from: 'XAU', to: 'USD', icon: '' },
+  { id: 12, symbol: 'COPPER-USD', name: 'Copper', category: 'commodity', maxLeverage: 50, from: 'HG', to: 'USD', icon: '' },
+  { id: 13, symbol: 'WTI-USD', name: 'Crude Oil', category: 'commodity', maxLeverage: 50, from: 'CL', to: 'USD', icon: '' },
+
+  // Indices (16-20)
   { id: 16, symbol: 'SPX-USD', name: 'S&P 500', category: 'index', maxLeverage: 50, from: 'SPX', to: 'USD', icon: '' },
-  { id: 17, symbol: 'NDX-USD', name: 'NASDAQ 100', category: 'index', maxLeverage: 50, from: 'NDX', to: 'USD', icon: '' },
-  { id: 18, symbol: 'AAPL-USD', name: 'Apple', category: 'stock', maxLeverage: 25, from: 'AAPL', to: 'USD', icon: STOCK_ICONS.AAPL },
-  { id: 19, symbol: 'MSFT-USD', name: 'Microsoft', category: 'stock', maxLeverage: 25, from: 'MSFT', to: 'USD', icon: STOCK_ICONS.MSFT },
-  { id: 20, symbol: 'GOOG-USD', name: 'Google', category: 'stock', maxLeverage: 25, from: 'GOOG', to: 'USD', icon: STOCK_ICONS.GOOG },
-  { id: 21, symbol: 'AMZN-USD', name: 'Amazon', category: 'stock', maxLeverage: 25, from: 'AMZN', to: 'USD', icon: STOCK_ICONS.AMZN },
-  { id: 22, symbol: 'TSLA-USD', name: 'Tesla', category: 'stock', maxLeverage: 25, from: 'TSLA', to: 'USD', icon: STOCK_ICONS.TSLA },
-  { id: 23, symbol: 'META-USD', name: 'Meta', category: 'stock', maxLeverage: 25, from: 'META', to: 'USD', icon: STOCK_ICONS.META },
-  { id: 24, symbol: 'NVDA-USD', name: 'NVIDIA', category: 'stock', maxLeverage: 25, from: 'NVDA', to: 'USD', icon: STOCK_ICONS.NVDA },
+  { id: 18, symbol: 'NDX-USD', name: 'NASDAQ 100', category: 'index', maxLeverage: 50, from: 'NDX', to: 'USD', icon: '' },
+  { id: 20, symbol: 'DJI-USD', name: 'Dow Jones', category: 'index', maxLeverage: 50, from: 'DJI', to: 'USD', icon: '' },
+
+  // Crypto (21-29)
+  { id: 21, symbol: 'BTC-USD', name: 'Bitcoin', category: 'crypto', maxLeverage: 100, from: 'BTC', to: 'USD', icon: `${CRYPTO_ICON_BASE}/1/small/bitcoin.png` },
+  { id: 22, symbol: 'ETH-USD', name: 'Ethereum', category: 'crypto', maxLeverage: 100, from: 'ETH', to: 'USD', icon: `${CRYPTO_ICON_BASE}/279/small/ethereum.png` },
+  { id: 23, symbol: 'SOL-USD', name: 'Solana', category: 'crypto', maxLeverage: 75, from: 'SOL', to: 'USD', icon: `${CRYPTO_ICON_BASE}/4128/small/solana.png` },
+  { id: 24, symbol: 'BNB-USD', name: 'BNB', category: 'crypto', maxLeverage: 50, from: 'BNB', to: 'USD', icon: `${CRYPTO_ICON_BASE}/825/small/bnb-icon2_2x.png` },
+  { id: 25, symbol: 'XRP-USD', name: 'XRP', category: 'crypto', maxLeverage: 50, from: 'XRP', to: 'USD', icon: `${CRYPTO_ICON_BASE}/44/small/xrp-symbol-white-128.png` },
+  { id: 27, symbol: 'ADA-USD', name: 'Cardano', category: 'crypto', maxLeverage: 50, from: 'ADA', to: 'USD', icon: `${CRYPTO_ICON_BASE}/975/small/cardano.png` },
+  { id: 29, symbol: 'LINK-USD', name: 'Chainlink', category: 'crypto', maxLeverage: 50, from: 'LINK', to: 'USD', icon: `${CRYPTO_ICON_BASE}/877/small/chainlink-new-logo.png` },
+
+  // Stocks (30-38)
+  { id: 30, symbol: 'NVDA-USD', name: 'NVIDIA', category: 'stock', maxLeverage: 25, from: 'NVDA', to: 'USD', icon: STOCK_ICONS.NVDA },
+  { id: 31, symbol: 'GOOG-USD', name: 'Google', category: 'stock', maxLeverage: 25, from: 'GOOG', to: 'USD', icon: STOCK_ICONS.GOOG },
+  { id: 32, symbol: 'AMZN-USD', name: 'Amazon', category: 'stock', maxLeverage: 25, from: 'AMZN', to: 'USD', icon: STOCK_ICONS.AMZN },
+  { id: 33, symbol: 'META-USD', name: 'Meta', category: 'stock', maxLeverage: 25, from: 'META', to: 'USD', icon: STOCK_ICONS.META },
+  { id: 34, symbol: 'TSLA-USD', name: 'Tesla', category: 'stock', maxLeverage: 25, from: 'TSLA', to: 'USD', icon: STOCK_ICONS.TSLA },
+  { id: 37, symbol: 'AAPL-USD', name: 'Apple', category: 'stock', maxLeverage: 25, from: 'AAPL', to: 'USD', icon: STOCK_ICONS.AAPL },
+  { id: 38, symbol: 'MSFT-USD', name: 'Microsoft', category: 'stock', maxLeverage: 25, from: 'MSFT', to: 'USD', icon: STOCK_ICONS.MSFT },
 ] as const
 
 export type OstiumPair = typeof OSTIUM_PAIRS[number]
