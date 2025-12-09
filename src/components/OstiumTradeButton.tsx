@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { arbitrum } from 'viem/chains'
-import { encodeFunctionData, parseUnits, formatUnits, maxUint256, zeroAddress } from 'viem'
+import { encodeFunctionData, encodeAbiParameters, parseUnits, formatUnits, maxUint256, zeroAddress, toHex, concat } from 'viem'
 import { Loader2, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react'
 import { OSTIUM_TRADING_ABI, OSTIUM_STORAGE_ABI, ERC20_ABI } from '@/lib/ostium/abi'
 import { OSTIUM_CONTRACTS, ORDER_TYPE, calculateSlippage, DEFAULT_SLIPPAGE_BPS, OSTIUM_PAIRS, OSTIUM_API } from '@/lib/ostium/constants'
@@ -276,13 +276,15 @@ export function OstiumTradeButton({
 
       // Build trade struct - exact field order per ABI
       // Verified from: https://github.com/0xOstium/smart-contracts-public/blob/main/src/interfaces/IOstiumTradingStorage.sol
+      const leverageScaled = leverage * 100  // PRECISION_2: 10x = 1000
+
       const tradeStruct = {
         collateral: collateralWei,              // uint256 - USDC in 6 decimals
         openPrice: openPriceWei,                // uint192 - price in 18 decimals
         tp: BigInt(0),                          // uint192 - take profit (0 = disabled)
         sl: BigInt(0),                          // uint192 - stop loss (0 = disabled)
         trader: smartWalletAddress,             // address
-        leverage: leverage * 100,               // uint32 - PRECISION_2 (10x = 1000)
+        leverage: leverageScaled,               // uint32 - PRECISION_2 (10x = 1000)
         pairIndex: pairIndex,                   // uint16
         index: 0,                               // uint8 - 0 for new position
         buy: isLong,                            // bool - true = long
