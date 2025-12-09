@@ -270,11 +270,11 @@ export function OstiumTradeButton({
       console.log('📉 Slippage:', slippageP.toString(), `(${DEFAULT_SLIPPAGE_BPS} bps = ${DEFAULT_SLIPPAGE_BPS / 100}%)`)
 
       // Convert FRESH price to 18 decimal precision (PRECISION_18)
-      // MUST match Python SDK's convert_to_scaled_integer(value, precision=5, scale=18)
-      // Step 1: Round to precision decimals (5), Step 2: Scale to 18 decimals
-      const pricePrecision5 = Math.round(freshPrice * 1e5)  // Round to 5 decimal places
-      const openPriceWei = BigInt(pricePrecision5) * BigInt(1e13)  // Scale from 5 to 18 decimals (10^13)
-      console.log('📊 Price precision 5:', pricePrecision5)
+      // Use string conversion to COMPLETELY avoid JavaScript floating point corruption
+      // The issue: BigInt(1e13) can corrupt large numbers due to floating point
+      const priceStr = freshPrice.toFixed(18).replace('.', '')  // "277730000000000000000" for 277.73
+      const openPriceWei = BigInt(priceStr)
+      console.log('📊 Price string:', priceStr)
       console.log('📊 Open Price (18 dec):', openPriceWei.toString())
       console.log('📊 Open Price check:', Number(openPriceWei) / 1e18)
 
