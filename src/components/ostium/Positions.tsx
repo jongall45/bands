@@ -11,13 +11,18 @@ import { OSTIUM_TRADING_ABI, OSTIUM_STORAGE_ABI } from '@/lib/ostium/abi'
 import { Loader2, X, TrendingUp, TrendingDown, Clock } from 'lucide-react'
 
 // Helper to read on-chain position data directly from TradingStorage contract
+// Uses the corrected ABI from: https://github.com/0xOstium/smart-contracts-public/blob/main/src/interfaces/IOstiumTradingStorage.sol
 async function readOnChainPosition(trader: string, pairIndex: number, index: number) {
   try {
+    // openTrades inputs: address _trader, uint16 _pairIndex, uint8 _index
     const calldata = encodeFunctionData({
       abi: OSTIUM_STORAGE_ABI,
       functionName: 'openTrades',
-      args: [trader as `0x${string}`, BigInt(pairIndex), BigInt(index)],
+      args: [trader as `0x${string}`, pairIndex, index],
     })
+
+    console.log('🔍 Calling openTrades with:', { trader, pairIndex, index })
+    console.log('🔍 Calldata:', calldata)
 
     const response = await fetch('https://arb1.arbitrum.io/rpc', {
       method: 'POST',
@@ -34,33 +39,145 @@ async function readOnChainPosition(trader: string, pairIndex: number, index: num
     })
 
     const result = await response.json()
+    console.log('🔍 Raw RPC response:', result)
 
-    if (result.result && result.result !== '0x') {
-      // Decode the response
-      const decoded = decodeFunctionResult({
-        abi: OSTIUM_STORAGE_ABI,
-        functionName: 'openTrades',
-        data: result.result,
-      }) as any
+    if (result.error) {
+      console.error('RPC Error:', result.error)
+      return null
+    }
 
-      return {
-        trader: decoded.trader,
-        pairIndex: Number(decoded.pairIndex),
-        index: Number(decoded.index),
-        initialPosToken: decoded.initialPosToken,
-        positionSizeUSDC: Number(decoded.positionSizeUSDC) / 1e6, // Convert to USDC
-        openPrice: Number(decoded.openPrice) / 1e18, // Convert from PRECISION_18
-        buy: decoded.buy,
-        leverage: Number(decoded.leverage),
-        tp: Number(decoded.tp) / 1e18,
-        sl: Number(decoded.sl) / 1e18,
+    // openTrades returns 9 values: collateral, openPrice, tp, sl, trader, leverage, pairIndex, index, buy
+    if (result.result && result.result !== '0x' && result.result.length > 66) {
+      // Try to decode the response
+      try {
+        const decoded = decodeFunctionResult({
+          abi: OSTIUM_STORAGE_ABI,
+          functionName: 'openTrades',
+          data: result.result,
+        }) as [bigint, bigint, bigint, bigint, string, number, number, number, boolean]
+
+        console.log('🔍 Decoded position (raw):', decoded)
+
+        // Extract values in order: collateral, openPrice, tp, sl, trader, leverage, pairIndex, index, buy
+        const [collateral, openPrice, tp, sl, traderAddr, leverage, decodedPairIndex, decodedIndex, buy] = decoded
+
+        // Check if the trader address is zero (means no position)
+        if (traderAddr === '0x0000000000000000000000000000000000000000') {
+          console.log('⚠️ Position exists but trader is zero address - position likely closed')
+          return null
+        }
+
+        // Check if collateral is 0 (no position)
+        if (collateral === BigInt(0)) {
+          console.log('⚠️ Position has zero collateral - position likely closed')
+          return null
+        }
+
+        const positionData = {
+          trader: traderAddr,
+          pairIndex: Number(decodedPairIndex),
+          index: Number(decodedIndex),
+          positionSizeUSDC: Number(collateral) / 1e6, // PRECISION_6
+          openPrice: Number(openPrice) / 1e18,        // PRECISION_18
+          buy,
+          leverage: Number(leverage) / 100,           // PRECISION_2 (e.g., 1000 = 10x)
+          tp: Number(tp) / 1e18,
+          sl: Number(sl) / 1e18,
+        }
+
+        console.log('🔍 Decoded position (parsed):', positionData)
+        return positionData
+      } catch (decodeError) {
+        console.error('Failed to decode with standard ABI, trying raw parsing:', decodeError)
+        // Try raw parsing of the response
+        return parseRawPositionData(result.result)
       }
     }
+
+    console.log('⚠️ Empty or minimal response from openTrades')
     return null
   } catch (error) {
     console.error('Error reading on-chain position:', error)
     return null
   }
+}
+
+// Fallback raw parser for position data
+// New Trade struct layout (from Ostium contract):
+// 0: collateral (uint256)   - PRECISION_6
+// 1: openPrice (uint192)    - PRECISION_18
+// 2: tp (uint192)           - PRECISION_18
+// 3: sl (uint192)           - PRECISION_18
+// 4: trader (address)
+// 5: leverage (uint32)      - PRECISION_2
+// 6: pairIndex (uint16)
+// 7: index (uint8)
+// 8: buy (bool)
+function parseRawPositionData(hexData: string): any | null {
+  try {
+    // Remove 0x prefix
+    const data = hexData.slice(2)
+
+    // Each 32-byte slot is 64 hex characters
+    const slots = []
+    for (let i = 0; i < data.length; i += 64) {
+      slots.push(data.slice(i, i + 64))
+    }
+
+    console.log('🔍 Raw data slots:', slots)
+
+    if (slots.length < 9) {
+      console.log('⚠️ Not enough data slots for position struct')
+      return null
+    }
+
+    const collateral = BigInt('0x' + slots[0])
+    const openPrice = BigInt('0x' + slots[1])
+    const tp = BigInt('0x' + slots[2])
+    const sl = BigInt('0x' + slots[3])
+    const trader = '0x' + slots[4].slice(24) // Last 20 bytes of the slot
+    const leverage = BigInt('0x' + slots[5])
+    const pairIndex = BigInt('0x' + slots[6])
+    const index = BigInt('0x' + slots[7])
+    const buy = BigInt('0x' + slots[8]) === BigInt(1)
+
+    // Check if trader is zero address or collateral is zero
+    if (trader === '0x0000000000000000000000000000000000000000' || collateral === BigInt(0)) {
+      console.log('⚠️ No position found (zero trader or collateral)')
+      return null
+    }
+
+    return {
+      trader,
+      pairIndex: Number(pairIndex),
+      index: Number(index),
+      positionSizeUSDC: Number(collateral) / 1e6,  // PRECISION_6
+      openPrice: Number(openPrice) / 1e18,          // PRECISION_18
+      buy,
+      leverage: Number(leverage) / 100,             // PRECISION_2
+      tp: Number(tp) / 1e18,
+      sl: Number(sl) / 1e18,
+    }
+  } catch (e) {
+    console.error('Raw parsing failed:', e)
+    return null
+  }
+}
+
+// Scan multiple position indices to find all positions for a trader/pair
+async function scanPositions(trader: string, pairIndex: number, maxIndex: number = 5) {
+  console.log(`🔍 Scanning positions for trader=${trader}, pairIndex=${pairIndex}, indices 0-${maxIndex}`)
+  const positions = []
+
+  for (let i = 0; i <= maxIndex; i++) {
+    const pos = await readOnChainPosition(trader, pairIndex, i)
+    if (pos && pos.positionSizeUSDC > 0) {
+      console.log(`✅ Found position at index ${i}:`, pos)
+      positions.push({ ...pos, index: i })
+    }
+  }
+
+  return positions
 }
 
 export function OstiumPositions() {
@@ -116,8 +233,28 @@ export function OstiumPositions() {
         console.log('   - TP:', onChainPosition.tp)
         console.log('   - SL:', onChainPosition.sl)
       } else {
-        console.log('   ⚠️ NO ON-CHAIN POSITION FOUND!')
-        console.log('   This means the position may not exist on-chain at this index.')
+        console.log('   ⚠️ NO ON-CHAIN POSITION FOUND AT INDEX', position.index)
+        console.log('   Scanning for positions at other indices...')
+
+        // Scan for positions at other indices
+        const foundPositions = await scanPositions(smartWalletAddress, position.pairId, 5)
+
+        if (foundPositions.length > 0) {
+          console.log(`   ✅ Found ${foundPositions.length} position(s) at other indices:`)
+          foundPositions.forEach(p => {
+            console.log(`      Index ${p.index}: ${p.positionSizeUSDC} USDC, Price: ${p.openPrice}`)
+          })
+          alert(`Position not found at index ${position.index}. Found ${foundPositions.length} position(s) at other indices. Check console for details. The subgraph data may be stale.`)
+          setClosingKey(null)
+          return
+        } else {
+          console.log('   ❌ No positions found for this pair!')
+          console.log('   The position has likely already been closed.')
+          alert('This position appears to be already closed on-chain. The subgraph data is stale. Please refresh the page.')
+          refetch() // Trigger a refresh of positions
+          setClosingKey(null)
+          return
+        }
       }
 
       console.log('')

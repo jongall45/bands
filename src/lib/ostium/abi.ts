@@ -73,32 +73,54 @@ export const OSTIUM_TRADING_ABI = [
 ] as const
 
 // Ostium TradingStorage ABI - for reading position data directly from chain
-// Based on Gains Network v5 interface (Ostium is forked from it)
+// From official repo: https://github.com/0xOstium/smart-contracts-public/blob/main/src/interfaces/IOstiumTradingStorage.sol
+// Trade struct: collateral (uint256 PRECISION_6), openPrice (uint192 PRECISION_18), tp, sl, trader, leverage (uint32 PRECISION_2), pairIndex (uint16), index (uint8), buy (bool)
 export const OSTIUM_STORAGE_ABI = [
   {
     name: 'openTrades',
     type: 'function',
     stateMutability: 'view',
     inputs: [
+      { name: '_trader', type: 'address' },
+      { name: '_pairIndex', type: 'uint16' },
+      { name: '_index', type: 'uint8' },
+    ],
+    // Returns individual values, NOT a tuple!
+    outputs: [
+      { name: 'collateral', type: 'uint256' },    // PRECISION_6 (USDC)
+      { name: 'openPrice', type: 'uint192' },     // PRECISION_18
+      { name: 'tp', type: 'uint192' },            // PRECISION_18
+      { name: 'sl', type: 'uint192' },            // PRECISION_18
       { name: 'trader', type: 'address' },
-      { name: 'pairIndex', type: 'uint256' },
-      { name: 'index', type: 'uint256' },
+      { name: 'leverage', type: 'uint32' },       // PRECISION_2
+      { name: 'pairIndex', type: 'uint16' },
+      { name: 'index', type: 'uint8' },
+      { name: 'buy', type: 'bool' },
+    ],
+  },
+  {
+    name: 'getOpenTrade',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: '_trader', type: 'address' },
+      { name: '_pairIndex', type: 'uint16' },
+      { name: '_index', type: 'uint8' },
     ],
     outputs: [
       {
         name: '',
         type: 'tuple',
         components: [
+          { name: 'collateral', type: 'uint256' },  // PRECISION_6
+          { name: 'openPrice', type: 'uint192' },   // PRECISION_18
+          { name: 'tp', type: 'uint192' },          // PRECISION_18
+          { name: 'sl', type: 'uint192' },          // PRECISION_18
           { name: 'trader', type: 'address' },
-          { name: 'pairIndex', type: 'uint256' },
-          { name: 'index', type: 'uint256' },
-          { name: 'initialPosToken', type: 'uint256' },
-          { name: 'positionSizeUSDC', type: 'uint256' },
-          { name: 'openPrice', type: 'uint256' },
+          { name: 'leverage', type: 'uint32' },     // PRECISION_2
+          { name: 'pairIndex', type: 'uint16' },
+          { name: 'index', type: 'uint8' },
           { name: 'buy', type: 'bool' },
-          { name: 'leverage', type: 'uint256' },
-          { name: 'tp', type: 'uint256' },
-          { name: 'sl', type: 'uint256' },
         ],
       },
     ],
@@ -108,23 +130,19 @@ export const OSTIUM_STORAGE_ABI = [
     type: 'function',
     stateMutability: 'view',
     inputs: [
-      { name: 'trader', type: 'address' },
-      { name: 'pairIndex', type: 'uint256' },
-      { name: 'index', type: 'uint256' },
+      { name: '_trader', type: 'address' },
+      { name: '_pairIndex', type: 'uint16' },
+      { name: '_index', type: 'uint8' },
     ],
+    // Returns 7 values: tokenId, tokenPriceDai, tpLastUpdated, slLastUpdated, beingMarketClosed, createdBlock, lossProtectionPercentage
     outputs: [
-      {
-        name: '',
-        type: 'tuple',
-        components: [
-          { name: 'tokenId', type: 'uint256' },
-          { name: 'tokenPriceDai', type: 'uint256' },
-          { name: 'openInterestDai', type: 'uint256' },
-          { name: 'tpLastUpdated', type: 'uint256' },
-          { name: 'slLastUpdated', type: 'uint256' },
-          { name: 'beingMarketClosed', type: 'bool' },
-        ],
-      },
+      { name: 'tokenId', type: 'uint256' },
+      { name: 'tokenPriceDai', type: 'uint256' },
+      { name: 'tpLastUpdated', type: 'uint32' },
+      { name: 'slLastUpdated', type: 'uint32' },
+      { name: 'beingMarketClosed', type: 'bool' },
+      { name: 'createdBlock', type: 'uint32' },
+      { name: 'lossProtectionPercentage', type: 'uint32' },
     ],
   },
   {
@@ -132,8 +150,8 @@ export const OSTIUM_STORAGE_ABI = [
     type: 'function',
     stateMutability: 'view',
     inputs: [
-      { name: 'trader', type: 'address' },
-      { name: 'pairIndex', type: 'uint256' },
+      { name: '_trader', type: 'address' },
+      { name: '_pairIndex', type: 'uint16' },
     ],
     outputs: [{ name: '', type: 'uint256' }],
   },
