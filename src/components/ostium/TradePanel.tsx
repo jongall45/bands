@@ -165,7 +165,7 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
   const meetsMinimum = collateralNum >= MIN_COLLATERAL_USD
 
   return (
-    <div className="p-3 space-y-3 pb-4">
+    <div className="p-3 space-y-2.5 pb-4">
       {/* No ETH for Gas Warning - Compact */}
       {!hasEnoughGas && (
         <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
@@ -304,30 +304,28 @@ export function OstiumTradePanel({ pair }: TradePanelProps) {
         </div>
       </div>
 
-      {/* Trade Summary - More compact */}
-      <div className="bg-[#080808] border border-white/[0.04] rounded-xl p-3 space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-white/40 text-xs">Position Size</span>
-          <span className="text-white font-mono text-sm">${positionSize.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-white/40 text-xs">Entry Price</span>
-          <span className="text-white font-mono text-sm">
-            {priceLoading ? '...' : `$${formatPrice(currentPrice)}`}
-          </span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-white/40 text-xs flex items-center gap-1">
-            Liq. Price
-            <Info className="w-2.5 h-2.5 opacity-50" />
-          </span>
-          <span className={`font-mono text-sm ${isLong ? 'text-red-400' : 'text-green-400'}`}>
-            ${formatPrice(liquidationPrice)}
-          </span>
-        </div>
-        <div className="border-t border-white/[0.04] pt-2 flex items-center justify-between">
-          <span className="text-white/40 text-xs">Est. Fee</span>
-          <span className="text-white/50 font-mono text-xs">~${(positionSize * 0.0008).toFixed(2)}</span>
+      {/* Trade Summary - Ultra compact 2x2 grid */}
+      <div className="bg-[#080808] border border-white/[0.04] rounded-xl p-2.5">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+          <div className="flex justify-between items-center">
+            <span className="text-white/40">Position Size</span>
+            <span className="text-white font-mono">${positionSize.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-white/40">Entry Price</span>
+            <span className="text-white font-mono">{priceLoading ? '...' : `$${formatPrice(currentPrice)}`}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-white/40 flex items-center gap-0.5">
+              Liq. Price
+              <Info className="w-2.5 h-2.5 opacity-40" />
+            </span>
+            <span className={`font-mono ${isLong ? 'text-red-400' : 'text-green-400'}`}>${formatPrice(liquidationPrice)}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-white/40">Est. Fee</span>
+            <span className="text-white/50 font-mono">~${(positionSize * 0.0008).toFixed(2)}</span>
+          </div>
         </div>
       </div>
 

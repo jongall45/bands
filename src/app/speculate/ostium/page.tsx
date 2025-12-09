@@ -143,6 +143,20 @@ export default function OstiumTradingPage() {
     }
   }, [isAuthenticated, isConnected])
 
+  // Set default pair to the first active position's ticker (if any)
+  const [hasSetInitialPair, setHasSetInitialPair] = useState(false)
+  useEffect(() => {
+    if (!hasSetInitialPair && positions && positions.length > 0) {
+      // Find the pair for the first active position
+      const firstPosition = positions[0]
+      const matchingPair = OSTIUM_PAIRS.find(p => p.id === firstPosition.pairId)
+      if (matchingPair) {
+        setSelectedPair(matchingPair)
+        setHasSetInitialPair(true)
+      }
+    }
+  }, [positions, hasSetInitialPair])
+
   // Only redirect if auth is fully loaded AND user is not authenticated
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {

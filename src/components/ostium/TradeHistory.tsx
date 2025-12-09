@@ -8,6 +8,7 @@ import {
   Clock, TrendingUp, TrendingDown, ExternalLink,
   CheckCircle, XCircle, Loader2, RefreshCw
 } from 'lucide-react'
+import { AssetIcon } from './AssetIcon'
 
 interface TradeRecord {
   id: string
@@ -307,14 +308,18 @@ export function TradeHistory() {
             {/* Header with symbol and PnL */}
             <div className="flex items-center justify-between mb-2 relative">
               <div className="flex items-center gap-2">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                  trade.isLong ? 'bg-green-500/20' : 'bg-red-500/20'
-                }`}>
-                  {trade.isLong ? (
-                    <TrendingUp className="w-4 h-4 text-green-400" />
-                  ) : (
-                    <TrendingDown className="w-4 h-4 text-red-400" />
-                  )}
+                <div className="relative">
+                  <AssetIcon symbol={trade.symbol} size="md" />
+                  {/* Long/Short indicator badge */}
+                  <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full flex items-center justify-center ${
+                    trade.isLong ? 'bg-green-500' : 'bg-red-500'
+                  }`}>
+                    {trade.isLong ? (
+                      <TrendingUp className="w-2 h-2 text-white" />
+                    ) : (
+                      <TrendingDown className="w-2 h-2 text-white" />
+                    )}
+                  </div>
                 </div>
                 <div>
                   <p className="text-white font-medium text-sm">

@@ -9,6 +9,7 @@ import { encodeFunctionData, decodeFunctionResult } from 'viem'
 import { OSTIUM_CONTRACTS, DEFAULT_SLIPPAGE_BPS } from '@/lib/ostium/constants'
 import { OSTIUM_TRADING_ABI, OSTIUM_STORAGE_ABI } from '@/lib/ostium/abi'
 import { Loader2, X, TrendingUp, TrendingDown, Clock } from 'lucide-react'
+import { AssetIcon } from './AssetIcon'
 
 // Helper to read on-chain position data directly from TradingStorage contract
 // Uses the corrected ABI from: https://github.com/0xOstium/smart-contracts-public/blob/main/src/interfaces/IOstiumTradingStorage.sol
@@ -665,14 +666,18 @@ function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
       {/* Header */}
       <div className="flex items-center justify-between mb-3 relative">
         <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-            position.isLong ? 'bg-green-500/20' : 'bg-red-500/20'
-          }`}>
-            {position.isLong ? (
-              <TrendingUp className="w-5 h-5 text-green-400" />
-            ) : (
-              <TrendingDown className="w-5 h-5 text-red-400" />
-            )}
+          <div className="relative">
+            <AssetIcon symbol={position.symbol} size="lg" className="rounded-xl" />
+            {/* Long/Short indicator badge */}
+            <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center ${
+              position.isLong ? 'bg-green-500' : 'bg-red-500'
+            }`}>
+              {position.isLong ? (
+                <TrendingUp className="w-2.5 h-2.5 text-white" />
+              ) : (
+                <TrendingDown className="w-2.5 h-2.5 text-white" />
+              )}
+            </div>
           </div>
           <div>
             <p className="text-white font-semibold">{position.symbol}</p>
