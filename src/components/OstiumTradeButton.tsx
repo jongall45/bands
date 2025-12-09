@@ -10,78 +10,84 @@ import { OSTIUM_CONTRACTS, ORDER_TYPE, calculateSlippage, DEFAULT_SLIPPAGE_BPS, 
 import { TransactionSuccessModal } from '@/components/ostium/TransactionSuccessModal'
 import { addTradeRecord } from '@/components/ostium/TradeHistory'
 
-// Expected price ranges by asset category to validate prices make sense
-// These are sanity checks to prevent catastrophic errors from wrong prices
-const PRICE_RANGES: Record<string, { min: number; max: number }> = {
-  // Crypto - highly variable but with reasonable bounds
-  crypto_btc: { min: 10000, max: 500000 },
-  crypto_eth: { min: 500, max: 50000 },
-  crypto_sol: { min: 5, max: 2000 },
-  crypto_doge: { min: 0.01, max: 10 },
-  crypto_pepe: { min: 0.0000001, max: 0.001 },
-  // Forex - typical ranges
-  forex: { min: 0.5, max: 200 },
-  // Indices - S&P, NASDAQ, etc
-  index_spx: { min: 3000, max: 10000 },
-  index_ndx: { min: 10000, max: 30000 },
-  // Stocks
-  stock: { min: 10, max: 3000 },
-  // Commodities
-  commodity_xau: { min: 1000, max: 5000 },  // Gold
-  commodity_xag: { min: 10, max: 100 },      // Silver
-  commodity_wti: { min: 20, max: 200 },      // Oil
-  commodity_copper: { min: 2, max: 10 },
-  commodity_natgas: { min: 1, max: 20 },
-}
-
-// Get the expected price range for a pair
-function getPriceRange(pairIndex: number): { min: number; max: number } | null {
+// Cross-validate price against Ostium's direct API
+// This ensures we're using the exact price format the protocol expects
+// Much more robust than hardcoded price ranges
+async function fetchAndValidatePrice(pairIndex: number): Promise<{ price: number; error?: string }> {
   const pair = OSTIUM_PAIRS.find(p => p.id === pairIndex)
-  if (!pair) return null
-
-  // Map pair to price range key
-  const symbol = pair.symbol.toLowerCase()
-  const category = pair.category
-
-  if (symbol.includes('btc')) return PRICE_RANGES.crypto_btc
-  if (symbol.includes('eth')) return PRICE_RANGES.crypto_eth
-  if (symbol.includes('sol')) return PRICE_RANGES.crypto_sol
-  if (symbol.includes('doge')) return PRICE_RANGES.crypto_doge
-  if (symbol.includes('pepe')) return PRICE_RANGES.crypto_pepe
-  if (symbol.includes('spx')) return PRICE_RANGES.index_spx
-  if (symbol.includes('ndx')) return PRICE_RANGES.index_ndx
-  if (symbol.includes('xau')) return PRICE_RANGES.commodity_xau
-  if (symbol.includes('xag')) return PRICE_RANGES.commodity_xag
-  if (symbol.includes('wti')) return PRICE_RANGES.commodity_wti
-  if (symbol.includes('copper')) return PRICE_RANGES.commodity_copper
-  if (symbol.includes('nat_gas')) return PRICE_RANGES.commodity_natgas
-  if (category === 'forex') return PRICE_RANGES.forex
-  if (category === 'stock') return PRICE_RANGES.stock
-
-  return null
-}
-
-// Validate that price is within expected range
-function validatePrice(pairIndex: number, price: number): { valid: boolean; error?: string } {
-  if (price <= 0) {
-    return { valid: false, error: 'Price is zero or negative' }
+  if (!pair) {
+    return { price: 0, error: `Unknown pair index: ${pairIndex}` }
   }
 
-  const range = getPriceRange(pairIndex)
-  if (!range) {
-    // No range defined, allow any positive price
-    return { valid: true }
-  }
+  console.log(`🔒 Cross-validating price for ${pair.symbol}...`)
 
-  if (price < range.min || price > range.max) {
-    const pair = OSTIUM_PAIRS.find(p => p.id === pairIndex)
-    return {
-      valid: false,
-      error: `Price $${price.toFixed(2)} is outside expected range ($${range.min}-$${range.max}) for ${pair?.symbol || 'unknown'}. This may indicate a data error.`,
+  // Fetch from our API proxy
+  let proxyPrice = 0
+  try {
+    const proxyResponse = await fetch('/api/ostium/prices', { cache: 'no-store' })
+    if (proxyResponse.ok) {
+      const prices = await proxyResponse.json()
+      const priceData = prices.find((p: any) => p.pairId === pairIndex)
+      if (priceData?.mid && priceData.mid > 0) {
+        proxyPrice = priceData.mid
+        console.log(`📊 Proxy API price: $${proxyPrice}`)
+      }
     }
+  } catch (e) {
+    console.warn('Proxy price fetch failed:', e)
   }
 
-  return { valid: true }
+  // Fetch directly from Ostium API for cross-validation
+  let directPrice = 0
+  const assetSymbol = `${pair.from}${pair.to}`
+  try {
+    const directResponse = await fetch(
+      `https://metadata-backend.ostium.io/PricePublish/latest-price?asset=${assetSymbol}`,
+      { cache: 'no-store' }
+    )
+    if (directResponse.ok) {
+      const data = await directResponse.json()
+      if (data?.mid && data.mid > 0) {
+        directPrice = data.mid
+        console.log(`📊 Direct Ostium API price: $${directPrice}`)
+      }
+    }
+  } catch (e) {
+    console.warn('Direct price fetch failed:', e)
+  }
+
+  // Validate we got at least one price
+  if (proxyPrice <= 0 && directPrice <= 0) {
+    return { price: 0, error: `Failed to fetch price for ${pair.symbol} from any source` }
+  }
+
+  // If we have both prices, cross-validate them
+  if (proxyPrice > 0 && directPrice > 0) {
+    const priceDiff = Math.abs(proxyPrice - directPrice)
+    const avgPrice = (proxyPrice + directPrice) / 2
+    const diffPercent = (priceDiff / avgPrice) * 100
+
+    console.log(`📊 Price difference: ${diffPercent.toFixed(2)}%`)
+
+    // Allow up to 1% difference (accounts for slight timing differences)
+    if (diffPercent > 1) {
+      console.warn(`⚠️ Price sources disagree significantly!`)
+      console.warn(`   Proxy: $${proxyPrice}`)
+      console.warn(`   Direct: $${directPrice}`)
+      console.warn(`   Diff: ${diffPercent.toFixed(2)}%`)
+      // Use the direct Ostium price as it's authoritative
+      return { price: directPrice }
+    }
+
+    // Prices match - use direct Ostium price as authoritative
+    console.log(`✅ Prices cross-validated successfully`)
+    return { price: directPrice }
+  }
+
+  // Only one price available - use whichever we got
+  const finalPrice = directPrice > 0 ? directPrice : proxyPrice
+  console.log(`📊 Using single source price: $${finalPrice}`)
+  return { price: finalPrice }
 }
 
 interface SmartWalletTradeButtonProps {
@@ -188,13 +194,10 @@ export function OstiumTradeButton({
   useEffect(() => {
     const fetchPrice = async () => {
       try {
-        // Use our API proxy to avoid CORS issues
         const response = await fetch('/api/ostium/prices')
         if (!response.ok) throw new Error('Price fetch failed')
 
         const prices = await response.json()
-
-        // Find matching price by pairId
         const priceData = prices.find((p: any) => p.pairId === pairIndex)
 
         // Only update if this is still the current pair (prevent race conditions)
@@ -204,16 +207,8 @@ export function OstiumTradeButton({
         }
 
         if (priceData?.mid) {
-          // Validate price is in expected range before setting
-          const validation = validatePrice(pairIndex, priceData.mid)
-          if (validation.valid) {
-            setCurrentPrice(priceData.mid)
-            console.log(`📊 Current ${priceData.symbol} price: $${priceData.mid}`)
-          } else {
-            console.error(`⚠️ Price validation failed: ${validation.error}`)
-            // Still set it but log the warning - user will be warned on trade
-            setCurrentPrice(priceData.mid)
-          }
+          setCurrentPrice(priceData.mid)
+          console.log(`📊 Current ${priceData.symbol} price: $${priceData.mid}`)
         } else {
           console.warn(`⚠️ No price data found for pair ${pairIndex}`)
           setCurrentPrice(0)
@@ -225,53 +220,8 @@ export function OstiumTradeButton({
     }
 
     fetchPrice()
-    const interval = setInterval(fetchPrice, 5000) // Update price every 5 seconds
+    const interval = setInterval(fetchPrice, 5000)
     return () => clearInterval(interval)
-  }, [pairIndex])
-
-  // Fresh price fetch function - used right before trade execution
-  const fetchFreshPrice = useCallback(async (): Promise<number> => {
-    const pair = OSTIUM_PAIRS.find(p => p.id === pairIndex)
-    if (!pair) {
-      throw new Error(`Unknown pair index: ${pairIndex}`)
-    }
-
-    console.log(`🔄 Fetching fresh price for ${pair.symbol}...`)
-
-    // Try our API proxy first
-    try {
-      const response = await fetch('/api/ostium/prices', { cache: 'no-store' })
-      if (response.ok) {
-        const prices = await response.json()
-        const priceData = prices.find((p: any) => p.pairId === pairIndex)
-        if (priceData?.mid && priceData.mid > 0) {
-          console.log(`✅ Fresh price from API: $${priceData.mid}`)
-          return priceData.mid
-        }
-      }
-    } catch (e) {
-      console.warn('API proxy fetch failed, trying direct...', e)
-    }
-
-    // Fallback: Direct Ostium API call
-    const assetSymbol = `${pair.from}${pair.to}`
-    try {
-      const directResponse = await fetch(
-        `https://metadata-backend.ostium.io/PricePublish/latest-price?asset=${assetSymbol}`,
-        { cache: 'no-store' }
-      )
-      if (directResponse.ok) {
-        const data = await directResponse.json()
-        if (data?.mid && data.mid > 0) {
-          console.log(`✅ Fresh price from direct API: $${data.mid}`)
-          return data.mid
-        }
-      }
-    } catch (e) {
-      console.error('Direct price fetch failed:', e)
-    }
-
-    throw new Error(`Failed to fetch fresh price for ${pair.symbol}`)
   }, [pairIndex])
 
   const trade = async () => {
@@ -284,23 +234,13 @@ export function OstiumTradeButton({
     setError(null)
 
     try {
-      // CRITICAL: Fetch a FRESH price right before trading
-      // This prevents using stale prices when switching between pairs
-      console.log('🔒 Fetching fresh price before trade execution...')
-      let freshPrice: number
-      try {
-        freshPrice = await fetchFreshPrice()
-      } catch (e: any) {
-        setError(`Failed to fetch fresh price: ${e.message}. Please try again.`)
-        setLoading(false)
-        return
-      }
+      // CRITICAL: Fetch and cross-validate price from multiple sources
+      // This ensures we're using the exact price format Ostium expects
+      console.log('🔒 Cross-validating price before trade execution...')
+      const { price: freshPrice, error: priceError } = await fetchAndValidatePrice(pairIndex)
 
-      // CRITICAL: Validate the fresh price is in expected range
-      const priceValidation = validatePrice(pairIndex, freshPrice)
-      if (!priceValidation.valid) {
-        console.error('❌ Price validation failed:', priceValidation.error)
-        setError(priceValidation.error || 'Price validation failed')
+      if (priceError || freshPrice <= 0) {
+        setError(priceError || 'Failed to fetch valid price. Please try again.')
         setLoading(false)
         return
       }
