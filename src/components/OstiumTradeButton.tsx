@@ -344,7 +344,11 @@ export function OstiumTradeButton({
 
       // Log the raw calldata for debugging
       console.log('📋 Raw calldata length:', openTradeCalldata.length)
-      console.log('📋 Function selector:', openTradeCalldata.slice(0, 10))
+      const ourSelector = openTradeCalldata.slice(0, 10)
+      const expectedSelector = '0x742088c0' // From successful Ostium tx on Arbiscan
+      console.log('📋 Our function selector:', ourSelector)
+      console.log('📋 Expected selector:', expectedSelector)
+      console.log('📋 Selector match:', ourSelector === expectedSelector ? '✅ YES' : '❌ NO - WRONG FUNCTION!')
       // Parse the calldata to verify encoding
       const calldataWithoutSelector = openTradeCalldata.slice(10)
       console.log('📋 Encoded collateral (slot 0):', '0x' + calldataWithoutSelector.slice(0, 64))
