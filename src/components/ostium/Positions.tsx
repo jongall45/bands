@@ -291,7 +291,7 @@ export function OstiumPositions() {
         if (priceResponse.ok) {
           const priceData = await priceResponse.json()
           currentPrice = priceData.mid || priceData.price || 0
-          console.log('✅ Fresh Ostium price:', currentPrice)
+          console.log('✅ Fresh Ostium API price:', currentPrice)
         }
       } catch (e) {
         console.log('⚠️ Could not fetch from Ostium API, using cached price')
@@ -305,6 +305,23 @@ export function OstiumPositions() {
 
       if (!currentPrice || currentPrice <= 0) {
         throw new Error('Unable to fetch current price for market close')
+      }
+
+      // CRITICAL FIX: Check if on-chain price is vastly different from API price
+      // This indicates a price format mismatch - just use API price with max slippage
+      let marketPriceToUse = currentPrice
+      if (onChainPosition && onChainPosition.openPrice > 0) {
+        const priceRatio = currentPrice / onChainPosition.openPrice
+        console.log('📊 Price ratio (API/OnChain):', priceRatio.toFixed(2))
+
+        // If prices differ by more than 100x, there's a potential format mismatch
+        if (priceRatio > 100) {
+          console.log('⚠️ LARGE PRICE DIFFERENCE DETECTED!')
+          console.log('   On-chain openPrice:', onChainPosition.openPrice)
+          console.log('   API current price:', currentPrice)
+          console.log('   This position may have corrupted price data')
+          console.log('   Will attempt close with API price and max slippage')
+        }
       }
 
       // Calculate close percentage (10000 = 100%)
@@ -327,20 +344,21 @@ export function OstiumPositions() {
       console.log('   - Subgraph Collateral:', position.collateral, 'USDC')
       console.log('   - ON-CHAIN Collateral:', actualCollateral, 'USDC')
       console.log('   - Leverage:', position.leverage, 'x')
-      console.log('   - Entry Price:', position.entryPrice)
-      console.log('   - Current Price:', currentPrice)
+      console.log('   - On-chain Entry Price:', onChainPosition?.openPrice || 'N/A')
+      console.log('   - API Current Price:', currentPrice)
+      console.log('   - Market Price to Use:', marketPriceToUse)
       console.log('💰 Close Amount:')
       console.log('   - Close Percentage:', closePercent, '%', `(${closePercentage}/10000)`)
       console.log('   - Expected Return:', expectedReturn.toFixed(2), 'USDC (before PnL)')
 
       // Convert price to 18 decimal precision (PRECISION_18)
-      const marketPriceWei = BigInt(Math.floor(currentPrice * 1e18))
+      const marketPriceWei = BigInt(Math.floor(marketPriceToUse * 1e18))
       console.log('📊 Market Price (18 dec):', marketPriceWei.toString())
 
-      // CRITICAL: Use HIGH slippage (5%) to ensure close goes through
-      // Low slippage causes close to fail silently (fee lost, position stays open)
-      const slippageP = 500 // 5% slippage - much higher to ensure execution
-      console.log('⚠️ Using 5% slippage to ensure close execution')
+      // CRITICAL: Use MAXIMUM slippage (99%) to ensure close goes through
+      // The oracle price format might differ significantly from what we expect
+      const slippageP = 9900 // 99% slippage - maximum to ensure execution
+      console.log('⚠️ Using 99% slippage (maximum) to ensure close execution')
 
       console.log('📦 Contract Call Parameters:', {
         pairIndex: position.pairId,
