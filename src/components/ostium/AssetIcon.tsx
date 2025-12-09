@@ -1,6 +1,10 @@
 'use client'
 
-// Asset icon colors and gradients
+import { useState } from 'react'
+import Image from 'next/image'
+import { OSTIUM_PAIRS } from '@/lib/ostium/constants'
+
+// Asset icon colors for fallback
 const ASSET_COLORS: Record<string, { bg: string; text: string }> = {
   // Crypto
   BTC: { bg: 'from-orange-500 to-orange-600', text: 'text-white' },
@@ -48,26 +52,54 @@ interface AssetIconProps {
   symbol: string // e.g., "BTC-USD" or "BTC"
   size?: 'sm' | 'md' | 'lg'
   className?: string
+  iconUrl?: string // Optional direct icon URL override
 }
 
-export function AssetIcon({ symbol, size = 'md', className = '' }: AssetIconProps) {
+export function AssetIcon({ symbol, size = 'md', className = '', iconUrl }: AssetIconProps) {
+  const [imgError, setImgError] = useState(false)
+
   // Extract base asset from symbol (e.g., "BTC" from "BTC-USD")
   const baseAsset = symbol.split('-')[0].toUpperCase()
   const colors = ASSET_COLORS[baseAsset] || DEFAULT_COLORS
 
-  // Size classes
-  const sizeClasses = {
-    sm: 'w-6 h-6 text-[8px]',
-    md: 'w-8 h-8 text-[10px]',
-    lg: 'w-10 h-10 text-xs',
+  // Size classes and image sizes
+  const sizeConfig = {
+    sm: { classes: 'w-6 h-6 text-[8px]', imgSize: 20 },
+    md: { classes: 'w-8 h-8 text-[10px]', imgSize: 28 },
+    lg: { classes: 'w-10 h-10 text-xs', imgSize: 36 },
   }
+  const { classes: sizeClasses, imgSize } = sizeConfig[size]
 
-  // Get display text (max 4 chars)
+  // Get display text (max 4 chars) for fallback
   const displayText = baseAsset.slice(0, 4)
 
+  // Look up icon URL from OSTIUM_PAIRS if not provided directly
+  const resolvedIconUrl = iconUrl || OSTIUM_PAIRS.find(p => p.symbol === symbol || p.symbol.startsWith(baseAsset + '-'))?.icon
+
+  // Check if we have a valid external icon URL
+  const hasExternalIcon = resolvedIconUrl && resolvedIconUrl.length > 0 && !resolvedIconUrl.startsWith('/')
+
+  // Render actual logo image if available
+  if (hasExternalIcon && !imgError) {
+    return (
+      <div className={`${sizeClasses} rounded-lg flex items-center justify-center overflow-hidden bg-white ${className}`}>
+        <Image
+          src={resolvedIconUrl}
+          alt={symbol}
+          width={imgSize}
+          height={imgSize}
+          className="object-contain"
+          onError={() => setImgError(true)}
+          unoptimized
+        />
+      </div>
+    )
+  }
+
+  // Fallback to colored text icon
   return (
     <div
-      className={`bg-gradient-to-br ${colors.bg} rounded-lg flex items-center justify-center font-bold ${colors.text} ${sizeClasses[size]} ${className}`}
+      className={`bg-gradient-to-br ${colors.bg} rounded-lg flex items-center justify-center font-bold ${colors.text} ${sizeClasses} ${className}`}
     >
       {displayText}
     </div>
