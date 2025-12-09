@@ -105,54 +105,86 @@ export function TradeHistory() {
     return getStoredTrades(primaryAddress)
   }, [primaryAddress])
 
+  // Clean up stale local storage when we have API data
+  useEffect(() => {
+    if (apiTrades && apiTrades.length > 0 && primaryAddress) {
+      cleanupStaleLocalTrades(primaryAddress)
+    }
+  }, [apiTrades, primaryAddress])
+
+  // Helper to clean up stale local trades (older than 5 minutes without matching API data)
+  function cleanupStaleLocalTrades(address: string) {
+    if (typeof window === 'undefined') return
+    try {
+      const stored = localStorage.getItem(`${STORAGE_KEY}_${address.toLowerCase()}`)
+      if (!stored) return
+      const trades: TradeRecord[] = JSON.parse(stored)
+      const fiveMinutesAgo = Date.now() - 5 * 60 * 1000
+
+      // Keep only trades that are recent OR have valid symbol
+      const cleaned = trades.filter(t => {
+        // Keep if recent
+        if ((t.openTime || 0) > fiveMinutesAgo) return true
+        // Keep if has valid symbol (not default or empty)
+        if (t.symbol && t.symbol.length > 0 && t.symbol !== 'BTC-USD') return true
+        // Remove stale entries
+        return false
+      })
+
+      if (cleaned.length !== trades.length) {
+        console.log(`Cleaned up ${trades.length - cleaned.length} stale local trades`)
+        localStorage.setItem(`${STORAGE_KEY}_${address.toLowerCase()}`, JSON.stringify(cleaned))
+      }
+    } catch (e) {
+      console.error('Failed to cleanup local trades:', e)
+    }
+  }
+
   // Merge API trades with local trades, syncing status from API
   const trades = useMemo(() => {
     const apiTradeList = apiTrades || []
 
-    // First, build a map of API trades for quick lookup
-    // Key by pairId-index combination since that uniquely identifies a position
-    const apiTradeMap = new Map<string, TradeRecord>()
-    apiTradeList.forEach(trade => {
-      // Use pairId and index as the key since that's the position identifier
-      const key = `${trade.pairId}-${trade.index}`
-      // Keep the most recent version (API already sorted by timestamp desc)
-      if (!apiTradeMap.has(key)) {
-        apiTradeMap.set(key, trade)
-      }
-    })
+    // If we have API data, use it as the authoritative source
+    // Only add local trades if they're very recent (< 2 min) and not yet indexed
+    if (apiTradeList.length > 0) {
+      const twoMinutesAgo = Date.now() - 2 * 60 * 1000
 
-    // Start with API trades as the base
-    const combined = [...apiTradeList]
+      // Build a set of API trade IDs for quick lookup
+      const apiTradeIds = new Set(apiTradeList.map(t => t.id))
 
-    // Add local trades that aren't represented in API results
-    // But sync their isOpen status if the API has updated info
-    localTrades.forEach(local => {
-      const posKey = `${local.pairId}-${local.index}`
-      const apiMatch = apiTradeMap.get(posKey)
-
-      if (apiMatch) {
-        // Position exists in API - check if we should update local trade
-        // If openTime is within 60 seconds, it's likely the same trade
-        const timeDiff = Math.abs((apiMatch.openTime || 0) - (local.openTime || 0))
-        if (timeDiff < 60000) {
-          // Same trade - API has authoritative data, don't add local duplicate
-          // Update localStorage with correct isOpen status if needed
-          if (local.isOpen && !apiMatch.isOpen && primaryAddress) {
-            updateLocalTradeStatus(primaryAddress, local.id, apiMatch)
+      // Filter local trades to only include very recent ones not yet in API
+      const recentLocalTrades = localTrades.filter(local => {
+        // Must have a symbol and txHash
+        if (!local.symbol || !local.txHash) return false
+        // Must be recent (< 2 minutes old)
+        if ((local.openTime || 0) < twoMinutesAgo) return false
+        // Must not already be in API results
+        if (apiTradeIds.has(local.id)) return false
+        // Check if there's a matching API trade by position key
+        const matchingApi = apiTradeList.find(api =>
+          api.pairId === local.pairId &&
+          api.index === local.index &&
+          Math.abs((api.openTime || 0) - (local.openTime || 0)) < 120000
+        )
+        if (matchingApi) {
+          // Update local storage with API data
+          if (primaryAddress && local.isOpen !== matchingApi.isOpen) {
+            updateLocalTradeStatus(primaryAddress, local.id, matchingApi)
           }
-          return // Skip adding local trade, API version is already in combined
+          return false // Don't add duplicate
         }
-      }
+        return true
+      })
 
-      // No matching API trade - add the local trade
-      // This handles very recent trades that haven't been indexed yet
-      if (local.txHash && !combined.some(t => t.txHash === local.txHash || t.id === local.id)) {
-        combined.push(local)
-      }
-    })
+      // Combine and sort
+      const combined = [...apiTradeList, ...recentLocalTrades]
+      return combined.sort((a, b) => (b.openTime || 0) - (a.openTime || 0))
+    }
 
-    // Sort by openTime desc
-    return combined.sort((a, b) => (b.openTime || 0) - (a.openTime || 0))
+    // No API data - use local trades as fallback (filtered for valid data)
+    return localTrades
+      .filter(t => t.symbol && t.symbol.length > 0)
+      .sort((a, b) => (b.openTime || 0) - (a.openTime || 0))
   }, [apiTrades, localTrades, primaryAddress])
 
   // Helper to update local trade status
