@@ -70,7 +70,7 @@ function AssetIcon({ pair, size = 'md' }: { pair: OstiumPair; size?: 'sm' | 'md'
 
   if (hasExternalIcon && !imgError) {
     return (
-      <div className={`${sizeClasses} rounded-xl flex items-center justify-center overflow-hidden bg-white/[0.05]`}>
+      <div className={`${sizeClasses} rounded-xl flex items-center justify-center overflow-hidden bg-white`}>
         <Image
           src={pair.icon!}
           alt={pair.name}
