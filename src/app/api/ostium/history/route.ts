@@ -113,6 +113,13 @@ export async function GET(request: NextRequest) {
         pnl = (priceDiff / entryPrice) * collateral * leverage
       }
 
+      // Determine if trade is actually closed
+      // Use multiple signals: isOpen flag, closePrice existence, closeTimestamp
+      // Some subgraphs may not update isOpen correctly
+      const hasCloseData = (closePrice !== null && closePrice > 0) ||
+                           (trade.closeTimestamp && parseInt(trade.closeTimestamp) > 0)
+      const isActuallyOpen = trade.isOpen && !hasCloseData
+
       // Debug logging
       console.log(`History ${symbol}:`, {
         rawOpenPrice: trade.openPrice,
@@ -121,7 +128,9 @@ export async function GET(request: NextRequest) {
         parsedEntryPrice: entryPrice,
         parsedClosePrice: closePrice,
         parsedPnl: pnl,
-        isOpen: trade.isOpen,
+        subgraphIsOpen: trade.isOpen,
+        hasCloseData,
+        isActuallyOpen,
       })
 
       return {
@@ -135,10 +144,10 @@ export async function GET(request: NextRequest) {
         entryPrice,
         closePrice,
         pnl,
-        isOpen: trade.isOpen,
+        isOpen: isActuallyOpen,
         openTime: parseInt(trade.timestamp) * 1000,
         closeTime: trade.closeTimestamp ? parseInt(trade.closeTimestamp) * 1000 : null,
-        type: trade.isOpen ? 'open' : 'closed',
+        type: isActuallyOpen ? 'open' : 'closed',
       }
     })
 

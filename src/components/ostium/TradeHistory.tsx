@@ -254,13 +254,26 @@ export function TradeHistory() {
         const collateral = trade.collateral || 0
         const pnlPercent = collateral > 0 ? (pnl / collateral) * 100 : 0
         const isProfitable = pnl >= 0
+        const size = (trade.collateral || 0) * (trade.leverage || 1)
 
         return (
           <div
             key={trade.id}
-            className="bg-[#141414] border border-white/[0.04] rounded-xl p-3"
+            className="bg-[#141414] border border-white/[0.04] rounded-xl p-3 relative overflow-hidden"
           >
-            <div className="flex items-center justify-between mb-2">
+            {/* PnL Background Gradient */}
+            {pnl !== 0 && (
+              <div
+                className={`absolute inset-0 opacity-10 ${
+                  isProfitable
+                    ? 'bg-gradient-to-r from-green-500 to-transparent'
+                    : 'bg-gradient-to-r from-red-500 to-transparent'
+                }`}
+              />
+            )}
+
+            {/* Header with symbol and PnL */}
+            <div className="flex items-center justify-between mb-2 relative">
               <div className="flex items-center gap-2">
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
                   trade.isLong ? 'bg-green-500/20' : 'bg-red-500/20'
@@ -280,63 +293,51 @@ export function TradeHistory() {
                   </p>
                 </div>
               </div>
-              <div className="flex flex-col items-end gap-0.5">
+              {/* PnL display in header - always show */}
+              <div className="text-right">
+                <p className={`font-mono font-semibold ${isProfitable ? 'text-green-400' : 'text-red-400'}`}>
+                  {isProfitable ? '+' : ''}${pnl.toFixed(2)}
+                </p>
+                <p className={`text-[10px] font-medium ${isProfitable ? 'text-green-400' : 'text-red-400'}`}>
+                  {isProfitable ? '+' : ''}{pnlPercent.toFixed(2)}%
+                </p>
+              </div>
+            </div>
+
+            {/* Trade details - unified layout */}
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs relative">
+              <div className="flex justify-between">
+                <span className="text-white/30">Size</span>
+                <span className="text-white font-mono">${size.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/30">Collateral</span>
+                <span className="text-white font-mono">${collateral.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/30">Entry</span>
+                <span className="text-white font-mono">${formatPrice(trade.entryPrice || 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/30">{trade.isOpen ? 'Status' : 'Exit'}</span>
                 {trade.isOpen ? (
                   <span className="text-[#FF6B00] text-[10px] font-medium px-1.5 py-0.5 bg-[#FF6B00]/10 rounded">
                     Active
                   </span>
                 ) : (
-                  <span className="text-green-400 text-[10px] font-medium px-1.5 py-0.5 bg-green-500/10 rounded flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3" />
-                    Closed
-                  </span>
+                  <span className="text-white font-mono">${formatPrice(trade.closePrice || 0)}</span>
                 )}
               </div>
             </div>
 
-            {/* Trade details - different layout for open vs closed */}
-            {trade.isOpen ? (
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <div>
-                  <p className="text-white/30 text-[10px]">Size</p>
-                  <p className="text-white font-mono">${((trade.collateral || 0) * (trade.leverage || 1)).toFixed(2)}</p>
-                </div>
-                <div>
-                  <p className="text-white/30 text-[10px]">Collateral</p>
-                  <p className="text-white font-mono">${(trade.collateral || 0).toFixed(2)}</p>
-                </div>
-                <div>
-                  <p className="text-white/30 text-[10px]">Entry</p>
-                  <p className="text-white font-mono">${formatPrice(trade.entryPrice || 0)}</p>
-                </div>
+            {/* Status badge for closed trades */}
+            {!trade.isOpen && (
+              <div className="mt-2 pt-2 border-t border-white/[0.04] flex items-center justify-center relative">
+                <span className="text-green-400 text-[10px] font-medium px-2 py-0.5 bg-green-500/10 rounded flex items-center gap-1">
+                  <CheckCircle className="w-3 h-3" />
+                  Closed
+                </span>
               </div>
-            ) : (
-              <>
-                {/* Closed trade details: Entry, Exit, PnL */}
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div>
-                    <p className="text-white/30 text-[10px]">Entry</p>
-                    <p className="text-white font-mono">${formatPrice(trade.entryPrice || 0)}</p>
-                  </div>
-                  <div>
-                    <p className="text-white/30 text-[10px]">Exit</p>
-                    <p className="text-white font-mono">${formatPrice(trade.closePrice || 0)}</p>
-                  </div>
-                  <div>
-                    <p className="text-white/30 text-[10px]">Gain/Loss</p>
-                    <p className={`font-mono font-semibold ${isProfitable ? 'text-green-400' : 'text-red-400'}`}>
-                      {isProfitable ? '+' : ''}{pnlPercent.toFixed(1)}%
-                    </p>
-                  </div>
-                </div>
-                {/* PnL row */}
-                <div className="mt-2 pt-2 border-t border-white/[0.04] flex items-center justify-between">
-                  <span className="text-white/40 text-xs">P&L</span>
-                  <span className={`font-mono font-semibold ${isProfitable ? 'text-green-400' : 'text-red-400'}`}>
-                    {isProfitable ? '+' : ''}${pnl.toFixed(2)}
-                  </span>
-                </div>
-              </>
             )}
 
             {trade.txHash && (
