@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // Query all trades (open and closed) for the trader
-    // Include various PnL fields since different subgraph versions may use different names
+    // Note: The subgraph does NOT have 'pnl' or 'closeTimestamp' fields - we calculate PnL ourselves
     const query = `
       query trades($trader: Bytes!) {
         trades(
@@ -31,11 +31,9 @@ export async function GET(request: NextRequest) {
           takeProfitPrice
           isOpen
           timestamp
-          closeTimestamp
           isBuy
           trader
           index
-          pnl
           pair {
             id
             from
@@ -92,21 +90,11 @@ export async function GET(request: NextRequest) {
       const entryPrice = parsePrice(trade.openPrice) || 0
       const closePrice = parsePrice(trade.closePrice)
 
-      // PnL from subgraph - check if it's in USDC decimals (6) or raw
-      // Also check for realized PnL fields that subgraph might use
-      let pnl: number | null = null
-      if (trade.pnl && trade.pnl !== '0') {
-        // PnL is typically in USDC (6 decimals)
-        pnl = parseFloat(trade.pnl) / 1e6
-      } else if (trade.realizedPnl && trade.realizedPnl !== '0') {
-        // Some subgraphs use realizedPnl
-        pnl = parseFloat(trade.realizedPnl) / 1e6
-      }
-
-      // Fallback: Calculate PnL if we have close price but no PnL from subgraph
+      // Calculate PnL from entry/exit prices
       // PnL = (closePrice - entryPrice) / entryPrice * collateral * leverage (for longs)
       // PnL = (entryPrice - closePrice) / entryPrice * collateral * leverage (for shorts)
-      if (pnl === null && closePrice && entryPrice > 0 && !trade.isOpen) {
+      let pnl: number | null = null
+      if (closePrice && closePrice > 0 && entryPrice > 0 && !trade.isOpen) {
         const priceDiff = trade.isBuy
           ? (closePrice - entryPrice)
           : (entryPrice - closePrice)
@@ -114,20 +102,18 @@ export async function GET(request: NextRequest) {
       }
 
       // Determine if trade is actually closed
-      // Use multiple signals: isOpen flag, closePrice existence, closeTimestamp
-      // Some subgraphs may not update isOpen correctly
-      const hasCloseData = (closePrice !== null && closePrice > 0) ||
-                           (trade.closeTimestamp && parseInt(trade.closeTimestamp) > 0)
+      // Use multiple signals: isOpen flag and closePrice existence
+      const hasCloseData = closePrice !== null && closePrice > 0
       const isActuallyOpen = trade.isOpen && !hasCloseData
 
       // Debug logging
       console.log(`History ${symbol}:`, {
+        tradeID: trade.tradeID,
         rawOpenPrice: trade.openPrice,
         rawClosePrice: trade.closePrice,
-        rawPnl: trade.pnl,
         parsedEntryPrice: entryPrice,
         parsedClosePrice: closePrice,
-        parsedPnl: pnl,
+        calculatedPnl: pnl,
         subgraphIsOpen: trade.isOpen,
         hasCloseData,
         isActuallyOpen,
@@ -146,7 +132,7 @@ export async function GET(request: NextRequest) {
         pnl,
         isOpen: isActuallyOpen,
         openTime: parseInt(trade.timestamp) * 1000,
-        closeTime: trade.closeTimestamp ? parseInt(trade.closeTimestamp) * 1000 : null,
+        closeTime: null, // Not available in subgraph
         type: isActuallyOpen ? 'open' : 'closed',
       }
     })
