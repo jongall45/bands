@@ -105,21 +105,81 @@ export function TradeHistory() {
     return getStoredTrades(primaryAddress)
   }, [primaryAddress])
 
-  // Merge API trades with local trades (de-duplicate by txHash)
+  // Merge API trades with local trades, syncing status from API
   const trades = useMemo(() => {
     const apiTradeList = apiTrades || []
+
+    // First, build a map of API trades for quick lookup
+    // Key by pairId-index combination since that uniquely identifies a position
+    const apiTradeMap = new Map<string, TradeRecord>()
+    apiTradeList.forEach(trade => {
+      // Use pairId and index as the key since that's the position identifier
+      const key = `${trade.pairId}-${trade.index}`
+      // Keep the most recent version (API already sorted by timestamp desc)
+      if (!apiTradeMap.has(key)) {
+        apiTradeMap.set(key, trade)
+      }
+    })
+
+    // Start with API trades as the base
     const combined = [...apiTradeList]
 
-    // Add local trades that aren't already in API results
+    // Add local trades that aren't represented in API results
+    // But sync their isOpen status if the API has updated info
     localTrades.forEach(local => {
-      if (local.txHash && !combined.some(t => t.txHash === local.txHash)) {
+      const posKey = `${local.pairId}-${local.index}`
+      const apiMatch = apiTradeMap.get(posKey)
+
+      if (apiMatch) {
+        // Position exists in API - check if we should update local trade
+        // If openTime is within 60 seconds, it's likely the same trade
+        const timeDiff = Math.abs((apiMatch.openTime || 0) - (local.openTime || 0))
+        if (timeDiff < 60000) {
+          // Same trade - API has authoritative data, don't add local duplicate
+          // Update localStorage with correct isOpen status if needed
+          if (local.isOpen && !apiMatch.isOpen && primaryAddress) {
+            updateLocalTradeStatus(primaryAddress, local.id, apiMatch)
+          }
+          return // Skip adding local trade, API version is already in combined
+        }
+      }
+
+      // No matching API trade - add the local trade
+      // This handles very recent trades that haven't been indexed yet
+      if (local.txHash && !combined.some(t => t.txHash === local.txHash || t.id === local.id)) {
         combined.push(local)
       }
     })
 
     // Sort by openTime desc
     return combined.sort((a, b) => (b.openTime || 0) - (a.openTime || 0))
-  }, [apiTrades, localTrades])
+  }, [apiTrades, localTrades, primaryAddress])
+
+  // Helper to update local trade status
+  function updateLocalTradeStatus(address: string, localId: string, apiTrade: TradeRecord) {
+    if (typeof window === 'undefined') return
+    try {
+      const stored = localStorage.getItem(`${STORAGE_KEY}_${address.toLowerCase()}`)
+      if (!stored) return
+      const trades: TradeRecord[] = JSON.parse(stored)
+      const updated = trades.map(t => {
+        if (t.id === localId) {
+          return {
+            ...t,
+            isOpen: apiTrade.isOpen,
+            closePrice: apiTrade.closePrice,
+            closeTime: apiTrade.closeTime,
+            pnl: apiTrade.pnl,
+            type: apiTrade.isOpen ? 'open' : 'closed' as const,
+          }
+        }
+        return t
+      })
+      localStorage.setItem(`${STORAGE_KEY}_${address.toLowerCase()}`, JSON.stringify(updated))
+    } catch (e) {
+      console.error('Failed to update local trade status:', e)
+    }
+  }
 
   const formatTime = (timestamp: number) => {
     const diff = Date.now() - timestamp
@@ -213,10 +273,10 @@ export function TradeHistory() {
                 </div>
                 <div>
                   <p className="text-white font-medium text-sm">
-                    {trade.leverage || 1}x {trade.isLong ? 'Long' : 'Short'}
+                    {trade.symbol}
                   </p>
                   <p className="text-white/40 text-[10px]">
-                    {formatTime(trade.openTime || Date.now())}
+                    {trade.leverage || 1}x {trade.isLong ? 'Long' : 'Short'} · {formatTime(trade.openTime || Date.now())}
                   </p>
                 </div>
               </div>

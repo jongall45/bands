@@ -627,6 +627,7 @@ interface PositionCardProps {
 
 function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
   const [showCloseOptions, setShowCloseOptions] = useState(false)
+  const [closePercent, setClosePercent] = useState(100)
 
   const formatPrice = (p: number) => {
     return p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -641,7 +642,12 @@ function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
     return `${minutes}m ago`
   }
 
-  const closePercentages = [25, 50, 75, 100]
+  // Calculate the amount of collateral being closed
+  const collateralToClose = (position.collateral * closePercent) / 100
+  const sizeToClose = (position.collateral * position.leverage * closePercent) / 100
+
+  // Quick select percentages for convenience
+  const quickPercentages = [25, 50, 75, 100]
 
   return (
     <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4 relative overflow-hidden">
@@ -743,35 +749,89 @@ function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
       {isClosing ? (
         <div className="w-full py-2.5 bg-white/[0.05] border border-white/[0.08] rounded-xl text-white/60 text-sm font-medium flex items-center justify-center gap-2 relative">
           <Loader2 className="w-4 h-4 animate-spin" />
-          Closing...
+          Closing {closePercent}%...
         </div>
       ) : showCloseOptions ? (
-        <div className="space-y-2 relative">
-          <p className="text-white/40 text-xs text-center">Close how much?</p>
-          <div className="grid grid-cols-4 gap-2">
-            {closePercentages.map((pct) => (
+        <div className="space-y-3 relative">
+          {/* Close amount display */}
+          <div className="bg-white/[0.03] rounded-xl p-3 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-white/40 text-xs">Close Amount</span>
+              <span className="text-white font-mono font-semibold">{closePercent}%</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-white/40 text-xs">Collateral</span>
+              <span className="text-[#FF6B00] font-mono font-semibold">${collateralToClose.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-white/40 text-xs">Position Size</span>
+              <span className="text-white/60 font-mono text-sm">${sizeToClose.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {/* Slider */}
+          <div className="px-1">
+            <input
+              type="range"
+              min="1"
+              max="100"
+              value={closePercent}
+              onChange={(e) => setClosePercent(parseInt(e.target.value))}
+              className="w-full h-2 bg-white/10 rounded-full appearance-none cursor-pointer
+                [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5
+                [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#FF6B00]
+                [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:cursor-pointer
+                [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white/20
+                [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5
+                [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#FF6B00]
+                [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white/20
+                [&::-moz-range-thumb]:cursor-pointer"
+              style={{
+                background: `linear-gradient(to right, #FF6B00 0%, #FF6B00 ${closePercent}%, rgba(255,255,255,0.1) ${closePercent}%, rgba(255,255,255,0.1) 100%)`
+              }}
+            />
+          </div>
+
+          {/* Quick select buttons */}
+          <div className="grid grid-cols-4 gap-1.5">
+            {quickPercentages.map((pct) => (
               <button
                 key={pct}
-                onClick={() => {
-                  onClose(pct)
-                  setShowCloseOptions(false)
-                }}
-                className={`py-2 rounded-lg text-xs font-semibold transition-all ${
-                  pct === 100
-                    ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30'
-                    : 'bg-[#FF6B00]/20 hover:bg-[#FF6B00]/30 text-[#FF6B00] border border-[#FF6B00]/30'
+                onClick={() => setClosePercent(pct)}
+                className={`py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  closePercent === pct
+                    ? 'bg-[#FF6B00]/30 text-[#FF6B00] border border-[#FF6B00]/50'
+                    : 'bg-white/[0.05] hover:bg-white/[0.08] text-white/50 hover:text-white/70 border border-white/[0.06]'
                 }`}
               >
                 {pct}%
               </button>
             ))}
           </div>
-          <button
-            onClick={() => setShowCloseOptions(false)}
-            className="w-full py-1.5 text-white/40 hover:text-white/60 text-xs transition-colors"
-          >
-            Cancel
-          </button>
+
+          {/* Action buttons */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowCloseOptions(false)}
+              className="flex-1 py-2.5 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-xl text-white/50 hover:text-white/70 text-sm font-medium transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                onClose(closePercent)
+                setShowCloseOptions(false)
+              }}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
+                closePercent === 100
+                  ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30'
+                  : 'bg-[#FF6B00]/20 hover:bg-[#FF6B00]/30 text-[#FF6B00] border border-[#FF6B00]/30'
+              }`}
+            >
+              <X className="w-4 h-4" />
+              Close {closePercent}%
+            </button>
+          </div>
         </div>
       ) : (
         <button
