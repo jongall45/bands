@@ -270,9 +270,13 @@ export function OstiumTradeButton({
       console.log('📉 Slippage:', slippageP.toString(), `(${DEFAULT_SLIPPAGE_BPS} bps = ${DEFAULT_SLIPPAGE_BPS / 100}%)`)
 
       // Convert FRESH price to 18 decimal precision (PRECISION_18)
-      // Price from API is like 91283.09, need to multiply by 1e18
-      const openPriceWei = BigInt(Math.floor(freshPrice * 1e18))
+      // MUST match Python SDK's convert_to_scaled_integer(value, precision=5, scale=18)
+      // Step 1: Round to precision decimals (5), Step 2: Scale to 18 decimals
+      const pricePrecision5 = Math.round(freshPrice * 1e5)  // Round to 5 decimal places
+      const openPriceWei = BigInt(pricePrecision5) * BigInt(1e13)  // Scale from 5 to 18 decimals (10^13)
+      console.log('📊 Price precision 5:', pricePrecision5)
       console.log('📊 Open Price (18 dec):', openPriceWei.toString())
+      console.log('📊 Open Price check:', Number(openPriceWei) / 1e18)
 
       // Build trade struct - exact field order per ABI
       // Verified from: https://github.com/0xOstium/smart-contracts-public/blob/main/src/interfaces/IOstiumTradingStorage.sol
@@ -391,13 +395,18 @@ export function OstiumTradeButton({
         }
 
         if (confirmed) {
-          // Now verify the stored position
+          // Now verify the stored position - check multiple indices in case user has existing positions
           console.log('🔍 Verifying stored position on-chain...')
-          const verifyCalldata = encodeFunctionData({
-            abi: OSTIUM_STORAGE_ABI,
-            functionName: 'openTrades',
-            args: [smartWalletAddress, pairIndex, 0],
-          })
+          console.log('🔍 Checking indices 0, 1, 2 for pairIndex:', pairIndex)
+
+          // Try multiple indices to find the position
+          for (let tradeIndex = 0; tradeIndex < 3; tradeIndex++) {
+            console.log(`\n🔍 Checking index ${tradeIndex}...`)
+            const verifyCalldata = encodeFunctionData({
+              abi: OSTIUM_STORAGE_ABI,
+              functionName: 'openTrades',
+              args: [smartWalletAddress, pairIndex, tradeIndex],
+            })
 
           const verifyResponse = await fetch('https://arb1.arbitrum.io/rpc', {
             method: 'POST',
@@ -470,7 +479,14 @@ export function OstiumTradeButton({
               console.error('Difference:', priceDiff)
             }
             console.log('═══════════════════════════════════════════')
+
+            // If we found a position with non-zero collateral, stop checking
+            if (slot0 > 0) {
+              console.log(`✅ Found position at index ${tradeIndex}`)
+              break
+            }
           }
+          } // end for loop
         }
       } catch (verifyError) {
         console.log('⚠️ Could not verify position:', verifyError)
