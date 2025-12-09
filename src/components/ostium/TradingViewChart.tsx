@@ -29,6 +29,7 @@ interface CandleResponse {
     low: number
     close: number
   }>
+  source?: 'finnhub' | 'cache' | 'fallback'
   error?: string
 }
 
@@ -60,7 +61,7 @@ export function TradingViewChart({
     }
   }, [symbol, selectedTimeframe])
 
-  // Fetch real candle data from API
+  // Fetch real candle data from Finnhub API
   const fetchCandles = useCallback(async () => {
     const fetchId = ++fetchIdRef.current
     const targetSymbol = symbol
@@ -68,7 +69,8 @@ export function TradingViewChart({
 
     try {
       setIsLoading(true)
-      const response = await fetch(`/api/ostium/candles?symbol=${targetSymbol}&timeframe=${targetTimeframe}&limit=100`)
+      // Use Finnhub for better latency and data quality
+      const response = await fetch(`/api/finnhub/candles?symbol=${targetSymbol}&timeframe=${targetTimeframe}&limit=100`)
       const data: CandleResponse = await response.json()
 
       // Only update if this is still the current request (prevents race conditions)
@@ -100,7 +102,8 @@ export function TradingViewChart({
   // Fetch candles on mount and when symbol/timeframe changes
   useEffect(() => {
     fetchCandles()
-    const interval = setInterval(fetchCandles, 15000) // Slightly longer interval to reduce flicker
+    // Finnhub allows 60 calls/min - use 10s refresh for better real-time feel
+    const interval = setInterval(fetchCandles, 10000)
     return () => clearInterval(interval)
   }, [fetchCandles])
 
