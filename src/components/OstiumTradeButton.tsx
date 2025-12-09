@@ -274,32 +274,35 @@ export function OstiumTradeButton({
       const openPriceWei = BigInt(Math.floor(freshPrice * 1e18))
       console.log('📊 Open Price (18 dec):', openPriceWei.toString())
 
-      // Build trade struct - MUST match Ostium's exact field order
-      // Verified from implementation contract: 0x64c06a9ac454de566d4bb1b3d5a57aae4004c522
+      // Build trade struct - exact field order per ABI
+      // Verified from: https://github.com/0xOstium/smart-contracts-public/blob/main/src/interfaces/IOstiumTradingStorage.sol
       const tradeStruct = {
-        collateral: collateralWei,           // uint256 - USDC amount in 6 decimals
-        openPrice: openPriceWei,             // uint192 - current price in 18 decimals
-        tp: BigInt(0),                       // uint192 - take profit (0 = disabled)
-        sl: BigInt(0),                       // uint192 - stop loss (0 = disabled)
-        trader: smartWalletAddress,          // address
-        leverage: leverage * 100,            // uint32 - PRECISION_2 (10x = 1000)
-        pairIndex: pairIndex,                // uint16
-        index: 0,                            // uint8 - 0 for new position
-        buy: isLong,                         // bool - true = long
+        collateral: collateralWei,              // uint256 - USDC in 6 decimals
+        openPrice: openPriceWei,                // uint192 - price in 18 decimals
+        tp: BigInt(0),                          // uint192 - take profit (0 = disabled)
+        sl: BigInt(0),                          // uint192 - stop loss (0 = disabled)
+        trader: smartWalletAddress,             // address
+        leverage: leverage * 100,               // uint32 - PRECISION_2 (10x = 1000)
+        pairIndex: pairIndex,                   // uint16
+        index: 0,                               // uint8 - 0 for new position
+        buy: isLong,                            // bool - true = long
       }
 
-      // BuilderFee struct - no referrer for now
+      // BuilderFee struct
       const builderFee = {
-        builder: zeroAddress,                // address - no builder/referrer
-        builderFee: 0,                       // uint32 - 0 bps
+        builder: zeroAddress,                   // address - no referrer
+        builderFee: 0,                          // uint32 - 0 bps
       }
 
       console.log('📦 Trade struct:', {
         collateral: tradeStruct.collateral.toString(),
         openPrice: tradeStruct.openPrice.toString(),
+        tp: tradeStruct.tp.toString(),
+        sl: tradeStruct.sl.toString(),
         trader: tradeStruct.trader,
         leverage: tradeStruct.leverage,
         pairIndex: tradeStruct.pairIndex,
+        index: tradeStruct.index,
         buy: tradeStruct.buy,
       })
 
@@ -322,18 +325,30 @@ export function OstiumTradeButton({
 
       // Add openTrade call - using verified ABI from Ostium contract
       console.log('📝 Adding openTrade call...')
+      const openTradeCalldata = encodeFunctionData({
+        abi: OSTIUM_TRADING_ABI,
+        functionName: 'openTrade',
+        args: [
+          tradeStruct,      // Trade struct (array)
+          builderFee,       // BuilderFee struct (array)
+          ORDER_TYPE.MARKET,// uint8 orderType (0 = MARKET)
+          slippageP,        // uint256 slippage in basis points (50 = 0.5%)
+        ],
+      })
+
+      // Log the raw calldata for debugging
+      console.log('📋 Raw calldata length:', openTradeCalldata.length)
+      console.log('📋 Function selector:', openTradeCalldata.slice(0, 10))
+      // Parse the calldata to verify encoding
+      const calldataWithoutSelector = openTradeCalldata.slice(10)
+      console.log('📋 Encoded collateral (slot 0):', '0x' + calldataWithoutSelector.slice(0, 64))
+      console.log('📋 Encoded openPrice (slot 1):', '0x' + calldataWithoutSelector.slice(64, 128))
+      console.log('📋 openPrice as BigInt:', BigInt('0x' + calldataWithoutSelector.slice(64, 128)).toString())
+      console.log('📋 openPrice / 1e18:', Number(BigInt('0x' + calldataWithoutSelector.slice(64, 128))) / 1e18)
+
       calls.push({
         to: OSTIUM_CONTRACTS.TRADING as `0x${string}`,
-        data: encodeFunctionData({
-          abi: OSTIUM_TRADING_ABI,
-          functionName: 'openTrade',
-          args: [
-            tradeStruct,      // Trade struct
-            builderFee,       // BuilderFee struct
-            ORDER_TYPE.MARKET,// uint8 orderType (0 = MARKET)
-            slippageP,        // uint256 slippage in basis points (50 = 0.5%)
-          ],
-        }),
+        data: openTradeCalldata,
         value: BigInt(0), // Function is nonpayable
       })
 
@@ -398,14 +413,46 @@ export function OstiumTradeButton({
 
           const verifyResult = await verifyResponse.json()
           if (verifyResult.result && verifyResult.result.length > 66) {
-            // Parse the response - openTrades returns 9 values
+            // Parse ALL fields to see where values actually landed
             const data = verifyResult.result.slice(2)
-            const storedOpenPrice = BigInt('0x' + data.slice(64, 128))
-            const storedPriceHuman = Number(storedOpenPrice) / 1e18
+
+            // Decode all 9 slots (each 32 bytes = 64 hex chars)
+            const slot0 = BigInt('0x' + data.slice(0, 64))      // First field
+            const slot1 = BigInt('0x' + data.slice(64, 128))    // Second field
+            const slot2 = BigInt('0x' + data.slice(128, 192))   // Third field
+            const slot3 = BigInt('0x' + data.slice(192, 256))   // Fourth field
+            const slot4 = '0x' + data.slice(256, 320).slice(24) // Address (last 20 bytes)
+            const slot5 = BigInt('0x' + data.slice(320, 384))   // Sixth field
+            const slot6 = BigInt('0x' + data.slice(384, 448))   // Seventh field
+            const slot7 = BigInt('0x' + data.slice(448, 512))   // Eighth field
+            const slot8 = BigInt('0x' + data.slice(512, 576))   // Ninth field
 
             console.log('╔═══════════════════════════════════════════╗')
-            console.log('║  ✅ POSITION VERIFICATION                 ║')
+            console.log('║  🔬 RAW STRUCT DECODE                     ║')
             console.log('╚═══════════════════════════════════════════╝')
+            console.log('Slot 0:', slot0.toString(), '| /1e18:', Number(slot0) / 1e18, '| /1e6:', Number(slot0) / 1e6)
+            console.log('Slot 1:', slot1.toString(), '| /1e18:', Number(slot1) / 1e18, '| /1e6:', Number(slot1) / 1e6)
+            console.log('Slot 2:', slot2.toString(), '| /1e18:', Number(slot2) / 1e18)
+            console.log('Slot 3:', slot3.toString(), '| /1e18:', Number(slot3) / 1e18)
+            console.log('Slot 4 (addr):', slot4)
+            console.log('Slot 5:', slot5.toString())
+            console.log('Slot 6:', slot6.toString())
+            console.log('Slot 7:', slot7.toString())
+            console.log('Slot 8:', slot8.toString())
+            console.log('')
+            console.log('🎯 LOOKING FOR THESE VALUES:')
+            console.log('   collateral (6 dec):', collateralWei.toString())
+            console.log('   openPrice (18 dec):', openPriceWei.toString())
+            console.log('   leverage:', leverage * 100)
+            console.log('   pairIndex:', pairIndex)
+            console.log('   trader:', smartWalletAddress)
+            console.log('═══════════════════════════════════════════')
+
+            // Try to find where the openPrice actually landed
+            const storedOpenPrice = slot1
+            const storedPriceHuman = Number(storedOpenPrice) / 1e18
+
+            console.log('')
             console.log('Sent openPrice (18 dec):', openPriceWei.toString())
             console.log('Stored openPrice (18 dec):', storedOpenPrice.toString())
             console.log('Sent price (human):', freshPrice)
