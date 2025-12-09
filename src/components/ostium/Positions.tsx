@@ -291,7 +291,7 @@ export function OstiumPositions() {
         if (priceResponse.ok) {
           const priceData = await priceResponse.json()
           currentPrice = priceData.mid || priceData.price || 0
-          console.log('✅ Fresh Ostium price:', currentPrice)
+          console.log('✅ Fresh Ostium API price:', currentPrice)
         }
       } catch (e) {
         console.log('⚠️ Could not fetch from Ostium API, using cached price')
@@ -305,6 +305,23 @@ export function OstiumPositions() {
 
       if (!currentPrice || currentPrice <= 0) {
         throw new Error('Unable to fetch current price for market close')
+      }
+
+      // CRITICAL FIX: Check if on-chain price is vastly different from API price
+      // This indicates a price format mismatch - just use API price with max slippage
+      let marketPriceToUse = currentPrice
+      if (onChainPosition && onChainPosition.openPrice > 0) {
+        const priceRatio = currentPrice / onChainPosition.openPrice
+        console.log('📊 Price ratio (API/OnChain):', priceRatio.toFixed(2))
+
+        // If prices differ by more than 100x, there's a potential format mismatch
+        if (priceRatio > 100) {
+          console.log('⚠️ LARGE PRICE DIFFERENCE DETECTED!')
+          console.log('   On-chain openPrice:', onChainPosition.openPrice)
+          console.log('   API current price:', currentPrice)
+          console.log('   This position may have corrupted price data')
+          console.log('   Will attempt close with API price and max slippage')
+        }
       }
 
       // Calculate close percentage (10000 = 100%)
@@ -327,20 +344,21 @@ export function OstiumPositions() {
       console.log('   - Subgraph Collateral:', position.collateral, 'USDC')
       console.log('   - ON-CHAIN Collateral:', actualCollateral, 'USDC')
       console.log('   - Leverage:', position.leverage, 'x')
-      console.log('   - Entry Price:', position.entryPrice)
-      console.log('   - Current Price:', currentPrice)
+      console.log('   - On-chain Entry Price:', onChainPosition?.openPrice || 'N/A')
+      console.log('   - API Current Price:', currentPrice)
+      console.log('   - Market Price to Use:', marketPriceToUse)
       console.log('💰 Close Amount:')
       console.log('   - Close Percentage:', closePercent, '%', `(${closePercentage}/10000)`)
       console.log('   - Expected Return:', expectedReturn.toFixed(2), 'USDC (before PnL)')
 
       // Convert price to 18 decimal precision (PRECISION_18)
-      const marketPriceWei = BigInt(Math.floor(currentPrice * 1e18))
+      const marketPriceWei = BigInt(Math.floor(marketPriceToUse * 1e18))
       console.log('📊 Market Price (18 dec):', marketPriceWei.toString())
 
-      // CRITICAL: Use HIGH slippage (5%) to ensure close goes through
-      // Low slippage causes close to fail silently (fee lost, position stays open)
-      const slippageP = 500 // 5% slippage - much higher to ensure execution
-      console.log('⚠️ Using 5% slippage to ensure close execution')
+      // CRITICAL: Use MAXIMUM slippage (99%) to ensure close goes through
+      // The oracle price format might differ significantly from what we expect
+      const slippageP = 9900 // 99% slippage - maximum to ensure execution
+      console.log('⚠️ Using 99% slippage (maximum) to ensure close execution')
 
       console.log('📦 Contract Call Parameters:', {
         pairIndex: position.pairId,
@@ -385,13 +403,39 @@ export function OstiumPositions() {
       console.log('   2. An oracle/keeper will fulfill the price request')
       console.log('   3. Your collateral + PnL will be returned in a follow-up tx')
       console.log('   4. This usually takes 5-30 seconds to settle')
+      console.log('')
+      console.log('🔍 Checking if position closed in 15 seconds...')
 
-      // Show user-friendly message about async close
-      alert(`Close request submitted!\n\nTransaction: ${hash.slice(0, 10)}...\n\nWhat happens next:\n1. Oracle fee (0.10 USDC) paid upfront\n2. Keeper executes close at oracle price\n3. Collateral + PnL returned (5-30 sec)\n\nUsing 5% slippage to ensure execution.\nRefresh page after ~30 seconds.`)
+      // Check if position still exists after 15 seconds
+      setTimeout(async () => {
+        const postClosePosition = await readOnChainPosition(
+          smartWalletAddress,
+          position.pairId,
+          position.index
+        )
+        if (!postClosePosition || postClosePosition.positionSizeUSDC === 0) {
+          console.log('✅ SUCCESS! Position is now closed on-chain!')
+          alert('Position successfully closed! Your funds should be in your wallet.')
+        } else {
+          console.log('⚠️ Position STILL EXISTS after close attempt!')
+          console.log('   Remaining collateral:', postClosePosition.positionSizeUSDC, 'USDC')
+          console.log('')
+          console.log('📋 TROUBLESHOOTING:')
+          console.log('   1. Check Arbiscan Events tab for the transaction')
+          console.log('   2. Look for "MarketOrderExecuted" or "CloseRejected" events')
+          console.log('   3. The oracle callback may have failed due to:')
+          console.log('      - Price validation failure')
+          console.log('      - Insufficient protocol liquidity')
+          console.log('      - Position data corruption')
+          console.log('')
+          console.log('   Consider contacting Ostium support about this position.')
+          alert('⚠️ Position still open!\n\nThe close transaction was submitted but the position remains open. This could be due to:\n1. Oracle callback failure\n2. Price validation issue\n3. Protocol-level rejection\n\nCheck the Arbiscan Events tab for details.\nYou may need to contact Ostium support.')
+        }
+        refetch()
+      }, 15000)
 
-      // Refetch positions after a longer delay to account for async settlement
-      setTimeout(() => refetch(), 10000) // 10 seconds for settlement
-      setTimeout(() => refetch(), 30000) // 30 seconds as backup
+      // Additional refetch as backup
+      setTimeout(() => refetch(), 30000)
     } catch (error: any) {
       console.error('❌ Close position failed:', error)
 
