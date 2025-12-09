@@ -53,7 +53,7 @@ function PairIcon({ pair, size = 40 }: { pair: OstiumPair; size?: number }) {
   if (hasIcon && !imgError) {
     return (
       <div
-        className="rounded-xl flex items-center justify-center overflow-hidden bg-white/[0.05]"
+        className="rounded-xl flex items-center justify-center overflow-hidden bg-white"
         style={{ width: size, height: size }}
       >
         <Image
