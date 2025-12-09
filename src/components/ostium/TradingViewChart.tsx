@@ -29,7 +29,7 @@ interface CandleResponse {
     low: number
     close: number
   }>
-  source?: 'finnhub' | 'cache' | 'fallback'
+  source?: 'yahoo' | 'cryptocompare' | 'cache' | 'fallback'
   error?: string
 }
 
@@ -69,8 +69,8 @@ export function TradingViewChart({
 
     try {
       setIsLoading(true)
-      // Use Alpha Vantage/CryptoCompare (Finnhub free tier doesn't have candle data)
-      const response = await fetch(`/api/ostium/candles?symbol=${targetSymbol}&timeframe=${targetTimeframe}&limit=100`)
+      // Use Yahoo Finance API - no rate limits, covers all asset classes
+      const response = await fetch(`/api/tradingview/candles?symbol=${targetSymbol}&timeframe=${targetTimeframe}&limit=100`)
       const data: CandleResponse = await response.json()
 
       // Only update if this is still the current request (prevents race conditions)
