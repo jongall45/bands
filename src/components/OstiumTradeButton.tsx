@@ -371,7 +371,12 @@ export function OstiumTradeButton({
       console.log('🔗 Arbiscan:', `https://arbiscan.io/tx/${hash}`)
 
       // Wait for confirmation and verify the stored entry price
+      // NOTE: Ostium uses a 2-step async process for market orders:
+      // 1. Our tx initiates the order and requests price from oracle
+      // 2. Oracle keeper sends SEPARATE callback tx with actual price
+      // We need to wait for the callback before reading the position!
       console.log('⏳ Waiting for transaction confirmation...')
+      console.log('📋 Note: Market orders use async oracle callback - entry price is set by oracle, not our tx')
       try {
         // Poll for transaction receipt
         let confirmed = false
@@ -399,6 +404,11 @@ export function OstiumTradeButton({
         }
 
         if (confirmed) {
+          // Wait additional time for oracle callback to complete
+          // The oracle keeper needs to send a SEPARATE transaction with the actual price
+          console.log('⏳ Waiting 10 seconds for oracle callback to complete...')
+          await new Promise(r => setTimeout(r, 10000))
+
           // Now verify the stored position - check multiple indices in case user has existing positions
           console.log('🔍 Verifying stored position on-chain...')
           console.log('🔍 Checking indices 0, 1, 2 for pairIndex:', pairIndex)
