@@ -346,6 +346,7 @@ export function OstiumPositions() {
       console.log('📝 Calldata:', calldata)
       console.log('📝 Calldata length:', calldata.length)
       console.log('🚀 Sending close position via smart wallet...')
+      console.log('💰 Note: Ostium charges a 0.10 USDC oracle fee per close')
 
       // Close trade - nonpayable function
       const hash = await client.sendTransaction({
@@ -356,11 +357,21 @@ export function OstiumPositions() {
         }],
       })
 
-      console.log('✅ Close position tx:', hash)
+      console.log('✅ Close position tx submitted:', hash)
       console.log('🔗 Arbiscan:', `https://arbiscan.io/tx/${hash}`)
+      console.log('')
+      console.log('⏳ IMPORTANT: Ostium closes are ASYNCHRONOUS')
+      console.log('   1. This tx requests the close and pays 0.10 USDC oracle fee')
+      console.log('   2. An oracle/keeper will fulfill the price request')
+      console.log('   3. Your collateral + PnL will be returned in a follow-up tx')
+      console.log('   4. This usually takes 5-30 seconds to settle')
 
-      // Refetch positions after a delay
-      setTimeout(() => refetch(), 3000)
+      // Show user-friendly message about async close
+      alert(`Close request submitted! Transaction: ${hash.slice(0, 10)}...\n\nOstium closes are asynchronous:\n- 0.10 USDC oracle fee paid\n- Your funds will be returned in 5-30 seconds\n- Refresh page after settlement to see updated balance`)
+
+      // Refetch positions after a longer delay to account for async settlement
+      setTimeout(() => refetch(), 10000) // 10 seconds for settlement
+      setTimeout(() => refetch(), 30000) // 30 seconds as backup
     } catch (error: any) {
       console.error('❌ Close position failed:', error)
 
