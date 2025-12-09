@@ -5,7 +5,7 @@ import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { arbitrum } from 'viem/chains'
 import { encodeFunctionData, parseUnits, formatUnits, maxUint256, zeroAddress } from 'viem'
 import { Loader2, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react'
-import { OSTIUM_TRADING_ABI, ERC20_ABI } from '@/lib/ostium/abi'
+import { OSTIUM_TRADING_ABI, OSTIUM_STORAGE_ABI, ERC20_ABI } from '@/lib/ostium/abi'
 import { OSTIUM_CONTRACTS, ORDER_TYPE, calculateSlippage, DEFAULT_SLIPPAGE_BPS, OSTIUM_PAIRS, OSTIUM_API } from '@/lib/ostium/constants'
 import { TransactionSuccessModal } from '@/components/ostium/TransactionSuccessModal'
 import { addTradeRecord } from '@/components/ostium/TradeHistory'
@@ -344,6 +344,88 @@ export function OstiumTradeButton({
 
       console.log('✅ Transaction submitted:', hash)
       console.log('🔗 Arbiscan:', `https://arbiscan.io/tx/${hash}`)
+
+      // Wait for confirmation and verify the stored entry price
+      console.log('⏳ Waiting for transaction confirmation...')
+      try {
+        // Poll for transaction receipt
+        let confirmed = false
+        for (let i = 0; i < 30 && !confirmed; i++) {
+          await new Promise(r => setTimeout(r, 2000)) // Wait 2 seconds
+          try {
+            const receiptResponse = await fetch('https://arb1.arbitrum.io/rpc', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0',
+                id: 1,
+                method: 'eth_getTransactionReceipt',
+                params: [hash],
+              }),
+            })
+            const receiptResult = await receiptResponse.json()
+            if (receiptResult.result && receiptResult.result.blockNumber) {
+              confirmed = true
+              console.log('🟢 Transaction confirmed! Block:', parseInt(receiptResult.result.blockNumber, 16))
+            }
+          } catch (e) {
+            // Continue polling
+          }
+        }
+
+        if (confirmed) {
+          // Now verify the stored position
+          console.log('🔍 Verifying stored position on-chain...')
+          const verifyCalldata = encodeFunctionData({
+            abi: OSTIUM_STORAGE_ABI,
+            functionName: 'openTrades',
+            args: [smartWalletAddress, pairIndex, 0],
+          })
+
+          const verifyResponse = await fetch('https://arb1.arbitrum.io/rpc', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'eth_call',
+              params: [{
+                to: OSTIUM_CONTRACTS.TRADING_STORAGE,
+                data: verifyCalldata,
+              }, 'latest'],
+            }),
+          })
+
+          const verifyResult = await verifyResponse.json()
+          if (verifyResult.result && verifyResult.result.length > 66) {
+            // Parse the response - openTrades returns 9 values
+            const data = verifyResult.result.slice(2)
+            const storedOpenPrice = BigInt('0x' + data.slice(64, 128))
+            const storedPriceHuman = Number(storedOpenPrice) / 1e18
+
+            console.log('╔═══════════════════════════════════════════╗')
+            console.log('║  ✅ POSITION VERIFICATION                 ║')
+            console.log('╚═══════════════════════════════════════════╝')
+            console.log('Sent openPrice (18 dec):', openPriceWei.toString())
+            console.log('Stored openPrice (18 dec):', storedOpenPrice.toString())
+            console.log('Sent price (human):', freshPrice)
+            console.log('Stored price (human):', storedPriceHuman)
+
+            const priceDiff = Math.abs(freshPrice - storedPriceHuman)
+            if (priceDiff < 1) {
+              console.log('🎉 Price match: ✅ YES - Entry price stored correctly!')
+            } else {
+              console.error('🚨 Price match: ❌ NO - CORRUPTED!')
+              console.error('Expected:', freshPrice)
+              console.error('Got:', storedPriceHuman)
+              console.error('Difference:', priceDiff)
+            }
+            console.log('═══════════════════════════════════════════')
+          }
+        }
+      } catch (verifyError) {
+        console.log('⚠️ Could not verify position:', verifyError)
+      }
 
       // Show success modal
       setLastTxHash(hash)
