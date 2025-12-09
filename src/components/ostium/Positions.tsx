@@ -164,6 +164,59 @@ function parseRawPositionData(hexData: string): any | null {
   }
 }
 
+// Read additional position info including beingMarketClosed flag
+async function readPositionInfo(trader: string, pairIndex: number, index: number) {
+  try {
+    const calldata = encodeFunctionData({
+      abi: OSTIUM_STORAGE_ABI,
+      functionName: 'openTradesInfo',
+      args: [trader as `0x${string}`, pairIndex, index],
+    })
+
+    const response = await fetch('https://arb1.arbitrum.io/rpc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'eth_call',
+        params: [{
+          to: OSTIUM_CONTRACTS.TRADING_STORAGE,
+          data: calldata,
+        }, 'latest'],
+      }),
+    })
+
+    const result = await response.json()
+
+    if (result.error || !result.result || result.result === '0x') {
+      return null
+    }
+
+    // Decode: tokenId, tokenPriceDai, tpLastUpdated, slLastUpdated, beingMarketClosed, createdBlock, lossProtectionPercentage
+    const decoded = decodeFunctionResult({
+      abi: OSTIUM_STORAGE_ABI,
+      functionName: 'openTradesInfo',
+      data: result.result,
+    }) as [bigint, bigint, number, number, boolean, number, number]
+
+    const [tokenId, tokenPriceDai, tpLastUpdated, slLastUpdated, beingMarketClosed, createdBlock, lossProtectionPercentage] = decoded
+
+    return {
+      tokenId: Number(tokenId),
+      tokenPriceDai: Number(tokenPriceDai) / 1e18, // PRECISION_18
+      tpLastUpdated,
+      slLastUpdated,
+      beingMarketClosed,
+      createdBlock,
+      lossProtectionPercentage,
+    }
+  } catch (error) {
+    console.error('Error reading position info:', error)
+    return null
+  }
+}
+
 // Scan multiple position indices to find all positions for a trader/pair
 async function scanPositions(trader: string, pairIndex: number, maxIndex: number = 5) {
   console.log(`🔍 Scanning positions for trader=${trader}, pairIndex=${pairIndex}, indices 0-${maxIndex}`)
@@ -221,6 +274,13 @@ export function OstiumPositions() {
         position.index
       )
 
+      // Also read position info to check beingMarketClosed flag
+      const positionInfo = await readPositionInfo(
+        smartWalletAddress,
+        position.pairId,
+        position.index
+      )
+
       console.log('📊 ON-CHAIN Position Data:')
       if (onChainPosition) {
         console.log('   - Trader:', onChainPosition.trader)
@@ -232,6 +292,29 @@ export function OstiumPositions() {
         console.log('   - Leverage:', onChainPosition.leverage)
         console.log('   - TP:', onChainPosition.tp)
         console.log('   - SL:', onChainPosition.sl)
+
+        // Log position info
+        if (positionInfo) {
+          console.log('')
+          console.log('📋 Position Info (openTradesInfo):')
+          console.log('   - Token ID:', positionInfo.tokenId)
+          console.log('   - Token Price (stored):', positionInfo.tokenPriceDai)
+          console.log('   - Being Market Closed:', positionInfo.beingMarketClosed)
+          console.log('   - Created Block:', positionInfo.createdBlock)
+          console.log('   - Loss Protection %:', positionInfo.lossProtectionPercentage)
+
+          // CRITICAL: Check if position is already being closed
+          if (positionInfo.beingMarketClosed) {
+            console.log('')
+            console.log('🚨 POSITION IS ALREADY BEING MARKET CLOSED!')
+            console.log('   A previous close request is pending fulfillment by the oracle.')
+            console.log('   The Gelato keeper should execute this shortly.')
+            console.log('   If stuck for a long time, contact Ostium support.')
+            alert('This position already has a pending close request!\n\nA previous close is waiting for the Gelato keeper to fulfill it.\n\nPlease wait a few minutes. If it remains stuck, contact Ostium support.')
+            setClosingKey(null)
+            return
+          }
+        }
       } else {
         console.log('   ⚠️ NO ON-CHAIN POSITION FOUND AT INDEX', position.index)
         console.log('   Scanning for positions at other indices...')
