@@ -1,17 +1,17 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { usePublicClient, useBalance } from 'wagmi'
 import { parseUnits, formatUnits, createPublicClient, http } from 'viem'
 import { arbitrum } from 'viem/chains'
-import { 
-  Loader2, 
-  TrendingUp, 
-  TrendingDown, 
-  AlertCircle, 
-  Check, 
+import {
+  Loader2,
+  TrendingUp,
+  TrendingDown,
+  AlertCircle,
+  Check,
   ExternalLink,
   Wallet,
   Zap,
@@ -28,6 +28,58 @@ import {
   type OstiumOrderBatchParams
 } from '@/lib/ostium/smartWallet'
 import { OSTIUM_PAIRS, OSTIUM_API } from '@/lib/ostium/constants'
+
+// Expected price ranges by asset category to validate prices
+const PRICE_RANGES: Record<string, { min: number; max: number }> = {
+  crypto_btc: { min: 10000, max: 500000 },
+  crypto_eth: { min: 500, max: 50000 },
+  crypto_sol: { min: 5, max: 2000 },
+  crypto_doge: { min: 0.01, max: 10 },
+  crypto_pepe: { min: 0.0000001, max: 0.001 },
+  forex: { min: 0.5, max: 200 },
+  index_spx: { min: 3000, max: 10000 },
+  index_ndx: { min: 10000, max: 30000 },
+  stock: { min: 10, max: 3000 },
+  commodity_xau: { min: 1000, max: 5000 },
+  commodity_xag: { min: 10, max: 100 },
+  commodity_wti: { min: 20, max: 200 },
+  commodity_copper: { min: 2, max: 10 },
+  commodity_natgas: { min: 1, max: 20 },
+}
+
+function getPriceRange(pairIndex: number): { min: number; max: number } | null {
+  const pair = OSTIUM_PAIRS.find(p => p.id === pairIndex)
+  if (!pair) return null
+  const symbol = pair.symbol.toLowerCase()
+  const category = pair.category
+
+  if (symbol.includes('btc')) return PRICE_RANGES.crypto_btc
+  if (symbol.includes('eth')) return PRICE_RANGES.crypto_eth
+  if (symbol.includes('sol')) return PRICE_RANGES.crypto_sol
+  if (symbol.includes('doge')) return PRICE_RANGES.crypto_doge
+  if (symbol.includes('pepe')) return PRICE_RANGES.crypto_pepe
+  if (symbol.includes('spx')) return PRICE_RANGES.index_spx
+  if (symbol.includes('ndx')) return PRICE_RANGES.index_ndx
+  if (symbol.includes('xau')) return PRICE_RANGES.commodity_xau
+  if (symbol.includes('xag')) return PRICE_RANGES.commodity_xag
+  if (symbol.includes('wti')) return PRICE_RANGES.commodity_wti
+  if (symbol.includes('copper')) return PRICE_RANGES.commodity_copper
+  if (symbol.includes('nat_gas')) return PRICE_RANGES.commodity_natgas
+  if (category === 'forex') return PRICE_RANGES.forex
+  if (category === 'stock') return PRICE_RANGES.stock
+  return null
+}
+
+function validatePrice(pairIndex: number, price: number): { valid: boolean; error?: string } {
+  if (price <= 0) return { valid: false, error: 'Price is zero or negative' }
+  const range = getPriceRange(pairIndex)
+  if (!range) return { valid: true }
+  if (price < range.min || price > range.max) {
+    const pair = OSTIUM_PAIRS.find(p => p.id === pairIndex)
+    return { valid: false, error: `Price $${price.toFixed(2)} outside expected range ($${range.min}-$${range.max}) for ${pair?.symbol}` }
+  }
+  return { valid: true }
+}
 
 // ============================================
 // TYPES
@@ -127,31 +179,89 @@ export function SmartWalletOstiumOrder({
     }
   }, [smartWalletAddress, fetchBalances])
 
+  // Track current pairIndex to prevent stale updates
+  const currentPairIndexRef = useRef(pairIndex)
+
+  // Reset price when pair changes - CRITICAL to prevent wrong prices
+  useEffect(() => {
+    if (currentPairIndexRef.current !== pairIndex) {
+      console.log(`🔄 Pair changed from ${currentPairIndexRef.current} to ${pairIndex} - resetting price`)
+      setCurrentPrice(0)
+      currentPairIndexRef.current = pairIndex
+    }
+  }, [pairIndex])
+
   // Fetch current price via API proxy (avoids CORS issues)
   useEffect(() => {
     const fetchPrice = async () => {
       try {
-        // Use our API proxy to avoid CORS issues
         const response = await fetch('/api/ostium/prices')
         if (!response.ok) throw new Error('Price fetch failed')
 
         const prices = await response.json()
-
-        // Find matching price by pairId
         const priceData = prices.find((p: any) => p.pairId === pairIndex)
+
+        // Only update if this is still the current pair
+        if (currentPairIndexRef.current !== pairIndex) {
+          console.log(`⚠️ Ignoring stale price update for pair ${pairIndex}`)
+          return
+        }
 
         if (priceData?.mid) {
           setCurrentPrice(priceData.mid)
           console.log(`📊 Current ${priceData.symbol} price: $${priceData.mid}`)
+        } else {
+          console.warn(`⚠️ No price data found for pair ${pairIndex}`)
+          setCurrentPrice(0)
         }
       } catch (e) {
         console.error('Price fetch failed:', e)
+        setCurrentPrice(0)
       }
     }
 
     fetchPrice()
     const interval = setInterval(fetchPrice, 5000)
     return () => clearInterval(interval)
+  }, [pairIndex])
+
+  // Fresh price fetch function for pre-trade validation
+  const fetchFreshPrice = useCallback(async (): Promise<number> => {
+    const pair = OSTIUM_PAIRS.find(p => p.id === pairIndex)
+    if (!pair) throw new Error(`Unknown pair index: ${pairIndex}`)
+
+    console.log(`🔄 Fetching fresh price for ${pair.symbol}...`)
+
+    try {
+      const response = await fetch('/api/ostium/prices', { cache: 'no-store' })
+      if (response.ok) {
+        const prices = await response.json()
+        const priceData = prices.find((p: any) => p.pairId === pairIndex)
+        if (priceData?.mid && priceData.mid > 0) {
+          console.log(`✅ Fresh price: $${priceData.mid}`)
+          return priceData.mid
+        }
+      }
+    } catch (e) {
+      console.warn('API fetch failed, trying direct...', e)
+    }
+
+    // Fallback: Direct Ostium API
+    const assetSymbol = `${pair.from}${pair.to}`
+    try {
+      const directResponse = await fetch(
+        `https://metadata-backend.ostium.io/PricePublish/latest-price?asset=${assetSymbol}`,
+        { cache: 'no-store' }
+      )
+      if (directResponse.ok) {
+        const data = await directResponse.json()
+        if (data?.mid && data.mid > 0) return data.mid
+      }
+    } catch (e) {
+      console.error('Direct price fetch failed:', e)
+    }
+
+    throw new Error(`Failed to fetch fresh price for ${pair.symbol}`)
   }, [pairIndex])
 
   // ============================================
@@ -232,15 +342,10 @@ export function SmartWalletOstiumOrder({
       slippageBps,
     }
 
-    // Validate
+    // Validate order params
     const validation = validateOrderParams(baseParams)
     if (!validation.valid) {
       setError(validation.error || 'Invalid parameters')
-      return
-    }
-
-    if (currentPrice <= 0) {
-      setError('Unable to fetch current price. Please try again.')
       return
     }
 
@@ -248,11 +353,34 @@ export function SmartWalletOstiumOrder({
     setState('checking')
 
     try {
-      // Build full params with trader address and current price
+      // CRITICAL: Fetch fresh price before trade execution
+      console.log('🔒 Fetching fresh price before trade...')
+      let freshPrice: number
+      try {
+        freshPrice = await fetchFreshPrice()
+      } catch (e: any) {
+        setError(`Failed to fetch fresh price: ${e.message}`)
+        setState('error')
+        return
+      }
+
+      // CRITICAL: Validate the price is in expected range
+      const priceValidation = validatePrice(pairIndex, freshPrice)
+      if (!priceValidation.valid) {
+        console.error('❌ Price validation failed:', priceValidation.error)
+        setError(priceValidation.error || 'Price validation failed')
+        setState('error')
+        return
+      }
+
+      // Update displayed price
+      setCurrentPrice(freshPrice)
+
+      // Build full params with validated fresh price
       const batchParams: OstiumOrderBatchParams = {
         ...baseParams,
         traderAddress: smartWalletAddress,
-        currentPrice,
+        currentPrice: freshPrice, // Use validated fresh price
       }
 
       // Simulate first (returns the batch)
@@ -268,6 +396,7 @@ export function SmartWalletOstiumOrder({
       console.log('💰 Collateral:', collateral, 'USDC')
       console.log('⚡ Leverage:', leverage, 'x')
       console.log('📈 Exposure:', calculateExposure(collateral, leverage), 'USD')
+      console.log('🔒 Fresh Price (validated):', freshPrice)
       console.log('📉 Slippage:', slippageBps / 100, '%')
       console.log('📦 Transactions in batch:', batch.length)
       console.log('💵 Approval target: OSTIUM_STORAGE (correct)')
@@ -327,6 +456,7 @@ export function SmartWalletOstiumOrder({
     pair.symbol,
     simulateTransaction,
     fetchBalances,
+    fetchFreshPrice, // Added for pre-trade price fetch
     onSuccess,
     onError,
   ])
