@@ -1,4 +1,4 @@
-import { createClient, getClient } from '@reservoir0x/relay-sdk'
+import { createClient, getClient } from '@relayprotocol/relay-sdk'
 import { base, arbitrum } from 'viem/chains'
 import type { WalletClient } from 'viem'
 

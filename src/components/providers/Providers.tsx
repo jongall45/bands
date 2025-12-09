@@ -5,24 +5,22 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { PrivyProvider } from '@privy-io/react-auth'
 import { SmartWalletsProvider } from '@privy-io/react-auth/smart-wallets'
 import { WagmiProvider, createConfig } from '@privy-io/wagmi'
-import { RelayKitProvider } from '@reservoir0x/relay-kit-ui'
 import { http } from 'viem'
-import { base, arbitrum } from 'viem/chains'
+import { base, arbitrum, optimism, mainnet } from 'viem/chains'
 import { PWALayout } from '@/components/layout/PWALayout'
-import { initializeRelayClient } from '@/lib/relay-client'
+import { initializeRelayClient, SUPPORTED_CHAINS } from '@/lib/relay-client'
 
-// Import Relay styles
-import '@reservoir0x/relay-kit-ui/styles.css'
-
-// Initialize Relay SDK client for deposit address bridge
+// Initialize Relay SDK client on app startup
 initializeRelayClient()
 
-// Wagmi config for Privy
+// Wagmi config for Privy - supports all Relay chains
 const wagmiConfig = createConfig({
-  chains: [base, arbitrum],
+  chains: [base, arbitrum, optimism, mainnet],
   transports: {
     [base.id]: http(),
     [arbitrum.id]: http(),
+    [optimism.id]: http(),
+    [mainnet.id]: http(),
   },
 })
 
@@ -71,20 +69,20 @@ export function Providers({ children }: { children: React.ReactNode }) {
           logo: '/icons/icon.svg',
           showWalletLoginFirst: false,
         },
-        
+
         // Login methods
         loginMethods: ['email', 'google', 'apple'],
-        
+
         // Embedded wallet config - creates EOA signer for smart wallet
         embeddedWallets: {
           ethereum: {
             createOnLogin: 'all-users',
           },
         },
-        
-        // Chain config - default to Base, auto-switch to Arbitrum for Ostium
+
+        // Chain config - default to Base, support multiple chains
         defaultChain: base,
-        supportedChains: [base, arbitrum],
+        supportedChains: [base, arbitrum, optimism, mainnet],
       }}
     >
       {/* SmartWalletsProvider enables ERC-4337 smart wallets via Pimlico */}
@@ -92,19 +90,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <SmartWalletsProvider>
         <QueryClientProvider client={queryClient}>
           <WagmiProvider config={wagmiConfig}>
-            <RelayKitProvider
-              options={{
-                appName: 'bands',
-                chains: [
-                  { id: 8453, name: 'Base', displayName: 'Base' },
-                  { id: 42161, name: 'Arbitrum One', displayName: 'Arbitrum' },
-                ],
-              }}
-            >
-              <PWALayout>
-                {children}
-              </PWALayout>
-            </RelayKitProvider>
+            <PWALayout>
+              {children}
+            </PWALayout>
           </WagmiProvider>
         </QueryClientProvider>
       </SmartWalletsProvider>

@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { useAccount, useBalance, useWalletClient, usePublicClient, useSwitchChain, useChainId } from 'wagmi'
 import { useWallets } from '@privy-io/react-auth'
 import { base, arbitrum } from 'viem/chains'
-import { getClient, createClient } from '@reservoir0x/relay-sdk'
+import { getClient, createClient } from '@relayprotocol/relay-sdk'
 
 // Constants
 const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'

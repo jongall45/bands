@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useWallets } from '@privy-io/react-auth'
 import { ArrowUpDown, ArrowRightLeft, Repeat, RefreshCw } from 'lucide-react'
-import { PrivyRelaySwap } from '@/components/relay/PrivyRelaySwap'
+import { SmartSwap } from '@/components/relay/SmartSwap'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
 
@@ -112,17 +112,17 @@ export default function SwapPage() {
           </div>
         </div>
 
-        {/* Widget Container - Custom Privy + Relay Integration */}
+        {/* Widget Container - Smart Wallet + Relay Integration */}
         <div className="px-5">
           {activeTab === 'swap' ? (
-            <PrivyRelaySwap onSuccess={handleSuccess} />
+            <SmartSwap onSuccess={handleSuccess} />
           ) : (
-            <PrivyRelaySwap 
+            <SmartSwap
               defaultFromChain={8453}
               defaultToChain={42161}
               defaultFromToken="USDC"
               defaultToToken="USDC"
-              onSuccess={handleSuccess} 
+              onSuccess={handleSuccess}
             />
           )}
         </div>
