@@ -282,9 +282,26 @@ export function OstiumPositions() {
         }
       }
 
-      // Get current price for market close
-      const currentPriceData = prices?.find(p => p.pairId === position.pairId)
-      const currentPrice = currentPriceData?.mid || position.currentPrice || position.entryPrice
+      // CRITICAL: Fetch fresh price directly from Ostium API before closing
+      // This ensures we use the exact price their oracle will use
+      let currentPrice = 0
+      try {
+        console.log('📡 Fetching fresh price from Ostium API...')
+        const priceResponse = await fetch(`https://metadata-backend.ostium.io/PricePublish/latest-price?asset=${position.symbol.replace('-USD', 'USD')}`)
+        if (priceResponse.ok) {
+          const priceData = await priceResponse.json()
+          currentPrice = priceData.mid || priceData.price || 0
+          console.log('✅ Fresh Ostium price:', currentPrice)
+        }
+      } catch (e) {
+        console.log('⚠️ Could not fetch from Ostium API, using cached price')
+      }
+
+      // Fallback to cached prices if API fails
+      if (!currentPrice || currentPrice <= 0) {
+        const currentPriceData = prices?.find(p => p.pairId === position.pairId)
+        currentPrice = currentPriceData?.mid || position.currentPrice || position.entryPrice
+      }
 
       if (!currentPrice || currentPrice <= 0) {
         throw new Error('Unable to fetch current price for market close')
@@ -320,7 +337,10 @@ export function OstiumPositions() {
       const marketPriceWei = BigInt(Math.floor(currentPrice * 1e18))
       console.log('📊 Market Price (18 dec):', marketPriceWei.toString())
 
-      const slippageP = DEFAULT_SLIPPAGE_BPS // 50 = 0.5%
+      // CRITICAL: Use HIGH slippage (5%) to ensure close goes through
+      // Low slippage causes close to fail silently (fee lost, position stays open)
+      const slippageP = 500 // 5% slippage - much higher to ensure execution
+      console.log('⚠️ Using 5% slippage to ensure close execution')
 
       console.log('📦 Contract Call Parameters:', {
         pairIndex: position.pairId,
@@ -346,6 +366,7 @@ export function OstiumPositions() {
       console.log('📝 Calldata:', calldata)
       console.log('📝 Calldata length:', calldata.length)
       console.log('🚀 Sending close position via smart wallet...')
+      console.log('💰 Note: Ostium charges a 0.10 USDC oracle fee per close')
 
       // Close trade - nonpayable function
       const hash = await client.sendTransaction({
@@ -356,11 +377,21 @@ export function OstiumPositions() {
         }],
       })
 
-      console.log('✅ Close position tx:', hash)
+      console.log('✅ Close position tx submitted:', hash)
       console.log('🔗 Arbiscan:', `https://arbiscan.io/tx/${hash}`)
+      console.log('')
+      console.log('⏳ IMPORTANT: Ostium closes are ASYNCHRONOUS')
+      console.log('   1. This tx requests the close and pays 0.10 USDC oracle fee')
+      console.log('   2. An oracle/keeper will fulfill the price request')
+      console.log('   3. Your collateral + PnL will be returned in a follow-up tx')
+      console.log('   4. This usually takes 5-30 seconds to settle')
 
-      // Refetch positions after a delay
-      setTimeout(() => refetch(), 3000)
+      // Show user-friendly message about async close
+      alert(`Close request submitted!\n\nTransaction: ${hash.slice(0, 10)}...\n\nWhat happens next:\n1. Oracle fee (0.10 USDC) paid upfront\n2. Keeper executes close at oracle price\n3. Collateral + PnL returned (5-30 sec)\n\nUsing 5% slippage to ensure execution.\nRefresh page after ~30 seconds.`)
+
+      // Refetch positions after a longer delay to account for async settlement
+      setTimeout(() => refetch(), 10000) // 10 seconds for settlement
+      setTimeout(() => refetch(), 30000) // 30 seconds as backup
     } catch (error: any) {
       console.error('❌ Close position failed:', error)
 
