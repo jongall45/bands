@@ -403,13 +403,39 @@ export function OstiumPositions() {
       console.log('   2. An oracle/keeper will fulfill the price request')
       console.log('   3. Your collateral + PnL will be returned in a follow-up tx')
       console.log('   4. This usually takes 5-30 seconds to settle')
+      console.log('')
+      console.log('🔍 Checking if position closed in 15 seconds...')
 
-      // Show user-friendly message about async close
-      alert(`Close request submitted!\n\nTransaction: ${hash.slice(0, 10)}...\n\nWhat happens next:\n1. Oracle fee (0.10 USDC) paid upfront\n2. Keeper executes close at oracle price\n3. Collateral + PnL returned (5-30 sec)\n\nUsing 5% slippage to ensure execution.\nRefresh page after ~30 seconds.`)
+      // Check if position still exists after 15 seconds
+      setTimeout(async () => {
+        const postClosePosition = await readOnChainPosition(
+          smartWalletAddress,
+          position.pairId,
+          position.index
+        )
+        if (!postClosePosition || postClosePosition.positionSizeUSDC === 0) {
+          console.log('✅ SUCCESS! Position is now closed on-chain!')
+          alert('Position successfully closed! Your funds should be in your wallet.')
+        } else {
+          console.log('⚠️ Position STILL EXISTS after close attempt!')
+          console.log('   Remaining collateral:', postClosePosition.positionSizeUSDC, 'USDC')
+          console.log('')
+          console.log('📋 TROUBLESHOOTING:')
+          console.log('   1. Check Arbiscan Events tab for the transaction')
+          console.log('   2. Look for "MarketOrderExecuted" or "CloseRejected" events')
+          console.log('   3. The oracle callback may have failed due to:')
+          console.log('      - Price validation failure')
+          console.log('      - Insufficient protocol liquidity')
+          console.log('      - Position data corruption')
+          console.log('')
+          console.log('   Consider contacting Ostium support about this position.')
+          alert('⚠️ Position still open!\n\nThe close transaction was submitted but the position remains open. This could be due to:\n1. Oracle callback failure\n2. Price validation issue\n3. Protocol-level rejection\n\nCheck the Arbiscan Events tab for details.\nYou may need to contact Ostium support.')
+        }
+        refetch()
+      }, 15000)
 
-      // Refetch positions after a longer delay to account for async settlement
-      setTimeout(() => refetch(), 10000) // 10 seconds for settlement
-      setTimeout(() => refetch(), 30000) // 30 seconds as backup
+      // Additional refetch as backup
+      setTimeout(() => refetch(), 30000)
     } catch (error: any) {
       console.error('❌ Close position failed:', error)
 
