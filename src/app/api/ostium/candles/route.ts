@@ -36,8 +36,49 @@ const FOREX_COMMODITY_SYMBOLS: Record<string, { from: string; to: string }> = {
   'XAG-USD': { from: 'XAG', to: 'USD' },
 }
 
+// In-memory cache for candle data
+const candleCache = new Map<string, { data: any[], timestamp: number }>()
+const CACHE_DURATION = {
+  '1m': 10 * 1000,    // 10 seconds for 1m
+  '5m': 30 * 1000,    // 30 seconds for 5m
+  '15m': 60 * 1000,   // 1 minute for 15m
+  '1h': 120 * 1000,   // 2 minutes for 1h
+  '4h': 300 * 1000,   // 5 minutes for 4h
+  '1D': 600 * 1000,   // 10 minutes for 1D
+}
+
+function getCacheKey(symbol: string, timeframe: string) {
+  return `${symbol}-${timeframe}`
+}
+
+function getCachedCandles(symbol: string, timeframe: string) {
+  const key = getCacheKey(symbol, timeframe)
+  const cached = candleCache.get(key)
+  if (!cached) return null
+
+  const maxAge = CACHE_DURATION[timeframe as keyof typeof CACHE_DURATION] || 60000
+  if (Date.now() - cached.timestamp > maxAge) {
+    candleCache.delete(key)
+    return null
+  }
+
+  return cached.data
+}
+
+function setCachedCandles(symbol: string, timeframe: string, data: any[]) {
+  const key = getCacheKey(symbol, timeframe)
+  candleCache.set(key, { data, timestamp: Date.now() })
+}
+
 // Fetch crypto candles from CryptoCompare
 async function fetchCryptoCandles(symbol: string, timeframe: string, limit: number) {
+  // Check cache first
+  const cached = getCachedCandles(symbol, timeframe)
+  if (cached) {
+    console.log(`Cache hit for ${symbol} ${timeframe}`)
+    return cached
+  }
+
   const cryptoSymbol = symbol.split('-')[0]
   const config = TIMEFRAME_MAP[timeframe] || TIMEFRAME_MAP['15m']
 
@@ -45,7 +86,7 @@ async function fetchCryptoCandles(symbol: string, timeframe: string, limit: numb
 
   const response = await fetch(url, {
     headers: { 'Accept': 'application/json' },
-    next: { revalidate: 30 },
+    next: { revalidate: 10 }, // Faster revalidation
   })
 
   if (!response.ok) throw new Error('CryptoCompare API error')
@@ -53,17 +94,29 @@ async function fetchCryptoCandles(symbol: string, timeframe: string, limit: numb
   const data = await response.json()
   if (data.Response === 'Error') throw new Error(data.Message)
 
-  return (data.Data?.Data || []).map((c: any) => ({
+  const candles = (data.Data?.Data || []).map((c: any) => ({
     time: c.time,
     open: c.open,
     high: c.high,
     low: c.low,
     close: c.close,
   }))
+
+  // Cache the result
+  setCachedCandles(symbol, timeframe, candles)
+
+  return candles
 }
 
 // Fetch stock/index candles from Yahoo Finance (via unofficial API)
 async function fetchStockCandles(symbol: string, timeframe: string, limit: number) {
+  // Check cache first
+  const cached = getCachedCandles(symbol, timeframe)
+  if (cached) {
+    console.log(`Cache hit for stock ${symbol} ${timeframe}`)
+    return cached
+  }
+
   const yahooSymbol = YAHOO_SYMBOLS[symbol]
   if (!yahooSymbol) throw new Error('Stock symbol not supported')
 
@@ -96,7 +149,7 @@ async function fetchStockCandles(symbol: string, timeframe: string, limit: numbe
   const timestamps = result.timestamp || []
   const quotes = result.indicators?.quote?.[0] || {}
 
-  const candles = timestamps.map((time: number, i: number) => ({
+  let candles = timestamps.map((time: number, i: number) => ({
     time,
     open: quotes.open?.[i] || 0,
     high: quotes.high?.[i] || 0,
@@ -106,10 +159,15 @@ async function fetchStockCandles(symbol: string, timeframe: string, limit: numbe
 
   // For 4h timeframe, aggregate hourly candles
   if (timeframe === '4h') {
-    return aggregateCandles(candles, 4)
+    candles = aggregateCandles(candles, 4)
+  } else {
+    candles = candles.slice(-limit)
   }
 
-  return candles.slice(-limit)
+  // Cache the result
+  setCachedCandles(symbol, timeframe, candles)
+
+  return candles
 }
 
 // Aggregate candles for custom timeframes
@@ -131,6 +189,13 @@ function aggregateCandles(candles: any[], factor: number) {
 
 // Fetch forex candles (fallback to generated data if API unavailable)
 async function fetchForexCandles(symbol: string, timeframe: string, limit: number, currentPrice: number) {
+  // Check cache first
+  const cached = getCachedCandles(symbol, timeframe)
+  if (cached) {
+    console.log(`Cache hit for forex ${symbol} ${timeframe}`)
+    return cached
+  }
+
   // Try CryptoCompare for forex (limited support)
   const forexConfig = FOREX_COMMODITY_SYMBOLS[symbol]
   if (forexConfig) {
@@ -146,13 +211,16 @@ async function fetchForexCandles(symbol: string, timeframe: string, limit: numbe
       if (response.ok) {
         const data = await response.json()
         if (data.Data?.Data?.length > 0) {
-          return data.Data.Data.map((c: any) => ({
+          const candles = data.Data.Data.map((c: any) => ({
             time: c.time,
             open: c.open,
             high: c.high,
             low: c.low,
             close: c.close,
           }))
+          // Cache the result
+          setCachedCandles(symbol, timeframe, candles)
+          return candles
         }
       }
     } catch (e) {
@@ -161,7 +229,10 @@ async function fetchForexCandles(symbol: string, timeframe: string, limit: numbe
   }
 
   // Generate realistic-looking candles based on current price
-  return generateRealisticCandles(currentPrice, timeframe, limit)
+  const candles = generateRealisticCandles(currentPrice, timeframe, limit)
+  // Cache generated candles too (shorter duration via cache logic)
+  setCachedCandles(symbol, timeframe, candles)
+  return candles
 }
 
 // Generate realistic candles when API unavailable
