@@ -11,7 +11,7 @@ import {
   calculateSlippage,
   DEFAULT_SLIPPAGE_BPS,
 } from '@/lib/ostium/constants'
-import { OSTIUM_TRADING_ABI, ERC20_ABI } from '@/lib/ostium/abi'
+import { OSTIUM_TRADING_ABI, OSTIUM_STORAGE_ABI, ERC20_ABI } from '@/lib/ostium/abi'
 import { fetchPairPrice, fetchPythPriceUpdate } from '@/lib/ostium/api'
 
 const ARBITRUM_CHAIN_ID = 42161
@@ -316,8 +316,53 @@ export function useOstiumTrade() {
 
       console.log('🟢 Trade tx sent:', hash)
       setTxHash(hash)
-      setStep('success')
 
+      // Wait for confirmation and verify the stored price
+      console.log('⏳ Waiting for transaction confirmation...')
+      const receipt = await publicClient.waitForTransactionReceipt({
+        hash,
+        confirmations: 1,
+      })
+      console.log('🟢 Transaction confirmed! Block:', receipt.blockNumber)
+
+      // Verify the position was stored correctly by reading it back
+      console.log('🔍 Verifying stored position...')
+      try {
+        const storedPosition = await publicClient.readContract({
+          address: OSTIUM_CONTRACTS.TRADING_STORAGE,
+          abi: OSTIUM_STORAGE_ABI,
+          functionName: 'openTrades',
+          args: [address, pairIndex, 0], // index 0 for first position
+        }) as [bigint, bigint, bigint, bigint, string, number, number, number, boolean]
+
+        const [storedCollateral, storedOpenPrice, storedTp, storedSl, storedTrader, storedLeverage, storedPairIndex, storedIndex, storedBuy] = storedPosition
+
+        // Convert stored price back to human readable
+        const storedPriceHuman = Number(storedOpenPrice) / 1e18
+
+        console.log('======================================')
+        console.log('✅ POSITION VERIFICATION')
+        console.log('======================================')
+        console.log('Sent openPrice (18 dec):', openPriceWei.toString())
+        console.log('Stored openPrice (18 dec):', storedOpenPrice.toString())
+        console.log('Sent price (human):', currentPrice)
+        console.log('Stored price (human):', storedPriceHuman)
+        console.log('Price match:', Math.abs(currentPrice - storedPriceHuman) < 1 ? '✅ YES' : '❌ NO - CORRUPTED!')
+        console.log('Stored collateral:', storedCollateral.toString())
+        console.log('Stored leverage:', storedLeverage)
+        console.log('Stored buy (isLong):', storedBuy)
+        console.log('======================================')
+
+        if (Math.abs(currentPrice - storedPriceHuman) >= 1) {
+          console.error('🚨 CRITICAL: Entry price was corrupted!')
+          console.error('Expected:', currentPrice)
+          console.error('Got:', storedPriceHuman)
+        }
+      } catch (verifyError) {
+        console.log('⚠️ Could not verify position (may not exist yet or different index):', verifyError)
+      }
+
+      setStep('success')
       return hash
     } catch (error: any) {
       console.error('Trade execution error:', error)
