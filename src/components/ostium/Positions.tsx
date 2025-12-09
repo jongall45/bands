@@ -5,10 +5,63 @@ import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { useOstiumPositions, type OstiumPosition } from '@/hooks/useOstiumPositions'
 import { useOstiumPrices } from '@/hooks/useOstiumPrices'
 import { arbitrum } from 'viem/chains'
-import { encodeFunctionData } from 'viem'
+import { encodeFunctionData, decodeFunctionResult } from 'viem'
 import { OSTIUM_CONTRACTS, DEFAULT_SLIPPAGE_BPS } from '@/lib/ostium/constants'
-import { OSTIUM_TRADING_ABI } from '@/lib/ostium/abi'
+import { OSTIUM_TRADING_ABI, OSTIUM_STORAGE_ABI } from '@/lib/ostium/abi'
 import { Loader2, X, TrendingUp, TrendingDown, Clock } from 'lucide-react'
+
+// Helper to read on-chain position data directly from TradingStorage contract
+async function readOnChainPosition(trader: string, pairIndex: number, index: number) {
+  try {
+    const calldata = encodeFunctionData({
+      abi: OSTIUM_STORAGE_ABI,
+      functionName: 'openTrades',
+      args: [trader as `0x${string}`, BigInt(pairIndex), BigInt(index)],
+    })
+
+    const response = await fetch('https://arb1.arbitrum.io/rpc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'eth_call',
+        params: [{
+          to: OSTIUM_CONTRACTS.TRADING_STORAGE,
+          data: calldata,
+        }, 'latest'],
+      }),
+    })
+
+    const result = await response.json()
+
+    if (result.result && result.result !== '0x') {
+      // Decode the response
+      const decoded = decodeFunctionResult({
+        abi: OSTIUM_STORAGE_ABI,
+        functionName: 'openTrades',
+        data: result.result,
+      }) as any
+
+      return {
+        trader: decoded.trader,
+        pairIndex: Number(decoded.pairIndex),
+        index: Number(decoded.index),
+        initialPosToken: decoded.initialPosToken,
+        positionSizeUSDC: Number(decoded.positionSizeUSDC) / 1e6, // Convert to USDC
+        openPrice: Number(decoded.openPrice) / 1e18, // Convert from PRECISION_18
+        buy: decoded.buy,
+        leverage: Number(decoded.leverage),
+        tp: Number(decoded.tp) / 1e18,
+        sl: Number(decoded.sl) / 1e18,
+      }
+    }
+    return null
+  } catch (error) {
+    console.error('Error reading on-chain position:', error)
+    return null
+  }
+}
 
 export function OstiumPositions() {
   const { data: positions, isLoading, refetch } = useOstiumPositions()
@@ -40,6 +93,58 @@ export function OstiumPositions() {
         await client.switchChain({ id: arbitrum.id })
       }
 
+      console.log('╔═══════════════════════════════════════════════════════════════════════════╗')
+      console.log('║  READING ON-CHAIN POSITION DATA                                           ║')
+      console.log('╚═══════════════════════════════════════════════════════════════════════════╝')
+
+      // CRITICAL: Read the ACTUAL on-chain position data first
+      const onChainPosition = await readOnChainPosition(
+        smartWalletAddress,
+        position.pairId,
+        position.index
+      )
+
+      console.log('📊 ON-CHAIN Position Data:')
+      if (onChainPosition) {
+        console.log('   - Trader:', onChainPosition.trader)
+        console.log('   - Pair Index:', onChainPosition.pairIndex)
+        console.log('   - Position Index:', onChainPosition.index)
+        console.log('   - Position Size USDC:', onChainPosition.positionSizeUSDC)
+        console.log('   - Open Price:', onChainPosition.openPrice)
+        console.log('   - Buy (Long):', onChainPosition.buy)
+        console.log('   - Leverage:', onChainPosition.leverage)
+        console.log('   - TP:', onChainPosition.tp)
+        console.log('   - SL:', onChainPosition.sl)
+      } else {
+        console.log('   ⚠️ NO ON-CHAIN POSITION FOUND!')
+        console.log('   This means the position may not exist on-chain at this index.')
+      }
+
+      console.log('')
+      console.log('📊 SUBGRAPH Position Data (what UI shows):')
+      console.log('   - Pair Index:', position.pairId)
+      console.log('   - Position Index:', position.index)
+      console.log('   - Collateral:', position.collateral, 'USDC')
+      console.log('   - Entry Price:', position.entryPrice)
+      console.log('   - Is Long:', position.isLong)
+      console.log('   - Leverage:', position.leverage)
+
+      // Compare the data
+      if (onChainPosition) {
+        console.log('')
+        console.log('🔍 DATA COMPARISON:')
+        console.log(`   Collateral: Subgraph=${position.collateral.toFixed(6)} vs OnChain=${onChainPosition.positionSizeUSDC.toFixed(6)}`)
+        console.log(`   Entry Price: Subgraph=${position.entryPrice.toFixed(2)} vs OnChain=${onChainPosition.openPrice.toFixed(2)}`)
+        console.log(`   Direction: Subgraph=${position.isLong ? 'LONG' : 'SHORT'} vs OnChain=${onChainPosition.buy ? 'LONG' : 'SHORT'}`)
+
+        if (Math.abs(position.collateral - onChainPosition.positionSizeUSDC) > 0.01) {
+          console.log('')
+          console.log('⚠️ COLLATERAL MISMATCH DETECTED!')
+          console.log('   The subgraph shows different collateral than what is on-chain.')
+          console.log('   Using ON-CHAIN value for close calculation.')
+        }
+      }
+
       // Get current price for market close
       const currentPriceData = prices?.find(p => p.pairId === position.pairId)
       const currentPrice = currentPriceData?.mid || position.currentPrice || position.entryPrice
@@ -50,8 +155,12 @@ export function OstiumPositions() {
 
       // Calculate close percentage (10000 = 100%)
       const closePercentage = Math.round(closePercent * 100)
-      const expectedReturn = (position.collateral * closePercent) / 100
 
+      // Use on-chain collateral if available, otherwise fall back to subgraph
+      const actualCollateral = onChainPosition?.positionSizeUSDC || position.collateral
+      const expectedReturn = (actualCollateral * closePercent) / 100
+
+      console.log('')
       console.log('╔═══════════════════════════════════════════════════════════════════════════╗')
       console.log('║  CLOSING POSITION VIA SMART WALLET                                        ║')
       console.log('╚═══════════════════════════════════════════════════════════════════════════╝')
@@ -61,7 +170,8 @@ export function OstiumPositions() {
       console.log('   - Position Index:', position.index)
       console.log('   - Symbol:', position.symbol)
       console.log('   - Direction:', position.isLong ? 'LONG' : 'SHORT')
-      console.log('   - Total Collateral:', position.collateral, 'USDC')
+      console.log('   - Subgraph Collateral:', position.collateral, 'USDC')
+      console.log('   - ON-CHAIN Collateral:', actualCollateral, 'USDC')
       console.log('   - Leverage:', position.leverage, 'x')
       console.log('   - Entry Price:', position.entryPrice)
       console.log('   - Current Price:', currentPrice)
