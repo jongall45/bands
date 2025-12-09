@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { OSTIUM_PAIRS } from '@/lib/ostium/constants'
 
-// Timeframe configurations
+// Alpha Vantage API key
+const ALPHA_VANTAGE_KEY = 'R9XABUUEVJM3AC66'
+
+// Timeframe configurations for CryptoCompare
 const TIMEFRAME_MAP: Record<string, { minutes: number; endpoint: string; aggregate: number }> = {
   '1m': { minutes: 1, endpoint: 'histominute', aggregate: 1 },
   '5m': { minutes: 5, endpoint: 'histominute', aggregate: 5 },
@@ -11,40 +14,55 @@ const TIMEFRAME_MAP: Record<string, { minutes: number; endpoint: string; aggrega
   '1D': { minutes: 1440, endpoint: 'histoday', aggregate: 1 },
 }
 
-// Yahoo Finance symbol mapping for stocks/indices
-const YAHOO_SYMBOLS: Record<string, string> = {
-  'SPX-USD': '%5EGSPC',      // S&P 500
-  'NDX-USD': '%5EIXIC',      // NASDAQ
-  'AAPL-USD': 'AAPL',
-  'MSFT-USD': 'MSFT',
-  'GOOG-USD': 'GOOG',
-  'AMZN-USD': 'AMZN',
-  'TSLA-USD': 'TSLA',
-  'META-USD': 'META',
-  'NVDA-USD': 'NVDA',
+// Alpha Vantage interval mapping
+const AV_INTERVAL_MAP: Record<string, string> = {
+  '1m': '1min',
+  '5m': '5min',
+  '15m': '15min',
+  '1h': '60min',
+  '4h': '60min', // Will aggregate 4 hourly candles
+  '1D': 'daily',
 }
 
-// Forex/commodity symbols for CryptoCompare (limited support)
-const FOREX_COMMODITY_SYMBOLS: Record<string, { from: string; to: string }> = {
+// Stock symbols (strip -USD suffix for API calls)
+const STOCK_SYMBOLS = ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'TSLA', 'META', 'NVDA', 'COIN', 'HOOD', 'MSTR']
+
+// Index symbols for Alpha Vantage
+const INDEX_SYMBOLS: Record<string, string> = {
+  'SPX-USD': 'SPY',   // S&P 500 ETF as proxy
+  'NDX-USD': 'QQQ',   // NASDAQ ETF as proxy
+  'DJI-USD': 'DIA',   // Dow Jones ETF as proxy
+}
+
+// Forex pairs for Alpha Vantage
+const FOREX_PAIRS: Record<string, { from: string; to: string }> = {
   'EUR-USD': { from: 'EUR', to: 'USD' },
   'GBP-USD': { from: 'GBP', to: 'USD' },
   'USD-JPY': { from: 'USD', to: 'JPY' },
   'AUD-USD': { from: 'AUD', to: 'USD' },
   'USD-CAD': { from: 'USD', to: 'CAD' },
   'USD-CHF': { from: 'USD', to: 'CHF' },
-  'XAU-USD': { from: 'XAU', to: 'USD' },
-  'XAG-USD': { from: 'XAG', to: 'USD' },
+  'NZD-USD': { from: 'NZD', to: 'USD' },
+  'USD-MXN': { from: 'USD', to: 'MXN' },
+}
+
+// Commodity symbols (use ETFs as proxies)
+const COMMODITY_ETFS: Record<string, string> = {
+  'XAU-USD': 'GLD',   // Gold ETF
+  'XAG-USD': 'SLV',   // Silver ETF
+  'CL-USD': 'USO',    // Oil ETF
+  'HG-USD': 'CPER',   // Copper ETF
 }
 
 // In-memory cache for candle data
-const candleCache = new Map<string, { data: any[], timestamp: number }>()
-const CACHE_DURATION = {
-  '1m': 10 * 1000,    // 10 seconds for 1m
-  '5m': 30 * 1000,    // 30 seconds for 5m
-  '15m': 60 * 1000,   // 1 minute for 15m
-  '1h': 120 * 1000,   // 2 minutes for 1h
-  '4h': 300 * 1000,   // 5 minutes for 4h
-  '1D': 600 * 1000,   // 10 minutes for 1D
+const candleCache = new Map<string, { data: any[]; timestamp: number }>()
+const CACHE_DURATION: Record<string, number> = {
+  '1m': 30 * 1000,     // 30 seconds for 1m
+  '5m': 60 * 1000,     // 1 minute for 5m
+  '15m': 2 * 60 * 1000, // 2 minutes for 15m
+  '1h': 5 * 60 * 1000,  // 5 minutes for 1h
+  '4h': 10 * 60 * 1000, // 10 minutes for 4h
+  '1D': 30 * 60 * 1000, // 30 minutes for 1D
 }
 
 function getCacheKey(symbol: string, timeframe: string) {
@@ -56,7 +74,7 @@ function getCachedCandles(symbol: string, timeframe: string) {
   const cached = candleCache.get(key)
   if (!cached) return null
 
-  const maxAge = CACHE_DURATION[timeframe as keyof typeof CACHE_DURATION] || 60000
+  const maxAge = CACHE_DURATION[timeframe] || 60000
   if (Date.now() - cached.timestamp > maxAge) {
     candleCache.delete(key)
     return null
@@ -70,14 +88,10 @@ function setCachedCandles(symbol: string, timeframe: string, data: any[]) {
   candleCache.set(key, { data, timestamp: Date.now() })
 }
 
-// Fetch crypto candles from CryptoCompare
+// Fetch crypto candles from CryptoCompare (reliable for crypto)
 async function fetchCryptoCandles(symbol: string, timeframe: string, limit: number) {
-  // Check cache first
   const cached = getCachedCandles(symbol, timeframe)
-  if (cached) {
-    console.log(`Cache hit for ${symbol} ${timeframe}`)
-    return cached
-  }
+  if (cached) return cached
 
   const cryptoSymbol = symbol.split('-')[0]
   const config = TIMEFRAME_MAP[timeframe] || TIMEFRAME_MAP['15m']
@@ -85,8 +99,7 @@ async function fetchCryptoCandles(symbol: string, timeframe: string, limit: numb
   const url = `https://min-api.cryptocompare.com/data/v2/${config.endpoint}?fsym=${cryptoSymbol}&tsym=USD&limit=${limit}&aggregate=${config.aggregate}`
 
   const response = await fetch(url, {
-    headers: { 'Accept': 'application/json' },
-    next: { revalidate: 10 }, // Faster revalidation
+    headers: { Accept: 'application/json' },
   })
 
   if (!response.ok) throw new Error('CryptoCompare API error')
@@ -102,75 +115,184 @@ async function fetchCryptoCandles(symbol: string, timeframe: string, limit: numb
     close: c.close,
   }))
 
-  // Cache the result
   setCachedCandles(symbol, timeframe, candles)
-
   return candles
 }
 
-// Fetch stock/index candles from Yahoo Finance (via unofficial API)
+// Fetch stock candles from Alpha Vantage
 async function fetchStockCandles(symbol: string, timeframe: string, limit: number) {
-  // Check cache first
   const cached = getCachedCandles(symbol, timeframe)
-  if (cached) {
-    console.log(`Cache hit for stock ${symbol} ${timeframe}`)
-    return cached
+  if (cached) return cached
+
+  // Extract ticker from symbol (e.g., "AAPL-USD" -> "AAPL")
+  const ticker = symbol.split('-')[0]
+
+  // Check if it's an index and use ETF proxy
+  const avSymbol = INDEX_SYMBOLS[symbol] || COMMODITY_ETFS[symbol] || ticker
+  const interval = AV_INTERVAL_MAP[timeframe] || '15min'
+
+  let url: string
+  let dataKey: string
+
+  if (timeframe === '1D') {
+    // Daily data
+    url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${avSymbol}&outputsize=compact&apikey=${ALPHA_VANTAGE_KEY}`
+    dataKey = 'Time Series (Daily)'
+  } else {
+    // Intraday data
+    url = `https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=${avSymbol}&interval=${interval}&outputsize=compact&apikey=${ALPHA_VANTAGE_KEY}`
+    dataKey = `Time Series (${interval})`
   }
 
-  const yahooSymbol = YAHOO_SYMBOLS[symbol]
-  if (!yahooSymbol) throw new Error('Stock symbol not supported')
+  console.log(`[Alpha Vantage] Fetching ${avSymbol} ${timeframe}`)
 
-  // Map timeframe to Yahoo interval
-  let interval = '15m'
-  let range = '5d'
-  if (timeframe === '1m') { interval = '1m'; range = '1d' }
-  else if (timeframe === '5m') { interval = '5m'; range = '5d' }
-  else if (timeframe === '15m') { interval = '15m'; range = '5d' }
-  else if (timeframe === '1h') { interval = '1h'; range = '1mo' }
-  else if (timeframe === '4h') { interval = '1h'; range = '3mo' } // Yahoo doesn't have 4h
-  else if (timeframe === '1D') { interval = '1d'; range = '1y' }
-
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=${interval}&range=${range}`
-
-  const response = await fetch(url, {
-    headers: {
-      'Accept': 'application/json',
-      'User-Agent': 'Mozilla/5.0',
-    },
-    next: { revalidate: 60 },
-  })
-
-  if (!response.ok) throw new Error('Yahoo Finance API error')
+  const response = await fetch(url)
+  if (!response.ok) throw new Error('Alpha Vantage API error')
 
   const data = await response.json()
-  const result = data.chart?.result?.[0]
-  if (!result) throw new Error('No data from Yahoo')
 
-  const timestamps = result.timestamp || []
-  const quotes = result.indicators?.quote?.[0] || {}
+  // Check for API errors
+  if (data['Error Message']) {
+    throw new Error(data['Error Message'])
+  }
+  if (data['Note']) {
+    console.warn('[Alpha Vantage] Rate limit warning:', data['Note'])
+    // Return cached data if available, even if stale
+    const staleCache = candleCache.get(getCacheKey(symbol, timeframe))
+    if (staleCache) return staleCache.data
+    throw new Error('Alpha Vantage rate limit reached')
+  }
 
-  let candles = timestamps.map((time: number, i: number) => ({
-    time,
-    open: quotes.open?.[i] || 0,
-    high: quotes.high?.[i] || 0,
-    low: quotes.low?.[i] || 0,
-    close: quotes.close?.[i] || 0,
-  })).filter((c: any) => c.open > 0)
+  const timeSeries = data[dataKey]
+  if (!timeSeries) {
+    console.error('[Alpha Vantage] No data found, response:', JSON.stringify(data).slice(0, 200))
+    throw new Error('No data from Alpha Vantage')
+  }
+
+  // Convert to candle format
+  let candles = Object.entries(timeSeries).map(([dateStr, values]: [string, any]) => {
+    const timestamp = Math.floor(new Date(dateStr).getTime() / 1000)
+    return {
+      time: timestamp,
+      open: parseFloat(values['1. open']),
+      high: parseFloat(values['2. high']),
+      low: parseFloat(values['3. low']),
+      close: parseFloat(values['4. close']),
+    }
+  })
+
+  // Sort by time ascending
+  candles.sort((a, b) => a.time - b.time)
 
   // For 4h timeframe, aggregate hourly candles
   if (timeframe === '4h') {
     candles = aggregateCandles(candles, 4)
-  } else {
-    candles = candles.slice(-limit)
   }
 
-  // Cache the result
-  setCachedCandles(symbol, timeframe, candles)
+  // Limit results
+  candles = candles.slice(-limit)
 
+  setCachedCandles(symbol, timeframe, candles)
   return candles
 }
 
-// Aggregate candles for custom timeframes
+// Fetch forex candles from Alpha Vantage
+async function fetchForexCandles(symbol: string, timeframe: string, limit: number, currentPrice: number) {
+  const cached = getCachedCandles(symbol, timeframe)
+  if (cached) return cached
+
+  const forexPair = FOREX_PAIRS[symbol]
+  if (!forexPair) {
+    return generateRealisticCandles(currentPrice, timeframe, limit)
+  }
+
+  const interval = AV_INTERVAL_MAP[timeframe] || '15min'
+
+  let url: string
+  let dataKey: string
+
+  if (timeframe === '1D') {
+    url = `https://www.alphavantage.co/query?function=FX_DAILY&from_symbol=${forexPair.from}&to_symbol=${forexPair.to}&outputsize=compact&apikey=${ALPHA_VANTAGE_KEY}`
+    dataKey = 'Time Series FX (Daily)'
+  } else {
+    url = `https://www.alphavantage.co/query?function=FX_INTRADAY&from_symbol=${forexPair.from}&to_symbol=${forexPair.to}&interval=${interval}&outputsize=compact&apikey=${ALPHA_VANTAGE_KEY}`
+    dataKey = `Time Series FX (Intraday)`
+  }
+
+  console.log(`[Alpha Vantage FX] Fetching ${symbol} ${timeframe}`)
+
+  try {
+    const response = await fetch(url)
+    if (!response.ok) throw new Error('Alpha Vantage FX API error')
+
+    const data = await response.json()
+
+    if (data['Error Message'] || data['Note']) {
+      console.warn('[Alpha Vantage FX] Error or rate limit')
+      throw new Error('Alpha Vantage FX unavailable')
+    }
+
+    const timeSeries = data[dataKey]
+    if (!timeSeries) {
+      throw new Error('No FX data')
+    }
+
+    let candles = Object.entries(timeSeries).map(([dateStr, values]: [string, any]) => {
+      const timestamp = Math.floor(new Date(dateStr).getTime() / 1000)
+      return {
+        time: timestamp,
+        open: parseFloat(values['1. open']),
+        high: parseFloat(values['2. high']),
+        low: parseFloat(values['3. low']),
+        close: parseFloat(values['4. close']),
+      }
+    })
+
+    candles.sort((a, b) => a.time - b.time)
+
+    if (timeframe === '4h') {
+      candles = aggregateCandles(candles, 4)
+    }
+
+    candles = candles.slice(-limit)
+
+    setCachedCandles(symbol, timeframe, candles)
+    return candles
+  } catch (e) {
+    console.log('[Alpha Vantage FX] Fallback to CryptoCompare:', e)
+
+    // Fallback to CryptoCompare for forex
+    try {
+      const config = TIMEFRAME_MAP[timeframe] || TIMEFRAME_MAP['15m']
+      const ccUrl = `https://min-api.cryptocompare.com/data/v2/${config.endpoint}?fsym=${forexPair.from}&tsym=${forexPair.to}&limit=${limit}&aggregate=${config.aggregate}`
+
+      const ccResponse = await fetch(ccUrl)
+      if (ccResponse.ok) {
+        const ccData = await ccResponse.json()
+        if (ccData.Data?.Data?.length > 0) {
+          const candles = ccData.Data.Data.map((c: any) => ({
+            time: c.time,
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+          }))
+          setCachedCandles(symbol, timeframe, candles)
+          return candles
+        }
+      }
+    } catch (ccError) {
+      console.log('[CryptoCompare FX] Also failed:', ccError)
+    }
+
+    // Final fallback: generate realistic candles
+    const candles = generateRealisticCandles(currentPrice, timeframe, limit)
+    setCachedCandles(symbol, timeframe, candles)
+    return candles
+  }
+}
+
+// Aggregate candles for custom timeframes (e.g., 4h from 1h)
 function aggregateCandles(candles: any[], factor: number) {
   const aggregated = []
   for (let i = 0; i < candles.length; i += factor) {
@@ -179,95 +301,45 @@ function aggregateCandles(candles: any[], factor: number) {
     aggregated.push({
       time: chunk[0].time,
       open: chunk[0].open,
-      high: Math.max(...chunk.map(c => c.high)),
-      low: Math.min(...chunk.map(c => c.low)),
+      high: Math.max(...chunk.map((c) => c.high)),
+      low: Math.min(...chunk.map((c) => c.low)),
       close: chunk[chunk.length - 1].close,
     })
   }
   return aggregated
 }
 
-// Fetch forex candles (fallback to generated data if API unavailable)
-async function fetchForexCandles(symbol: string, timeframe: string, limit: number, currentPrice: number) {
-  // Check cache first
-  const cached = getCachedCandles(symbol, timeframe)
-  if (cached) {
-    console.log(`Cache hit for forex ${symbol} ${timeframe}`)
-    return cached
-  }
-
-  // Try CryptoCompare for forex (limited support)
-  const forexConfig = FOREX_COMMODITY_SYMBOLS[symbol]
-  if (forexConfig) {
-    try {
-      const config = TIMEFRAME_MAP[timeframe] || TIMEFRAME_MAP['15m']
-      const url = `https://min-api.cryptocompare.com/data/v2/${config.endpoint}?fsym=${forexConfig.from}&tsym=${forexConfig.to}&limit=${limit}&aggregate=${config.aggregate}`
-
-      const response = await fetch(url, {
-        headers: { 'Accept': 'application/json' },
-        next: { revalidate: 60 },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        if (data.Data?.Data?.length > 0) {
-          const candles = data.Data.Data.map((c: any) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-          }))
-          // Cache the result
-          setCachedCandles(symbol, timeframe, candles)
-          return candles
-        }
-      }
-    } catch (e) {
-      console.log('CryptoCompare forex fallback failed:', e)
-    }
-  }
-
-  // Generate realistic-looking candles based on current price
-  const candles = generateRealisticCandles(currentPrice, timeframe, limit)
-  // Cache generated candles too (shorter duration via cache logic)
-  setCachedCandles(symbol, timeframe, candles)
-  return candles
-}
-
-// Generate realistic candles when API unavailable
+// Generate realistic candles when all APIs fail
 function generateRealisticCandles(currentPrice: number, timeframe: string, limit: number) {
   const config = TIMEFRAME_MAP[timeframe] || TIMEFRAME_MAP['15m']
   const now = Math.floor(Date.now() / 1000)
   const intervalSeconds = config.minutes * 60
 
   const candles = []
-  let price = currentPrice
+  let price = currentPrice * (1 + (Math.random() - 0.5) * 0.02) // Start with slight variance
 
-  // Work backwards from current time
   for (let i = limit - 1; i >= 0; i--) {
-    const time = now - (i * intervalSeconds)
+    const time = now - i * intervalSeconds
 
-    // Use seeded random for consistency
-    const seed = time + currentPrice
+    // Deterministic random based on time
+    const seed = time * 0.001
     const random = () => {
-      const x = Math.sin(seed * (candles.length + 1)) * 10000
+      const x = Math.sin(seed * (candles.length + 1) * 12.9898) * 43758.5453
       return x - Math.floor(x)
     }
 
-    // Generate realistic price movement
-    const volatility = currentPrice * 0.002 // 0.2% volatility per candle
+    const volatility = currentPrice * 0.003
     const change = (random() - 0.5) * volatility * 2
     const open = price
     const close = price + change
-    const high = Math.max(open, close) + random() * volatility * 0.5
-    const low = Math.min(open, close) - random() * volatility * 0.5
+    const high = Math.max(open, close) + random() * volatility * 0.3
+    const low = Math.min(open, close) - random() * volatility * 0.3
 
     candles.push({ time, open, high, low, close })
     price = close
   }
 
-  // Adjust last candle to match current price
+  // Ensure last candle matches current price
   if (candles.length > 0) {
     candles[candles.length - 1].close = currentPrice
   }
@@ -281,36 +353,52 @@ export async function GET(request: NextRequest) {
   const limit = parseInt(request.nextUrl.searchParams.get('limit') || '100')
 
   try {
-    // Find the pair to determine category
-    const pair = OSTIUM_PAIRS.find(p => p.symbol === symbol)
+    const pair = OSTIUM_PAIRS.find((p) => p.symbol === symbol)
     const category = pair?.category || 'crypto'
+    const ticker = symbol.split('-')[0]
 
     let candles: any[] = []
 
     if (category === 'crypto') {
       candles = await fetchCryptoCandles(symbol, timeframe, limit)
-    } else if (category === 'stock') {
+    } else if (category === 'stock' || category === 'index') {
       candles = await fetchStockCandles(symbol, timeframe, limit)
+    } else if (category === 'commodity') {
+      // Try using commodity ETF proxies
+      if (COMMODITY_ETFS[symbol]) {
+        candles = await fetchStockCandles(symbol, timeframe, limit)
+      } else {
+        // Fallback for commodities without ETF proxy
+        let currentPrice = 1
+        try {
+          const priceResponse = await fetch('https://metadata-backend.ostium.io/PricePublish/latest-prices')
+          if (priceResponse.ok) {
+            const prices = await priceResponse.json()
+            const priceData = prices.find(
+              (p: any) => `${p.from}-${p.to}` === symbol || (pair && p.from === pair.from && p.to === pair.to)
+            )
+            if (priceData) currentPrice = parseFloat(priceData.mid)
+          }
+        } catch (e) {
+          console.log('Price fetch failed')
+        }
+        candles = generateRealisticCandles(currentPrice, timeframe, limit)
+      }
     } else {
-      // Forex and commodities - try API first, then generate
-      // Get current price from Ostium API for fallback
+      // Forex
       let currentPrice = 1
       try {
         const priceResponse = await fetch('https://metadata-backend.ostium.io/PricePublish/latest-prices')
         if (priceResponse.ok) {
           const prices = await priceResponse.json()
-          const priceData = prices.find((p: any) =>
-            `${p.from}-${p.to}` === symbol ||
-            (pair && p.from === pair.from && p.to === pair.to)
+          const priceData = prices.find(
+            (p: any) => `${p.from}-${p.to}` === symbol || (pair && p.from === pair.from && p.to === pair.to)
           )
-          if (priceData) {
-            currentPrice = parseFloat(priceData.mid)
-          }
+          if (priceData) currentPrice = parseFloat(priceData.mid)
         }
       } catch (e) {
-        console.log('Price fetch failed, using default')
+        console.log('Price fetch failed')
       }
-
       candles = await fetchForexCandles(symbol, timeframe, limit, currentPrice)
     }
 

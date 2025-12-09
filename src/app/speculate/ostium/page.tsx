@@ -357,7 +357,17 @@ export default function OstiumTradingPage() {
           {/* Tab Content */}
           <div className="max-h-[50vh] overflow-y-auto">
             {activeTab === 'trade' && <OstiumTradePanel pair={selectedPair} />}
-            {activeTab === 'positions' && <OstiumPositions />}
+            {activeTab === 'positions' && (
+              <OstiumPositions
+                onSelectPair={(pairId) => {
+                  const pair = OSTIUM_PAIRS.find(p => p.id === pairId)
+                  if (pair) {
+                    setSelectedPair(pair)
+                    setActiveTab('trade')
+                  }
+                }}
+              />
+            )}
             {activeTab === 'history' && <TradeHistory />}
           </div>
         </div>
