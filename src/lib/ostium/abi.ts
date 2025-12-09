@@ -72,6 +72,73 @@ export const OSTIUM_TRADING_ABI = [
   },
 ] as const
 
+// Ostium TradingStorage ABI - for reading position data directly from chain
+// Based on Gains Network v5 interface (Ostium is forked from it)
+export const OSTIUM_STORAGE_ABI = [
+  {
+    name: 'openTrades',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'trader', type: 'address' },
+      { name: 'pairIndex', type: 'uint256' },
+      { name: 'index', type: 'uint256' },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple',
+        components: [
+          { name: 'trader', type: 'address' },
+          { name: 'pairIndex', type: 'uint256' },
+          { name: 'index', type: 'uint256' },
+          { name: 'initialPosToken', type: 'uint256' },
+          { name: 'positionSizeUSDC', type: 'uint256' },
+          { name: 'openPrice', type: 'uint256' },
+          { name: 'buy', type: 'bool' },
+          { name: 'leverage', type: 'uint256' },
+          { name: 'tp', type: 'uint256' },
+          { name: 'sl', type: 'uint256' },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'openTradesInfo',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'trader', type: 'address' },
+      { name: 'pairIndex', type: 'uint256' },
+      { name: 'index', type: 'uint256' },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple',
+        components: [
+          { name: 'tokenId', type: 'uint256' },
+          { name: 'tokenPriceDai', type: 'uint256' },
+          { name: 'openInterestDai', type: 'uint256' },
+          { name: 'tpLastUpdated', type: 'uint256' },
+          { name: 'slLastUpdated', type: 'uint256' },
+          { name: 'beingMarketClosed', type: 'bool' },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'openTradesCount',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'trader', type: 'address' },
+      { name: 'pairIndex', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+] as const
+
 // ERC20 ABI for USDC interactions
 export const ERC20_ABI = [
   {
