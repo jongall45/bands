@@ -234,7 +234,11 @@ async function scanPositions(trader: string, pairIndex: number, maxIndex: number
   return positions
 }
 
-export function OstiumPositions() {
+interface OstiumPositionsProps {
+  onSelectPair?: (pairId: number) => void
+}
+
+export function OstiumPositions({ onSelectPair }: OstiumPositionsProps) {
   const { data: positions, isLoading, refetch } = useOstiumPositions()
   const { data: prices } = useOstiumPrices()
   const { client } = useSmartWallets()
@@ -599,7 +603,7 @@ export function OstiumPositions() {
   })
 
   return (
-    <div className="p-4 space-y-3">
+    <div className="p-3 space-y-2">
       {enrichedPositions.map((position) => {
         const positionKey = `${position.pairId}-${position.index}`
         return (
@@ -608,6 +612,7 @@ export function OstiumPositions() {
             position={position}
             onClose={(percent) => closePosition(position, percent)}
             isClosing={closingKey === positionKey}
+            onSelect={() => onSelectPair?.(position.pairId)}
           />
         )
       })}
@@ -624,13 +629,15 @@ interface PositionCardProps {
   position: EnrichedPosition
   onClose: (percent: number) => void
   isClosing: boolean
+  onSelect?: () => void
 }
 
-function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
+function PositionCard({ position, onClose, isClosing, onSelect }: PositionCardProps) {
   const [showCloseOptions, setShowCloseOptions] = useState(false)
   const [closePercent, setClosePercent] = useState(100)
 
   const formatPrice = (p: number) => {
+    if (p < 10) return p.toFixed(4)
     return p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   }
 
@@ -651,7 +658,7 @@ function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
   const quickPercentages = [25, 50, 75, 100]
 
   return (
-    <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4 relative overflow-hidden">
+    <div className="bg-[#141414] border border-white/[0.04] rounded-xl p-3 relative overflow-hidden">
       {/* PnL Background Gradient - only show if entry price is valid */}
       {!position.hasInvalidEntryPrice && (
         <div
@@ -663,25 +670,28 @@ function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
         />
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3 relative">
-        <div className="flex items-center gap-3">
+      {/* Header - clickable to select chart */}
+      <div
+        className="flex items-center justify-between mb-2 relative cursor-pointer"
+        onClick={onSelect}
+      >
+        <div className="flex items-center gap-2">
           <div className="relative">
-            <AssetIcon symbol={position.symbol} size="lg" className="rounded-xl" />
+            <AssetIcon symbol={position.symbol} size="md" />
             {/* Long/Short indicator badge */}
-            <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center ${
+            <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full flex items-center justify-center ${
               position.isLong ? 'bg-green-500' : 'bg-red-500'
             }`}>
               {position.isLong ? (
-                <TrendingUp className="w-2.5 h-2.5 text-white" />
+                <TrendingUp className="w-2 h-2 text-white" />
               ) : (
-                <TrendingDown className="w-2.5 h-2.5 text-white" />
+                <TrendingDown className="w-2 h-2 text-white" />
               )}
             </div>
           </div>
           <div>
-            <p className="text-white font-semibold">{position.symbol}</p>
-            <p className="text-white/40 text-xs">
+            <p className="text-white font-medium text-sm">{position.symbol}</p>
+            <p className="text-white/40 text-[10px]">
               {position.leverage}x {position.isLong ? 'Long' : 'Short'} · {timeSinceOpen()}
             </p>
           </div>
@@ -689,15 +699,15 @@ function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
         <div className="text-right">
           {position.hasInvalidEntryPrice ? (
             <>
-              <p className="font-mono font-semibold text-lg text-white/40">---</p>
-              <p className="text-xs font-medium text-white/30">P&L unavailable</p>
+              <p className="font-mono font-semibold text-white/40">---</p>
+              <p className="text-[10px] font-medium text-white/30">P&L unavailable</p>
             </>
           ) : (
             <>
-              <p className={`font-mono font-semibold text-lg ${position.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {position.pnl >= 0 ? '+' : ''}${position.pnl.toFixed(2)}
+              <p className={`font-mono font-semibold ${position.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                ${position.pnl >= 0 ? '' : '-'}{Math.abs(position.pnl).toFixed(2)}
               </p>
-              <p className={`text-xs font-medium ${position.pnlPercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              <p className={`text-[10px] font-medium ${position.pnlPercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 {position.pnlPercent >= 0 ? '+' : ''}{position.pnlPercent.toFixed(2)}%
               </p>
             </>
@@ -707,43 +717,43 @@ function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
 
       {/* Invalid Entry Price Warning */}
       {position.hasInvalidEntryPrice && (
-        <div className="mb-3 px-2 py-1.5 bg-yellow-500/10 border border-yellow-500/20 rounded-lg flex items-center gap-2 relative">
-          <span className="text-yellow-400 text-xs">⚠️ Entry price data unavailable</span>
+        <div className="mb-2 px-2 py-1 bg-yellow-500/10 border border-yellow-500/20 rounded-lg flex items-center gap-2 relative">
+          <span className="text-yellow-400 text-[10px]">⚠️ Entry price data unavailable</span>
         </div>
       )}
 
-      {/* Details Grid */}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-4 text-sm relative">
+      {/* Details Grid - more compact */}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 mb-2 text-xs relative">
         <div className="flex justify-between">
-          <span className="text-white/40">Size</span>
+          <span className="text-white/30">Size</span>
           <span className="text-white font-mono">${(position.collateral * position.leverage).toFixed(2)}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-white/40">Collateral</span>
+          <span className="text-white/30">Collateral</span>
           <span className="text-white font-mono">${position.collateral.toFixed(2)}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-white/40">Entry</span>
+          <span className="text-white/30">Entry</span>
           <span className={`font-mono ${position.hasInvalidEntryPrice ? 'text-yellow-400' : 'text-white'}`}>
             {position.hasInvalidEntryPrice ? '---' : `$${formatPrice(position.displayEntryPrice || position.entryPrice)}`}
           </span>
         </div>
         <div className="flex justify-between">
-          <span className="text-white/40">Mark</span>
+          <span className="text-white/30">Mark</span>
           <span className="text-white font-mono">${formatPrice(position.currentPrice)}</span>
         </div>
       </div>
 
       {/* TP/SL Tags */}
       {(position.takeProfit || position.stopLoss) && (
-        <div className="flex gap-2 mb-4 relative">
+        <div className="flex gap-2 mb-2 relative">
           {position.takeProfit && (
-            <span className="bg-green-500/10 border border-green-500/20 text-green-400 text-xs px-2.5 py-1 rounded-lg">
+            <span className="bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] px-2 py-0.5 rounded-lg">
               TP: ${formatPrice(position.takeProfit)}
             </span>
           )}
           {position.stopLoss && (
-            <span className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs px-2.5 py-1 rounded-lg">
+            <span className="bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] px-2 py-0.5 rounded-lg">
               SL: ${formatPrice(position.stopLoss)}
             </span>
           )}
@@ -752,25 +762,21 @@ function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
 
       {/* Close Position Section */}
       {isClosing ? (
-        <div className="w-full py-2.5 bg-white/[0.05] border border-white/[0.08] rounded-xl text-white/60 text-sm font-medium flex items-center justify-center gap-2 relative">
-          <Loader2 className="w-4 h-4 animate-spin" />
+        <div className="w-full py-2 bg-white/[0.05] border border-white/[0.08] rounded-lg text-white/60 text-xs font-medium flex items-center justify-center gap-2 relative">
+          <Loader2 className="w-3 h-3 animate-spin" />
           Closing {closePercent}%...
         </div>
       ) : showCloseOptions ? (
-        <div className="space-y-3 relative">
+        <div className="space-y-2 relative">
           {/* Close amount display */}
-          <div className="bg-white/[0.03] rounded-xl p-3 space-y-1">
+          <div className="bg-white/[0.03] rounded-lg p-2 space-y-0.5">
             <div className="flex items-center justify-between">
-              <span className="text-white/40 text-xs">Close Amount</span>
-              <span className="text-white font-mono font-semibold">{closePercent}%</span>
+              <span className="text-white/40 text-[10px]">Close Amount</span>
+              <span className="text-white font-mono text-xs font-semibold">{closePercent}%</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-white/40 text-xs">Collateral</span>
-              <span className="text-[#FF6B00] font-mono font-semibold">${collateralToClose.toFixed(2)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-white/40 text-xs">Position Size</span>
-              <span className="text-white/60 font-mono text-sm">${sizeToClose.toFixed(2)}</span>
+              <span className="text-white/40 text-[10px]">Collateral</span>
+              <span className="text-[#FF6B00] font-mono text-xs font-semibold">${collateralToClose.toFixed(2)}</span>
             </div>
           </div>
 
@@ -782,12 +788,12 @@ function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
               max="100"
               value={closePercent}
               onChange={(e) => setClosePercent(parseInt(e.target.value))}
-              className="w-full h-2 bg-white/10 rounded-full appearance-none cursor-pointer
-                [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5
+              className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer
+                [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4
                 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#FF6B00]
                 [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:cursor-pointer
                 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white/20
-                [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5
+                [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4
                 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#FF6B00]
                 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white/20
                 [&::-moz-range-thumb]:cursor-pointer"
@@ -798,12 +804,12 @@ function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
           </div>
 
           {/* Quick select buttons */}
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-4 gap-1">
             {quickPercentages.map((pct) => (
               <button
                 key={pct}
                 onClick={() => setClosePercent(pct)}
-                className={`py-1.5 rounded-lg text-xs font-medium transition-all ${
+                className={`py-1 rounded text-[10px] font-medium transition-all ${
                   closePercent === pct
                     ? 'bg-[#FF6B00]/30 text-[#FF6B00] border border-[#FF6B00]/50'
                     : 'bg-white/[0.05] hover:bg-white/[0.08] text-white/50 hover:text-white/70 border border-white/[0.06]'
@@ -815,10 +821,10 @@ function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
           </div>
 
           {/* Action buttons */}
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             <button
               onClick={() => setShowCloseOptions(false)}
-              className="flex-1 py-2.5 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-xl text-white/50 hover:text-white/70 text-sm font-medium transition-all"
+              className="flex-1 py-2 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-lg text-white/50 hover:text-white/70 text-xs font-medium transition-all"
             >
               Cancel
             </button>
@@ -827,13 +833,13 @@ function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
                 onClose(closePercent)
                 setShowCloseOptions(false)
               }}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
+              className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 ${
                 closePercent === 100
                   ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30'
                   : 'bg-[#FF6B00]/20 hover:bg-[#FF6B00]/30 text-[#FF6B00] border border-[#FF6B00]/30'
               }`}
             >
-              <X className="w-4 h-4" />
+              <X className="w-3 h-3" />
               Close {closePercent}%
             </button>
           </div>
@@ -841,15 +847,15 @@ function PositionCard({ position, onClose, isClosing }: PositionCardProps) {
       ) : (
         <button
           onClick={() => setShowCloseOptions(true)}
-          className="w-full py-2.5 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-xl text-white/60 hover:text-white text-sm font-medium transition-all flex items-center justify-center gap-2 relative"
+          className="w-full py-2 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-lg text-white/60 hover:text-white text-xs font-medium transition-all flex items-center justify-center gap-1.5 relative"
         >
-          <X className="w-4 h-4" />
+          <X className="w-3 h-3" />
           Close Position
         </button>
       )}
 
       {/* Debug info (position index) - small footer */}
-      <div className="mt-2 pt-2 border-t border-white/[0.04] text-[10px] text-white/20 font-mono flex justify-between relative">
+      <div className="mt-1.5 pt-1.5 border-t border-white/[0.04] text-[10px] text-white/20 font-mono flex justify-between relative">
         <span>idx: {position.index}</span>
         <span>pair: {position.pairId}</span>
       </div>

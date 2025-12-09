@@ -47,13 +47,33 @@ export function TradingViewChart({
   const isInitializedRef = useRef(false)
   const currentSymbolRef = useRef(symbol)
   const currentTimeframeRef = useRef(selectedTimeframe)
+  const fetchIdRef = useRef(0)
+
+  // Clear data and show loading when symbol or timeframe changes
+  useEffect(() => {
+    // Only clear if actually changed
+    if (currentSymbolRef.current !== symbol || currentTimeframeRef.current !== selectedTimeframe) {
+      setCandleData([])
+      setIsLoading(true)
+      isInitializedRef.current = false
+    }
+  }, [symbol, selectedTimeframe])
 
   // Fetch real candle data from API
   const fetchCandles = useCallback(async () => {
+    const fetchId = ++fetchIdRef.current
+    const targetSymbol = symbol
+    const targetTimeframe = selectedTimeframe
+
     try {
       setIsLoading(true)
-      const response = await fetch(`/api/ostium/candles?symbol=${symbol}&timeframe=${selectedTimeframe}&limit=100`)
+      const response = await fetch(`/api/ostium/candles?symbol=${targetSymbol}&timeframe=${targetTimeframe}&limit=100`)
       const data: CandleResponse = await response.json()
+
+      // Only update if this is still the current request (prevents race conditions)
+      if (fetchId !== fetchIdRef.current) {
+        return
+      }
 
       if (data.candles && data.candles.length > 0) {
         const formattedCandles: CandlestickData[] = data.candles.map(c => ({
@@ -64,18 +84,22 @@ export function TradingViewChart({
           close: c.close,
         }))
         setCandleData(formattedCandles)
+        currentSymbolRef.current = targetSymbol
+        currentTimeframeRef.current = targetTimeframe
       }
     } catch (error) {
       console.error('Failed to fetch candles:', error)
     } finally {
-      setIsLoading(false)
+      if (fetchId === fetchIdRef.current) {
+        setIsLoading(false)
+      }
     }
   }, [symbol, selectedTimeframe])
 
   // Fetch candles on mount and when symbol/timeframe changes
   useEffect(() => {
     fetchCandles()
-    const interval = setInterval(fetchCandles, 10000)
+    const interval = setInterval(fetchCandles, 15000) // Slightly longer interval to reduce flicker
     return () => clearInterval(interval)
   }, [fetchCandles])
 
