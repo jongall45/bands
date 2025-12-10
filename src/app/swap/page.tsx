@@ -464,6 +464,40 @@ const swapStyles = `
   }
 
   /* ============================================
+     FIX: Keep Relay modal open when Privy opens
+     Prevent FocusTrap from triggering close
+     ============================================ */
+
+  /* Ensure Relay's dialog stays visible and doesn't get hidden by Privy */
+  body:has(iframe[src*="privy"]) [data-radix-portal],
+  body:has(iframe[src*="privy"]) [role="dialog"] {
+    visibility: visible !important;
+    display: block !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  /* Keep focus-trap anchor accessible */
+  .focus-trap-anchor {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  /* Ensure the anchor is focusable */
+  .focus-trap-anchor:focus {
+    outline: none !important;
+  }
+
+  /* ============================================
      SUCCESS MODAL
      ============================================ */
   .swap-success-modal {
