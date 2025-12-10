@@ -257,54 +257,59 @@ const swapStyles = `
   }
 
   /* ============================================
-     SWAP ARROW - 20x20px VERY SMALL
+     SWAP ARROW - Red circle, white arrow, centered
      ============================================ */
   .relay-swap-widget button[class*="rounded_12"][class*="p_2"],
   .relay-swap-widget button[class*="rounded_12"][class*="bg_primary"]:not([class*="gap_"]):not([class*="w_max"]),
   .relay-swap-widget button[class*="rounded_"][class*="bg_primary"]:not([class*="gap_"]):not([class*="w_max"]):not([class*="h_50"]) {
-    width: 20px !important;
-    height: 20px !important;
-    min-width: 20px !important;
-    min-height: 20px !important;
-    max-width: 20px !important;
-    max-height: 20px !important;
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+    max-width: 32px !important;
+    max-height: 32px !important;
     padding: 0 !important;
-    margin: 0 auto !important;
-    border-radius: 5px !important;
-    background: rgba(255, 255, 255, 0.05) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    box-shadow: none !important;
+    margin: 4px auto !important;
+    border-radius: 50% !important;
+    background: #ef4444 !important;
+    border: none !important;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.35) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
 
   .relay-swap-widget button[class*="rounded_12"][class*="p_2"]:hover,
   .relay-swap-widget button[class*="rounded_12"][class*="bg_primary"]:not([class*="gap_"]):hover {
-    background: rgba(255, 255, 255, 0.08) !important;
+    background: #dc2626 !important;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.45) !important;
   }
 
   .relay-swap-widget button[class*="rounded_12"] svg,
   .relay-swap-widget button[class*="rounded_"] svg:not([class*="token"]) {
-    width: 10px !important;
-    height: 10px !important;
-    color: rgba(255, 255, 255, 0.4) !important;
+    width: 14px !important;
+    height: 14px !important;
+    color: #ffffff !important;
   }
 
   /* ============================================
-     WALLET ADDRESS BUTTONS - RIGHT ALIGNED
+     WALLET ADDRESS - Green connected indicator
      ============================================ */
   .relay-swap-widget button[class*="rounded_99999"] {
-    height: 22px !important;
-    min-height: 22px !important;
-    padding: 0 8px !important;
-    font-size: 10px !important;
-    background: rgba(255, 255, 255, 0.06) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    height: 24px !important;
+    min-height: 24px !important;
+    padding: 0 10px !important;
+    font-size: 11px !important;
+    background: rgba(34, 197, 94, 0.12) !important;
+    border: 1px solid rgba(34, 197, 94, 0.35) !important;
     border-radius: 6px !important;
   }
 
   .relay-swap-widget button[class*="rounded_99999"] span,
   .relay-swap-widget button[class*="rounded_99999"] * {
-    color: #ffffff !important;
-    font-size: 10px !important;
+    color: #22c55e !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
   }
 
   /* ============================================
@@ -329,9 +334,8 @@ const swapStyles = `
   }
 
   /* ============================================
-     CTA BUTTON - FULL WIDTH, PROMINENT
+     CTA BUTTON - FULL WIDTH, 56px HEIGHT
      Target the main Swap/Review button at the bottom
-     Using multiple selector strategies to ensure we catch it
      ============================================ */
 
   /* Target by class patterns */
@@ -339,18 +343,18 @@ const swapStyles = `
   .relay-swap-widget button[class*="min-h_50"],
   .relay-swap-widget button[class*="shrink_0"][class*="w_max"],
   .relay-swap-widget button[class*="bg_primary"][class*="w_max"] {
-    height: 52px !important;
-    min-height: 52px !important;
+    height: 56px !important;
+    min-height: 56px !important;
     width: 100% !important;
     min-width: 100% !important;
     max-width: 100% !important;
-    border-radius: 16px !important;
+    border-radius: 14px !important;
     background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
-    font-size: 16px !important;
+    font-size: 17px !important;
     font-weight: 600 !important;
     color: #ffffff !important;
     border: none !important;
-    box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4) !important;
+    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.35) !important;
     cursor: pointer !important;
     pointer-events: auto !important;
     position: relative !important;
@@ -359,24 +363,17 @@ const swapStyles = `
     font-style: normal !important;
     opacity: 1 !important;
     visibility: visible !important;
-    letter-spacing: 0.02em !important;
-    margin-top: 8px !important;
+    letter-spacing: 0.01em !important;
+    margin-top: 12px !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
   }
 
-  /* Exclude the swap arrow button from CTA styling */
-  .relay-swap-widget button[class*="h_50"]:not([class*="rounded_12"]):not([class*="p_2"]),
-  .relay-swap-widget button[class*="min-h_50"]:not([class*="rounded_12"]) {
-    height: 52px !important;
-    width: 100% !important;
-  }
-
   .relay-swap-widget button[class*="h_50"]:hover,
   .relay-swap-widget button[class*="min-h_50"]:hover {
     background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
-    box-shadow: 0 6px 24px rgba(239, 68, 68, 0.5) !important;
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.45) !important;
     transform: translateY(-1px) !important;
   }
 
@@ -386,7 +383,7 @@ const swapStyles = `
     font-weight: 600 !important;
     text-transform: none !important;
     font-style: normal !important;
-    font-size: 16px !important;
+    font-size: 17px !important;
   }
 
   /* ============================================
@@ -413,6 +410,17 @@ const swapStyles = `
     backdrop-filter: blur(40px) !important;
     border: 1px solid rgba(255,255,255,0.1) !important;
     border-radius: 20px !important;
+  }
+
+  /* ============================================
+     PRIVY MODAL - Must appear above Relay modal
+     ============================================ */
+  [data-privy-dialog],
+  .privy-dialog,
+  .privy-modal,
+  div[id*="privy"],
+  div[class*="privy"] > div[role="dialog"] {
+    z-index: 999999 !important;
   }
 
   /* ============================================
