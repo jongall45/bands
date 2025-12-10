@@ -260,9 +260,24 @@ export function RelaySwapWidget({ onSuccess, onError }: RelaySwapWidgetProps) {
     onError?.(error, data)
   }, [onError])
 
+  // Show loading state while waiting for smart wallet to initialize
+  // This ensures the SwapWidget only renders once we have all the data
+  if (!smartWalletAddress || !adaptedWallet) {
+    return (
+      <div className="relay-swap-widget flex items-center justify-center p-8">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-[#ef4444] border-t-transparent rounded-full animate-spin" />
+          <p className="text-white/60 text-sm">Initializing wallet...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="relay-swap-widget">
+      {/* Key forces full re-mount when wallet address changes */}
       <SwapWidget
+        key={smartWalletAddress}
         wallet={adaptedWallet}
         // Set the destination address to be the same as the source (smart wallet)
         // This ensures both sides of the swap use the same wallet
