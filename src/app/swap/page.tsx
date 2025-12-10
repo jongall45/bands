@@ -257,7 +257,7 @@ const swapStyles = `
   }
 
   /* ============================================
-     SWAP ARROW - Red circle, white arrow, centered
+     SWAP ARROW - Clean red circle, white arrow, NO outline
      ============================================ */
   .relay-swap-widget button[class*="rounded_12"][class*="p_2"],
   .relay-swap-widget button[class*="rounded_12"][class*="bg_primary"]:not([class*="gap_"]):not([class*="w_max"]),
@@ -273,7 +273,9 @@ const swapStyles = `
     border-radius: 50% !important;
     background: #ef4444 !important;
     border: none !important;
-    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.35) !important;
+    outline: none !important;
+    box-shadow: none !important;
+    -webkit-appearance: none !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -282,7 +284,12 @@ const swapStyles = `
   .relay-swap-widget button[class*="rounded_12"][class*="p_2"]:hover,
   .relay-swap-widget button[class*="rounded_12"][class*="bg_primary"]:not([class*="gap_"]):hover {
     background: #dc2626 !important;
-    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.45) !important;
+  }
+
+  .relay-swap-widget button[class*="rounded_12"][class*="p_2"]:focus,
+  .relay-swap-widget button[class*="rounded_12"][class*="bg_primary"]:not([class*="gap_"]):focus {
+    outline: none !important;
+    box-shadow: none !important;
   }
 
   .relay-swap-widget button[class*="rounded_12"] svg,
@@ -290,55 +297,71 @@ const swapStyles = `
     width: 14px !important;
     height: 14px !important;
     color: #ffffff !important;
+    stroke: #ffffff !important;
   }
 
   /* ============================================
-     WALLET ADDRESS - Green connected indicator
+     WALLET ADDRESS - White text + small green dot
      ============================================ */
   .relay-swap-widget button[class*="rounded_99999"] {
-    height: 24px !important;
-    min-height: 24px !important;
-    padding: 0 10px !important;
+    height: 26px !important;
+    min-height: 26px !important;
+    padding: 0 10px 0 8px !important;
     font-size: 11px !important;
-    background: rgba(34, 197, 94, 0.12) !important;
-    border: 1px solid rgba(34, 197, 94, 0.35) !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
     border-radius: 6px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
+
+  .relay-swap-widget button[class*="rounded_99999"]::before {
+    content: '' !important;
+    display: block !important;
+    width: 6px !important;
+    height: 6px !important;
+    background: #22c55e !important;
+    border-radius: 50% !important;
+    flex-shrink: 0 !important;
   }
 
   .relay-swap-widget button[class*="rounded_99999"] span,
   .relay-swap-widget button[class*="rounded_99999"] * {
-    color: #22c55e !important;
+    color: #ffffff !important;
     font-size: 11px !important;
     font-weight: 500 !important;
   }
 
   /* ============================================
-     TOKEN SELECTOR BUTTONS
+     TOKEN SELECTOR BUTTONS - White text and arrow
      ============================================ */
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] {
-    height: 32px !important;
-    min-height: 32px !important;
-    padding: 0 10px !important;
-    font-size: 12px !important;
-    border-radius: 8px !important;
-    background: rgba(239, 68, 68, 0.85) !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    padding: 0 12px !important;
+    font-size: 13px !important;
+    border-radius: 10px !important;
+    background: #ef4444 !important;
     text-transform: none !important;
   }
 
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] span {
     color: #ffffff !important;
-    font-size: 12px !important;
+    font-size: 13px !important;
     font-weight: 600 !important;
     text-transform: none !important;
     font-style: normal !important;
   }
 
+  .relay-swap-widget button[class*="bg_primary"][class*="gap_"] svg {
+    color: #ffffff !important;
+    stroke: #ffffff !important;
+  }
+
   /* ============================================
      CTA BUTTON - FULL WIDTH, 56px HEIGHT
-     Target the main Swap/Review button at the bottom
      ============================================ */
-
-  /* Target by class patterns */
   .relay-swap-widget button[class*="h_50"],
   .relay-swap-widget button[class*="min-h_50"],
   .relay-swap-widget button[class*="shrink_0"][class*="w_max"],
@@ -350,7 +373,7 @@ const swapStyles = `
     max-width: 100% !important;
     border-radius: 14px !important;
     background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
-    font-size: 17px !important;
+    font-size: 16px !important;
     font-weight: 600 !important;
     color: #ffffff !important;
     border: none !important;
@@ -363,7 +386,6 @@ const swapStyles = `
     font-style: normal !important;
     opacity: 1 !important;
     visibility: visible !important;
-    letter-spacing: 0.01em !important;
     margin-top: 12px !important;
     display: flex !important;
     align-items: center !important;
@@ -374,7 +396,6 @@ const swapStyles = `
   .relay-swap-widget button[class*="min-h_50"]:hover {
     background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
     box-shadow: 0 6px 20px rgba(239, 68, 68, 0.45) !important;
-    transform: translateY(-1px) !important;
   }
 
   .relay-swap-widget button[class*="h_50"] span,
@@ -383,7 +404,7 @@ const swapStyles = `
     font-weight: 600 !important;
     text-transform: none !important;
     font-style: normal !important;
-    font-size: 17px !important;
+    font-size: 16px !important;
   }
 
   /* ============================================
