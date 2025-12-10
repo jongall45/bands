@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useWallets } from '@privy-io/react-auth'
 import { Repeat, RefreshCw, CheckCircle, X } from 'lucide-react'
-import { RelaySwapWidget } from '@/components/relay/RelaySwapWidget'
+import { RelaySwapWidget, type SwapState } from '@/components/relay/RelaySwapWidget'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
 import type { Execute } from '@relayprotocol/relay-sdk'
@@ -15,6 +15,9 @@ export default function SwapPage() {
   const [recentTx, setRecentTx] = useState<string | null>(null)
   const [showSuccess, setShowSuccess] = useState(false)
   const [swapDetails, setSwapDetails] = useState<{ txHash: string } | null>(null)
+
+  // Track swap state from the widget
+  const [swapState, setSwapState] = useState<SwapState>('idle')
 
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
   const isConnected = !!embeddedWallet
@@ -28,13 +31,22 @@ export default function SwapPage() {
     return () => clearTimeout(timer)
   }, [isConnected, router])
 
-  const handleSuccess = (data: Execute) => {
+  // Handle swap state changes from widget
+  const handleStateChange = useCallback((state: SwapState) => {
+    console.log('[SwapPage] 🔄 Swap state changed:', state)
+    setSwapState(state)
+  }, [])
+
+  const handleSuccess = useCallback((data: Execute) => {
+    console.log('[SwapPage] ✅ handleSuccess called!', data)
+
     const steps = data?.steps || []
     for (const step of steps) {
       const items = step?.items || []
       for (const item of items) {
         if (item?.txHashes && item.txHashes.length > 0) {
           const txHash = item.txHashes[0].txHash
+          console.log('[SwapPage] Found txHash:', txHash)
           setRecentTx(txHash)
           setSwapDetails({ txHash })
           setShowSuccess(true)
@@ -42,16 +54,26 @@ export default function SwapPage() {
         }
       }
     }
-  }
 
-  const handleError = (error: string) => {
-    console.error('[SwapPage] Error:', error)
-  }
+    // If no txHash found in data, still show success
+    console.log('[SwapPage] No txHash in data, but swap succeeded')
+    setShowSuccess(true)
+  }, [])
 
-  const closeSuccessModal = () => {
+  const handleError = useCallback((error: string) => {
+    console.error('[SwapPage] ❌ handleError called:', error)
+  }, [])
+
+  const closeSuccessModal = useCallback(() => {
+    console.log('[SwapPage] Closing success modal, resetting state')
     setShowSuccess(false)
     setSwapDetails(null)
-  }
+    setSwapState('idle')
+  }, [])
+
+  // Determine if we should show blur based on swap state
+  // Only show blur when actively processing (confirming, sending, pending)
+  const isProcessing = swapState === 'confirming' || swapState === 'sending' || swapState === 'pending'
 
   if (!isConnected) {
     return (
@@ -68,8 +90,9 @@ export default function SwapPage() {
   }
 
   return (
-    <div className="swap-page">
+    <div className="swap-page" data-swap-state={swapState}>
       <div className="noise-overlay" />
+      {/* Auras - controlled by data-swap-state via CSS */}
       <div className="aura aura-1" />
       <div className="aura aura-2" />
       <div className="aura aura-3" />
@@ -91,6 +114,7 @@ export default function SwapPage() {
             <RelaySwapWidget
               onSuccess={handleSuccess}
               onError={handleError}
+              onStateChange={handleStateChange}
             />
           </div>
         </div>
@@ -104,7 +128,7 @@ export default function SwapPage() {
       </div>
 
       {/* Success Modal - shown after transaction completes */}
-      {showSuccess && swapDetails && (
+      {showSuccess && (
         <div className="swap-success-modal" onClick={closeSuccessModal}>
           <div className="swap-success-content" onClick={(e) => e.stopPropagation()}>
             <button className="swap-success-close" onClick={closeSuccessModal}>
@@ -115,14 +139,16 @@ export default function SwapPage() {
             </div>
             <h3 className="swap-success-title">Swap Successful!</h3>
             <p className="swap-success-subtitle">Your transaction has been confirmed</p>
-            <a
-              href={`https://basescan.org/tx/${swapDetails.txHash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="swap-success-link"
-            >
-              View on Explorer →
-            </a>
+            {swapDetails?.txHash && (
+              <a
+                href={`https://basescan.org/tx/${swapDetails.txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="swap-success-link"
+              >
+                View on Explorer →
+              </a>
+            )}
             <button className="swap-success-button" onClick={closeSuccessModal}>
               Done
             </button>
@@ -161,6 +187,7 @@ const swapStyles = `
     border-radius: 50%;
     z-index: 0;
     animation: aura-float 20s ease-in-out infinite;
+    transition: filter 0.3s ease, opacity 0.3s ease;
   }
 
   .swap-page .aura-1 {
@@ -193,6 +220,18 @@ const swapStyles = `
     0%, 100% { transform: translate(0, 0) scale(1); }
     33% { transform: translate(30px, -20px) scale(1.02); }
     66% { transform: translate(-20px, 20px) scale(0.98); }
+  }
+
+  /* ============================================
+     DISABLE AURA BLUR DURING ACTIVE STATES
+     This uses data-swap-state attribute on .swap-page
+     ============================================ */
+  .swap-page[data-swap-state="confirming"] .aura,
+  .swap-page[data-swap-state="sending"] .aura,
+  .swap-page[data-swap-state="pending"] .aura {
+    filter: none !important;
+    -webkit-filter: none !important;
+    opacity: 0.15 !important;
   }
 
   /* ============================================
@@ -347,7 +386,8 @@ const swapStyles = `
   }
 
   /* ============================================
-     RELAY MODALS - Dark theme, LOWER z-index than Privy
+     RELAY MODALS - Dark theme, proper z-index
+     CRITICAL: Ensure modals are visible and interactive
      ============================================ */
   .relay-swap-widget [role="dialog"] > div {
     background: rgba(12, 12, 12, 0.98) !important;
@@ -355,7 +395,7 @@ const swapStyles = `
     border-radius: 20px !important;
   }
 
-  /* Keep Relay modals at a reasonable z-index but BELOW Privy */
+  /* Relay modals and portals - high z-index but below Privy */
   .relay-swap-widget [role="dialog"],
   .relay-swap-widget [data-radix-portal],
   [data-radix-popper-content-wrapper],
@@ -363,21 +403,24 @@ const swapStyles = `
     z-index: 50000 !important;
   }
 
-  /* Relay modal overlays/backdrops - lower than modal content */
+  /* Relay modal overlays - slightly lower */
   .relay-swap-widget [data-radix-portal] > [data-radix-overlay],
   [data-radix-portal] > div[style*="position: fixed"] {
     z-index: 49999 !important;
   }
 
-  /* Ensure Relay modals don't have filters */
-  .relay-swap-widget [role="dialog"] {
+  /* CRITICAL: Ensure Relay modals are not affected by page filters */
+  .relay-swap-widget [role="dialog"],
+  [data-radix-portal],
+  [data-radix-portal] > * {
     filter: none !important;
+    -webkit-filter: none !important;
     backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 
   /* ============================================
      PRIVY MODAL - HIGHEST z-index
-     Simple approach: only set z-index, add filter:none to prevent blur
      ============================================ */
   #privy-iframe-container,
   #privy-dialog,
@@ -404,17 +447,16 @@ const swapStyles = `
     -webkit-filter: none !important;
   }
 
-  /* When Privy modal is open, disable blur on aura elements
-     This prevents the aura blur from affecting Privy modal rendering */
+  /* When Privy modal is open, disable blur on aura elements */
   body:has(iframe[src*="privy.io"]) .aura,
   body:has(iframe[src*="privy"]) .aura,
   body:has([data-privy-dialog]) .aura {
     filter: none !important;
     -webkit-filter: none !important;
-    opacity: 0.2 !important;
+    opacity: 0.15 !important;
   }
 
-  /* Also ensure the main content doesn't have any blur effects */
+  /* Also ensure the main content doesn't have any blur effects during Privy */
   body:has(iframe[src*="privy"]) .swap-page,
   body:has([data-privy-dialog]) .swap-page {
     filter: none !important;
