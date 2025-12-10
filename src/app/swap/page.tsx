@@ -229,31 +229,33 @@ const swapStyles = `
   }
 
   /* ============================================
-     20% 50% MAX BUTTONS - TINY PILLS
+     20% 50% MAX BUTTONS - SUPER TINY
      ============================================ */
   .relay-swap-widget button[class*="fs_12"][class*="fw_500"] {
-    height: 16px !important;
-    min-height: 16px !important;
-    max-height: 16px !important;
-    padding: 0 4px !important;
-    font-size: 8px !important;
+    height: 14px !important;
+    min-height: 14px !important;
+    max-height: 14px !important;
+    padding: 0 3px !important;
+    font-size: 7px !important;
     font-weight: 500 !important;
-    border-radius: 3px !important;
+    border-radius: 2px !important;
     background: transparent !important;
-    border: 1px solid rgba(255, 255, 255, 0.15) !important;
-    color: rgba(255, 255, 255, 0.7) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    color: rgba(255, 255, 255, 0.5) !important;
     text-transform: none !important;
-    margin-left: 3px !important;
+    margin-left: 2px !important;
+    line-height: 1 !important;
   }
 
   .relay-swap-widget button[class*="fs_12"][class*="fw_500"]:hover {
-    background: rgba(255, 255, 255, 0.08) !important;
-    border-color: rgba(255, 255, 255, 0.25) !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
   }
 
   .relay-swap-widget button[class*="fs_12"][class*="fw_500"] span {
-    color: rgba(255, 255, 255, 0.7) !important;
-    font-size: 8px !important;
+    color: rgba(255, 255, 255, 0.5) !important;
+    font-size: 7px !important;
+    line-height: 1 !important;
   }
 
   /* ============================================
@@ -291,99 +293,103 @@ const swapStyles = `
   }
 
   /* ============================================
-     TOKEN SELECTOR BUTTONS - Target by data-testid
-     Button has: relay-bg_widget-selector-background, relay-min-h_50, relay-h_50
+     TOKEN SELECTOR BUTTONS - Match Relay's actual UI
      ============================================ */
   .relay-swap-widget button[data-testid="origin-token-select-button"],
   .relay-swap-widget button[data-testid="destination-token-select-button"],
   .relay-swap-widget button[class*="widget-selector-background"][class*="h_50"] {
-    height: 36px !important;
-    min-height: 36px !important;
-    max-height: 36px !important;
-    padding: 4px 8px !important;
-    border-radius: 18px !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    max-height: 44px !important;
+    padding: 6px 10px 6px 6px !important;
+    border-radius: 22px !important;
     background: #ef4444 !important;
-    overflow: hidden !important;
+    overflow: visible !important;
+    gap: 6px !important;
   }
 
-  /* Token icon container inside selector - override relay-w_32 relay-h_32 */
-  .relay-swap-widget button[data-testid="origin-token-select-button"] div[class*="w_32"],
-  .relay-swap-widget button[data-testid="destination-token-select-button"] div[class*="w_32"],
-  .relay-swap-widget button[data-testid="origin-token-select-button"] div[class*="h_32"],
-  .relay-swap-widget button[data-testid="destination-token-select-button"] div[class*="h_32"] {
-    width: 24px !important;
-    height: 24px !important;
-    min-width: 24px !important;
-    min-height: 24px !important;
-    max-width: 24px !important;
-    max-height: 24px !important;
+  /* Token icon container - relative for chain badge positioning */
+  .relay-swap-widget button[data-testid="origin-token-select-button"] > div:first-child,
+  .relay-swap-widget button[data-testid="destination-token-select-button"] > div:first-child {
+    position: relative !important;
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+    flex-shrink: 0 !important;
   }
 
-  /* Token icon image inside selector - main token icon */
-  .relay-swap-widget button[data-testid="origin-token-select-button"] img:first-of-type,
-  .relay-swap-widget button[data-testid="destination-token-select-button"] img:first-of-type {
-    width: 24px !important;
-    height: 24px !important;
-    min-width: 24px !important;
-    min-height: 24px !important;
+  /* Main token icon - larger size */
+  .relay-swap-widget button[data-testid="origin-token-select-button"] img,
+  .relay-swap-widget button[data-testid="destination-token-select-button"] img {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
     border-radius: 50% !important;
   }
 
-  /* Chain badge - small circle overlapping token icon */
-  .relay-swap-widget button[data-testid="origin-token-select-button"] img:not(:first-of-type),
-  .relay-swap-widget button[data-testid="destination-token-select-button"] img:not(:first-of-type),
-  .relay-swap-widget button[data-testid="origin-token-select-button"] div[class*="pos_absolute"] img,
-  .relay-swap-widget button[data-testid="destination-token-select-button"] div[class*="pos_absolute"] img,
-  .relay-swap-widget button[data-testid="origin-token-select-button"] [class*="rounded_4"] img,
-  .relay-swap-widget button[data-testid="destination-token-select-button"] [class*="rounded_4"] img {
-    width: 10px !important;
-    height: 10px !important;
-    min-width: 10px !important;
-    min-height: 10px !important;
-    max-width: 10px !important;
-    max-height: 10px !important;
-    border-radius: 2px !important;
-  }
-
-  /* Chain badge container - position it properly */
+  /* Chain badge - small circle at bottom right of token icon */
   .relay-swap-widget button[data-testid="origin-token-select-button"] div[class*="pos_absolute"],
   .relay-swap-widget button[data-testid="destination-token-select-button"] div[class*="pos_absolute"],
   .relay-swap-widget button[data-testid="origin-token-select-button"] [class*="rounded_4"],
   .relay-swap-widget button[data-testid="destination-token-select-button"] [class*="rounded_4"] {
-    width: 10px !important;
-    height: 10px !important;
-    min-width: 10px !important;
-    min-height: 10px !important;
+    position: absolute !important;
+    bottom: -2px !important;
+    right: -2px !important;
+    width: 14px !important;
+    height: 14px !important;
+    min-width: 14px !important;
+    min-height: 14px !important;
+    max-width: 14px !important;
+    max-height: 14px !important;
     padding: 0 !important;
+    border-radius: 4px !important;
+    overflow: hidden !important;
+    border: 1.5px solid #ef4444 !important;
+    background: #1a1a1a !important;
   }
 
-  /* Token name text - override relay-fs_16 */
+  .relay-swap-widget button[data-testid="origin-token-select-button"] div[class*="pos_absolute"] img,
+  .relay-swap-widget button[data-testid="destination-token-select-button"] div[class*="pos_absolute"] img,
+  .relay-swap-widget button[data-testid="origin-token-select-button"] [class*="rounded_4"] img,
+  .relay-swap-widget button[data-testid="destination-token-select-button"] [class*="rounded_4"] img {
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 100% !important;
+    min-height: 100% !important;
+    border-radius: 2px !important;
+  }
+
+  /* Token name text */
   .relay-swap-widget button[data-testid="origin-token-select-button"] div[class*="fs_16"],
   .relay-swap-widget button[data-testid="destination-token-select-button"] div[class*="fs_16"],
   .relay-swap-widget button[data-testid="origin-token-select-button"] [class*="fw_700"]:not(button),
   .relay-swap-widget button[data-testid="destination-token-select-button"] [class*="fw_700"]:not(button) {
-    font-size: 11px !important;
-    font-weight: 600 !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
     line-height: 1.2 !important;
+    color: #ffffff !important;
   }
 
-  /* Chain name text - override relay-fs_12 */
+  /* Chain name text */
   .relay-swap-widget button[data-testid="origin-token-select-button"] div[class*="fs_12"],
   .relay-swap-widget button[data-testid="destination-token-select-button"] div[class*="fs_12"],
   .relay-swap-widget button[data-testid="origin-token-select-button"] div[class*="text_subtle"],
   .relay-swap-widget button[data-testid="destination-token-select-button"] div[class*="text_subtle"] {
-    font-size: 8px !important;
+    font-size: 11px !important;
     font-weight: 400 !important;
     line-height: 1.2 !important;
-    color: rgba(255, 255, 255, 0.7) !important;
+    color: rgba(255, 255, 255, 0.6) !important;
   }
 
-  /* Dropdown arrow in token selector */
-  .relay-swap-widget button[data-testid="origin-token-select-button"] svg,
-  .relay-swap-widget button[data-testid="destination-token-select-button"] svg {
-    width: 12px !important;
-    height: 12px !important;
+  /* Dropdown arrow */
+  .relay-swap-widget button[data-testid="origin-token-select-button"] > svg,
+  .relay-swap-widget button[data-testid="destination-token-select-button"] > svg {
+    width: 16px !important;
+    height: 16px !important;
     color: #ffffff !important;
+    flex-shrink: 0 !important;
   }
 
   /* ============================================
@@ -484,17 +490,23 @@ const swapStyles = `
   }
 
   /* ============================================
-     RELAY MODAL - Set base z-index for modals
+     RELAY MODAL - Lower z-index so Privy appears on top
      ============================================ */
   .relay-swap-widget [role="dialog"],
   .relay-swap-widget [data-radix-portal],
   [data-radix-popper-content-wrapper] {
-    z-index: 50000 !important;
+    z-index: 10000 !important;
+  }
+
+  /* Relay transaction details modal backdrop */
+  .relay-swap-widget [data-radix-portal] > div:first-child,
+  .relay-swap-widget [role="dialog"] ~ div {
+    z-index: 9999 !important;
   }
 
   /* ============================================
-     PRIVY MODAL - Must appear above Relay modal
-     Higher z-index ensures Privy approval shows on top
+     PRIVY MODAL - Must appear ABOVE Relay modal
+     This ensures Privy approval popup shows on top
      ============================================ */
   [data-privy-dialog],
   .privy-dialog,
@@ -507,14 +519,23 @@ const swapStyles = `
   #privy-modal-content,
   #privy-dialog,
   [class*="PrivyDialog"],
-  [class*="privy-connect"] {
-    z-index: 100000 !important;
+  [class*="privy-connect"],
+  [class*="PrivyModal"],
+  [data-privy-wallet-modal] {
+    z-index: 2147483647 !important; /* Max z-index */
   }
 
-  /* Privy overlay/backdrop */
+  /* Privy overlay/backdrop - just below modal */
   div[class*="privy"][class*="overlay"],
-  div[class*="privy"][class*="backdrop"] {
-    z-index: 99999 !important;
+  div[class*="privy"][class*="backdrop"],
+  [data-privy-backdrop] {
+    z-index: 2147483646 !important;
+  }
+
+  /* Privy iframe specifically */
+  iframe[src*="privy"],
+  iframe[id*="privy"] {
+    z-index: 2147483647 !important;
   }
 
   /* ============================================
