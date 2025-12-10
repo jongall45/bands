@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useCallback, useRef } from 'react'
+import { useMemo, useCallback, useRef, useEffect } from 'react'
 import { SwapWidget } from '@relayprotocol/relay-kit-ui'
 import type { LinkedWallet } from '@relayprotocol/relay-kit-ui'
 import { usePublicClient } from 'wagmi'
@@ -17,64 +17,59 @@ interface RelaySwapWidgetProps {
 
 // Map chain IDs to viem chain objects for creating public clients
 const chainMap: Record<number, Chain> = {
-  [mainnet.id]: mainnet,         // 1
-  [optimism.id]: optimism,       // 10
-  [polygon.id]: polygon,         // 137
-  [base.id]: base,               // 8453
-  [arbitrum.id]: arbitrum,       // 42161
-  [zora.id]: zora,               // 7777777
-  [blast.id]: blast,             // 81457
+  [mainnet.id]: mainnet,
+  [optimism.id]: optimism,
+  [polygon.id]: polygon,
+  [base.id]: base,
+  [arbitrum.id]: arbitrum,
+  [zora.id]: zora,
+  [blast.id]: blast,
+}
+
+// Cache for public clients per chain - OUTSIDE component to persist across renders
+const publicClientCache: Record<number, ReturnType<typeof createPublicClient>> = {}
+
+function getPublicClientForChain(targetChainId: number, defaultClient: any) {
+  if (publicClientCache[targetChainId]) {
+    return publicClientCache[targetChainId]
+  }
+
+  const chain = chainMap[targetChainId]
+  if (!chain) {
+    console.warn(`[SmartWalletAdapter] Unknown chain ${targetChainId}, using default client`)
+    return defaultClient
+  }
+
+  const client = createPublicClient({
+    chain,
+    transport: http(),
+  })
+  publicClientCache[targetChainId] = client
+  return client
 }
 
 /**
  * Creates a Relay SDK compatible wallet adapter for Privy Smart Wallets
- * This enables crosschain swaps/bridges using ERC-4337 account abstraction with gas sponsorship
+ *
+ * CRITICAL: This adapter uses refs to always access the latest client instances
+ * without causing the adapter object reference to change. This prevents
+ * Relay SDK from aborting execution due to wallet instance changes.
  */
 function createSmartWalletAdapter(
-  smartWalletClient: any,
-  getClientForChain: (args: { id: number }) => Promise<any>,
-  defaultPublicClient: any,
+  getClientForChainRef: React.MutableRefObject<((args: { id: number }) => Promise<any>) | undefined>,
+  defaultPublicClientRef: React.MutableRefObject<any>,
   smartWalletAddress: `0x${string}`
 ): AdaptedWallet {
-  // Cache for public clients per chain
-  const publicClientCache: Record<number, any> = {}
-
-  // Track current chain - starts with default but updates on switchChain
-  let currentChainId = defaultPublicClient?.chain?.id || 8453
-
-  // Get or create a public client for a specific chain
-  const getPublicClientForChain = (targetChainId: number) => {
-    if (publicClientCache[targetChainId]) {
-      return publicClientCache[targetChainId]
-    }
-
-    const chain = chainMap[targetChainId]
-    if (!chain) {
-      console.warn(`[SmartWalletAdapter] Unknown chain ${targetChainId}, using default client`)
-      return defaultPublicClient
-    }
-
-    const client = createPublicClient({
-      chain,
-      transport: http(),
-    })
-    publicClientCache[targetChainId] = client
-    return client
-  }
+  // Track current chain - starts with Base but updates on switchChain
+  let currentChainId = 8453
 
   return {
     vmType: 'evm',
 
-    // Return the CURRENT chain (updates after switchChain)
-    // IMPORTANT: Do NOT read from smartWalletClient.chain.id here!
-    // The closure holds a stale reference that doesn't update when getClientForChain is called.
-    // We track the chain ourselves via currentChainId which is updated in switchChain().
     getChainId: async () => {
-      console.log('[SmartWalletAdapter] getChainId returning:', currentChainId)
       return currentChainId
     },
 
-    // IMPORTANT: Return the smart wallet address, not the EOA
     address: async () => smartWalletAddress,
 
     getBalance: async (
@@ -83,9 +78,7 @@ function createSmartWalletAdapter(
       tokenAddress?: string,
     ) => {
       try {
-        // Get a public client for the target chain
-        const publicClient = getPublicClientForChain(targetChainId)
-        console.log(`[SmartWalletAdapter] getBalance on chain ${targetChainId} for ${walletAddress}`)
+        const publicClient = getPublicClientForChain(targetChainId, defaultPublicClientRef.current)
 
         if (!tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000') {
           const balance = await publicClient.getBalance({
@@ -110,7 +103,12 @@ function createSmartWalletAdapter(
     handleSignMessageStep: async (item: any) => {
       try {
         console.log('[SmartWalletAdapter] Signing message...')
-        const signature = await smartWalletClient.signMessage({
+        // Get latest client from ref
+        const getClientForChain = getClientForChainRef.current
+        if (!getClientForChain) throw new Error('getClientForChain not available')
+
+        const client = await getClientForChain({ id: currentChainId })
+        const signature = await client.signMessage({
           message: item.data,
         })
         return signature
@@ -130,7 +128,10 @@ function createSmartWalletAdapter(
         console.log('  Current chain:', currentChainId)
         console.log('  To:', item.data?.to)
 
-        // ALWAYS get a client for the target chain
+        // Get latest client from ref - this is the key to stability!
+        const getClientForChain = getClientForChainRef.current
+        if (!getClientForChain) throw new Error('getClientForChain not available')
+
         const client = await getClientForChain({ id: targetChainId })
         if (!client) {
           throw new Error(`Failed to get client for chain ${targetChainId}`)
@@ -161,7 +162,7 @@ function createSmartWalletAdapter(
     ) => {
       try {
         console.log('[SmartWalletAdapter] Waiting for confirmation:', txHash)
-        const publicClient = getPublicClientForChain(targetChainId)
+        const publicClient = getPublicClientForChain(targetChainId, defaultPublicClientRef.current)
         const receipt = await publicClient.waitForTransactionReceipt({
           hash: txHash as `0x${string}`,
           timeout: 60_000,
@@ -176,14 +177,12 @@ function createSmartWalletAdapter(
 
     switchChain: async (targetChainId: number) => {
       console.log('[SmartWalletAdapter] Chain switch requested to:', targetChainId)
-
-      // Update our tracked chain ID immediately
       currentChainId = targetChainId
 
-      // Try to switch the smart wallet client chain
       try {
-        const newClient = await getClientForChain({ id: targetChainId })
-        if (newClient) {
+        const getClientForChain = getClientForChainRef.current
+        if (getClientForChain) {
+          await getClientForChain({ id: targetChainId })
           console.log('[SmartWalletAdapter] Switched to chain:', targetChainId)
         }
       } catch (error) {
@@ -199,7 +198,9 @@ function createSmartWalletAdapter(
       try {
         console.log('[SmartWalletAdapter] Sending batch transaction on chain:', targetChainId)
 
-        // Get smart wallet client for the target chain
+        const getClientForChain = getClientForChainRef.current
+        if (!getClientForChain) throw new Error('getClientForChain not available')
+
         const client = await getClientForChain({ id: targetChainId })
         if (!client) {
           throw new Error(`Failed to get client for chain ${targetChainId}`)
@@ -221,7 +222,6 @@ function createSmartWalletAdapter(
         }
         console.log('[SmartWalletAdapter] Batch transaction sent:', lastHash)
 
-        // Update current chain
         currentChainId = targetChainId
 
         return lastHash
@@ -243,37 +243,53 @@ export function RelaySwapWidget({ onSuccess, onError }: RelaySwapWidgetProps) {
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
 
   // Get the SMART WALLET address (not the EOA)
-  // The smart wallet client has an account property with the smart wallet address
   const smartWalletAddress = smartWalletClient?.account?.address as `0x${string}` | undefined
 
-  // Store getClientForChain in a ref to prevent adapter recreation
-  const getClientForChainRef = useRef(getClientForChain)
-  getClientForChainRef.current = getClientForChain
+  // ============================================
+  // CRITICAL: Use refs to store mutable dependencies
+  // This ensures the adapter can always access the latest clients
+  // without the adapter object itself changing reference
+  // ============================================
+  const getClientForChainRef = useRef<typeof getClientForChain | undefined>(undefined)
+  const publicClientRef = useRef<typeof publicClient>(publicClient)
 
-  // Create a stable getClientForChain function that uses the ref
-  const stableGetClientForChain = useCallback(
-    (args: { id: number }) => getClientForChainRef.current(args),
-    []
-  )
+  // Update refs on every render (but this doesn't trigger adapter recreation)
+  useEffect(() => {
+    getClientForChainRef.current = getClientForChain
+    publicClientRef.current = publicClient
+  })
 
-  // Create the adapted wallet for Relay SDK
-  // Use minimal dependencies to prevent recreation during transaction flow
+  // Store the adapter in a ref to maintain reference stability
+  const adapterRef = useRef<AdaptedWallet | null>(null)
+  const adapterAddressRef = useRef<string | null>(null)
+
+  // Create the adapted wallet - ONLY recreate when address changes
   const adaptedWallet = useMemo<AdaptedWallet | undefined>(() => {
-    if (!smartWalletAddress || !publicClient || !smartWalletClient) {
+    if (!smartWalletAddress) {
       return undefined
     }
 
+    // If we already have an adapter for this exact address, reuse it!
+    if (adapterRef.current && adapterAddressRef.current === smartWalletAddress) {
+      return adapterRef.current
+    }
+
     console.log('[RelaySwapWidget] Creating smart wallet adapter for:', smartWalletAddress)
-    return createSmartWalletAdapter(
-      smartWalletClient,
-      stableGetClientForChain,
-      publicClient,
+
+    const adapter = createSmartWalletAdapter(
+      getClientForChainRef,
+      publicClientRef,
       smartWalletAddress
     )
-  }, [smartWalletAddress, smartWalletClient, stableGetClientForChain, publicClient])
+
+    // Cache the adapter
+    adapterRef.current = adapter
+    adapterAddressRef.current = smartWalletAddress
+
+    return adapter
+  }, [smartWalletAddress]) // ONLY depend on address - refs are accessed inside
 
   // Create linkedWallets array for multi-wallet mode
-  // This ensures the wallet address is displayed on BOTH Sell and Buy sides
   const linkedWallets = useMemo<LinkedWallet[]>(() => {
     if (!smartWalletAddress) return []
     return [{
@@ -291,17 +307,13 @@ export function RelaySwapWidget({ onSuccess, onError }: RelaySwapWidgetProps) {
   }, [authenticated, login])
 
   // Handle linking a new wallet (required for multi-wallet mode)
-  // Since we only use one smart wallet, this just returns the existing wallet
   const handleLinkNewWallet = useCallback(async (): Promise<LinkedWallet> => {
     if (!smartWalletAddress) {
-      // Trigger login if not authenticated
       if (!authenticated) {
         login()
       }
-      // Return a placeholder - will be updated once wallet is ready
       throw new Error('Wallet not initialized')
     }
-    // Return the existing linked wallet
     return {
       address: smartWalletAddress,
       vmType: 'evm' as const,
@@ -309,20 +321,25 @@ export function RelaySwapWidget({ onSuccess, onError }: RelaySwapWidgetProps) {
     }
   }, [smartWalletAddress, authenticated, login])
 
-  // Handle swap success
+  // Handle swap success - use ref to ensure stable callback
+  const onSuccessRef = useRef(onSuccess)
+  onSuccessRef.current = onSuccess
+
   const handleSwapSuccess = useCallback((data: Execute) => {
     console.log('[RelaySwapWidget] Swap success:', data)
-    onSuccess?.(data)
-  }, [onSuccess])
+    onSuccessRef.current?.(data)
+  }, [])
 
-  // Handle swap error
+  // Handle swap error - use ref to ensure stable callback
+  const onErrorRef = useRef(onError)
+  onErrorRef.current = onError
+
   const handleSwapError = useCallback((error: string, data?: Execute) => {
     console.error('[RelaySwapWidget] Swap error:', error)
-    onError?.(error, data)
-  }, [onError])
+    onErrorRef.current?.(error, data)
+  }, [])
 
   // Show loading state while waiting for smart wallet to initialize
-  // This ensures the SwapWidget only renders once we have all the data
   if (!smartWalletAddress || !adaptedWallet) {
     return (
       <div className="relay-swap-widget flex items-center justify-center p-8">
@@ -336,21 +353,14 @@ export function RelaySwapWidget({ onSuccess, onError }: RelaySwapWidgetProps) {
 
   return (
     <div className="relay-swap-widget">
-      {/* Key forces full re-mount when wallet address changes */}
       <SwapWidget
-        key={smartWalletAddress}
         wallet={adaptedWallet}
-        // Enable multi-wallet mode to show wallet address on BOTH sides
         multiWalletSupportEnabled={true}
         linkedWallets={linkedWallets}
         onLinkNewWallet={handleLinkNewWallet}
-        // Set the destination address to be the same as the source (smart wallet)
         defaultToAddress={smartWalletAddress}
-        // Prioritize Base, Ethereum, Arbitrum in chain selector
         popularChainIds={[8453, 1, 42161]}
         supportedWalletVMs={['evm']}
-        // Set default slippage tolerance to 1% (100 basis points)
-        // This prevents swaps from failing due to price movement
         slippageTolerance={'100'}
         onConnectWallet={handleConnectWallet}
         onSwapSuccess={handleSwapSuccess}
