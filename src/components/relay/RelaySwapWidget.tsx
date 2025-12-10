@@ -140,9 +140,12 @@ function createSmartWalletAdapter(
         // CRITICAL FIX: Make Relay's dialog inert BEFORE calling Privy
         // This prevents FocusTrap from detecting focus loss when Privy opens
         document.querySelectorAll('[data-radix-portal] [role="dialog"]').forEach(dialog => {
-          dialog.setAttribute('inert', '')
-          dialogs.push(dialog)
-          console.log('[SmartWalletAdapter] Made Relay dialog inert')
+          // Check if already inert
+          if (!dialog.hasAttribute('inert')) {
+            dialog.setAttribute('inert', '')
+            dialogs.push(dialog)
+            console.log('[SmartWalletAdapter] Made Relay dialog inert')
+          }
         })
 
         // Also hide the dialog overlay to prevent visual conflicts
@@ -182,6 +185,10 @@ function createSmartWalletAdapter(
         dialogs.forEach(dialog => {
           dialog.removeAttribute('inert')
         })
+        
+        // Restore visual state
+        // NOTE: We don't restore opacity here because the swap might still be in progress
+        // and we want Relay to stay hidden while we show our success modal or loading state
       }
     },
 
@@ -236,9 +243,11 @@ function createSmartWalletAdapter(
 
         // CRITICAL FIX: Make Relay's dialog inert BEFORE calling Privy
         document.querySelectorAll('[data-radix-portal] [role="dialog"]').forEach(dialog => {
-          dialog.setAttribute('inert', '')
-          dialogs.push(dialog)
-          console.log('[SmartWalletAdapter] Made Relay dialog inert (batch)')
+          if (!dialog.hasAttribute('inert')) {
+            dialog.setAttribute('inert', '')
+            dialogs.push(dialog)
+            console.log('[SmartWalletAdapter] Made Relay dialog inert (batch)')
+          }
         })
 
         document.querySelectorAll('[data-radix-portal]').forEach(portal => {
