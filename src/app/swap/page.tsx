@@ -233,126 +233,47 @@ const swapStyles = `
   }
 
   /* ============================================
-     TOKEN SELECTOR - Compact red button with ellipsis
+     TOKEN SELECTOR - Red background only
+     Let Relay handle ALL sizing/layout
      ============================================ */
   .relay-swap-widget [class*="widget-selector-background"] {
     background: #ef4444 !important;
-    height: 40px !important;
-    min-height: 40px !important;
-    max-height: 40px !important;
-    padding: 4px 8px 4px 4px !important;
-    border-radius: 20px !important;
-    gap: 4px !important;
-    max-width: 140px !important;
-    overflow: hidden !important;
   }
 
   .relay-swap-widget [class*="widget-selector-background"]:hover {
     background: #dc2626 !important;
   }
 
-  /* Token icon - compact 28px */
-  .relay-swap-widget [class*="widget-selector-background"] img {
-    width: 28px !important;
-    height: 28px !important;
-    min-width: 28px !important;
-    min-height: 28px !important;
-    flex-shrink: 0 !important;
-  }
-
-  /* Chain badge - small overlay */
-  .relay-swap-widget [class*="widget-selector-background"] [class*="rounded_4"],
-  .relay-swap-widget [class*="widget-selector-background"] [class*="pos_absolute"] {
-    width: 12px !important;
-    height: 12px !important;
-    min-width: 12px !important;
-    min-height: 12px !important;
-  }
-
-  .relay-swap-widget [class*="widget-selector-background"] [class*="rounded_4"] img,
-  .relay-swap-widget [class*="widget-selector-background"] [class*="pos_absolute"] img {
-    width: 12px !important;
-    height: 12px !important;
-    min-width: 12px !important;
-    min-height: 12px !important;
-  }
-
-  /* Token name - compact with ellipsis */
-  .relay-swap-widget [class*="widget-selector-background"] [class*="fw_700"],
-  .relay-swap-widget [class*="widget-selector-background"] [class*="fs_16"] {
-    font-size: 13px !important;
-    font-weight: 600 !important;
-    line-height: 1.1 !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    max-width: 70px !important;
-  }
-
-  /* Chain name - smaller with ellipsis */
-  .relay-swap-widget [class*="widget-selector-background"] [class*="text_subtle"],
-  .relay-swap-widget [class*="widget-selector-background"] [class*="fs_12"] {
-    font-size: 10px !important;
-    line-height: 1.1 !important;
-    color: rgba(255, 255, 255, 0.7) !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    max-width: 70px !important;
-  }
-
-  /* All text white */
   .relay-swap-widget [class*="widget-selector-background"] * {
     color: #ffffff !important;
   }
 
-  /* Chevron - compact */
-  .relay-swap-widget [class*="widget-selector-background"] svg {
-    width: 14px !important;
-    height: 14px !important;
-    flex-shrink: 0 !important;
+  .relay-swap-widget [class*="widget-selector-background"] [class*="text_subtle"] {
+    color: rgba(255, 255, 255, 0.75) !important;
   }
 
   /* ============================================
-     20% 50% MAX BUTTONS - 2x smaller
+     20% 50% MAX BUTTONS - Red fill
      ============================================ */
   .relay-swap-widget button[class*="fs_12"][class*="fw_500"] {
-    height: 18px !important;
-    min-height: 18px !important;
-    max-height: 18px !important;
-    padding: 0 6px !important;
-    font-size: 9px !important;
-    font-weight: 500 !important;
-    border-radius: 4px !important;
     background: #ef4444 !important;
     border: none !important;
-    line-height: 1 !important;
   }
 
   .relay-swap-widget button[class*="fs_12"][class*="fw_500"]:hover {
     background: #dc2626 !important;
   }
 
-  .relay-swap-widget button[class*="fs_12"][class*="fw_500"] span {
-    font-size: 9px !important;
+  .relay-swap-widget button[class*="fs_12"][class*="fw_500"] * {
     color: #ffffff !important;
   }
 
   /* ============================================
-     SWAP ARROW - Compact red square
+     SWAP ARROW - Red background
      ============================================ */
   .relay-swap-widget button[class*="rounded_12"][class*="p_2"] {
-    width: 28px !important;
-    height: 28px !important;
-    min-width: 28px !important;
-    min-height: 28px !important;
-    padding: 0 !important;
     background: #ef4444 !important;
     border: none !important;
-    border-radius: 6px !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
   }
 
   .relay-swap-widget button[class*="rounded_12"][class*="p_2"]:hover {
@@ -360,8 +281,6 @@ const swapStyles = `
   }
 
   .relay-swap-widget button[class*="rounded_12"][class*="p_2"] svg {
-    width: 14px !important;
-    height: 14px !important;
     color: #ffffff !important;
   }
 
@@ -437,7 +356,7 @@ const swapStyles = `
   }
 
   /* ============================================
-     PRIVY MODAL - Highest z-index, NO blur, fully interactive
+     PRIVY MODAL - Highest z-index, fully interactive
      ============================================ */
   [data-privy-dialog],
   .privy-dialog,
@@ -453,50 +372,22 @@ const swapStyles = `
   [data-privy-wallet-modal] {
     z-index: 2147483647 !important;
     filter: none !important;
-    -webkit-filter: none !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
     opacity: 1 !important;
     pointer-events: auto !important;
-    isolation: isolate !important;
   }
 
-  /* Privy backdrop - solid, no blur */
   div[class*="privy"][class*="overlay"],
   div[class*="privy"][class*="backdrop"],
   [data-privy-backdrop] {
     z-index: 2147483646 !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-    background: rgba(0, 0, 0, 0.5) !important;
   }
 
-  /* Privy iframe - crisp, no filters */
   iframe[src*="privy"],
   iframe[id*="privy"] {
     z-index: 2147483647 !important;
     filter: none !important;
-    -webkit-filter: none !important;
     opacity: 1 !important;
     pointer-events: auto !important;
-  }
-
-  /* When Privy is open, hide the noise overlay that causes blur */
-  body:has([data-privy-dialog]) .noise-overlay,
-  body:has([class*="privy"]) .noise-overlay,
-  body:has(iframe[src*="privy"]) .noise-overlay {
-    display: none !important;
-  }
-
-  /* Ensure Privy content never inherits blur */
-  [data-privy-dialog] *,
-  [class*="PrivyDialog"] *,
-  [class*="PrivyModal"] *,
-  div[class*="privy"] * {
-    filter: none !important;
-    -webkit-filter: none !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
   }
 
   /* ============================================
