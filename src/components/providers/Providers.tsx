@@ -168,6 +168,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
                 baseApiUrl: MAINNET_RELAY_API,
                 source: 'bands.cash',
                 chains: [base, arbitrum, optimism, mainnet].map(convertViemChainToRelayChain),
+                // Dune API key enables "Your Tokens" feature to show wallet balances
+                // Get a free key at https://dune.com/settings/api
+                duneConfig: process.env.NEXT_PUBLIC_DUNE_API_KEY ? {
+                  apiKey: process.env.NEXT_PUBLIC_DUNE_API_KEY,
+                } : undefined,
               }}
               theme={bandsTheme}
             >
