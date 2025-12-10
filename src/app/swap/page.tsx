@@ -404,6 +404,23 @@ const swapStyles = `
     -webkit-filter: none !important;
   }
 
+  /* When Privy modal is open, disable blur on aura elements
+     This prevents the aura blur from affecting Privy modal rendering */
+  body:has(iframe[src*="privy.io"]) .aura,
+  body:has(iframe[src*="privy"]) .aura,
+  body:has([data-privy-dialog]) .aura {
+    filter: none !important;
+    -webkit-filter: none !important;
+    opacity: 0.2 !important;
+  }
+
+  /* Also ensure the main content doesn't have any blur effects */
+  body:has(iframe[src*="privy"]) .swap-page,
+  body:has([data-privy-dialog]) .swap-page {
+    filter: none !important;
+    -webkit-filter: none !important;
+  }
+
   /* ============================================
      SUCCESS MODAL
      ============================================ */

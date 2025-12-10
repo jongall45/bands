@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useCallback } from 'react'
+import { useMemo, useCallback, useRef } from 'react'
 import { SwapWidget } from '@relayprotocol/relay-kit-ui'
 import type { LinkedWallet } from '@relayprotocol/relay-kit-ui'
 import { usePublicClient } from 'wagmi'
@@ -246,25 +246,31 @@ export function RelaySwapWidget({ onSuccess, onError }: RelaySwapWidgetProps) {
   // The smart wallet client has an account property with the smart wallet address
   const smartWalletAddress = smartWalletClient?.account?.address as `0x${string}` | undefined
 
-  // Log both addresses to help debug
-  console.log('[RelaySwapWidget] EOA address:', embeddedWallet?.address)
-  console.log('[RelaySwapWidget] Smart wallet address:', smartWalletAddress)
+  // Store getClientForChain in a ref to prevent adapter recreation
+  const getClientForChainRef = useRef(getClientForChain)
+  getClientForChainRef.current = getClientForChain
+
+  // Create a stable getClientForChain function that uses the ref
+  const stableGetClientForChain = useCallback(
+    (args: { id: number }) => getClientForChainRef.current(args),
+    []
+  )
 
   // Create the adapted wallet for Relay SDK
+  // Use minimal dependencies to prevent recreation during transaction flow
   const adaptedWallet = useMemo<AdaptedWallet | undefined>(() => {
     if (!smartWalletAddress || !publicClient || !smartWalletClient) {
-      console.log('[RelaySwapWidget] Missing deps - smartWalletAddress:', !!smartWalletAddress, 'publicClient:', !!publicClient, 'smartWalletClient:', !!smartWalletClient)
       return undefined
     }
 
     console.log('[RelaySwapWidget] Creating smart wallet adapter for:', smartWalletAddress)
     return createSmartWalletAdapter(
       smartWalletClient,
-      getClientForChain,
+      stableGetClientForChain,
       publicClient,
       smartWalletAddress
     )
-  }, [smartWalletAddress, smartWalletClient, getClientForChain, publicClient])
+  }, [smartWalletAddress, smartWalletClient, stableGetClientForChain, publicClient])
 
   // Create linkedWallets array for multi-wallet mode
   // This ensures the wallet address is displayed on BOTH Sell and Buy sides
