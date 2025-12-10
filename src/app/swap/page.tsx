@@ -229,31 +229,31 @@ const swapStyles = `
   }
 
   /* ============================================
-     20% 50% MAX BUTTONS - WHITE TEXT, TINY
+     20% 50% MAX BUTTONS - TINY PILLS
      ============================================ */
   .relay-swap-widget button[class*="fs_12"][class*="fw_500"] {
-    height: 18px !important;
-    min-height: 18px !important;
-    max-height: 18px !important;
-    padding: 0 5px !important;
-    font-size: 9px !important;
+    height: 16px !important;
+    min-height: 16px !important;
+    max-height: 16px !important;
+    padding: 0 4px !important;
+    font-size: 8px !important;
     font-weight: 500 !important;
-    border-radius: 4px !important;
+    border-radius: 3px !important;
     background: transparent !important;
-    border: 1px solid rgba(255, 255, 255, 0.2) !important;
-    color: rgba(255, 255, 255, 0.8) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    color: rgba(255, 255, 255, 0.7) !important;
     text-transform: none !important;
-    margin-left: 4px !important;
+    margin-left: 3px !important;
   }
 
   .relay-swap-widget button[class*="fs_12"][class*="fw_500"]:hover {
-    background: rgba(255, 255, 255, 0.1) !important;
-    border-color: rgba(255, 255, 255, 0.3) !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.25) !important;
   }
 
   .relay-swap-widget button[class*="fs_12"][class*="fw_500"] span {
-    color: rgba(255, 255, 255, 0.8) !important;
-    font-size: 9px !important;
+    color: rgba(255, 255, 255, 0.7) !important;
+    font-size: 8px !important;
   }
 
   /* ============================================
@@ -291,15 +291,17 @@ const swapStyles = `
   }
 
   /* ============================================
-     TOKEN SELECTOR BUTTONS - Smaller, sleeker
+     TOKEN SELECTOR BUTTONS - Compact with overflow handling
      ============================================ */
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] {
-    height: 28px !important;
-    min-height: 28px !important;
-    padding: 0 8px !important;
-    font-size: 11px !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    max-width: 140px !important;
+    padding: 4px 8px !important;
+    font-size: 10px !important;
     border-radius: 6px !important;
     background: #ef4444 !important;
+    overflow: hidden !important;
   }
 
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"]::before {
@@ -308,15 +310,27 @@ const swapStyles = `
 
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] span {
     color: #ffffff !important;
-    font-size: 11px !important;
+    font-size: 10px !important;
     font-weight: 500 !important;
     text-transform: none !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 80px !important;
   }
 
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] svg {
     color: #ffffff !important;
-    width: 12px !important;
-    height: 12px !important;
+    width: 10px !important;
+    height: 10px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Token icon inside selector - smaller */
+  .relay-swap-widget button[class*="bg_primary"][class*="gap_"] img {
+    width: 18px !important;
+    height: 18px !important;
+    flex-shrink: 0 !important;
   }
 
   /* ============================================
