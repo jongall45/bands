@@ -257,19 +257,20 @@ const swapStyles = `
   }
 
   /* ============================================
-     SWAP ARROW - VERY SMALL
+     SWAP ARROW - 20x20px VERY SMALL
      ============================================ */
   .relay-swap-widget button[class*="rounded_12"][class*="p_2"],
-  .relay-swap-widget button[class*="rounded_12"][class*="bg_primary"]:not([class*="gap_"]):not([class*="w_max"]) {
-    width: 24px !important;
-    height: 24px !important;
-    min-width: 24px !important;
-    min-height: 24px !important;
-    max-width: 24px !important;
-    max-height: 24px !important;
+  .relay-swap-widget button[class*="rounded_12"][class*="bg_primary"]:not([class*="gap_"]):not([class*="w_max"]),
+  .relay-swap-widget button[class*="rounded_"][class*="bg_primary"]:not([class*="gap_"]):not([class*="w_max"]):not([class*="h_50"]) {
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+    min-height: 20px !important;
+    max-width: 20px !important;
+    max-height: 20px !important;
     padding: 0 !important;
     margin: 0 auto !important;
-    border-radius: 6px !important;
+    border-radius: 5px !important;
     background: rgba(255, 255, 255, 0.05) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
     box-shadow: none !important;
@@ -280,9 +281,10 @@ const swapStyles = `
     background: rgba(255, 255, 255, 0.08) !important;
   }
 
-  .relay-swap-widget button[class*="rounded_12"] svg {
-    width: 12px !important;
-    height: 12px !important;
+  .relay-swap-widget button[class*="rounded_12"] svg,
+  .relay-swap-widget button[class*="rounded_"] svg:not([class*="token"]) {
+    width: 10px !important;
+    height: 10px !important;
     color: rgba(255, 255, 255, 0.4) !important;
   }
 
@@ -327,23 +329,30 @@ const swapStyles = `
   }
 
   /* ============================================
-     CTA BUTTON - FULL WIDTH, SLICK
+     CTA BUTTON - FULL WIDTH, PROMINENT
+     Target the main action button at the bottom
      ============================================ */
   .relay-swap-widget button[class*="w_max"][class*="h_50"],
   .relay-swap-widget button[class*="min-h_50"][class*="w_max"],
   .relay-swap-widget button[class*="shrink_0"][class*="h_50"],
-  .relay-swap-widget button[class*="w_max-content"][class*="h_50"] {
-    height: 48px !important;
-    min-height: 48px !important;
+  .relay-swap-widget button[class*="w_max-content"][class*="h_50"],
+  .relay-swap-widget > div > div > button[class*="h_50"],
+  .relay-swap-widget > div > button[class*="h_50"],
+  .relay-swap-widget button[class*="h_50"][class*="bg_primary"],
+  .relay-swap-widget button[class*="h_50"][class*="shrink"],
+  .relay-swap-widget button[class*="h_"][class*="shrink_0"]:last-of-type {
+    height: 52px !important;
+    min-height: 52px !important;
     width: 100% !important;
+    min-width: 100% !important;
     max-width: 100% !important;
-    border-radius: 14px !important;
+    border-radius: 16px !important;
     background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
-    font-size: 15px !important;
+    font-size: 16px !important;
     font-weight: 600 !important;
     color: #ffffff !important;
     border: none !important;
-    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.3) !important;
+    box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4) !important;
     cursor: pointer !important;
     pointer-events: auto !important;
     position: relative !important;
@@ -353,23 +362,26 @@ const swapStyles = `
     opacity: 1 !important;
     visibility: visible !important;
     letter-spacing: 0.02em !important;
+    margin-top: 8px !important;
   }
 
   .relay-swap-widget button[class*="w_max"][class*="h_50"]:hover,
-  .relay-swap-widget button[class*="shrink_0"][class*="h_50"]:hover {
+  .relay-swap-widget button[class*="shrink_0"][class*="h_50"]:hover,
+  .relay-swap-widget button[class*="h_50"][class*="bg_primary"]:hover {
     background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
-    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4) !important;
+    box-shadow: 0 6px 24px rgba(239, 68, 68, 0.5) !important;
     transform: translateY(-1px) !important;
   }
 
   .relay-swap-widget button[class*="w_max"][class*="h_50"] span,
   .relay-swap-widget button[class*="min-h_50"] span,
-  .relay-swap-widget button[class*="shrink_0"][class*="h_50"] span {
+  .relay-swap-widget button[class*="shrink_0"][class*="h_50"] span,
+  .relay-swap-widget button[class*="h_50"] span {
     color: #ffffff !important;
     font-weight: 600 !important;
     text-transform: none !important;
     font-style: normal !important;
-    font-size: 15px !important;
+    font-size: 16px !important;
   }
 
   /* ============================================

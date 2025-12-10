@@ -66,11 +66,11 @@ function createSmartWalletAdapter(
     vmType: 'evm',
 
     // Return the CURRENT chain (updates after switchChain)
+    // IMPORTANT: Do NOT read from smartWalletClient.chain.id here!
+    // The closure holds a stale reference that doesn't update when getClientForChain is called.
+    // We track the chain ourselves via currentChainId which is updated in switchChain().
     getChainId: async () => {
-      // Try to get from smart wallet client if available
-      if (smartWalletClient?.chain?.id) {
-        currentChainId = smartWalletClient.chain.id
-      }
+      console.log('[SmartWalletAdapter] getChainId returning:', currentChainId)
       return currentChainId
     },
 
