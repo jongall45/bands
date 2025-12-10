@@ -319,14 +319,42 @@ const swapStyles = `
     max-height: 24px !important;
   }
 
-  /* Token icon image inside selector */
-  .relay-swap-widget button[data-testid="origin-token-select-button"] img,
-  .relay-swap-widget button[data-testid="destination-token-select-button"] img {
+  /* Token icon image inside selector - main token icon */
+  .relay-swap-widget button[data-testid="origin-token-select-button"] img:first-of-type,
+  .relay-swap-widget button[data-testid="destination-token-select-button"] img:first-of-type {
     width: 24px !important;
     height: 24px !important;
     min-width: 24px !important;
     min-height: 24px !important;
     border-radius: 50% !important;
+  }
+
+  /* Chain badge - small circle overlapping token icon */
+  .relay-swap-widget button[data-testid="origin-token-select-button"] img:not(:first-of-type),
+  .relay-swap-widget button[data-testid="destination-token-select-button"] img:not(:first-of-type),
+  .relay-swap-widget button[data-testid="origin-token-select-button"] div[class*="pos_absolute"] img,
+  .relay-swap-widget button[data-testid="destination-token-select-button"] div[class*="pos_absolute"] img,
+  .relay-swap-widget button[data-testid="origin-token-select-button"] [class*="rounded_4"] img,
+  .relay-swap-widget button[data-testid="destination-token-select-button"] [class*="rounded_4"] img {
+    width: 10px !important;
+    height: 10px !important;
+    min-width: 10px !important;
+    min-height: 10px !important;
+    max-width: 10px !important;
+    max-height: 10px !important;
+    border-radius: 2px !important;
+  }
+
+  /* Chain badge container - position it properly */
+  .relay-swap-widget button[data-testid="origin-token-select-button"] div[class*="pos_absolute"],
+  .relay-swap-widget button[data-testid="destination-token-select-button"] div[class*="pos_absolute"],
+  .relay-swap-widget button[data-testid="origin-token-select-button"] [class*="rounded_4"],
+  .relay-swap-widget button[data-testid="destination-token-select-button"] [class*="rounded_4"] {
+    width: 10px !important;
+    height: 10px !important;
+    min-width: 10px !important;
+    min-height: 10px !important;
+    padding: 0 !important;
   }
 
   /* Token name text - override relay-fs_16 */
