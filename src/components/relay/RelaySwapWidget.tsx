@@ -34,11 +34,13 @@ function createSmartWalletAdapter(
   smartWalletClient: any,
   getClientForChain: (args: { id: number }) => Promise<any>,
   defaultPublicClient: any,
-  smartWalletAddress: `0x${string}`,
-  chainId: number
+  smartWalletAddress: `0x${string}`
 ): AdaptedWallet {
   // Cache for public clients per chain
   const publicClientCache: Record<number, any> = {}
+
+  // Track current chain - starts with default but updates on switchChain
+  let currentChainId = defaultPublicClient?.chain?.id || 8453
 
   // Get or create a public client for a specific chain
   const getPublicClientForChain = (targetChainId: number) => {
@@ -63,7 +65,14 @@ function createSmartWalletAdapter(
   return {
     vmType: 'evm',
 
-    getChainId: async () => chainId,
+    // Return the CURRENT chain (updates after switchChain)
+    getChainId: async () => {
+      // Try to get from smart wallet client if available
+      if (smartWalletClient?.chain?.id) {
+        currentChainId = smartWalletClient.chain.id
+      }
+      return currentChainId
+    },
 
     // IMPORTANT: Return the smart wallet address, not the EOA
     address: async () => smartWalletAddress,
@@ -118,15 +127,13 @@ function createSmartWalletAdapter(
       try {
         console.log('[SmartWalletAdapter] Sending transaction via smart wallet...')
         console.log('  Target chain:', targetChainId)
+        console.log('  Current chain:', currentChainId)
         console.log('  To:', item.data?.to)
 
-        // Get smart wallet client for the target chain
-        let client = smartWalletClient
-        if (targetChainId !== chainId) {
-          const chainClient = await getClientForChain({ id: targetChainId })
-          if (chainClient) {
-            client = chainClient
-          }
+        // ALWAYS get a client for the target chain
+        const client = await getClientForChain({ id: targetChainId })
+        if (!client) {
+          throw new Error(`Failed to get client for chain ${targetChainId}`)
         }
 
         const txRequest = {
@@ -137,6 +144,10 @@ function createSmartWalletAdapter(
 
         const hash = await client.sendTransaction(txRequest)
         console.log('[SmartWalletAdapter] Transaction sent:', hash)
+
+        // Update current chain after successful tx
+        currentChainId = targetChainId
+
         return hash
       } catch (error) {
         console.error('[SmartWalletAdapter] sendTransaction error:', error)
@@ -165,10 +176,20 @@ function createSmartWalletAdapter(
 
     switchChain: async (targetChainId: number) => {
       console.log('[SmartWalletAdapter] Chain switch requested to:', targetChainId)
-      // Use Privy's switchChain if available
-      if (smartWalletClient.switchChain) {
-        await smartWalletClient.switchChain({ id: targetChainId })
+
+      // Update our tracked chain ID immediately
+      currentChainId = targetChainId
+
+      // Try to switch the smart wallet client chain
+      try {
+        const newClient = await getClientForChain({ id: targetChainId })
+        if (newClient) {
+          console.log('[SmartWalletAdapter] Switched to chain:', targetChainId)
+        }
+      } catch (error) {
+        console.warn('[SmartWalletAdapter] Chain switch warning:', error)
       }
+
       return
     },
 
@@ -176,15 +197,12 @@ function createSmartWalletAdapter(
 
     handleBatchTransactionStep: async (targetChainId: number, items: any[]) => {
       try {
-        console.log('[SmartWalletAdapter] Sending batch transaction...')
+        console.log('[SmartWalletAdapter] Sending batch transaction on chain:', targetChainId)
 
         // Get smart wallet client for the target chain
-        let client = smartWalletClient
-        if (targetChainId !== chainId) {
-          const chainClient = await getClientForChain({ id: targetChainId })
-          if (chainClient) {
-            client = chainClient
-          }
+        const client = await getClientForChain({ id: targetChainId })
+        if (!client) {
+          throw new Error(`Failed to get client for chain ${targetChainId}`)
         }
 
         const calls = items.map(item => ({
@@ -202,6 +220,10 @@ function createSmartWalletAdapter(
           }
         }
         console.log('[SmartWalletAdapter] Batch transaction sent:', lastHash)
+
+        // Update current chain
+        currentChainId = targetChainId
+
         return lastHash
       } catch (error) {
         console.error('[SmartWalletAdapter] batchTransaction error:', error)
@@ -240,8 +262,7 @@ export function RelaySwapWidget({ onSuccess, onError }: RelaySwapWidgetProps) {
       smartWalletClient,
       getClientForChain,
       publicClient,
-      smartWalletAddress,
-      publicClient.chain?.id || 8453
+      smartWalletAddress
     )
   }, [smartWalletAddress, smartWalletClient, getClientForChain, publicClient])
 
