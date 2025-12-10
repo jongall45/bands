@@ -253,11 +253,16 @@ const swapStyles = `
   }
 
   /* ============================================
-     20% 50% MAX BUTTONS - Red fill
+     20% 50% MAX BUTTONS - Smaller (2x reduction)
      ============================================ */
   .relay-swap-widget button[class*="fs_12"][class*="fw_500"] {
     background: #ef4444 !important;
     border: none !important;
+    height: 20px !important;
+    min-height: 20px !important;
+    padding: 0 8px !important;
+    font-size: 10px !important;
+    border-radius: 6px !important;
   }
 
   .relay-swap-widget button[class*="fs_12"][class*="fw_500"]:hover {
@@ -266,6 +271,7 @@ const swapStyles = `
 
   .relay-swap-widget button[class*="fs_12"][class*="fw_500"] * {
     color: #ffffff !important;
+    font-size: 10px !important;
   }
 
   /* ============================================
@@ -357,6 +363,7 @@ const swapStyles = `
 
   /* ============================================
      PRIVY MODAL - Highest z-index, fully interactive
+     CRITICAL: Remove ALL blur/filter effects
      ============================================ */
   [data-privy-dialog],
   .privy-dialog,
@@ -372,22 +379,44 @@ const swapStyles = `
   [data-privy-wallet-modal] {
     z-index: 2147483647 !important;
     filter: none !important;
+    -webkit-filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
     opacity: 1 !important;
     pointer-events: auto !important;
+    isolation: isolate !important;
+    transform: translateZ(0) !important;
   }
 
   div[class*="privy"][class*="overlay"],
   div[class*="privy"][class*="backdrop"],
   [data-privy-backdrop] {
     z-index: 2147483646 !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 
   iframe[src*="privy"],
   iframe[id*="privy"] {
     z-index: 2147483647 !important;
     filter: none !important;
+    -webkit-filter: none !important;
     opacity: 1 !important;
     pointer-events: auto !important;
+  }
+
+  /* When Privy modal is open, remove blur from noise overlay */
+  body:has([data-privy-dialog]) .noise-overlay,
+  body:has(div[class*="privy"]) .noise-overlay {
+    filter: none !important;
+    backdrop-filter: none !important;
+    opacity: 0 !important;
+  }
+
+  /* Ensure Relay modals don't blur Privy */
+  .relay-swap-widget [role="dialog"] {
+    filter: none !important;
+    backdrop-filter: none !important;
   }
 
   /* ============================================
