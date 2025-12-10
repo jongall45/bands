@@ -291,21 +291,21 @@ const swapStyles = `
   }
 
   /* ============================================
-     TOKEN SELECTOR BUTTONS - Properly sized with visible content
+     TOKEN SELECTOR BUTTONS - Tiny compact version
      ============================================ */
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] {
-    height: 36px !important;
-    min-height: 36px !important;
+    height: 24px !important;
+    min-height: 24px !important;
     min-width: fit-content !important;
-    max-width: 160px !important;
-    padding: 6px 10px !important;
-    font-size: 12px !important;
-    border-radius: 8px !important;
+    max-width: 100px !important;
+    padding: 3px 6px !important;
+    font-size: 6px !important;
+    border-radius: 6px !important;
     background: #ef4444 !important;
     overflow: visible !important;
     display: flex !important;
     align-items: center !important;
-    gap: 6px !important;
+    gap: 3px !important;
   }
 
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"]::before {
@@ -322,34 +322,34 @@ const swapStyles = `
 
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] span {
     color: #ffffff !important;
-    font-size: 12px !important;
+    font-size: 6px !important;
     font-weight: 600 !important;
     text-transform: none !important;
     white-space: nowrap !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
-    max-width: 90px !important;
+    max-width: 60px !important;
   }
 
   /* Chain name under token - smaller gray text */
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] span[class*="subtle"],
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] span:last-child {
-    font-size: 9px !important;
+    font-size: 5px !important;
     font-weight: 400 !important;
     color: rgba(255, 255, 255, 0.65) !important;
   }
 
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] svg {
     color: #ffffff !important;
-    width: 12px !important;
-    height: 12px !important;
+    width: 6px !important;
+    height: 6px !important;
     flex-shrink: 0 !important;
   }
 
   /* Token icon inside selector */
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] img {
-    width: 22px !important;
-    height: 22px !important;
+    width: 11px !important;
+    height: 11px !important;
     flex-shrink: 0 !important;
     border-radius: 50% !important;
   }
@@ -452,17 +452,17 @@ const swapStyles = `
   }
 
   /* ============================================
-     RELAY MODAL - Lower z-index so Privy appears above
+     RELAY MODAL - Set base z-index for modals
      ============================================ */
   .relay-swap-widget [role="dialog"],
   .relay-swap-widget [data-radix-portal],
-  div[data-radix-portal]:has(.relay-swap-widget),
   [data-radix-popper-content-wrapper] {
-    z-index: 10000 !important;
+    z-index: 50000 !important;
   }
 
   /* ============================================
      PRIVY MODAL - Must appear above Relay modal
+     Higher z-index ensures Privy approval shows on top
      ============================================ */
   [data-privy-dialog],
   .privy-dialog,
@@ -473,16 +473,16 @@ const swapStyles = `
   iframe[title*="privy"],
   div[data-privy-dialog-container],
   #privy-modal-content,
-  #privy-dialog {
-    z-index: 99999999 !important;
-    position: relative !important;
+  #privy-dialog,
+  [class*="PrivyDialog"],
+  [class*="privy-connect"] {
+    z-index: 100000 !important;
   }
 
   /* Privy overlay/backdrop */
   div[class*="privy"][class*="overlay"],
-  div[class*="privy"][class*="backdrop"],
-  [data-privy-dialog] ~ div {
-    z-index: 99999998 !important;
+  div[class*="privy"][class*="backdrop"] {
+    z-index: 99999 !important;
   }
 
   /* ============================================
