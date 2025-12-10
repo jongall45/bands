@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useWallets } from '@privy-io/react-auth'
-import { Repeat, RefreshCw } from 'lucide-react'
+import { Repeat, RefreshCw, CheckCircle, X } from 'lucide-react'
 import { RelaySwapWidget } from '@/components/relay/RelaySwapWidget'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
@@ -13,6 +13,8 @@ export default function SwapPage() {
   const router = useRouter()
   const { wallets } = useWallets()
   const [recentTx, setRecentTx] = useState<string | null>(null)
+  const [showSuccess, setShowSuccess] = useState(false)
+  const [swapDetails, setSwapDetails] = useState<{ txHash: string } | null>(null)
 
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
   const isConnected = !!embeddedWallet
@@ -32,7 +34,10 @@ export default function SwapPage() {
       const items = step?.items || []
       for (const item of items) {
         if (item?.txHashes && item.txHashes.length > 0) {
-          setRecentTx(item.txHashes[0].txHash)
+          const txHash = item.txHashes[0].txHash
+          setRecentTx(txHash)
+          setSwapDetails({ txHash })
+          setShowSuccess(true)
           return
         }
       }
@@ -41,6 +46,11 @@ export default function SwapPage() {
 
   const handleError = (error: string) => {
     console.error('[SwapPage] Error:', error)
+  }
+
+  const closeSuccessModal = () => {
+    setShowSuccess(false)
+    setSwapDetails(null)
   }
 
   if (!isConnected) {
@@ -85,22 +95,6 @@ export default function SwapPage() {
           </div>
         </div>
 
-        {recentTx && (
-          <div className="px-5 mt-4">
-            <div className="bg-green-500/10 border border-green-500/20 rounded-2xl p-4">
-              <p className="text-green-400 text-sm font-medium">Transaction Submitted</p>
-              <a
-                href={`https://basescan.org/tx/${recentTx}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-green-400/60 text-xs hover:underline mt-1 block font-mono"
-              >
-                {recentTx.slice(0, 10)}...{recentTx.slice(-8)} →
-              </a>
-            </div>
-          </div>
-        )}
-
         <div className="px-5 mt-6">
           <div className="flex items-center justify-center gap-2 text-gray-400 text-xs">
             <Repeat className="w-3 h-3" />
@@ -108,6 +102,33 @@ export default function SwapPage() {
           </div>
         </div>
       </div>
+
+      {/* Success Modal - shown after transaction completes */}
+      {showSuccess && swapDetails && (
+        <div className="swap-success-modal" onClick={closeSuccessModal}>
+          <div className="swap-success-content" onClick={(e) => e.stopPropagation()}>
+            <button className="swap-success-close" onClick={closeSuccessModal}>
+              <X className="w-5 h-5" />
+            </button>
+            <div className="swap-success-icon">
+              <CheckCircle className="w-10 h-10" />
+            </div>
+            <h3 className="swap-success-title">Swap Successful!</h3>
+            <p className="swap-success-subtitle">Your transaction has been confirmed</p>
+            <a
+              href={`https://basescan.org/tx/${swapDetails.txHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="swap-success-link"
+            >
+              View on Explorer →
+            </a>
+            <button className="swap-success-button" onClick={closeSuccessModal}>
+              Done
+            </button>
+          </div>
+        </div>
+      )}
 
       <BottomNav />
       <style jsx global>{swapStyles}</style>
@@ -190,70 +211,69 @@ const swapStyles = `
   }
 
   /* ============================================
-     MAIN WIDGET - AGGRESSIVE OVERRIDES
+     MAIN WIDGET CONTAINER - Dark background
      ============================================ */
-  .relay-swap-widget,
-  .relay-swap-widget * {
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif !important;
-  }
-
   .relay-swap-widget > div {
     background: rgba(10, 10, 10, 0.98) !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
     border-radius: 22px !important;
     border: none !important;
-    padding: 16px !important;
   }
 
   /* ============================================
-     ALL TEXT WHITE
+     TEXT COLORS - White for dark theme
      ============================================ */
   .relay-swap-widget span,
   .relay-swap-widget p,
-  .relay-swap-widget label,
-  .relay-swap-widget div {
+  .relay-swap-widget label {
     color: #ffffff !important;
   }
 
-  /* Sell/Buy labels - white */
-  .relay-swap-widget span[class*="text_subtle"],
-  .relay-swap-widget p[class*="text_subtle"] {
+  .relay-swap-widget [class*="text_subtle"] {
     color: rgba(255,255,255,0.6) !important;
   }
 
-  /* Balance text - white */
-  .relay-swap-widget span[class*="fs_12"],
-  .relay-swap-widget span[class*="fs_14"] {
-    color: rgba(255,255,255,0.7) !important;
+  /* ============================================
+     TOKEN SELECTOR - Red background only
+     Let Relay handle ALL sizing/layout
+     ============================================ */
+  .relay-swap-widget [class*="widget-selector-background"] {
+    background: #ef4444 !important;
+  }
+
+  .relay-swap-widget [class*="widget-selector-background"]:hover {
+    background: #dc2626 !important;
+  }
+
+  .relay-swap-widget [class*="widget-selector-background"] * {
+    color: #ffffff !important;
+  }
+
+  .relay-swap-widget [class*="widget-selector-background"] [class*="text_subtle"] {
+    color: rgba(255, 255, 255, 0.75) !important;
   }
 
   /* ============================================
-     20% 50% MAX BUTTONS - Match Relay sizing, red accent
+     20% 50% MAX BUTTONS - Red fill
      ============================================ */
   .relay-swap-widget button[class*="fs_12"][class*="fw_500"] {
     background: #ef4444 !important;
     border: none !important;
-    color: #ffffff !important;
-    /* Let Relay handle native sizing */
   }
 
   .relay-swap-widget button[class*="fs_12"][class*="fw_500"]:hover {
     background: #dc2626 !important;
   }
 
-  .relay-swap-widget button[class*="fs_12"][class*="fw_500"] span {
+  .relay-swap-widget button[class*="fs_12"][class*="fw_500"] * {
     color: #ffffff !important;
   }
 
   /* ============================================
-     SWAP ARROW - Red background, preserve native sizing
+     SWAP ARROW - Red background
      ============================================ */
   .relay-swap-widget button[class*="rounded_12"][class*="p_2"] {
     background: #ef4444 !important;
     border: none !important;
-    box-shadow: none !important;
-    /* Let Relay handle native sizing */
   }
 
   .relay-swap-widget button[class*="rounded_12"][class*="p_2"]:hover {
@@ -265,98 +285,45 @@ const swapStyles = `
   }
 
   /* ============================================
-     TOKEN SELECTOR BUTTONS - Red background, preserve Relay sizing
-     ============================================ */
-  .relay-swap-widget button[data-testid="origin-token-select-button"],
-  .relay-swap-widget button[data-testid="destination-token-select-button"],
-  .relay-swap-widget button[class*="widget-selector-background"] {
-    background: #ef4444 !important;
-    /* Preserve Relay's native sizing - don't override height/padding */
-  }
-
-  .relay-swap-widget button[data-testid="origin-token-select-button"]:hover,
-  .relay-swap-widget button[data-testid="destination-token-select-button"]:hover {
-    background: #dc2626 !important;
-  }
-
-  /* Text colors for dark-on-red */
-  .relay-swap-widget button[data-testid="origin-token-select-button"] span,
-  .relay-swap-widget button[data-testid="destination-token-select-button"] span,
-  .relay-swap-widget button[data-testid="origin-token-select-button"] div,
-  .relay-swap-widget button[data-testid="destination-token-select-button"] div {
-    color: #ffffff !important;
-  }
-
-  /* Chain name - slightly transparent white */
-  .relay-swap-widget button[data-testid="origin-token-select-button"] [class*="text_subtle"],
-  .relay-swap-widget button[data-testid="destination-token-select-button"] [class*="text_subtle"] {
-    color: rgba(255, 255, 255, 0.75) !important;
-  }
-
-  /* Chevron arrow */
-  .relay-swap-widget button[data-testid="origin-token-select-button"] svg,
-  .relay-swap-widget button[data-testid="destination-token-select-button"] svg {
-    color: #ffffff !important;
-  }
-
-  /* Chain badge border - match red background */
-  .relay-swap-widget button[data-testid="origin-token-select-button"] [class*="rounded"],
-  .relay-swap-widget button[data-testid="destination-token-select-button"] [class*="rounded"] {
-    border-color: #ef4444 !important;
-  }
-
-  /* ============================================
-     WALLET ADDRESS DROPDOWN - Small green dot on left
+     WALLET DROPDOWN - Dark with green dot
      ============================================ */
   .relay-swap-widget button[class*="rounded_99999"] {
-    height: 24px !important;
-    min-height: 24px !important;
-    padding: 0 8px 0 6px !important;
-    font-size: 10px !important;
     background: rgba(255, 255, 255, 0.05) !important;
     border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    border-radius: 6px !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 4px !important;
   }
 
   .relay-swap-widget button[class*="rounded_99999"]::before {
     content: '' !important;
-    display: block !important;
-    width: 5px !important;
-    height: 5px !important;
+    display: inline-block !important;
+    width: 6px !important;
+    height: 6px !important;
     background: #22c55e !important;
     border-radius: 50% !important;
-    flex-shrink: 0 !important;
+    margin-right: 6px !important;
   }
 
-  .relay-swap-widget button[class*="rounded_99999"] span,
-  .relay-swap-widget button[class*="rounded_99999"] svg {
+  .relay-swap-widget button[class*="rounded_99999"] * {
     color: #ffffff !important;
-    font-size: 10px !important;
   }
 
   /* ============================================
-     CTA BUTTON - Red background, preserve native sizing
+     CTA / SWAP BUTTON - Red
      ============================================ */
   .relay-swap-widget button[data-testid="swap-button"],
   .relay-swap-widget button[class*="min-h_44"] {
     background: #ef4444 !important;
-    color: #ffffff !important;
     border: none !important;
     box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3) !important;
-    /* Let Relay handle native sizing */
-  }
-
-  .relay-swap-widget button[data-testid="swap-button"] span,
-  .relay-swap-widget button[class*="min-h_44"] span {
-    color: #ffffff !important;
   }
 
   .relay-swap-widget button[data-testid="swap-button"]:hover:not(:disabled),
   .relay-swap-widget button[class*="min-h_44"]:hover:not(:disabled) {
     background: #dc2626 !important;
+  }
+
+  .relay-swap-widget button[data-testid="swap-button"] *,
+  .relay-swap-widget button[class*="min-h_44"] * {
+    color: #ffffff !important;
   }
 
   /* ============================================
@@ -365,78 +332,56 @@ const swapStyles = `
   .relay-swap-widget input {
     background: transparent !important;
     border: none !important;
-    font-size: 24px !important;
-    font-weight: 500 !important;
     color: #ffffff !important;
     caret-color: #ef4444 !important;
   }
 
   .relay-swap-widget input::placeholder {
-    color: rgba(255,255,255,0.2) !important;
+    color: rgba(255,255,255,0.3) !important;
   }
 
   /* ============================================
-     DIALOGS - Relay modals (no blur to avoid affecting Privy)
+     RELAY MODALS - Dark theme, lower z-index
      ============================================ */
   .relay-swap-widget [role="dialog"] > div {
     background: rgba(12, 12, 12, 0.98) !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
     border: 1px solid rgba(255,255,255,0.1) !important;
     border-radius: 20px !important;
   }
 
-  /* ============================================
-     RELAY MODAL - Lower z-index so Privy appears on top
-     ============================================ */
   .relay-swap-widget [role="dialog"],
   .relay-swap-widget [data-radix-portal],
   [data-radix-popper-content-wrapper] {
     z-index: 10000 !important;
   }
 
-  /* Relay transaction details modal backdrop */
-  .relay-swap-widget [data-radix-portal] > div:first-child,
-  .relay-swap-widget [role="dialog"] ~ div {
-    z-index: 9999 !important;
-  }
-
   /* ============================================
-     PRIVY MODAL - Must appear ABOVE Relay modal
-     This ensures Privy approval popup shows on top
+     PRIVY MODAL - Highest z-index, fully interactive
      ============================================ */
   [data-privy-dialog],
   .privy-dialog,
   .privy-modal,
   div[id*="privy"],
   div[class*="privy"],
-  div[class*="privy"] > div[role="dialog"],
   iframe[title*="privy"],
   div[data-privy-dialog-container],
   #privy-modal-content,
   #privy-dialog,
   [class*="PrivyDialog"],
-  [class*="privy-connect"],
   [class*="PrivyModal"],
   [data-privy-wallet-modal] {
     z-index: 2147483647 !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
     filter: none !important;
     opacity: 1 !important;
     pointer-events: auto !important;
   }
 
-  /* Privy overlay/backdrop - clear, not blurred */
   div[class*="privy"][class*="overlay"],
   div[class*="privy"][class*="backdrop"],
   [data-privy-backdrop] {
     z-index: 2147483646 !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
   }
 
-  /* Privy iframe specifically - ensure it's interactive */
   iframe[src*="privy"],
   iframe[id*="privy"] {
     z-index: 2147483647 !important;
@@ -445,27 +390,114 @@ const swapStyles = `
     pointer-events: auto !important;
   }
 
-  /* When Privy modal is open, disable blur on Relay */
-  body:has([data-privy-dialog]) .relay-swap-widget,
-  body:has([class*="privy"]) .relay-swap-widget,
-  body:has(iframe[src*="privy"]) .relay-swap-widget {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
+  /* ============================================
+     SUCCESS MODAL
+     ============================================ */
+  .swap-success-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+    animation: fadeIn 0.2s ease;
   }
 
-  body:has([data-privy-dialog]) .relay-swap-widget > div,
-  body:has([class*="privy"]) .relay-swap-widget > div {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 
-  /* Ensure Privy content is never blurred */
-  [data-privy-dialog] *,
-  [class*="privy"] *,
-  [class*="PrivyDialog"] *,
-  [class*="PrivyModal"] * {
-    filter: none !important;
-    opacity: 1 !important;
+  .swap-success-content {
+    position: relative;
+    background: rgba(15, 15, 15, 0.98);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 24px;
+    padding: 32px;
+    max-width: 360px;
+    width: 90%;
+    text-align: center;
+    animation: slideUp 0.3s ease;
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  .swap-success-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: rgba(255,255,255,0.1);
+    border: none;
+    border-radius: 8px;
+    padding: 8px;
+    color: white;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .swap-success-close:hover {
+    background: rgba(255,255,255,0.2);
+  }
+
+  .swap-success-icon {
+    width: 72px;
+    height: 72px;
+    margin: 0 auto 20px;
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+  }
+
+  .swap-success-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 8px;
+  }
+
+  .swap-success-subtitle {
+    font-size: 14px;
+    color: rgba(255,255,255,0.6);
+    margin-bottom: 20px;
+  }
+
+  .swap-success-link {
+    display: block;
+    font-size: 13px;
+    color: #ef4444;
+    margin-bottom: 24px;
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+
+  .swap-success-link:hover {
+    color: #f87171;
+    text-decoration: underline;
+  }
+
+  .swap-success-button {
+    width: 100%;
+    padding: 16px;
+    background: #ef4444;
+    border: none;
+    border-radius: 14px;
+    color: white;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .swap-success-button:hover {
+    background: #dc2626;
   }
 
   /* ============================================
