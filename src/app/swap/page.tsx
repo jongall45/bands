@@ -257,154 +257,155 @@ const swapStyles = `
   }
 
   /* ============================================
-     SWAP ARROW - Clean red circle, white arrow, NO outline
+     SWAP ARROW - Red circle, white arrow, ZERO outline/ring
      ============================================ */
-  .relay-swap-widget button[class*="rounded_12"][class*="p_2"],
-  .relay-swap-widget button[class*="rounded_12"][class*="bg_primary"]:not([class*="gap_"]):not([class*="w_max"]),
-  .relay-swap-widget button[class*="rounded_"][class*="bg_primary"]:not([class*="gap_"]):not([class*="w_max"]):not([class*="h_50"]) {
-    width: 32px !important;
-    height: 32px !important;
-    min-width: 32px !important;
-    min-height: 32px !important;
-    max-width: 32px !important;
-    max-height: 32px !important;
-    padding: 0 !important;
-    margin: 4px auto !important;
+  .relay-swap-widget button[class*="rounded_12"][class*="p_2"] {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    min-height: 36px !important;
+    max-width: 36px !important;
+    max-height: 36px !important;
+    padding: 4px !important;
+    margin: 6px auto !important;
     border-radius: 50% !important;
     background: #ef4444 !important;
-    border: none !important;
-    outline: none !important;
+    border: 0 !important;
+    outline: 0 !important;
     box-shadow: none !important;
-    -webkit-appearance: none !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
+    -webkit-box-shadow: none !important;
+    -moz-box-shadow: none !important;
+    ring: 0 !important;
+    --tw-ring-shadow: none !important;
+    --tw-ring-offset-shadow: none !important;
   }
 
-  .relay-swap-widget button[class*="rounded_12"][class*="p_2"]:hover,
-  .relay-swap-widget button[class*="rounded_12"][class*="bg_primary"]:not([class*="gap_"]):hover {
+  .relay-swap-widget button[class*="rounded_12"][class*="p_2"]::before,
+  .relay-swap-widget button[class*="rounded_12"][class*="p_2"]::after {
+    display: none !important;
+    content: none !important;
+  }
+
+  .relay-swap-widget button[class*="rounded_12"][class*="p_2"]:hover {
     background: #dc2626 !important;
+    transform: scale(1.05) !important;
   }
 
   .relay-swap-widget button[class*="rounded_12"][class*="p_2"]:focus,
-  .relay-swap-widget button[class*="rounded_12"][class*="bg_primary"]:not([class*="gap_"]):focus {
-    outline: none !important;
+  .relay-swap-widget button[class*="rounded_12"][class*="p_2"]:focus-visible {
+    outline: 0 !important;
     box-shadow: none !important;
+    ring: 0 !important;
   }
 
-  .relay-swap-widget button[class*="rounded_12"] svg,
-  .relay-swap-widget button[class*="rounded_"] svg:not([class*="token"]) {
-    width: 14px !important;
-    height: 14px !important;
+  .relay-swap-widget button[class*="rounded_12"][class*="p_2"] svg {
+    width: 18px !important;
+    height: 18px !important;
     color: #ffffff !important;
-    stroke: #ffffff !important;
   }
 
   /* ============================================
-     WALLET ADDRESS - White text + small green dot
-     ============================================ */
-  .relay-swap-widget button[class*="rounded_99999"] {
-    height: 26px !important;
-    min-height: 26px !important;
-    padding: 0 10px 0 8px !important;
-    font-size: 11px !important;
-    background: rgba(255, 255, 255, 0.06) !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    border-radius: 6px !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 6px !important;
-  }
-
-  .relay-swap-widget button[class*="rounded_99999"]::before {
-    content: '' !important;
-    display: block !important;
-    width: 6px !important;
-    height: 6px !important;
-    background: #22c55e !important;
-    border-radius: 50% !important;
-    flex-shrink: 0 !important;
-  }
-
-  .relay-swap-widget button[class*="rounded_99999"] span,
-  .relay-swap-widget button[class*="rounded_99999"] * {
-    color: #ffffff !important;
-    font-size: 11px !important;
-    font-weight: 500 !important;
-  }
-
-  /* ============================================
-     TOKEN SELECTOR BUTTONS - White text and arrow
+     TOKEN SELECTOR BUTTONS - NO green dots, white arrow
      ============================================ */
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] {
-    height: 36px !important;
-    min-height: 36px !important;
-    padding: 0 12px !important;
-    font-size: 13px !important;
-    border-radius: 10px !important;
+    height: 34px !important;
+    min-height: 34px !important;
+    padding: 0 10px !important;
+    font-size: 12px !important;
+    border-radius: 8px !important;
     background: #ef4444 !important;
-    text-transform: none !important;
+  }
+
+  .relay-swap-widget button[class*="bg_primary"][class*="gap_"]::before {
+    display: none !important;
+    content: none !important;
   }
 
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] span {
     color: #ffffff !important;
-    font-size: 13px !important;
+    font-size: 12px !important;
     font-weight: 600 !important;
-    text-transform: none !important;
-    font-style: normal !important;
   }
 
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] svg {
     color: #ffffff !important;
-    stroke: #ffffff !important;
+    width: 14px !important;
+    height: 14px !important;
+  }
+
+  .relay-swap-widget button[class*="bg_primary"][class*="gap_"]:hover {
+    background: #dc2626 !important;
   }
 
   /* ============================================
-     CTA BUTTON - FULL WIDTH, 56px HEIGHT
+     WALLET ADDRESS DROPDOWN - White text, positioned green dot
      ============================================ */
+  .relay-swap-widget button[class*="rounded_99999"] {
+    height: 26px !important;
+    min-height: 26px !important;
+    padding: 0 10px !important;
+    font-size: 11px !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-radius: 6px !important;
+    position: relative !important;
+  }
+
+  .relay-swap-widget button[class*="rounded_99999"]::before {
+    content: '' !important;
+    position: absolute !important;
+    top: -3px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 6px !important;
+    height: 6px !important;
+    background: #22c55e !important;
+    border-radius: 50% !important;
+  }
+
+  .relay-swap-widget button[class*="rounded_99999"] span,
+  .relay-swap-widget button[class*="rounded_99999"] svg {
+    color: #ffffff !important;
+    font-size: 11px !important;
+  }
+
+  /* ============================================
+     CTA BUTTON - FULL WIDTH at bottom
+     ============================================ */
+  .relay-swap-widget > div > div:last-child > button,
   .relay-swap-widget button[class*="h_50"],
-  .relay-swap-widget button[class*="min-h_50"],
-  .relay-swap-widget button[class*="shrink_0"][class*="w_max"],
-  .relay-swap-widget button[class*="bg_primary"][class*="w_max"] {
-    height: 56px !important;
-    min-height: 56px !important;
+  .relay-swap-widget button[class*="w_max"][class*="shrink"] {
+    height: 54px !important;
+    min-height: 54px !important;
     width: 100% !important;
-    min-width: 100% !important;
     max-width: 100% !important;
-    border-radius: 14px !important;
-    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+    border-radius: 12px !important;
+    background: #ef4444 !important;
     font-size: 16px !important;
     font-weight: 600 !important;
     color: #ffffff !important;
     border: none !important;
-    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.35) !important;
-    cursor: pointer !important;
-    pointer-events: auto !important;
-    position: relative !important;
-    z-index: 100 !important;
-    text-transform: none !important;
-    font-style: normal !important;
-    opacity: 1 !important;
-    visibility: visible !important;
-    margin-top: 12px !important;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3) !important;
+    margin-top: 16px !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
   }
 
-  .relay-swap-widget button[class*="h_50"]:hover,
-  .relay-swap-widget button[class*="min-h_50"]:hover {
-    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
-    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.45) !important;
-  }
-
-  .relay-swap-widget button[class*="h_50"] span,
-  .relay-swap-widget button[class*="min-h_50"] span {
+  .relay-swap-widget > div > div:last-child > button span,
+  .relay-swap-widget button[class*="h_50"] span {
     color: #ffffff !important;
-    font-weight: 600 !important;
-    text-transform: none !important;
-    font-style: normal !important;
     font-size: 16px !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+  }
+
+  .relay-swap-widget > div > div:last-child > button:hover,
+  .relay-swap-widget button[class*="h_50"]:hover {
+    background: #dc2626 !important;
   }
 
   /* ============================================
