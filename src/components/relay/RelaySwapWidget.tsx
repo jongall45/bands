@@ -258,7 +258,22 @@ export function RelaySwapWidget({ onSuccess, onError, onStateChange }: RelaySwap
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
 
   // Get the SMART WALLET address (not the EOA)
-  const smartWalletAddress = smartWalletClient?.account?.address as `0x${string}` | undefined
+  const currentSmartWalletAddress = smartWalletClient?.account?.address as `0x${string}` | undefined
+
+  // CRITICAL FIX: Cache the wallet address once we have it
+  // This prevents widget unmount if Privy's smartWalletClient briefly becomes undefined during transaction
+  const cachedAddressRef = useRef<`0x${string}` | undefined>(undefined)
+
+  // Update cached address when we get a valid one
+  if (currentSmartWalletAddress && !cachedAddressRef.current) {
+    cachedAddressRef.current = currentSmartWalletAddress
+  }
+
+  // Track if a swap is in progress - once true, never unmount the widget
+  const swapInProgressRef = useRef(false)
+
+  // Use cached address if current is undefined but we're mid-swap or have a cached value
+  const smartWalletAddress = currentSmartWalletAddress || cachedAddressRef.current
 
   // Refs for mutable dependencies
   const getClientForChainRef = useRef<typeof getClientForChain | undefined>(undefined)
@@ -277,6 +292,15 @@ export function RelaySwapWidget({ onSuccess, onError, onStateChange }: RelaySwap
     console.log('[RelaySwapWidget] State change:', state)
     setSwapState(state)
     onStateChangeRef.current?.(state)
+
+    // Track swap in progress - set to true when swap starts, false when it ends
+    if (state === 'confirming' || state === 'sending' || state === 'pending') {
+      swapInProgressRef.current = true
+      console.log('[RelaySwapWidget] Swap in progress - widget will NOT unmount')
+    } else if (state === 'success' || state === 'error' || state === 'idle') {
+      swapInProgressRef.current = false
+      console.log('[RelaySwapWidget] Swap finished - normal unmount behavior restored')
+    }
   }, [])
 
   // Store the adapter in a ref to maintain reference stability
@@ -285,7 +309,19 @@ export function RelaySwapWidget({ onSuccess, onError, onStateChange }: RelaySwap
 
   // Create the adapted wallet - ONLY recreate when address changes
   const adaptedWallet = useMemo<AdaptedWallet | undefined>(() => {
+    // CRITICAL FIX: If we have a cached adapter and swap is in progress, ALWAYS reuse it
+    // This prevents adapter becoming undefined if smartWalletAddress briefly becomes undefined
+    if (adapterRef.current && swapInProgressRef.current) {
+      console.log('[RelaySwapWidget] Swap in progress - reusing cached adapter')
+      return adapterRef.current
+    }
+
     if (!smartWalletAddress) {
+      // If no address but we have a cached adapter, return it (defensive)
+      if (adapterRef.current) {
+        console.log('[RelaySwapWidget] No address but have cached adapter - reusing')
+        return adapterRef.current
+      }
       return undefined
     }
 
@@ -379,9 +415,12 @@ export function RelaySwapWidget({ onSuccess, onError, onStateChange }: RelaySwap
     }
   }, [handleStateChange])
 
-  // Show loading state while waiting for smart wallet to initialize
-  // CRITICAL: Use a wrapper div that doesn't unmount to prevent widget state loss
-  if (!smartWalletAddress || !adaptedWallet) {
+  // CRITICAL FIX: Only show loading state on INITIAL mount
+  // NEVER unmount/show loading once a swap is in progress - this causes "Execution aborted"
+  const shouldShowLoading = (!smartWalletAddress || !adaptedWallet) && !swapInProgressRef.current
+
+  if (shouldShowLoading) {
+    console.log('[RelaySwapWidget] Showing loading state (initial mount, no swap in progress)')
     return (
       <div className="relay-swap-widget" data-state="loading">
         <div className="flex items-center justify-center p-8">
@@ -392,6 +431,11 @@ export function RelaySwapWidget({ onSuccess, onError, onStateChange }: RelaySwap
         </div>
       </div>
     )
+  }
+
+  // If swap is in progress but wallet became undefined, log warning but DON'T unmount
+  if ((!smartWalletAddress || !adaptedWallet) && swapInProgressRef.current) {
+    console.warn('[RelaySwapWidget] Wallet temporarily undefined during swap - keeping widget mounted!')
   }
 
   return (
