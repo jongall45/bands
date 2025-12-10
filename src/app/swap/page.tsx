@@ -150,7 +150,7 @@ const swapStyles = `
     position: fixed;
     top: 0; left: 0; width: 100%; height: 100%;
     pointer-events: none;
-    z-index: 10000;
+    z-index: 1;
     opacity: 0.04;
     mix-blend-mode: overlay;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
@@ -347,7 +347,7 @@ const swapStyles = `
   }
 
   /* ============================================
-     RELAY MODALS - Dark theme, lower z-index
+     RELAY MODALS - Dark theme, LOWER z-index than Privy
      ============================================ */
   .relay-swap-widget [role="dialog"] > div {
     background: rgba(12, 12, 12, 0.98) !important;
@@ -355,25 +355,47 @@ const swapStyles = `
     border-radius: 20px !important;
   }
 
+  /* Keep Relay modals at a reasonable z-index but BELOW Privy */
   .relay-swap-widget [role="dialog"],
   .relay-swap-widget [data-radix-portal],
-  [data-radix-popper-content-wrapper] {
-    z-index: 10000 !important;
+  [data-radix-popper-content-wrapper],
+  [data-radix-portal] {
+    z-index: 50000 !important;
+  }
+
+  /* Relay modal overlays/backdrops - lower than modal content */
+  .relay-swap-widget [data-radix-portal] > [data-radix-overlay],
+  [data-radix-portal] > div[style*="position: fixed"] {
+    z-index: 49999 !important;
   }
 
   /* ============================================
-     PRIVY MODAL - Highest z-index, fully interactive
-     CRITICAL: Remove ALL blur/filter effects
+     PRIVY MODAL - HIGHEST z-index, fully interactive
+     CRITICAL: Must appear ABOVE Relay modals
      ============================================ */
+  /* Privy iframe container - this is the actual wallet popup */
+  #privy-iframe-container,
+  [id^="privy-"],
+  iframe[title*="Privy"],
+  iframe[src*="privy.io"],
+  div[data-privy-dialog],
+  div[data-privy-dialog-container] {
+    z-index: 2147483647 !important;
+    position: fixed !important;
+    filter: none !important;
+    -webkit-filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    isolation: isolate !important;
+  }
+
+  /* Privy dialog and modal classes */
   [data-privy-dialog],
   .privy-dialog,
   .privy-modal,
-  div[id*="privy"],
   div[class*="privy"],
-  iframe[title*="privy"],
-  div[data-privy-dialog-container],
-  #privy-modal-content,
-  #privy-dialog,
   [class*="PrivyDialog"],
   [class*="PrivyModal"],
   [data-privy-wallet-modal] {
@@ -388,6 +410,7 @@ const swapStyles = `
     transform: translateZ(0) !important;
   }
 
+  /* Privy overlay/backdrop - just below the modal */
   div[class*="privy"][class*="overlay"],
   div[class*="privy"][class*="backdrop"],
   [data-privy-backdrop] {
@@ -396,24 +419,36 @@ const swapStyles = `
     -webkit-backdrop-filter: none !important;
   }
 
+  /* Privy iframes specifically */
   iframe[src*="privy"],
-  iframe[id*="privy"] {
+  iframe[id*="privy"],
+  iframe[title*="privy" i] {
     z-index: 2147483647 !important;
     filter: none !important;
     -webkit-filter: none !important;
     opacity: 1 !important;
     pointer-events: auto !important;
+    position: fixed !important;
   }
 
-  /* When Privy modal is open, remove blur from noise overlay */
+  /* When Privy modal is open, dim/hide Relay modals */
+  body:has(iframe[src*="privy"]) .relay-swap-widget [role="dialog"],
+  body:has(div[data-privy-dialog]) .relay-swap-widget [role="dialog"],
+  body:has([id^="privy-"]) .relay-swap-widget [role="dialog"] {
+    opacity: 0.3 !important;
+    pointer-events: none !important;
+  }
+
+  /* When Privy modal is open, hide noise overlay */
   body:has([data-privy-dialog]) .noise-overlay,
-  body:has(div[class*="privy"]) .noise-overlay {
+  body:has(div[class*="privy"]) .noise-overlay,
+  body:has(iframe[src*="privy"]) .noise-overlay {
     filter: none !important;
     backdrop-filter: none !important;
     opacity: 0 !important;
   }
 
-  /* Ensure Relay modals don't blur Privy */
+  /* Ensure Relay modals don't blur or block Privy */
   .relay-swap-widget [role="dialog"] {
     filter: none !important;
     backdrop-filter: none !important;
