@@ -2,6 +2,7 @@
 
 import { useMemo, useCallback } from 'react'
 import { SwapWidget } from '@relayprotocol/relay-kit-ui'
+import type { LinkedWallet } from '@relayprotocol/relay-kit-ui'
 import { usePublicClient } from 'wagmi'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
@@ -241,12 +242,42 @@ export function RelaySwapWidget({ onSuccess, onError }: RelaySwapWidgetProps) {
     )
   }, [smartWalletAddress, smartWalletClient, getClientForChain, publicClient])
 
+  // Create linkedWallets array for multi-wallet mode
+  // This ensures the wallet address is displayed on BOTH Sell and Buy sides
+  const linkedWallets = useMemo<LinkedWallet[]>(() => {
+    if (!smartWalletAddress) return []
+    return [{
+      address: smartWalletAddress,
+      vmType: 'evm',
+      connector: 'privy-smart-wallet',
+    }]
+  }, [smartWalletAddress])
+
   // Handle connect wallet button
   const handleConnectWallet = useCallback(() => {
     if (!authenticated) {
       login()
     }
   }, [authenticated, login])
+
+  // Handle linking a new wallet (required for multi-wallet mode)
+  // Since we only use one smart wallet, this just returns the existing wallet
+  const handleLinkNewWallet = useCallback(async (): Promise<LinkedWallet> => {
+    if (!smartWalletAddress) {
+      // Trigger login if not authenticated
+      if (!authenticated) {
+        login()
+      }
+      // Return a placeholder - will be updated once wallet is ready
+      throw new Error('Wallet not initialized')
+    }
+    // Return the existing linked wallet
+    return {
+      address: smartWalletAddress,
+      vmType: 'evm' as const,
+      connector: 'privy-smart-wallet',
+    }
+  }, [smartWalletAddress, authenticated, login])
 
   // Handle swap success
   const handleSwapSuccess = useCallback((data: Execute) => {
@@ -279,8 +310,11 @@ export function RelaySwapWidget({ onSuccess, onError }: RelaySwapWidgetProps) {
       <SwapWidget
         key={smartWalletAddress}
         wallet={adaptedWallet}
+        // Enable multi-wallet mode to show wallet address on BOTH sides
+        multiWalletSupportEnabled={true}
+        linkedWallets={linkedWallets}
+        onLinkNewWallet={handleLinkNewWallet}
         // Set the destination address to be the same as the source (smart wallet)
-        // This ensures both sides of the swap use the same wallet
         defaultToAddress={smartWalletAddress}
         supportedWalletVMs={['evm']}
         onConnectWallet={handleConnectWallet}
