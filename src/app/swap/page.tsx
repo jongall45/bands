@@ -369,16 +369,20 @@ const swapStyles = `
     z-index: 49999 !important;
   }
 
+  /* Ensure Relay modals don't have filters */
+  .relay-swap-widget [role="dialog"] {
+    filter: none !important;
+    backdrop-filter: none !important;
+  }
+
   /* ============================================
-     PRIVY MODAL - HIGHEST z-index, fully interactive
-     CRITICAL: Must appear ABOVE Relay modals
-     Only override z-index, don't mess with Privy's positioning
+     PRIVY MODAL - HIGHEST z-index
+     Simple approach: only set z-index, add filter:none to prevent blur
      ============================================ */
-  /* Privy modal containers - only set z-index */
   #privy-iframe-container,
   #privy-dialog,
   #privy-modal,
-  [id^="privy-"],
+  [id^="privy-"]:not(style):not(script),
   div[data-privy-dialog],
   div[data-privy-dialog-container],
   [data-privy-dialog],
@@ -386,45 +390,18 @@ const swapStyles = `
   .privy-modal,
   [class*="PrivyDialog"],
   [class*="PrivyModal"],
-  [data-privy-wallet-modal] {
-    z-index: 2147483647 !important;
-  }
-
-  /* Privy overlay/backdrop - just below the modal */
+  [data-privy-wallet-modal],
   div[class*="privy"][class*="overlay"],
   div[class*="privy"][class*="backdrop"],
-  [data-privy-backdrop] {
-    z-index: 2147483646 !important;
-  }
-
-  /* Privy iframes - only z-index */
+  [data-privy-backdrop],
   iframe[src*="privy"],
   iframe[id*="privy"],
   iframe[title*="privy" i],
   iframe[title*="Privy"],
   iframe[src*="privy.io"] {
     z-index: 2147483647 !important;
-  }
-
-  /* When Privy modal is open, hide Relay modals completely */
-  body:has(iframe[src*="privy"]) .relay-swap-widget [role="dialog"],
-  body:has(iframe[src*="privy.io"]) .relay-swap-widget [role="dialog"],
-  body:has(div[data-privy-dialog]) .relay-swap-widget [role="dialog"],
-  body:has([id^="privy-"]:not(style)) .relay-swap-widget [role="dialog"] {
-    display: none !important;
-  }
-
-  /* When Privy modal is open, hide Relay modal backdrop too */
-  body:has(iframe[src*="privy"]) [data-radix-portal],
-  body:has(iframe[src*="privy.io"]) [data-radix-portal],
-  body:has(div[data-privy-dialog]) [data-radix-portal] {
-    display: none !important;
-  }
-
-  /* Ensure Relay modals don't have filters that could affect rendering */
-  .relay-swap-widget [role="dialog"] {
     filter: none !important;
-    backdrop-filter: none !important;
+    -webkit-filter: none !important;
   }
 
   /* ============================================
