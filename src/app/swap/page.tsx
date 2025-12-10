@@ -4,20 +4,15 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useWallets } from '@privy-io/react-auth'
 import { Repeat, RefreshCw, CheckCircle, X } from 'lucide-react'
-import { RelaySwapWidget, type SwapState } from '@/components/relay/RelaySwapWidget'
+import { CustomSwap } from '@/components/relay/CustomSwap'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
-import type { Execute } from '@relayprotocol/relay-sdk'
 
 export default function SwapPage() {
   const router = useRouter()
   const { wallets } = useWallets()
-  const [recentTx, setRecentTx] = useState<string | null>(null)
   const [showSuccess, setShowSuccess] = useState(false)
-  const [swapDetails, setSwapDetails] = useState<{ txHash: string } | null>(null)
-
-  // Track swap state from the widget
-  const [swapState, setSwapState] = useState<SwapState>('idle')
+  const [recentTx, setRecentTx] = useState<string | null>(null)
 
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
   const isConnected = !!embeddedWallet
@@ -31,49 +26,16 @@ export default function SwapPage() {
     return () => clearTimeout(timer)
   }, [isConnected, router])
 
-  // Handle swap state changes from widget
-  const handleStateChange = useCallback((state: SwapState) => {
-    console.log('[SwapPage] 🔄 Swap state changed:', state)
-    setSwapState(state)
-  }, [])
-
-  const handleSuccess = useCallback((data: Execute) => {
-    console.log('[SwapPage] ✅ handleSuccess called!', data)
-
-    const steps = data?.steps || []
-    for (const step of steps) {
-      const items = step?.items || []
-      for (const item of items) {
-        if (item?.txHashes && item.txHashes.length > 0) {
-          const txHash = item.txHashes[0].txHash
-          console.log('[SwapPage] Found txHash:', txHash)
-          setRecentTx(txHash)
-          setSwapDetails({ txHash })
-          setShowSuccess(true)
-          return
-        }
-      }
-    }
-
-    // If no txHash found in data, still show success
-    console.log('[SwapPage] No txHash in data, but swap succeeded')
+  const handleSuccess = useCallback((txHash: string) => {
+    console.log('[SwapPage] ✅ Swap success!', txHash)
+    setRecentTx(txHash)
     setShowSuccess(true)
   }, [])
 
-  const handleError = useCallback((error: string) => {
-    console.error('[SwapPage] ❌ handleError called:', error)
-  }, [])
-
   const closeSuccessModal = useCallback(() => {
-    console.log('[SwapPage] Closing success modal, resetting state')
     setShowSuccess(false)
-    setSwapDetails(null)
-    setSwapState('idle')
+    setRecentTx(null)
   }, [])
-
-  // Determine if we should show blur based on swap state
-  // Only show blur when actively processing (confirming, sending, pending)
-  const isProcessing = swapState === 'confirming' || swapState === 'sending' || swapState === 'pending'
 
   if (!isConnected) {
     return (
@@ -90,9 +52,8 @@ export default function SwapPage() {
   }
 
   return (
-    <div className="swap-page" data-swap-state={swapState}>
+    <div className="swap-page">
       <div className="noise-overlay" />
-      {/* Auras - controlled by data-swap-state via CSS */}
       <div className="aura aura-1" />
       <div className="aura aura-2" />
       <div className="aura aura-3" />
@@ -111,11 +72,7 @@ export default function SwapPage() {
 
         <div className="px-5">
           <div className="relay-widget-container">
-            <RelaySwapWidget
-              onSuccess={handleSuccess}
-              onError={handleError}
-              onStateChange={handleStateChange}
-            />
+            <CustomSwap onSuccess={handleSuccess} />
           </div>
         </div>
 
@@ -139,9 +96,9 @@ export default function SwapPage() {
             </div>
             <h3 className="swap-success-title">Swap Successful!</h3>
             <p className="swap-success-subtitle">Your transaction has been confirmed</p>
-            {swapDetails?.txHash && (
+            {recentTx && (
               <a
-                href={`https://basescan.org/tx/${swapDetails.txHash}`}
+                href={`https://basescan.org/tx/${recentTx}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="swap-success-link"
@@ -497,6 +454,29 @@ const swapStyles = `
     pointer-events: auto !important;
     z-index: 2147483647 !important;
     filter: none !important;
+  }
+
+  /* Remove blur/backdrop on Privy overlays/backdrops */
+  [class*="privy"][class*="overlay"],
+  [class*="privy"][class*="backdrop"],
+  [data-privy-backdrop],
+  div[data-privy-dialog-container] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    filter: none !important;
+  }
+
+  /* Disable page blur when Privy is open */
+  body:has(iframe[src*="privy"]),
+  body:has([data-privy-dialog]) {
+    filter: none !important;
+    -webkit-filter: none !important;
+  }
+
+  /* Hide Relay overlays while Privy is open */
+  body:has(iframe[src*="privy"]) [data-radix-overlay],
+  body:has([data-privy-dialog]) [data-radix-overlay] {
+    display: none !important;
   }
 
   /* Keep focus-trap anchor accessible (in case we need it later) */
