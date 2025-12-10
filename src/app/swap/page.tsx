@@ -291,91 +291,71 @@ const swapStyles = `
   }
 
   /* ============================================
-     TOKEN SELECTOR BUTTONS - Tiny compact version
-     Target Relay's specific classes for proper override
+     TOKEN SELECTOR BUTTONS - Target by data-testid
+     Button has: relay-bg_widget-selector-background, relay-min-h_50, relay-h_50
      ============================================ */
-  .relay-swap-widget button[class*="bg_primary"][class*="gap_"] {
-    height: 28px !important;
-    min-height: 28px !important;
-    max-height: 28px !important;
-    min-width: fit-content !important;
-    max-width: 110px !important;
-    padding: 2px 6px !important;
-    border-radius: 6px !important;
+  .relay-swap-widget button[data-testid="origin-token-select-button"],
+  .relay-swap-widget button[data-testid="destination-token-select-button"],
+  .relay-swap-widget button[class*="widget-selector-background"][class*="h_50"] {
+    height: 36px !important;
+    min-height: 36px !important;
+    max-height: 36px !important;
+    padding: 4px 8px !important;
+    border-radius: 18px !important;
     background: #ef4444 !important;
     overflow: hidden !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 4px !important;
   }
 
-  .relay-swap-widget button[class*="bg_primary"][class*="gap_"]::before {
-    display: none !important;
+  /* Token icon container inside selector - override relay-w_32 relay-h_32 */
+  .relay-swap-widget button[data-testid="origin-token-select-button"] div[class*="w_32"],
+  .relay-swap-widget button[data-testid="destination-token-select-button"] div[class*="w_32"],
+  .relay-swap-widget button[data-testid="origin-token-select-button"] div[class*="h_32"],
+  .relay-swap-widget button[data-testid="destination-token-select-button"] div[class*="h_32"] {
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px !important;
+    min-height: 24px !important;
+    max-width: 24px !important;
+    max-height: 24px !important;
   }
 
-  /* Token icon container - override relay-w_32 relay-h_32 */
-  .relay-swap-widget button[class*="bg_primary"] div[class*="relay-w_32"],
-  .relay-swap-widget button[class*="bg_primary"] div[class*="relay-h_32"],
-  .relay-swap-widget button[class*="bg_primary"] [class*="shrink_0"][class*="w_32"] {
-    width: 18px !important;
-    height: 18px !important;
-    min-width: 18px !important;
-    min-height: 18px !important;
-    max-width: 18px !important;
-    max-height: 18px !important;
-  }
-
-  /* Token icon image */
-  .relay-swap-widget button[class*="bg_primary"] img {
-    width: 18px !important;
-    height: 18px !important;
-    min-width: 18px !important;
-    min-height: 18px !important;
+  /* Token icon image inside selector */
+  .relay-swap-widget button[data-testid="origin-token-select-button"] img,
+  .relay-swap-widget button[data-testid="destination-token-select-button"] img {
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px !important;
+    min-height: 24px !important;
     border-radius: 50% !important;
   }
 
-  /* Text container - flex column */
-  .relay-swap-widget button[class*="bg_primary"] div[class*="flex_column"],
-  .relay-swap-widget button[class*="bg_primary"] > div[class*="gap_"] > div:last-of-type {
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: center !important;
-    gap: 0 !important;
-    line-height: 1 !important;
-    max-width: 55px !important;
-    overflow: hidden !important;
-  }
-
-  /* Token name - override relay-fs_16px */
-  .relay-swap-widget button[class*="bg_primary"] div[class*="fs_16"],
-  .relay-swap-widget button[class*="bg_primary"] [class*="fw_700"] {
-    font-size: 9px !important;
+  /* Token name text - override relay-fs_16 */
+  .relay-swap-widget button[data-testid="origin-token-select-button"] div[class*="fs_16"],
+  .relay-swap-widget button[data-testid="destination-token-select-button"] div[class*="fs_16"],
+  .relay-swap-widget button[data-testid="origin-token-select-button"] [class*="fw_700"]:not(button),
+  .relay-swap-widget button[data-testid="destination-token-select-button"] [class*="fw_700"]:not(button) {
+    font-size: 11px !important;
     font-weight: 600 !important;
-    line-height: 1.1 !important;
-    color: #ffffff !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
+    line-height: 1.2 !important;
   }
 
-  /* Chain name - override relay-fs_12px */
-  .relay-swap-widget button[class*="bg_primary"] div[class*="fs_12"],
-  .relay-swap-widget button[class*="bg_primary"] div[class*="text_subtle"] {
-    font-size: 7px !important;
+  /* Chain name text - override relay-fs_12 */
+  .relay-swap-widget button[data-testid="origin-token-select-button"] div[class*="fs_12"],
+  .relay-swap-widget button[data-testid="destination-token-select-button"] div[class*="fs_12"],
+  .relay-swap-widget button[data-testid="origin-token-select-button"] div[class*="text_subtle"],
+  .relay-swap-widget button[data-testid="destination-token-select-button"] div[class*="text_subtle"] {
+    font-size: 8px !important;
     font-weight: 400 !important;
-    line-height: 1.1 !important;
-    color: rgba(255, 255, 255, 0.6) !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
+    line-height: 1.2 !important;
+    color: rgba(255, 255, 255, 0.7) !important;
   }
 
-  /* Dropdown arrow */
-  .relay-swap-widget button[class*="bg_primary"][class*="gap_"] svg {
+  /* Dropdown arrow in token selector */
+  .relay-swap-widget button[data-testid="origin-token-select-button"] svg,
+  .relay-swap-widget button[data-testid="destination-token-select-button"] svg {
+    width: 12px !important;
+    height: 12px !important;
     color: #ffffff !important;
-    width: 10px !important;
-    height: 10px !important;
-    flex-shrink: 0 !important;
   }
 
   /* ============================================
