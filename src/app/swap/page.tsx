@@ -330,17 +330,15 @@ const swapStyles = `
 
   /* ============================================
      CTA BUTTON - FULL WIDTH, PROMINENT
-     Target the main action button at the bottom
+     Target the main Swap/Review button at the bottom
+     Using multiple selector strategies to ensure we catch it
      ============================================ */
-  .relay-swap-widget button[class*="w_max"][class*="h_50"],
-  .relay-swap-widget button[class*="min-h_50"][class*="w_max"],
-  .relay-swap-widget button[class*="shrink_0"][class*="h_50"],
-  .relay-swap-widget button[class*="w_max-content"][class*="h_50"],
-  .relay-swap-widget > div > div > button[class*="h_50"],
-  .relay-swap-widget > div > button[class*="h_50"],
-  .relay-swap-widget button[class*="h_50"][class*="bg_primary"],
-  .relay-swap-widget button[class*="h_50"][class*="shrink"],
-  .relay-swap-widget button[class*="h_"][class*="shrink_0"]:last-of-type {
+
+  /* Target by class patterns */
+  .relay-swap-widget button[class*="h_50"],
+  .relay-swap-widget button[class*="min-h_50"],
+  .relay-swap-widget button[class*="shrink_0"][class*="w_max"],
+  .relay-swap-widget button[class*="bg_primary"][class*="w_max"] {
     height: 52px !important;
     min-height: 52px !important;
     width: 100% !important;
@@ -363,20 +361,27 @@ const swapStyles = `
     visibility: visible !important;
     letter-spacing: 0.02em !important;
     margin-top: 8px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
 
-  .relay-swap-widget button[class*="w_max"][class*="h_50"]:hover,
-  .relay-swap-widget button[class*="shrink_0"][class*="h_50"]:hover,
-  .relay-swap-widget button[class*="h_50"][class*="bg_primary"]:hover {
+  /* Exclude the swap arrow button from CTA styling */
+  .relay-swap-widget button[class*="h_50"]:not([class*="rounded_12"]):not([class*="p_2"]),
+  .relay-swap-widget button[class*="min-h_50"]:not([class*="rounded_12"]) {
+    height: 52px !important;
+    width: 100% !important;
+  }
+
+  .relay-swap-widget button[class*="h_50"]:hover,
+  .relay-swap-widget button[class*="min-h_50"]:hover {
     background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
     box-shadow: 0 6px 24px rgba(239, 68, 68, 0.5) !important;
     transform: translateY(-1px) !important;
   }
 
-  .relay-swap-widget button[class*="w_max"][class*="h_50"] span,
-  .relay-swap-widget button[class*="min-h_50"] span,
-  .relay-swap-widget button[class*="shrink_0"][class*="h_50"] span,
-  .relay-swap-widget button[class*="h_50"] span {
+  .relay-swap-widget button[class*="h_50"] span,
+  .relay-swap-widget button[class*="min-h_50"] span {
     color: #ffffff !important;
     font-weight: 600 !important;
     text-transform: none !important;

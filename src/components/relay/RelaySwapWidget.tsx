@@ -343,6 +343,9 @@ export function RelaySwapWidget({ onSuccess, onError }: RelaySwapWidgetProps) {
         // Prioritize Base, Ethereum, Arbitrum in chain selector
         popularChainIds={[8453, 1, 42161]}
         supportedWalletVMs={['evm']}
+        // Set default slippage tolerance to 1% (100 basis points)
+        // This prevents swaps from failing due to price movement
+        slippageTolerance={'100'}
         onConnectWallet={handleConnectWallet}
         onSwapSuccess={handleSwapSuccess}
         onSwapError={handleSwapError}
