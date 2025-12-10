@@ -8,6 +8,7 @@ import { WagmiProvider, createConfig } from '@privy-io/wagmi'
 import { http } from 'viem'
 import { base, arbitrum, optimism, mainnet } from 'viem/chains'
 import { RelayKitProvider } from '@relayprotocol/relay-kit-ui'
+import type { RelayKitTheme } from '@relayprotocol/relay-kit-ui'
 import '@relayprotocol/relay-kit-ui/styles.css'
 import { PWALayout } from '@/components/layout/PWALayout'
 import { MAINNET_RELAY_API, convertViemChainToRelayChain } from '@relayprotocol/relay-sdk'
@@ -22,6 +23,79 @@ const wagmiConfig = createConfig({
     [mainnet.id]: http(),
   },
 })
+
+// Custom RelayKit theme for bands.cash - Red accent with frosted glass effects
+const bandsTheme: RelayKitTheme = {
+  font: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif',
+  primaryColor: '#ef4444',
+  focusColor: '#dc2626',
+  subtleBackgroundColor: 'rgba(255, 255, 255, 0.05)',
+  subtleBorderColor: 'rgba(255, 255, 255, 0.1)',
+  text: {
+    default: '#ffffff',
+    subtle: 'rgba(255, 255, 255, 0.6)',
+    error: '#ef4444',
+    success: '#22c55e',
+  },
+  buttons: {
+    primary: {
+      color: '#ffffff',
+      background: 'rgba(239, 68, 68, 0.9)',
+      hover: {
+        color: '#ffffff',
+        background: 'rgba(220, 38, 38, 0.95)',
+      },
+    },
+    secondary: {
+      color: '#ffffff',
+      background: 'rgba(255, 255, 255, 0.1)',
+      hover: {
+        color: '#ffffff',
+        background: 'rgba(255, 255, 255, 0.15)',
+      },
+    },
+    disabled: {
+      color: 'rgba(255, 255, 255, 0.4)',
+      background: 'rgba(255, 255, 255, 0.1)',
+    },
+  },
+  input: {
+    background: 'rgba(255, 255, 255, 0.05)',
+    color: '#ffffff',
+  },
+  anchor: {
+    color: '#ef4444',
+    hover: {
+      color: '#f87171',
+    },
+  },
+  dropdown: {
+    background: 'rgba(17, 17, 17, 0.95)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+  },
+  widget: {
+    background: 'rgba(17, 17, 17, 0.85)',
+    borderRadius: '24px',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+    card: {
+      background: 'rgba(0, 0, 0, 0.4)',
+      borderRadius: '16px',
+      border: '1px solid rgba(255, 255, 255, 0.06)',
+    },
+    selector: {
+      background: 'rgba(239, 68, 68, 0.85)',
+      hover: {
+        background: 'rgba(220, 38, 38, 0.9)',
+      },
+    },
+  },
+  modal: {
+    background: 'rgba(17, 17, 17, 0.95)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '24px',
+  },
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
@@ -95,6 +169,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
                 source: 'bands.cash',
                 chains: [base, arbitrum, optimism, mainnet].map(convertViemChainToRelayChain),
               }}
+              theme={bandsTheme}
             >
               <PWALayout>
                 {children}

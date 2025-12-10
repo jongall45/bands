@@ -77,8 +77,8 @@ export default function SwapPage() {
           style={{ paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))' }}
         >
           <div>
-            <h1 className="text-gray-900 font-semibold text-xl">Swap & Bridge</h1>
-            <p className="text-gray-500 text-sm">Trade tokens across chains</p>
+            <h1 className="text-white font-bold text-xl drop-shadow-lg">Swap & Bridge</h1>
+            <p className="text-white/60 text-sm">Trade tokens across chains</p>
           </div>
           <LogoInline size="sm" />
         </header>
@@ -131,7 +131,7 @@ const swapStyles = `
   .swap-page {
     min-height: 100vh;
     width: 100%;
-    background: #F4F4F5;
+    background: linear-gradient(135deg, #fecaca 0%, #fca5a5 25%, #f87171 50%, #ef4444 75%, #dc2626 100%);
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
     overflow-x: hidden;
     position: relative;
@@ -145,7 +145,7 @@ const swapStyles = `
     height: 100%;
     pointer-events: none;
     z-index: 10000;
-    opacity: 0.08;
+    opacity: 0.06;
     mix-blend-mode: overlay;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
   }
@@ -162,7 +162,7 @@ const swapStyles = `
     height: 800px;
     top: -250px;
     left: -200px;
-    background: #FF3B30;
+    background: rgba(255, 59, 48, 0.6);
     filter: blur(150px);
     opacity: 0.5;
   }
@@ -172,7 +172,7 @@ const swapStyles = `
     height: 700px;
     bottom: -200px;
     right: -150px;
-    background: #D70015;
+    background: rgba(215, 0, 21, 0.5);
     filter: blur(140px);
     opacity: 0.45;
     animation-delay: 7s;
@@ -183,7 +183,7 @@ const swapStyles = `
     height: 400px;
     top: 40%;
     right: 20%;
-    background: #FF6B35;
+    background: rgba(255, 107, 53, 0.4);
     filter: blur(120px);
     opacity: 0.3;
     animation-delay: 14s;
@@ -196,39 +196,156 @@ const swapStyles = `
   }
 
   .swap-page .card {
-    background: #111111;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 20px;
+    background: rgba(17, 17, 17, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 24px;
     position: relative;
     overflow: hidden;
   }
 
-  .swap-page .card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: radial-gradient(
-      ellipse at 0% 0%,
-      rgba(255, 59, 48, 0.25) 0%,
-      rgba(255, 59, 48, 0.1) 30%,
-      rgba(255, 59, 48, 0.03) 50%,
-      transparent 70%
-    );
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  .swap-page .card > * {
-    position: relative;
-    z-index: 1;
-  }
-
-  /* Relay Widget Container */
+  /* Relay Widget Container - Frosted Glass Effect */
   .relay-widget-container {
     border-radius: 24px;
-    overflow: hidden;
+    overflow: visible;
+  }
+
+  /* Main widget frosted glass background */
+  .relay-swap-widget > div {
+    backdrop-filter: blur(24px) !important;
+    -webkit-backdrop-filter: blur(24px) !important;
+  }
+
+  /* Token selector buttons - Glassy red pills */
+  .relay-swap-widget button[class*="selector"],
+  .relay-swap-widget [class*="TokenSelector"] button,
+  .relay-swap-widget [class*="token-selector"] {
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    box-shadow:
+      0 4px 16px rgba(239, 68, 68, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    transition: all 0.2s ease !important;
+  }
+
+  .relay-swap-widget button[class*="selector"]:hover,
+  .relay-swap-widget [class*="TokenSelector"] button:hover {
+    box-shadow:
+      0 6px 24px rgba(239, 68, 68, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.15) !important;
+    transform: translateY(-1px);
+  }
+
+  /* Quick amount buttons (20%, 50%, MAX) - Frosted pills */
+  .relay-swap-widget [class*="percentage"],
+  .relay-swap-widget [class*="Percentage"],
+  .relay-swap-widget button[class*="20"],
+  .relay-swap-widget button[class*="50"],
+  .relay-swap-widget button[class*="max"] {
+    background: rgba(255, 255, 255, 0.1) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    border: 1px solid rgba(239, 68, 68, 0.3) !important;
+    color: #ef4444 !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
+  }
+
+  .relay-swap-widget [class*="percentage"]:hover,
+  .relay-swap-widget [class*="Percentage"]:hover {
+    background: rgba(239, 68, 68, 0.2) !important;
+    border-color: rgba(239, 68, 68, 0.5) !important;
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.3) !important;
+  }
+
+  /* Swap arrow button - Glassy circle */
+  .relay-swap-widget [class*="swap-button"],
+  .relay-swap-widget [class*="SwapButton"],
+  .relay-swap-widget button[class*="switch"] {
+    background: rgba(239, 68, 68, 0.85) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    border: 2px solid rgba(255, 255, 255, 0.2) !important;
+    box-shadow:
+      0 4px 16px rgba(239, 68, 68, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+  }
+
+  /* Input fields - Subtle glass */
+  .relay-swap-widget input {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    color: #ffffff !important;
+  }
+
+  .relay-swap-widget input::placeholder {
+    color: rgba(255, 255, 255, 0.4) !important;
+  }
+
+  /* Card sections - Inner glass panels */
+  .relay-swap-widget [class*="card"],
+  .relay-swap-widget [class*="Card"] {
+    background: rgba(0, 0, 0, 0.3) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-radius: 16px !important;
+  }
+
+  /* CTA Button - Glassy red */
+  .relay-swap-widget button[class*="cta"],
+  .relay-swap-widget button[class*="primary"][class*="w-full"],
+  .relay-swap-widget [class*="SwapButton"]:not([class*="switch"]) {
+    background: rgba(127, 29, 29, 0.85) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    box-shadow:
+      0 4px 20px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  }
+
+  /* Dropdown menus - Frosted glass */
+  .relay-swap-widget [class*="dropdown"],
+  .relay-swap-widget [class*="Dropdown"],
+  .relay-swap-widget [class*="menu"],
+  .relay-swap-widget [class*="Menu"] {
+    background: rgba(17, 17, 17, 0.95) !important;
+    backdrop-filter: blur(24px) !important;
+    -webkit-backdrop-filter: blur(24px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+  }
+
+  /* Wallet address dropdown */
+  .relay-swap-widget [class*="wallet"],
+  .relay-swap-widget [class*="Wallet"],
+  .relay-swap-widget [class*="address"] {
+    color: rgba(255, 255, 255, 0.7) !important;
+  }
+
+  /* Balance text */
+  .relay-swap-widget [class*="balance"],
+  .relay-swap-widget [class*="Balance"] {
+    color: rgba(255, 255, 255, 0.5) !important;
+  }
+
+  /* Modal overlays */
+  .relay-swap-widget [class*="modal"],
+  .relay-swap-widget [class*="Modal"] {
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+  }
+
+  /* Loading spinner wrapper */
+  .relay-swap-widget .flex.items-center.justify-center {
+    background: rgba(17, 17, 17, 0.7);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-radius: 16px;
   }
 `
