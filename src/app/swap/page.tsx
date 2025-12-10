@@ -83,7 +83,7 @@ export default function SwapPage() {
           <LogoInline size="sm" />
         </header>
 
-        {/* Relay SwapWidget - Official UI with chain/token search, trending tokens, etc */}
+        {/* Relay SwapWidget with frosted glass container */}
         <div className="px-5">
           <div className="relay-widget-container">
             <RelaySwapWidget
@@ -195,163 +195,157 @@ const swapStyles = `
     66% { transform: translate(-20px, 20px) scale(0.98); }
   }
 
-  /* ========== RELAY WIDGET - FROSTED GLASS CONTAINER ========== */
+  /* ========================================
+     FROSTED GLASS CONTAINER WITH OUTLINE
+     ======================================== */
 
   .relay-widget-container {
     position: relative;
     border-radius: 24px;
-  }
-
-  /* Frosted glass outline effect */
-  .relay-widget-container::before {
-    content: '';
-    position: absolute;
-    inset: -1.5px;
-    border-radius: 25px;
+    padding: 2px;
     background: linear-gradient(
       135deg,
-      rgba(255, 255, 255, 0.25) 0%,
-      rgba(255, 255, 255, 0.08) 40%,
-      rgba(255, 255, 255, 0.03) 60%,
-      rgba(239, 68, 68, 0.15) 100%
+      rgba(255, 255, 255, 0.3) 0%,
+      rgba(255, 255, 255, 0.1) 30%,
+      rgba(255, 255, 255, 0.05) 70%,
+      rgba(239, 68, 68, 0.2) 100%
     );
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    padding: 1.5px;
-    pointer-events: none;
-    z-index: 1;
   }
 
-  /* Subtle glow behind the card */
-  .relay-widget-container::after {
-    content: '';
-    position: absolute;
-    inset: -4px;
-    border-radius: 28px;
-    background: radial-gradient(ellipse at top left, rgba(255, 255, 255, 0.1), transparent 50%);
-    filter: blur(10px);
-    z-index: -1;
-    pointer-events: none;
+  .relay-widget-container > div {
+    border-radius: 22px;
+    overflow: hidden;
   }
 
-  /* ========== MAIN WIDGET STYLING ========== */
+  /* ========================================
+     MAIN WIDGET STYLING
+     ======================================== */
 
   .relay-swap-widget {
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif !important;
   }
 
   .relay-swap-widget > div {
-    background: rgba(15, 15, 15, 0.92) !important;
+    background: rgba(12, 12, 12, 0.95) !important;
     backdrop-filter: blur(40px) saturate(180%) !important;
     -webkit-backdrop-filter: blur(40px) saturate(180%) !important;
-    border-radius: 24px !important;
+    border-radius: 22px !important;
     border: none !important;
-    box-shadow:
-      0 20px 50px rgba(0, 0, 0, 0.4),
-      inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
-    padding: 18px !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+    padding: 16px !important;
   }
 
-  /* ========== TOKEN SELECTOR BUTTONS (SELECT TOKEN) ========== */
+  /* ========================================
+     SELECT TOKEN BUTTONS - SMALL & COMPACT
+     Using relay- prefix classes
+     ======================================== */
 
-  /* Target the "Select Token" buttons specifically - they have gap_2 and bg_primary */
-  .relay-swap-widget button[class*="bg_primary"][class*="gap_2"] {
-    height: 34px !important;
-    min-height: 34px !important;
-    padding: 0 12px !important;
-    font-size: 13px !important;
+  /* Token selector buttons - target by relay-bg_primary and relay-gap */
+  .relay-swap-widget button[class*="relay-bg_primary"][class*="relay-gap"],
+  .relay-swap-widget button[class*="relay-bg_primary-button"] {
+    height: 28px !important;
+    min-height: 28px !important;
+    max-height: 28px !important;
+    padding: 0 10px !important;
+    font-size: 11px !important;
     font-weight: 600 !important;
-    border-radius: 10px !important;
+    border-radius: 8px !important;
     background: rgba(239, 68, 68, 0.85) !important;
     color: #ffffff !important;
     border: none !important;
-    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2) !important;
+    box-shadow: none !important;
+    text-transform: none !important;
   }
 
-  .relay-swap-widget button[class*="bg_primary"][class*="gap_2"]:hover {
+  .relay-swap-widget button[class*="relay-bg_primary"][class*="relay-gap"]:hover,
+  .relay-swap-widget button[class*="relay-bg_primary-button"]:hover {
     background: rgba(220, 38, 38, 0.9) !important;
   }
 
-  .relay-swap-widget button[class*="bg_primary"][class*="gap_2"] span,
-  .relay-swap-widget button[class*="bg_primary"][class*="gap_2"] p {
+  .relay-swap-widget button[class*="relay-bg_primary"][class*="relay-gap"] span,
+  .relay-swap-widget button[class*="relay-bg_primary-button"] span {
     color: #ffffff !important;
     font-weight: 600 !important;
-    font-size: 13px !important;
+    font-size: 11px !important;
+    text-transform: none !important;
   }
 
-  /* ========== WALLET ADDRESS BUTTONS - WHITE TEXT ========== */
+  /* ========================================
+     WALLET ADDRESS BUTTONS - SMALL & WHITE
+     ======================================== */
 
-  .relay-swap-widget button[class*="rounded_99999"] {
-    height: 24px !important;
-    min-height: 24px !important;
-    padding: 0 8px !important;
-    font-size: 11px !important;
-    background: rgba(255, 255, 255, 0.08) !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  .relay-swap-widget button[class*="relay-rounded_99999"] {
+    height: 22px !important;
+    min-height: 22px !important;
+    padding: 0 6px !important;
+    font-size: 10px !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
     border-radius: 6px !important;
   }
 
-  .relay-swap-widget button[class*="rounded_99999"]:hover {
-    background: rgba(255, 255, 255, 0.12) !important;
+  .relay-swap-widget button[class*="relay-rounded_99999"]:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
   }
 
-  /* Force white text on wallet buttons */
-  .relay-swap-widget button[class*="rounded_99999"] span,
-  .relay-swap-widget button[class*="rounded_99999"] p,
-  .relay-swap-widget button[class*="rounded_99999"] * {
+  .relay-swap-widget button[class*="relay-rounded_99999"] span,
+  .relay-swap-widget button[class*="relay-rounded_99999"] * {
     color: #ffffff !important;
-    font-size: 11px !important;
+    font-size: 10px !important;
   }
 
-  /* ========== SWAP ARROW BUTTON - SMALL & MINIMAL ========== */
+  /* ========================================
+     SWAP ARROW BUTTON - TINY & SUBTLE
+     ======================================== */
 
-  /* The swap/switch button has rounded_12 and p_2 classes */
-  .relay-swap-widget button[class*="rounded_12"][class*="p_2"] {
-    width: 32px !important;
-    height: 32px !important;
-    min-width: 32px !important;
-    min-height: 32px !important;
-    max-width: 32px !important;
-    max-height: 32px !important;
+  /* Target the switch/arrow button */
+  .relay-swap-widget button[class*="relay-rounded_12"][class*="relay-p_2"],
+  .relay-swap-widget button[class*="relay-rounded_12"][class*="relay-bg_primary"] {
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px !important;
+    min-height: 24px !important;
+    max-width: 24px !important;
+    max-height: 24px !important;
     padding: 0 !important;
-    border-radius: 8px !important;
-    background: rgba(255, 255, 255, 0.05) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    margin: 4px 0 !important;
+    border-radius: 6px !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
     box-shadow: none !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
   }
 
-  .relay-swap-widget button[class*="rounded_12"][class*="p_2"]:hover {
-    background: rgba(239, 68, 68, 0.15) !important;
-    border-color: rgba(239, 68, 68, 0.3) !important;
+  .relay-swap-widget button[class*="relay-rounded_12"][class*="relay-p_2"]:hover,
+  .relay-swap-widget button[class*="relay-rounded_12"][class*="relay-bg_primary"]:hover {
+    background: rgba(239, 68, 68, 0.1) !important;
+    border-color: rgba(239, 68, 68, 0.2) !important;
   }
 
-  .relay-swap-widget button[class*="rounded_12"][class*="p_2"] svg {
-    width: 14px !important;
-    height: 14px !important;
-    color: rgba(255, 255, 255, 0.5) !important;
+  .relay-swap-widget button[class*="relay-rounded_12"] svg {
+    width: 12px !important;
+    height: 12px !important;
+    color: rgba(255, 255, 255, 0.4) !important;
   }
 
-  .relay-swap-widget button[class*="rounded_12"][class*="p_2"]:hover svg {
+  .relay-swap-widget button[class*="relay-rounded_12"]:hover svg {
     color: #ef4444 !important;
   }
 
-  /* ========== INPUT FIELDS ========== */
+  /* ========================================
+     INPUT FIELDS - CLEAN
+     ======================================== */
 
   .relay-swap-widget input {
     background: transparent !important;
     border: none !important;
-    font-size: 26px !important;
+    font-size: 24px !important;
     font-weight: 500 !important;
     color: #ffffff !important;
     caret-color: #ef4444 !important;
   }
 
   .relay-swap-widget input::placeholder {
-    color: rgba(255, 255, 255, 0.2) !important;
+    color: rgba(255, 255, 255, 0.15) !important;
   }
 
   .relay-swap-widget input:focus {
@@ -359,88 +353,94 @@ const swapStyles = `
     box-shadow: none !important;
   }
 
-  /* ========== CTA BUTTON (SELECT A TOKEN / SWAP) - MUST BE CLICKABLE ========== */
+  /* ========================================
+     CTA BUTTON (SELECT A TOKEN / SWAP)
+     ======================================== */
 
-  /* Main action button - full width */
-  .relay-swap-widget button[class*="w_max"][class*="min-h_50"],
-  .relay-swap-widget button[class*="w_max"][class*="h_50"] {
-    height: 48px !important;
-    min-height: 48px !important;
+  /* Main action button - using relay- prefix */
+  .relay-swap-widget button[class*="relay-w_max"][class*="relay-min-h_50"],
+  .relay-swap-widget button[class*="relay-w_max"][class*="relay-h_50"],
+  .relay-swap-widget button[class*="relay-w_max-content"][class*="relay-h_50"] {
+    height: 44px !important;
+    min-height: 44px !important;
     width: 100% !important;
-    border-radius: 14px !important;
+    border-radius: 12px !important;
     background: rgba(239, 68, 68, 0.9) !important;
-    font-size: 15px !important;
+    font-size: 14px !important;
     font-weight: 600 !important;
     color: #ffffff !important;
     border: none !important;
-    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.25) !important;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2) !important;
     cursor: pointer !important;
     pointer-events: auto !important;
-    position: relative !important;
-    z-index: 10 !important;
+    text-transform: none !important;
+    font-style: normal !important;
   }
 
-  .relay-swap-widget button[class*="w_max"][class*="min-h_50"]:hover,
-  .relay-swap-widget button[class*="w_max"][class*="h_50"]:hover {
+  .relay-swap-widget button[class*="relay-w_max"]:hover {
     background: rgba(220, 38, 38, 0.95) !important;
-    transform: translateY(-1px) !important;
   }
 
-  .relay-swap-widget button[class*="w_max"][class*="min-h_50"] span,
-  .relay-swap-widget button[class*="w_max"][class*="h_50"] span {
+  .relay-swap-widget button[class*="relay-w_max"] span {
     color: #ffffff !important;
     font-weight: 600 !important;
+    text-transform: none !important;
+    font-style: normal !important;
   }
 
-  /* ========== ALL TEXT - PROPER WHITE COLORS ========== */
+  /* ========================================
+     TEXT COLORS - WHITE
+     ======================================== */
 
   .relay-swap-widget span,
   .relay-swap-widget p,
   .relay-swap-widget label {
-    color: rgba(255, 255, 255, 0.85) !important;
+    color: rgba(255, 255, 255, 0.8) !important;
   }
 
-  /* Sell/Buy labels */
-  .relay-swap-widget [class*="text_subtle"] {
-    color: rgba(255, 255, 255, 0.5) !important;
+  .relay-swap-widget [class*="relay-text_subtle"] {
+    color: rgba(255, 255, 255, 0.45) !important;
   }
 
-  /* USD values */
-  .relay-swap-widget [class*="fs_14"] {
-    color: rgba(255, 255, 255, 0.4) !important;
+  .relay-swap-widget [class*="relay-fs_14"] {
+    color: rgba(255, 255, 255, 0.35) !important;
   }
 
-  /* ========== DROPDOWNS & MODALS ========== */
+  /* ========================================
+     MODALS & DIALOGS
+     ======================================== */
 
   .relay-swap-widget [role="dialog"] > div {
-    background: rgba(18, 18, 18, 0.98) !important;
+    background: rgba(15, 15, 15, 0.98) !important;
     backdrop-filter: blur(40px) !important;
     -webkit-backdrop-filter: blur(40px) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
     border-radius: 20px !important;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5) !important;
   }
 
-  /* ========== MISC ========== */
+  /* ========================================
+     MISC
+     ======================================== */
 
   .relay-swap-widget a[class*="anchor"] {
-    color: rgba(255, 255, 255, 0.3) !important;
-    font-size: 11px !important;
+    color: rgba(255, 255, 255, 0.25) !important;
+    font-size: 10px !important;
   }
 
   .relay-swap-widget [class*="border"] {
-    border-color: rgba(255, 255, 255, 0.04) !important;
+    border-color: rgba(255, 255, 255, 0.03) !important;
   }
 
   /* Scrollbar */
   .relay-swap-widget ::-webkit-scrollbar {
-    width: 4px;
+    width: 3px;
   }
   .relay-swap-widget ::-webkit-scrollbar-track {
     background: transparent;
   }
   .relay-swap-widget ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
   }
 `

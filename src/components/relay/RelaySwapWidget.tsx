@@ -8,7 +8,7 @@ import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import type { AdaptedWallet, Execute } from '@relayprotocol/relay-sdk'
 import { createPublicClient, http, erc20Abi, type Chain } from 'viem'
-import { base, arbitrum, optimism, mainnet } from 'viem/chains'
+import { base, arbitrum, optimism, mainnet, polygon, zora, blast } from 'viem/chains'
 
 interface RelaySwapWidgetProps {
   onSuccess?: (data: Execute) => void
@@ -17,10 +17,13 @@ interface RelaySwapWidgetProps {
 
 // Map chain IDs to viem chain objects for creating public clients
 const chainMap: Record<number, Chain> = {
-  [base.id]: base,
-  [arbitrum.id]: arbitrum,
-  [optimism.id]: optimism,
-  [mainnet.id]: mainnet,
+  [mainnet.id]: mainnet,         // 1
+  [optimism.id]: optimism,       // 10
+  [polygon.id]: polygon,         // 137
+  [base.id]: base,               // 8453
+  [arbitrum.id]: arbitrum,       // 42161
+  [zora.id]: zora,               // 7777777
+  [blast.id]: blast,             // 81457
 }
 
 /**
