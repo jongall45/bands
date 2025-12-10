@@ -316,6 +316,8 @@ export function RelaySwapWidget({ onSuccess, onError }: RelaySwapWidgetProps) {
         onLinkNewWallet={handleLinkNewWallet}
         // Set the destination address to be the same as the source (smart wallet)
         defaultToAddress={smartWalletAddress}
+        // Prioritize Base, Ethereum, Arbitrum in chain selector
+        popularChainIds={[8453, 1, 42161]}
         supportedWalletVMs={['evm']}
         onConnectWallet={handleConnectWallet}
         onSwapSuccess={handleSwapSuccess}
