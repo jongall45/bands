@@ -127,12 +127,29 @@ function createSmartWalletAdapter(
       targetChainId: number,
       item: any,
     ) => {
+      // Store references to dialogs we'll make inert
+      const dialogs: Element[] = []
+
       try {
         console.log('[SmartWalletAdapter] handleSendTransactionStep called')
         console.log('  Target chain:', targetChainId)
         console.log('  To:', item.data?.to)
 
         onStateChange?.('sending')
+
+        // CRITICAL FIX: Make Relay's dialog inert BEFORE calling Privy
+        // This prevents FocusTrap from detecting focus loss when Privy opens
+        document.querySelectorAll('[data-radix-portal] [role="dialog"]').forEach(dialog => {
+          dialog.setAttribute('inert', '')
+          dialogs.push(dialog)
+          console.log('[SmartWalletAdapter] Made Relay dialog inert')
+        })
+
+        // Also hide the dialog overlay to prevent visual conflicts
+        document.querySelectorAll('[data-radix-portal]').forEach(portal => {
+          (portal as HTMLElement).style.opacity = '0'
+          ;(portal as HTMLElement).style.pointerEvents = 'none'
+        })
 
         const getClientForChain = getClientForChainRef.current
         if (!getClientForChain) throw new Error('getClientForChain not available')
@@ -148,6 +165,7 @@ function createSmartWalletAdapter(
           value: item.data.value ? BigInt(item.data.value) : BigInt(0),
         }
 
+        // Now call Privy - the dialog is inert so FocusTrap won't interfere
         const hash = await client.sendTransaction(txRequest)
         console.log('[SmartWalletAdapter] Transaction sent:', hash)
 
@@ -159,6 +177,11 @@ function createSmartWalletAdapter(
         console.error('[SmartWalletAdapter] sendTransaction error:', error)
         onStateChange?.('error')
         throw error
+      } finally {
+        // Remove inert from dialogs (cleanup)
+        dialogs.forEach(dialog => {
+          dialog.removeAttribute('inert')
+        })
       }
     },
 
@@ -204,9 +227,24 @@ function createSmartWalletAdapter(
     supportsAtomicBatch: async () => true,
 
     handleBatchTransactionStep: async (targetChainId: number, items: any[]) => {
+      // Store references to dialogs we'll make inert
+      const dialogs: Element[] = []
+
       try {
         console.log('[SmartWalletAdapter] handleBatchTransactionStep called')
         onStateChange?.('sending')
+
+        // CRITICAL FIX: Make Relay's dialog inert BEFORE calling Privy
+        document.querySelectorAll('[data-radix-portal] [role="dialog"]').forEach(dialog => {
+          dialog.setAttribute('inert', '')
+          dialogs.push(dialog)
+          console.log('[SmartWalletAdapter] Made Relay dialog inert (batch)')
+        })
+
+        document.querySelectorAll('[data-radix-portal]').forEach(portal => {
+          (portal as HTMLElement).style.opacity = '0'
+          ;(portal as HTMLElement).style.pointerEvents = 'none'
+        })
 
         const getClientForChain = getClientForChainRef.current
         if (!getClientForChain) throw new Error('getClientForChain not available')
@@ -240,6 +278,11 @@ function createSmartWalletAdapter(
         console.error('[SmartWalletAdapter] batchTransaction error:', error)
         onStateChange?.('error')
         throw error
+      } finally {
+        // Remove inert from dialogs (cleanup)
+        dialogs.forEach(dialog => {
+          dialog.removeAttribute('inert')
+        })
       }
     },
   }
