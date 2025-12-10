@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useWallets } from '@privy-io/react-auth'
 import { Repeat, RefreshCw } from 'lucide-react'
-import { RelaySwapWidget } from '@/components/relay/RelaySwapWidget'
+import { CustomSwapWidget } from '@/components/relay/CustomSwapWidget'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
 import type { Execute } from '@relayprotocol/relay-sdk'
@@ -78,7 +78,7 @@ export default function SwapPage() {
 
         <div className="px-5">
           <div className="relay-widget-container">
-            <RelaySwapWidget
+            <CustomSwapWidget
               onSuccess={handleSuccess}
               onError={handleError}
             />
