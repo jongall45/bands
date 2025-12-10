@@ -251,37 +251,8 @@ export function RelaySwapWidget({ onSuccess, onError, onStateChange }: RelaySwap
   const { client: smartWalletClient, getClientForChain } = useSmartWallets()
   const publicClient = usePublicClient()
 
-  // ============================================
-  // FIX: Prevent Relay's FocusTrap from closing modal when Privy opens
-  // We inject a hidden focusable element into Relay's dialog to keep FocusTrap happy
-  // ============================================
-  useEffect(() => {
-    const observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node instanceof HTMLElement) {
-            // Look for Radix dialog content (Relay's modal)
-            const dialog = node.querySelector?.('[role="dialog"]') ||
-                          (node.getAttribute?.('role') === 'dialog' ? node : null)
-
-            if (dialog && !dialog.querySelector('.focus-trap-anchor')) {
-              // Inject a hidden focusable element to prevent FocusTrap from closing
-              const anchor = document.createElement('button')
-              anchor.className = 'focus-trap-anchor'
-              anchor.setAttribute('aria-hidden', 'true')
-              anchor.setAttribute('tabindex', '0')
-              anchor.style.cssText = 'position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;opacity:0;pointer-events:none;'
-              dialog.appendChild(anchor)
-              console.log('[RelaySwapWidget] Injected focus anchor into Relay modal')
-            }
-          }
-        }
-      }
-    })
-
-    observer.observe(document.body, { childList: true, subtree: true })
-    return () => observer.disconnect()
-  }, [])
+  // NOTE: Relay's confirmation modal is hidden via CSS in swap/page.tsx
+  // This allows Privy's approval popup to show directly without FocusTrap conflicts
 
   // Track swap state locally
   const [swapState, setSwapState] = useState<SwapState>('idle')

@@ -464,20 +464,42 @@ const swapStyles = `
   }
 
   /* ============================================
-     FIX: Keep Relay modal open when Privy opens
-     Prevent FocusTrap from triggering close
+     FIX: HIDE Relay's CONFIRMATION modal
+     The confirmation modal that appears after clicking "Swap"
+     conflicts with Privy's transaction approval popup.
+     We hide it and let Privy show directly.
      ============================================ */
 
-  /* Ensure Relay's dialog stays visible and doesn't get hidden by Privy */
-  body:has(iframe[src*="privy"]) [data-radix-portal],
-  body:has(iframe[src*="privy"]) [role="dialog"] {
-    visibility: visible !important;
-    display: block !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
+  /*
+   * Hide Relay's confirmation/progress modal portal.
+   * This is the modal that shows "Confirming..." after you click Swap.
+   * Token selector dialogs use different structure and won't be affected.
+   */
+  [data-radix-portal]:has([role="dialog"]:has(button:disabled)),
+  [data-radix-portal]:has([role="dialog"] [class*="animate"]),
+  .swap-page[data-swap-state="sending"] [data-radix-portal],
+  .swap-page[data-swap-state="pending"] [data-radix-portal],
+  .swap-page[data-swap-state="confirming"] [data-radix-portal] {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    z-index: -1 !important;
   }
 
-  /* Keep focus-trap anchor accessible */
+  /* Privy's modal must ALWAYS be visible and on top */
+  #privy-iframe-container,
+  iframe[src*="privy"],
+  iframe[src*="privy.io"],
+  [data-privy-dialog],
+  [id^="privy-"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    z-index: 2147483647 !important;
+    filter: none !important;
+  }
+
+  /* Keep focus-trap anchor accessible (in case we need it later) */
   .focus-trap-anchor {
     position: absolute !important;
     width: 1px !important;
