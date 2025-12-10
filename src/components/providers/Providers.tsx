@@ -7,11 +7,10 @@ import { SmartWalletsProvider } from '@privy-io/react-auth/smart-wallets'
 import { WagmiProvider, createConfig } from '@privy-io/wagmi'
 import { http } from 'viem'
 import { base, arbitrum, optimism, mainnet } from 'viem/chains'
+import { RelayKitProvider } from '@relayprotocol/relay-kit-ui'
+import '@relayprotocol/relay-kit-ui/styles.css'
 import { PWALayout } from '@/components/layout/PWALayout'
-import { initializeRelayClient, SUPPORTED_CHAINS } from '@/lib/relay-client'
-
-// Initialize Relay SDK client on app startup
-initializeRelayClient()
+import { MAINNET_RELAY_API, convertViemChainToRelayChain } from '@relayprotocol/relay-sdk'
 
 // Wagmi config for Privy - supports all Relay chains
 const wagmiConfig = createConfig({
@@ -90,9 +89,17 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <SmartWalletsProvider>
         <QueryClientProvider client={queryClient}>
           <WagmiProvider config={wagmiConfig}>
-            <PWALayout>
-              {children}
-            </PWALayout>
+            <RelayKitProvider
+              options={{
+                baseApiUrl: MAINNET_RELAY_API,
+                source: 'bands.cash',
+                chains: [base, arbitrum, optimism, mainnet].map(convertViemChainToRelayChain),
+              }}
+            >
+              <PWALayout>
+                {children}
+              </PWALayout>
+            </RelayKitProvider>
           </WagmiProvider>
         </QueryClientProvider>
       </SmartWalletsProvider>

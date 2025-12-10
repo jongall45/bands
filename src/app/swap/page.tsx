@@ -1,25 +1,21 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { useWallets } from '@privy-io/react-auth'
-import { ArrowUpDown, ArrowRightLeft, Repeat, RefreshCw } from 'lucide-react'
-import { SmartSwap } from '@/components/relay/SmartSwap'
+import { Repeat, RefreshCw } from 'lucide-react'
+import { RelaySwapWidget } from '@/components/relay/RelaySwapWidget'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
-
-type Tab = 'swap' | 'bridge'
+import type { Execute } from '@relayprotocol/relay-sdk'
 
 export default function SwapPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { wallets } = useWallets()
-  const [activeTab, setActiveTab] = useState<Tab>('swap')
   const [recentTx, setRecentTx] = useState<string | null>(null)
 
   // Get the embedded Privy wallet
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
-  const address = embeddedWallet?.address
   const isConnected = !!embeddedWallet
 
   // Only redirect after a delay to allow connection state to settle
@@ -32,19 +28,22 @@ export default function SwapPage() {
     return () => clearTimeout(timer)
   }, [isConnected, router])
 
-  // Handle ?tab=bridge query param
-  useEffect(() => {
-    const tab = searchParams.get('tab')
-    if (tab === 'bridge') {
-      setActiveTab('bridge')
+  const handleSuccess = (data: Execute) => {
+    // Extract transaction hash from Relay's Execute response
+    const steps = data?.steps || []
+    for (const step of steps) {
+      const items = step?.items || []
+      for (const item of items) {
+        if (item?.txHashes && item.txHashes.length > 0) {
+          setRecentTx(item.txHashes[0].txHash)
+          return
+        }
+      }
     }
-  }, [searchParams])
+  }
 
-  const handleSuccess = (data: any) => {
-    const hash = data?.txHash || data?.hash || (typeof data === 'string' ? data : null)
-    if (hash) {
-      setRecentTx(hash)
-    }
+  const handleError = (error: string) => {
+    console.error('[SwapPage] Error:', error)
   }
 
   if (!isConnected) {
@@ -73,7 +72,7 @@ export default function SwapPage() {
 
       <div className="max-w-[430px] mx-auto relative z-10 pb-24">
         {/* Header */}
-        <header 
+        <header
           className="flex items-center justify-between px-5 py-4"
           style={{ paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))' }}
         >
@@ -84,47 +83,14 @@ export default function SwapPage() {
           <LogoInline size="sm" />
         </header>
 
-        {/* Tab Switcher */}
-        <div className="px-5 pb-4">
-          <div className="flex bg-[#111] border border-white/[0.06] rounded-2xl p-1">
-            <button
-              onClick={() => setActiveTab('swap')}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium transition-all ${
-                activeTab === 'swap'
-                  ? 'bg-[#ef4444] text-white'
-                  : 'text-white/40 hover:text-white/60'
-              }`}
-            >
-              <ArrowUpDown className="w-4 h-4" />
-              Swap
-            </button>
-            <button
-              onClick={() => setActiveTab('bridge')}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium transition-all ${
-                activeTab === 'bridge'
-                  ? 'bg-[#ef4444] text-white'
-                  : 'text-white/40 hover:text-white/60'
-              }`}
-            >
-              <ArrowRightLeft className="w-4 h-4" />
-              Bridge
-            </button>
-          </div>
-        </div>
-
-        {/* Widget Container - Smart Wallet + Relay Integration */}
+        {/* Relay SwapWidget - Official UI with chain/token search, trending tokens, etc */}
         <div className="px-5">
-          {activeTab === 'swap' ? (
-            <SmartSwap onSuccess={handleSuccess} />
-          ) : (
-            <SmartSwap
-              defaultFromChain={8453}
-              defaultToChain={42161}
-              defaultFromToken="USDC"
-              defaultToToken="USDC"
+          <div className="relay-widget-container">
+            <RelaySwapWidget
               onSuccess={handleSuccess}
+              onError={handleError}
             />
-          )}
+          </div>
         </div>
 
         {/* Recent Transaction */}
@@ -144,20 +110,8 @@ export default function SwapPage() {
           </div>
         )}
 
-        {/* Info Cards */}
-        <div className="px-5 mt-6 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="card p-4">
-              <p className="text-white/40 text-xs mb-1">Swap</p>
-              <p className="text-white text-sm">Exchange tokens on any chain</p>
-            </div>
-            <div className="card p-4">
-              <p className="text-white/40 text-xs mb-1">Bridge</p>
-              <p className="text-white text-sm">Move tokens across chains</p>
-            </div>
-          </div>
-
-          {/* Powered by Relay */}
+        {/* Powered by Relay */}
+        <div className="px-5 mt-6">
           <div className="flex items-center justify-center gap-2 text-gray-400 text-xs">
             <Repeat className="w-3 h-3" />
             Powered by Relay Protocol
@@ -272,17 +226,9 @@ const swapStyles = `
     z-index: 1;
   }
 
-  /* Relay Widget Overrides */
-  .relay-widget-wrapper .relay-swap-container,
-  .relay-widget-wrapper .relay-bridge-container {
+  /* Relay Widget Container */
+  .relay-widget-container {
     border-radius: 24px;
     overflow: hidden;
-  }
-
-  .relay-widget-wrapper .relay-swap-container > div,
-  .relay-widget-wrapper .relay-bridge-container > div {
-    background: #111111 !important;
-    border: 1px solid rgba(255, 255, 255, 0.06) !important;
-    border-radius: 24px !important;
   }
 `

@@ -15,6 +15,7 @@
     "@privy-io/react-auth": "^3.8.1",
     "@privy-io/wagmi": "^2.1.0",
     "@relayprotocol/relay-kit-hooks": "^2.0.9",
+    "@relayprotocol/relay-kit-ui": "^6.0.10",
     "@relayprotocol/relay-sdk": "^3.1.1",
     "@solana-program/system": "^0.10.0",
     "@solana-program/token": "^0.9.0",
