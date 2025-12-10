@@ -291,46 +291,67 @@ const swapStyles = `
   }
 
   /* ============================================
-     TOKEN SELECTOR BUTTONS - Compact with overflow handling
+     TOKEN SELECTOR BUTTONS - Properly sized with visible content
      ============================================ */
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] {
-    height: 32px !important;
-    min-height: 32px !important;
-    max-width: 140px !important;
-    padding: 4px 8px !important;
-    font-size: 10px !important;
-    border-radius: 6px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    min-width: fit-content !important;
+    max-width: 160px !important;
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+    border-radius: 8px !important;
     background: #ef4444 !important;
-    overflow: hidden !important;
+    overflow: visible !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
   }
 
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"]::before {
     display: none !important;
   }
 
+  .relay-swap-widget button[class*="bg_primary"][class*="gap_"] > div {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    line-height: 1.1 !important;
+    overflow: hidden !important;
+  }
+
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] span {
     color: #ffffff !important;
-    font-size: 10px !important;
-    font-weight: 500 !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
     text-transform: none !important;
     white-space: nowrap !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
-    max-width: 80px !important;
+    max-width: 90px !important;
+  }
+
+  /* Chain name under token - smaller gray text */
+  .relay-swap-widget button[class*="bg_primary"][class*="gap_"] span[class*="subtle"],
+  .relay-swap-widget button[class*="bg_primary"][class*="gap_"] span:last-child {
+    font-size: 9px !important;
+    font-weight: 400 !important;
+    color: rgba(255, 255, 255, 0.65) !important;
   }
 
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] svg {
     color: #ffffff !important;
-    width: 10px !important;
-    height: 10px !important;
+    width: 12px !important;
+    height: 12px !important;
     flex-shrink: 0 !important;
   }
 
-  /* Token icon inside selector - smaller */
+  /* Token icon inside selector */
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] img {
-    width: 18px !important;
-    height: 18px !important;
+    width: 22px !important;
+    height: 22px !important;
     flex-shrink: 0 !important;
+    border-radius: 50% !important;
   }
 
   /* ============================================
@@ -431,14 +452,37 @@ const swapStyles = `
   }
 
   /* ============================================
+     RELAY MODAL - Lower z-index so Privy appears above
+     ============================================ */
+  .relay-swap-widget [role="dialog"],
+  .relay-swap-widget [data-radix-portal],
+  div[data-radix-portal]:has(.relay-swap-widget),
+  [data-radix-popper-content-wrapper] {
+    z-index: 10000 !important;
+  }
+
+  /* ============================================
      PRIVY MODAL - Must appear above Relay modal
      ============================================ */
   [data-privy-dialog],
   .privy-dialog,
   .privy-modal,
   div[id*="privy"],
-  div[class*="privy"] > div[role="dialog"] {
-    z-index: 999999 !important;
+  div[class*="privy"],
+  div[class*="privy"] > div[role="dialog"],
+  iframe[title*="privy"],
+  div[data-privy-dialog-container],
+  #privy-modal-content,
+  #privy-dialog {
+    z-index: 99999999 !important;
+    position: relative !important;
+  }
+
+  /* Privy overlay/backdrop */
+  div[class*="privy"][class*="overlay"],
+  div[class*="privy"][class*="backdrop"],
+  [data-privy-dialog] ~ div {
+    z-index: 99999998 !important;
   }
 
   /* ============================================
