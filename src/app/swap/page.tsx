@@ -229,57 +229,31 @@ const swapStyles = `
   }
 
   /* ============================================
-     20% 50% MAX BUTTONS - SUPER TINY
+     20% 50% MAX BUTTONS - Match Relay sizing, red accent
      ============================================ */
   .relay-swap-widget button[class*="fs_12"][class*="fw_500"] {
-    height: 14px !important;
-    min-height: 14px !important;
-    max-height: 14px !important;
-    padding: 0 3px !important;
-    font-size: 7px !important;
-    font-weight: 500 !important;
-    border-radius: 2px !important;
-    background: transparent !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    color: rgba(255, 255, 255, 0.5) !important;
-    text-transform: none !important;
-    margin-left: 2px !important;
-    line-height: 1 !important;
+    background: #ef4444 !important;
+    border: none !important;
+    color: #ffffff !important;
+    /* Let Relay handle native sizing */
   }
 
   .relay-swap-widget button[class*="fs_12"][class*="fw_500"]:hover {
-    background: rgba(255, 255, 255, 0.06) !important;
-    border-color: rgba(255, 255, 255, 0.2) !important;
+    background: #dc2626 !important;
   }
 
   .relay-swap-widget button[class*="fs_12"][class*="fw_500"] span {
-    color: rgba(255, 255, 255, 0.5) !important;
-    font-size: 7px !important;
-    line-height: 1 !important;
+    color: #ffffff !important;
   }
 
   /* ============================================
-     SWAP ARROW - Red circle, white arrow, ZERO outline/ring
+     SWAP ARROW - Red background, preserve native sizing
      ============================================ */
   .relay-swap-widget button[class*="rounded_12"][class*="p_2"] {
-    width: 32px !important;
-    height: 32px !important;
-    min-width: 32px !important;
-    min-height: 32px !important;
-    max-width: 32px !important;
-    max-height: 32px !important;
-    padding: 4px !important;
-    margin: 6px auto !important;
-    border-radius: 8px !important;
     background: #ef4444 !important;
-    border: 0 !important;
-    outline: 0 !important;
+    border: none !important;
     box-shadow: none !important;
-  }
-
-  .relay-swap-widget button[class*="rounded_12"][class*="p_2"]::before,
-  .relay-swap-widget button[class*="rounded_12"][class*="p_2"]::after {
-    display: none !important;
+    /* Let Relay handle native sizing */
   }
 
   .relay-swap-widget button[class*="rounded_12"][class*="p_2"]:hover {
@@ -287,19 +261,17 @@ const swapStyles = `
   }
 
   .relay-swap-widget button[class*="rounded_12"][class*="p_2"] svg {
-    width: 14px !important;
-    height: 14px !important;
     color: #ffffff !important;
   }
 
   /* ============================================
-     TOKEN SELECTOR BUTTONS - Just change background color
-     Let Relay handle the native layout/sizing
+     TOKEN SELECTOR BUTTONS - Red background, preserve Relay sizing
      ============================================ */
   .relay-swap-widget button[data-testid="origin-token-select-button"],
   .relay-swap-widget button[data-testid="destination-token-select-button"],
   .relay-swap-widget button[class*="widget-selector-background"] {
     background: #ef4444 !important;
+    /* Preserve Relay's native sizing - don't override height/padding */
   }
 
   .relay-swap-widget button[data-testid="origin-token-select-button"]:hover,
@@ -307,7 +279,7 @@ const swapStyles = `
     background: #dc2626 !important;
   }
 
-  /* Token selector text colors */
+  /* Text colors for dark-on-red */
   .relay-swap-widget button[data-testid="origin-token-select-button"] span,
   .relay-swap-widget button[data-testid="destination-token-select-button"] span,
   .relay-swap-widget button[data-testid="origin-token-select-button"] div,
@@ -315,16 +287,22 @@ const swapStyles = `
     color: #ffffff !important;
   }
 
-  /* Subtle text in token selector */
+  /* Chain name - slightly transparent white */
   .relay-swap-widget button[data-testid="origin-token-select-button"] [class*="text_subtle"],
   .relay-swap-widget button[data-testid="destination-token-select-button"] [class*="text_subtle"] {
-    color: rgba(255, 255, 255, 0.7) !important;
+    color: rgba(255, 255, 255, 0.75) !important;
   }
 
-  /* Dropdown arrow */
+  /* Chevron arrow */
   .relay-swap-widget button[data-testid="origin-token-select-button"] svg,
   .relay-swap-widget button[data-testid="destination-token-select-button"] svg {
     color: #ffffff !important;
+  }
+
+  /* Chain badge border - match red background */
+  .relay-swap-widget button[data-testid="origin-token-select-button"] [class*="rounded"],
+  .relay-swap-widget button[data-testid="destination-token-select-button"] [class*="rounded"] {
+    border-color: #ef4444 !important;
   }
 
   /* ============================================
@@ -360,37 +338,20 @@ const swapStyles = `
   }
 
   /* ============================================
-     CTA BUTTON - Target by data-testid and class patterns
+     CTA BUTTON - Red background, preserve native sizing
      ============================================ */
   .relay-swap-widget button[data-testid="swap-button"],
-  .relay-swap-widget button[class*="min-h_44"],
-  .relay-swap-widget button[class*="justify_center"][class*="py_3"] {
-    height: 52px !important;
-    min-height: 52px !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    border-radius: 12px !important;
+  .relay-swap-widget button[class*="min-h_44"] {
     background: #ef4444 !important;
-    font-size: 15px !important;
-    font-weight: 600 !important;
     color: #ffffff !important;
     border: none !important;
     box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3) !important;
-    margin-top: 12px !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    text-transform: none !important;
-    font-style: normal !important;
+    /* Let Relay handle native sizing */
   }
 
   .relay-swap-widget button[data-testid="swap-button"] span,
   .relay-swap-widget button[class*="min-h_44"] span {
     color: #ffffff !important;
-    font-size: 15px !important;
-    font-weight: 600 !important;
-    text-transform: none !important;
-    font-style: normal !important;
   }
 
   .relay-swap-widget button[data-testid="swap-button"]:hover:not(:disabled),
