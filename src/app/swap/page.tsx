@@ -292,66 +292,90 @@ const swapStyles = `
 
   /* ============================================
      TOKEN SELECTOR BUTTONS - Tiny compact version
+     Target Relay's specific classes for proper override
      ============================================ */
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] {
-    height: 24px !important;
-    min-height: 24px !important;
+    height: 28px !important;
+    min-height: 28px !important;
+    max-height: 28px !important;
     min-width: fit-content !important;
-    max-width: 100px !important;
-    padding: 3px 6px !important;
-    font-size: 6px !important;
+    max-width: 110px !important;
+    padding: 2px 6px !important;
     border-radius: 6px !important;
     background: #ef4444 !important;
-    overflow: visible !important;
+    overflow: hidden !important;
     display: flex !important;
     align-items: center !important;
-    gap: 3px !important;
+    gap: 4px !important;
   }
 
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"]::before {
     display: none !important;
   }
 
-  .relay-swap-widget button[class*="bg_primary"][class*="gap_"] > div {
+  /* Token icon container - override relay-w_32 relay-h_32 */
+  .relay-swap-widget button[class*="bg_primary"] div[class*="relay-w_32"],
+  .relay-swap-widget button[class*="bg_primary"] div[class*="relay-h_32"],
+  .relay-swap-widget button[class*="bg_primary"] [class*="shrink_0"][class*="w_32"] {
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px !important;
+    min-height: 18px !important;
+    max-width: 18px !important;
+    max-height: 18px !important;
+  }
+
+  /* Token icon image */
+  .relay-swap-widget button[class*="bg_primary"] img {
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px !important;
+    min-height: 18px !important;
+    border-radius: 50% !important;
+  }
+
+  /* Text container - flex column */
+  .relay-swap-widget button[class*="bg_primary"] div[class*="flex_column"],
+  .relay-swap-widget button[class*="bg_primary"] > div[class*="gap_"] > div:last-of-type {
     display: flex !important;
     flex-direction: column !important;
-    align-items: flex-start !important;
-    line-height: 1.1 !important;
+    justify-content: center !important;
+    gap: 0 !important;
+    line-height: 1 !important;
+    max-width: 55px !important;
     overflow: hidden !important;
   }
 
-  .relay-swap-widget button[class*="bg_primary"][class*="gap_"] span {
-    color: #ffffff !important;
-    font-size: 6px !important;
+  /* Token name - override relay-fs_16px */
+  .relay-swap-widget button[class*="bg_primary"] div[class*="fs_16"],
+  .relay-swap-widget button[class*="bg_primary"] [class*="fw_700"] {
+    font-size: 9px !important;
     font-weight: 600 !important;
-    text-transform: none !important;
+    line-height: 1.1 !important;
+    color: #ffffff !important;
     white-space: nowrap !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
-    max-width: 60px !important;
   }
 
-  /* Chain name under token - smaller gray text */
-  .relay-swap-widget button[class*="bg_primary"][class*="gap_"] span[class*="subtle"],
-  .relay-swap-widget button[class*="bg_primary"][class*="gap_"] span:last-child {
-    font-size: 5px !important;
+  /* Chain name - override relay-fs_12px */
+  .relay-swap-widget button[class*="bg_primary"] div[class*="fs_12"],
+  .relay-swap-widget button[class*="bg_primary"] div[class*="text_subtle"] {
+    font-size: 7px !important;
     font-weight: 400 !important;
-    color: rgba(255, 255, 255, 0.65) !important;
+    line-height: 1.1 !important;
+    color: rgba(255, 255, 255, 0.6) !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
   }
 
+  /* Dropdown arrow */
   .relay-swap-widget button[class*="bg_primary"][class*="gap_"] svg {
     color: #ffffff !important;
-    width: 6px !important;
-    height: 6px !important;
+    width: 10px !important;
+    height: 10px !important;
     flex-shrink: 0 !important;
-  }
-
-  /* Token icon inside selector */
-  .relay-swap-widget button[class*="bg_primary"][class*="gap_"] img {
-    width: 11px !important;
-    height: 11px !important;
-    flex-shrink: 0 !important;
-    border-radius: 50% !important;
   }
 
   /* ============================================
