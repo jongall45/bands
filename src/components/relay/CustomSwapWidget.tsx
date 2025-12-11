@@ -44,8 +44,8 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
 
   // Local state
   const [sellAmount, setSellAmount] = useState('')
-  const [fromToken, setFromToken] = useState<Token>(COMMON_TOKENS[8453][0]) // USDC on Base
-  const [toToken, setToToken] = useState<Token>(COMMON_TOKENS[42161][0]) // USDC on Arbitrum
+  const [fromToken, setFromToken] = useState<Token>(COMMON_TOKENS[8453][0]) // ETH on Base
+  const [toToken, setToToken] = useState<Token>(COMMON_TOKENS[42161][1]) // USDC on Arbitrum
   const [fromBalance, setFromBalance] = useState('0')
   const [toBalance, setToBalance] = useState('0')
   const [isFromModalOpen, setIsFromModalOpen] = useState(false)
