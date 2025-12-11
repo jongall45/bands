@@ -212,7 +212,7 @@ const swapStyles = `
     background: rgba(26, 26, 26, 1) !important;
   }
 
-  /* PRIVY MODAL - HIGHEST z-index, always on top */
+  /* PRIVY MODAL - Only ensure high z-index and no blur, don't override positioning */
   #privy-iframe-container,
   #privy-dialog,
   #privy-modal,
@@ -224,14 +224,7 @@ const swapStyles = `
   .privy-modal,
   [class*="PrivyDialog"],
   [class*="PrivyModal"],
-  [data-privy-wallet-modal],
-  div[class*="privy"][class*="overlay"],
-  div[class*="privy"][class*="backdrop"],
-  [data-privy-backdrop],
   iframe[src*="privy"],
-  iframe[id*="privy"],
-  iframe[title*="privy" i],
-  iframe[title*="Privy"],
   iframe[src*="privy.io"] {
     z-index: 2147483647 !important;
     filter: none !important;
@@ -241,38 +234,5 @@ const swapStyles = `
     pointer-events: auto !important;
     opacity: 1 !important;
     visibility: visible !important;
-    transform: none !important;
-    position: fixed !important;
-  }
-
-  /* Ensure Privy parent containers don't block interaction */
-  body > div:has(iframe[src*="privy"]),
-  body > div:has([data-privy-dialog]) {
-    pointer-events: auto !important;
-    z-index: 2147483646 !important;
-  }
-
-  /* Force remove any backdrop/blur on body when Privy is open */
-  body:has(iframe[src*="privy"]),
-  body:has([data-privy-dialog]) {
-    filter: none !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-  }
-
-  body:has(iframe[src*="privy"]) .aura,
-  body:has([data-privy-dialog]) .aura {
-    display: none !important;
-  }
-
-  body:has(iframe[src*="privy"]) .noise-overlay,
-  body:has([data-privy-dialog]) .noise-overlay {
-    display: none !important;
-  }
-
-  body:has(iframe[src*="privy"]) .bottom-nav,
-  body:has([data-privy-dialog]) .bottom-nav {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
   }
 `

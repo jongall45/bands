@@ -208,9 +208,37 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
   const rate = Number(quote?.rate) || 0
   const gasFeeUsd = Number(quote?.gasFeeUsd) || 0
 
+  // When transaction is in progress, show minimal UI to not interfere with Privy
+  const isTransacting = state === 'sending' || state === 'confirming' || state === 'pending'
+
   return (
     <>
-      <div className="w-full font-sans">
+      {/* TRANSACTION OVERLAY - Shows when Privy modal should be visible */}
+      {isTransacting && (
+        <div className="w-full font-sans">
+          <div className="bg-[#0a0a0a] rounded-[24px] p-8 relative border border-white/10 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#ef4444]/20 flex items-center justify-center">
+              <Loader2 className="w-8 h-8 text-[#ef4444] animate-spin" />
+            </div>
+            <h3 className="text-xl font-bold text-white mb-2">
+              {state === 'confirming' ? 'Confirm in Wallet' : state === 'pending' ? 'Transaction Pending' : 'Processing...'}
+            </h3>
+            <p className="text-white/50 text-sm">
+              {state === 'confirming' 
+                ? 'Please confirm the transaction in your wallet' 
+                : state === 'pending'
+                ? 'Waiting for blockchain confirmation...'
+                : 'Sending transaction...'}
+            </p>
+            <p className="text-white/30 text-xs mt-4">
+              The wallet popup should appear above this screen
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* MAIN SWAP UI - Hidden during transaction */}
+      <div className={`w-full font-sans ${isTransacting ? 'hidden' : ''}`}>
         {/* Card */}
         <div className="bg-[#0a0a0a] rounded-[24px] p-2 relative border border-white/10">
           
@@ -421,7 +449,7 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
 
       {/* Success Modal */}
       {showSuccess && result && (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4" onClick={handleCloseSuccess}>
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/80 p-4" onClick={handleCloseSuccess}>
           <div className="bg-[#0f0f0f] border border-white/10 rounded-[24px] p-8 max-w-[360px] w-full text-center" onClick={e => e.stopPropagation()}>
             <button
               onClick={handleCloseSuccess}
