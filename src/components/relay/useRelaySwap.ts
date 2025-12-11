@@ -266,21 +266,26 @@ export function useRelaySwap() {
   // Refs
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  // Get wallet address
+  // Get embedded wallet (EOA) - this bypasses ERC-4337 issues
+  const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
+  
+  // Get wallet address - prefer smart wallet address if available, fallback to embedded
   const smartWalletAddress = smartWalletClient?.account?.address as `0x${string}` | undefined
+  const walletAddress = smartWalletAddress || embeddedWallet?.address as `0x${string}` | undefined
 
   // ============================================
-  // FETCH BALANCE
+  // FETCH BALANCE - Use embedded wallet address
   // ============================================
   const fetchBalance = useCallback(async (token: Token): Promise<string> => {
-    if (!smartWalletAddress) return '0'
+    const addressToUse = embeddedWallet?.address as `0x${string}` | undefined
+    if (!addressToUse) return '0'
 
     try {
       const client = getPublicClientForChain(token.chainId, publicClient)
 
       if (token.address === '0x0000000000000000000000000000000000000000') {
         // Native token
-        const balance = await client.getBalance({ address: smartWalletAddress })
+        const balance = await client.getBalance({ address: addressToUse })
         return formatUnits(balance, token.decimals)
       }
 
@@ -289,24 +294,25 @@ export function useRelaySwap() {
         address: token.address as `0x${string}`,
         abi: erc20Abi,
         functionName: 'balanceOf',
-        args: [smartWalletAddress],
+        args: [addressToUse],
       })
       return formatUnits(balance as bigint, token.decimals)
     } catch (err) {
       console.error('[useRelaySwap] fetchBalance error:', err)
       return '0'
     }
-  }, [smartWalletAddress, publicClient])
+  }, [embeddedWallet?.address, publicClient])
 
   // ============================================
-  // FETCH QUOTE
+  // FETCH QUOTE - Use embedded wallet address
   // ============================================
   const fetchQuote = useCallback(async (
     fromToken: Token,
     toToken: Token,
     amount: string,
   ): Promise<Quote | null> => {
-    if (!smartWalletAddress) {
+    const userAddress = embeddedWallet?.address as `0x${string}` | undefined
+    if (!userAddress) {
       setError('Wallet not connected')
       return null
     }
@@ -336,13 +342,13 @@ export function useRelaySwap() {
 
       // Build request body per Relay API spec
       const requestBody = {
-        user: smartWalletAddress,
+        user: userAddress,
         originChainId: fromToken.chainId,
         destinationChainId: toToken.chainId,
         originCurrency,
         destinationCurrency,
         amount: amountInWei,
-        recipient: smartWalletAddress,
+        recipient: userAddress,
         tradeType: 'EXACT_INPUT',
         referrer: 'bands.cash',
       }
@@ -412,10 +418,10 @@ export function useRelaySwap() {
       setState('error')
       return null
     }
-  }, [smartWalletAddress])
+  }, [embeddedWallet?.address])
 
   // ============================================
-  // EXECUTE SWAP
+  // EXECUTE SWAP - Using embedded wallet to bypass AA10 error
   // ============================================
   const executeSwap = useCallback(async (
     fromToken: Token,
@@ -426,16 +432,13 @@ export function useRelaySwap() {
       return null
     }
 
-    if (!smartWalletAddress || !smartWalletClient) {
+    if (!embeddedWallet) {
       setError('Wallet not connected')
       return null
     }
 
     setState('confirming')
     setError(null)
-
-    // Cache for chain-specific clients to avoid AA10 error
-    const chainClientCache: Record<number, any> = {}
 
     try {
       let lastTxHash: string | undefined
@@ -451,60 +454,27 @@ export function useRelaySwap() {
 
           setState('sending')
 
-          // Get or cache the Privy client for this chain
-          // This helps avoid the "AA10 sender already constructed" error
-          // by reusing the same client instance
-          let client = chainClientCache[targetChainId]
-          if (!client) {
-            try {
-              client = await getClientForChain({ id: targetChainId })
-              chainClientCache[targetChainId] = client
-            } catch (clientErr: any) {
-              console.warn('[useRelaySwap] getClientForChain error:', clientErr)
-              // Fall back to the main smart wallet client if on Base
-              if (targetChainId === 8453 && smartWalletClient) {
-                client = smartWalletClient
-                chainClientCache[targetChainId] = client
-              } else {
-                throw new Error(`Failed to get client for chain ${targetChainId}`)
-              }
-            }
+          // Switch chain if needed
+          const currentChainId = embeddedWallet.chainId
+          if (currentChainId !== `eip155:${targetChainId}`) {
+            console.log('[useRelaySwap] Switching chain to:', targetChainId)
+            await embeddedWallet.switchChain(targetChainId)
           }
 
-          if (!client) {
-            throw new Error(`No client available for chain ${targetChainId}`)
-          }
-
-          // Send transaction via Privy - THIS SHOWS THE PRIVY POPUP
-          // Add retry logic for AA10 "already constructed" error
-          let txHash: string
-          try {
-            txHash = await client.sendTransaction({
-              to: item.data.to as `0x${string}`,
-              data: item.data.data as `0x${string}`,
-              value: item.data.value ? BigInt(item.data.value) : BigInt(0),
-            })
-          } catch (sendErr: any) {
-            // Handle AA10 "sender already constructed" error - retry once
-            if (sendErr.message?.includes('AA10') || sendErr.message?.includes('already constructed') || sendErr.message?.includes('already been deployed')) {
-              console.log('[useRelaySwap] AA10 error detected, retrying with fresh client...')
-              
-              // Force get a fresh client
-              const freshClient = await getClientForChain({ id: targetChainId })
-              if (!freshClient) {
-                throw new Error('Failed to get fresh client for retry')
-              }
-              chainClientCache[targetChainId] = freshClient
-              
-              txHash = await freshClient.sendTransaction({
-                to: item.data.to as `0x${string}`,
-                data: item.data.data as `0x${string}`,
-                value: item.data.value ? BigInt(item.data.value) : BigInt(0),
-              })
-            } else {
-              throw sendErr
-            }
-          }
+          // Get the provider from embedded wallet
+          const provider = await embeddedWallet.getEthereumProvider()
+          
+          // Send transaction directly via embedded wallet provider
+          // This bypasses ERC-4337 bundler and avoids AA10 error
+          const txHash = await provider.request({
+            method: 'eth_sendTransaction',
+            params: [{
+              from: embeddedWallet.address,
+              to: item.data.to,
+              data: item.data.data,
+              value: item.data.value ? `0x${BigInt(item.data.value).toString(16)}` : '0x0',
+            }],
+          }) as string
 
           console.log('[useRelaySwap] Transaction sent:', txHash)
           lastTxHash = txHash
@@ -537,10 +507,8 @@ export function useRelaySwap() {
       console.error('[useRelaySwap] executeSwap error:', err)
       
       // Check if user rejected
-      if (err.message?.includes('rejected') || err.message?.includes('denied')) {
+      if (err.message?.includes('rejected') || err.message?.includes('denied') || err.message?.includes('User rejected')) {
         setError('Transaction rejected')
-      } else if (err.message?.includes('AA10') || err.message?.includes('already constructed')) {
-        setError('Wallet sync issue - please refresh and try again')
       } else {
         setError(err.message || 'Swap failed')
       }
@@ -548,7 +516,7 @@ export function useRelaySwap() {
       setState('error')
       return null
     }
-  }, [quote, smartWalletAddress, smartWalletClient, getClientForChain, publicClient])
+  }, [quote, embeddedWallet, publicClient])
 
   // ============================================
   // RESET
@@ -566,8 +534,8 @@ export function useRelaySwap() {
     quote,
     error,
     result,
-    isConnected: !!smartWalletAddress,
-    walletAddress: smartWalletAddress,
+    isConnected: !!embeddedWallet?.address,
+    walletAddress: embeddedWallet?.address as `0x${string}` | undefined,
 
     // Actions
     login,
