@@ -415,7 +415,7 @@ export function useRelaySwap() {
   }, [smartWalletAddress])
 
   // ============================================
-  // EXECUTE SWAP
+  // EXECUTE SWAP - Use smartWalletClient directly to avoid AA10 error
   // ============================================
   const executeSwap = useCallback(async (
     fromToken: Token,
@@ -434,9 +434,6 @@ export function useRelaySwap() {
     setState('confirming')
     setError(null)
 
-    // Cache for chain-specific clients to avoid AA10 error
-    const chainClientCache: Record<number, any> = {}
-
     try {
       let lastTxHash: string | undefined
 
@@ -451,52 +448,33 @@ export function useRelaySwap() {
 
           setState('sending')
 
-          // Get or cache the Privy client for this chain
-          // This helps avoid the "AA10 sender already constructed" error
-          // by reusing the same client instance
-          let client = chainClientCache[targetChainId]
-          if (!client) {
-            try {
-              client = await getClientForChain({ id: targetChainId })
-              chainClientCache[targetChainId] = client
-            } catch (clientErr: any) {
-              console.warn('[useRelaySwap] getClientForChain error:', clientErr)
-              // Fall back to the main smart wallet client if on Base
-              if (targetChainId === 8453 && smartWalletClient) {
-                client = smartWalletClient
-                chainClientCache[targetChainId] = client
-              } else {
-                throw new Error(`Failed to get client for chain ${targetChainId}`)
-              }
-            }
-          }
-
-          if (!client) {
-            throw new Error(`No client available for chain ${targetChainId}`)
-          }
-
-          // Send transaction via Privy - THIS SHOWS THE PRIVY POPUP
-          // Add retry logic for AA10 "already constructed" error
+          // IMPORTANT: Use smartWalletClient directly - it's already initialized
+          // and knows the account is deployed, avoiding the AA10 error.
+          // getClientForChain creates a fresh client that doesn't know the account state.
           let txHash: string
+
           try {
-            txHash = await client.sendTransaction({
+            // Try using the main smartWalletClient first
+            // It should handle chain switching internally
+            txHash = await smartWalletClient.sendTransaction({
               to: item.data.to as `0x${string}`,
               data: item.data.data as `0x${string}`,
               value: item.data.value ? BigInt(item.data.value) : BigInt(0),
+              chain: chainMap[targetChainId],
             })
           } catch (sendErr: any) {
-            // Handle AA10 "sender already constructed" error - retry once
-            if (sendErr.message?.includes('AA10') || sendErr.message?.includes('already constructed') || sendErr.message?.includes('already been deployed')) {
-              console.log('[useRelaySwap] AA10 error detected, retrying with fresh client...')
-              
-              // Force get a fresh client
-              const freshClient = await getClientForChain({ id: targetChainId })
-              if (!freshClient) {
-                throw new Error('Failed to get fresh client for retry')
+            console.log('[useRelaySwap] smartWalletClient.sendTransaction error:', sendErr.message)
+            
+            // If smartWalletClient fails, try getClientForChain as fallback
+            // This might be needed for cross-chain transactions
+            if (sendErr.message?.includes('chain') || sendErr.message?.includes('Chain')) {
+              console.log('[useRelaySwap] Trying getClientForChain for chain:', targetChainId)
+              const chainClient = await getClientForChain({ id: targetChainId })
+              if (!chainClient) {
+                throw new Error(`Failed to get client for chain ${targetChainId}`)
               }
-              chainClientCache[targetChainId] = freshClient
               
-              txHash = await freshClient.sendTransaction({
+              txHash = await chainClient.sendTransaction({
                 to: item.data.to as `0x${string}`,
                 data: item.data.data as `0x${string}`,
                 value: item.data.value ? BigInt(item.data.value) : BigInt(0),
@@ -511,8 +489,8 @@ export function useRelaySwap() {
 
           // Wait for confirmation
           setState('pending')
-          const chainClient = getPublicClientForChain(targetChainId, publicClient)
-          await chainClient.waitForTransactionReceipt({
+          const chainPublicClient = getPublicClientForChain(targetChainId, publicClient)
+          await chainPublicClient.waitForTransactionReceipt({
             hash: txHash as `0x${string}`,
             timeout: 120_000,
           })
