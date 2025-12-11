@@ -157,13 +157,14 @@ export default function Dashboard() {
                      selectedToken.address === 'native'
 
     if (isNative) {
-      // Send native ETH
+      // Send native ETH on selected chain
       sendTransaction({
         to: sendTo as `0x${string}`,
         value: amount,
+        chainId: selectedChain.id,
       })
     } else {
-      // Send ERC20 token
+      // Send ERC20 token on selected chain
       const data = encodeFunctionData({
         abi: ERC20_ABI,
         functionName: 'transfer',
@@ -173,6 +174,7 @@ export default function Dashboard() {
       sendTransaction({
         to: selectedToken.address as `0x${string}`,
         data,
+        chainId: selectedChain.id,
       })
     }
   }
@@ -406,15 +408,6 @@ export default function Dashboard() {
         <div className="card mt-4">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-white font-semibold">Recent Activity</h2>
-            <a
-              href={`https://debank.com/profile/${address}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-white/40 text-xs hover:text-white/60 transition-colors flex items-center gap-1"
-            >
-              View all
-              <ExternalLink className="w-3 h-3" />
-            </a>
           </div>
 
           <TransactionList address={address} limit={5} />
@@ -675,9 +668,23 @@ export default function Dashboard() {
             Copy Address
           </button>
 
-          <p className="text-white/30 text-xs mt-4">
-            Works on <span className="text-[#ef4444]">Base, Ethereum, Arbitrum, Optimism</span> & more
-          </p>
+          {/* Supported chains */}
+          <div className="mt-5">
+            <p className="text-white/30 text-xs mb-3">Works on</p>
+            <div className="flex items-center justify-center gap-2">
+              {SEND_CHAINS.map((chain) => (
+                <div key={chain.id} className="flex flex-col items-center gap-1" title={chain.name}>
+                  <div className="w-8 h-8 bg-white/[0.05] rounded-full border border-white/[0.1] flex items-center justify-center">
+                    <img
+                      src={chain.logo}
+                      alt={chain.name}
+                      className="w-5 h-5 rounded-full"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </Modal>
 

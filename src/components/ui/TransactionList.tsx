@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import {
   useTransactionHistory,
   formatTxAmount,
@@ -10,8 +11,8 @@ import {
 import { CHAIN_CONFIG } from '@/hooks/usePortfolio'
 import {
   ArrowUpRight, ArrowDownLeft, RefreshCw, ExternalLink,
-  CheckCircle, XCircle, Loader2, PiggyBank, TrendingUp,
-  ArrowLeftRight, Zap, Globe, Repeat
+  XCircle, Loader2, PiggyBank, TrendingUp,
+  ArrowLeftRight, Zap, Globe, Repeat, Plus, ChevronDown
 } from 'lucide-react'
 
 interface TransactionListProps {
@@ -20,8 +21,9 @@ interface TransactionListProps {
   crossChain?: boolean
 }
 
-export function TransactionList({ address, limit = 10, crossChain = true }: TransactionListProps) {
+export function TransactionList({ address, limit = 5, crossChain = true }: TransactionListProps) {
   const { data: transactions, isLoading, isError, refetch } = useTransactionHistory(address, { crossChain })
+  const [displayCount, setDisplayCount] = useState(limit)
 
   if (!address) {
     return <EmptyState message="Connect wallet to see activity" />
@@ -40,7 +42,7 @@ export function TransactionList({ address, limit = 10, crossChain = true }: Tran
     return (
       <div className="flex flex-col items-center justify-center py-12">
         <p className="text-gray-500 text-sm mb-3">Failed to load transactions</p>
-        <button 
+        <button
           onClick={() => refetch()}
           className="text-[#ef4444] text-sm hover:text-[#dc2626] flex items-center gap-1"
         >
@@ -55,7 +57,12 @@ export function TransactionList({ address, limit = 10, crossChain = true }: Tran
     return <EmptyState message="No transactions yet" submessage="Send or receive to get started" />
   }
 
-  const displayedTxs = transactions.slice(0, limit)
+  const displayedTxs = transactions.slice(0, displayCount)
+  const hasMore = transactions.length > displayCount
+
+  const showMore = () => {
+    setDisplayCount(prev => Math.min(prev + 5, transactions.length))
+  }
 
   return (
     <div className="space-y-2">
@@ -63,19 +70,14 @@ export function TransactionList({ address, limit = 10, crossChain = true }: Tran
         <TransactionRow key={tx.hash} tx={tx} userAddress={address} />
       ))}
 
-      {transactions.length > limit && (
-        <a
-          href={`https://basescan.org/address/${address}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block text-center py-3 text-[#ef4444] text-sm hover:text-[#dc2626] transition-colors"
+      {hasMore && (
+        <button
+          onClick={showMore}
+          className="w-full flex items-center justify-center gap-2 py-3 text-[#ef4444] text-sm hover:text-[#dc2626] transition-colors"
         >
-          View all →
-        </a>
-      )}
-
-      {transactions.length === 0 && !isLoading && (
-        <EmptyState message="No transactions yet" submessage="Send or receive to get started" />
+          <Plus className="w-4 h-4" />
+          Show more ({transactions.length - displayCount} remaining)
+        </button>
       )}
     </div>
   )
@@ -176,23 +178,45 @@ function TransactionRow({ tx, userAddress }: { tx: Transaction; userAddress: str
       }
     }
 
-    // Receive
+    // Receive - show token logo
     if (isReceive) {
+      const tokenLogo = tx.tokenLogoUri || `https://api.sim.dune.com/beta/token/logo/${chainId}/${tx.tokenAddress}`
       return {
         label: 'Received',
         sublabel: `From ${shortenAddress(counterparty)}`,
-        icon: <ArrowDownLeft className="w-5 h-5 text-green-400" />,
+        icon: tx.tokenLogoUri ? (
+          <img
+            src={tokenLogo}
+            alt={tx.tokenSymbol}
+            className="w-5 h-5 rounded-full"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none'
+              ;(e.target as HTMLImageElement).parentElement!.innerHTML = '<svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>'
+            }}
+          />
+        ) : <ArrowDownLeft className="w-5 h-5 text-green-400" />,
         iconBg: 'bg-green-500/10',
         amountColor: 'text-green-400',
         amountPrefix: '+',
       }
     }
 
-    // Default: Send
+    // Default: Send - show token logo
+    const tokenLogo = tx.tokenLogoUri || `https://api.sim.dune.com/beta/token/logo/${chainId}/${tx.tokenAddress}`
     return {
       label: 'Sent',
       sublabel: `To ${shortenAddress(counterparty)}`,
-      icon: <ArrowUpRight className="w-5 h-5 text-gray-400" />,
+      icon: tx.tokenLogoUri ? (
+        <img
+          src={tokenLogo}
+          alt={tx.tokenSymbol}
+          className="w-5 h-5 rounded-full"
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.display = 'none'
+            ;(e.target as HTMLImageElement).parentElement!.innerHTML = '<svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>'
+          }}
+        />
+      ) : <ArrowUpRight className="w-5 h-5 text-gray-400" />,
       iconBg: 'bg-white/[0.05]',
       amountColor: 'text-white',
       amountPrefix: '-',
