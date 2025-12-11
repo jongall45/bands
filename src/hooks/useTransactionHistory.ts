@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { formatUnits } from 'viem'
+import { CHAIN_CONFIG } from './usePortfolio'
 
 export interface Transaction {
   hash: string
@@ -32,7 +33,91 @@ export interface Transaction {
   vaultApy?: number | null
 }
 
-// Fetch from Blockscout (Base only, legacy)
+// Chain explorers mapping
+const CHAIN_EXPLORERS: Record<number, string> = {
+  1: 'https://etherscan.io',
+  8453: 'https://basescan.org',
+  42161: 'https://arbiscan.io',
+  10: 'https://optimistic.etherscan.io',
+  137: 'https://polygonscan.com',
+}
+
+// Fetch from Dune SimAPI Activity endpoint (cross-chain with swaps)
+async function fetchDuneActivity(address: string, chainIds?: string): Promise<Transaction[]> {
+  try {
+    const params = new URLSearchParams({ address })
+    if (chainIds) params.set('chainIds', chainIds)
+    params.set('limit', '50')
+
+    const response = await fetch(`/api/sim/activity?${params}`)
+    if (!response.ok) {
+      console.error('[Activity] Response not ok:', response.status)
+      return []
+    }
+    const data = await response.json()
+    console.log('[Activity] Fetched transactions:', data.transactions?.length || 0)
+
+    // Transform Dune activity format to our Transaction format
+    return (data.transactions || []).map((tx: any) => {
+      const chainId = tx.chainId || 8453
+      const chainConfig = CHAIN_CONFIG[chainId]
+      const explorer = CHAIN_EXPLORERS[chainId] || 'https://basescan.org'
+
+      // Determine transaction type
+      let type: Transaction['type'] = 'contract'
+      if (tx.isSwap) type = 'swap'
+      else if (tx.isBridge) type = 'bridge'
+      else if (tx.isTransfer) type = tx.direction === 'in' ? 'receive' : 'send'
+      else if (tx.app) type = 'app_interaction'
+
+      // Parse timestamp
+      let timestamp = Date.now()
+      if (tx.timestamp) {
+        const parsed = new Date(tx.timestamp).getTime()
+        if (!isNaN(parsed)) timestamp = parsed
+      }
+
+      return {
+        hash: tx.hash,
+        type,
+        from: tx.from || '',
+        to: tx.to || '',
+        value: tx.value || '0',
+        valueUsd: tx.valueUsd || 0,
+        tokenSymbol: tx.token?.symbol || tx.swapFromToken?.symbol || 'ETH',
+        tokenDecimals: tx.token?.decimals || 18,
+        tokenAddress: tx.token?.address || '',
+        tokenLogoUri: tx.token?.logoURI || '',
+        timestamp,
+        status: 'success' as const,
+        blockNumber: String(tx.blockNumber || 0),
+        chainId,
+        chainName: chainConfig?.name || 'Base',
+        chainLogo: chainConfig?.logo || '',
+        explorerUrl: `${explorer}/tx/${tx.hash}`,
+        // Swap fields
+        swapFromToken: tx.swapFromToken ? {
+          symbol: tx.swapFromToken.symbol,
+          amount: tx.swapFromToken.amount,
+          logoUri: tx.swapFromToken.logoURI,
+        } : undefined,
+        swapToToken: tx.swapToToken ? {
+          symbol: tx.swapToToken.symbol,
+          amount: tx.swapToToken.amount,
+          logoUri: tx.swapToToken.logoURI,
+        } : undefined,
+        // App info
+        appName: tx.app || undefined,
+        appCategory: tx.appCategory || undefined,
+      }
+    })
+  } catch (error) {
+    console.error('[Activity] Error fetching:', error)
+    return []
+  }
+}
+
+// Fetch from Blockscout (Base only, fallback)
 async function fetchBlockscoutTransactions(address: string): Promise<Transaction[]> {
   try {
     const response = await fetch(`/api/transactions?address=${address}`)
@@ -42,24 +127,10 @@ async function fetchBlockscoutTransactions(address: string): Promise<Transaction
     return (data.result || []).map((tx: Transaction) => ({
       ...tx,
       chainId: 8453,
-      chainName: 'base',
+      chainName: 'Base',
+      chainLogo: CHAIN_CONFIG[8453]?.logo || '',
       explorerUrl: `https://basescan.org/tx/${tx.hash}`,
     }))
-  } catch {
-    return []
-  }
-}
-
-// Fetch from Dune SimAPI (cross-chain)
-async function fetchDuneTransactions(address: string, chainIds?: string): Promise<Transaction[]> {
-  try {
-    const params = new URLSearchParams({ address })
-    if (chainIds) params.set('chainIds', chainIds)
-
-    const response = await fetch(`/api/sim/transactions?${params}`)
-    if (!response.ok) return []
-    const data = await response.json()
-    return data.transactions || []
   } catch {
     return []
   }
@@ -71,21 +142,20 @@ async function fetchTransactionHistory(
 ): Promise<Transaction[]> {
   if (!address) return []
 
-  const { crossChain = false, chainIds } = options
+  const { crossChain = true, chainIds = '8453,42161,1,10,137' } = options
 
   try {
-    // Use Blockscout for Base transactions (better swap detection)
-    const blockscoutTransactions = await fetchBlockscoutTransactions(address)
+    // Primary: Use Dune Activity API for cross-chain data with swap detection
+    const duneTransactions = await fetchDuneActivity(address, chainIds)
 
-    if (crossChain && chainIds) {
-      // Also fetch from Dune for other chains
-      const duneTransactions = await fetchDuneTransactions(address, chainIds)
-      // Merge and sort by timestamp
-      const allTransactions = [...blockscoutTransactions, ...duneTransactions]
-      allTransactions.sort((a, b) => b.timestamp - a.timestamp)
-      return allTransactions
+    if (duneTransactions.length > 0) {
+      console.log('[TransactionHistory] Using Dune Activity data:', duneTransactions.length, 'transactions')
+      return duneTransactions
     }
 
+    // Fallback: Use Blockscout for Base-only transactions
+    console.log('[TransactionHistory] Falling back to Blockscout')
+    const blockscoutTransactions = await fetchBlockscoutTransactions(address)
     return blockscoutTransactions
   } catch (error) {
     console.error('Error fetching transactions:', error)
