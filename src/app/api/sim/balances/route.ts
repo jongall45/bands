@@ -24,10 +24,11 @@ export async function GET(request: NextRequest) {
       url += `?chain_ids=${chainIds}`
     }
 
+    console.log('[Sim API] Fetching balances:', url)
+
     const response = await fetch(url, {
       headers: {
         'X-Sim-Api-Key': apiKey,
-        'Content-Type': 'application/json',
       },
     })
 
@@ -41,27 +42,42 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json()
+    console.log('[Sim API] Balances response:', JSON.stringify(data).slice(0, 500))
     
     // Transform data into our Token format
-    const tokens = (data.balances || []).map((balance: any) => ({
-      symbol: balance.symbol || 'UNKNOWN',
-      name: balance.name || balance.symbol || 'Unknown Token',
-      address: balance.address || '0x0000000000000000000000000000000000000000',
-      chainId: balance.chain_id,
-      decimals: balance.decimals || 18,
-      logoURI: balance.logo_url || null,
-      balance: balance.amount || '0',
-      balanceUsd: balance.value_usd || 0,
-      price: balance.price_usd || 0,
-    }))
+    // Sim API returns: chain, chain_id, address, amount, symbol, name, decimals, price_usd, value_usd, logo
+    const tokens = (data.balances || []).map((balance: any) => {
+      // Convert amount from smallest unit to human-readable
+      const decimals = balance.decimals || 18
+      const rawAmount = balance.amount || '0'
+      const humanAmount = parseFloat(rawAmount) / Math.pow(10, decimals)
+      
+      return {
+        symbol: balance.symbol || 'UNKNOWN',
+        name: balance.name || balance.symbol || 'Unknown Token',
+        // For native tokens, Sim returns 'native' as address
+        address: balance.address === 'native' ? '0x0000000000000000000000000000000000000000' : (balance.address || '0x0000000000000000000000000000000000000000'),
+        chainId: balance.chain_id,
+        chain: balance.chain,
+        decimals: decimals,
+        logoURI: balance.logo || null,
+        balance: humanAmount.toString(),
+        balanceUsd: balance.value_usd || 0,
+        price: balance.price_usd || 0,
+        lowLiquidity: balance.low_liquidity || false,
+      }
+    })
 
     // Sort by USD value descending
     tokens.sort((a: any, b: any) => (b.balanceUsd || 0) - (a.balanceUsd || 0))
 
+    // Calculate total value
+    const totalValueUsd = tokens.reduce((sum: number, t: any) => sum + (t.balanceUsd || 0), 0)
+
     return NextResponse.json({
       address,
       tokens,
-      totalValueUsd: data.total_value_usd || tokens.reduce((sum: number, t: any) => sum + (t.balanceUsd || 0), 0),
+      totalValueUsd,
     })
   } catch (error) {
     console.error('[Sim API] Balances fetch error:', error)

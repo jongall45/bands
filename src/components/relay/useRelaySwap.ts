@@ -161,6 +161,34 @@ function getPublicClientForChain(targetChainId: number, defaultClient: any) {
 }
 
 // ============================================
+// HOOK: Fetch Token Info from Sim API
+// ============================================
+export async function fetchTokenInfo(address: string, chainId: number): Promise<Token | null> {
+  try {
+    const response = await fetch(`/api/sim/token-info?address=${address}&chainId=${chainId}`)
+    
+    if (!response.ok) {
+      console.warn('[fetchTokenInfo] Failed for', address, 'on chain', chainId)
+      return null
+    }
+
+    const data = await response.json()
+    return {
+      symbol: data.symbol,
+      name: data.name,
+      address: data.address,
+      chainId: data.chainId,
+      decimals: data.decimals,
+      logoURI: data.logoURI,
+      price: data.price,
+    }
+  } catch (err) {
+    console.error('[fetchTokenInfo] Error:', err)
+    return null
+  }
+}
+
+// ============================================
 // HOOK: Fetch User Tokens from Sim API
 // ============================================
 export function useUserTokens(walletAddress: string | undefined) {
@@ -184,15 +212,16 @@ export function useUserTokens(walletAddress: string | undefined) {
       const response = await fetch(`/api/sim/balances?address=${walletAddress}&chainIds=${chainIds}`)
 
       if (!response.ok) {
-        throw new Error('Failed to fetch balances')
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to fetch balances')
       }
 
       const data = await response.json()
       console.log('[useUserTokens] Fetched tokens:', data)
 
-      // Filter out tokens with no balance or very small balances
+      // Filter out tokens with no balance or very small balances (> $0.01)
       const tokensWithBalance = (data.tokens || []).filter(
-        (t: Token) => t.balance && parseFloat(t.balance) > 0
+        (t: Token) => t.balance && parseFloat(t.balance) > 0 && (t.balanceUsd || 0) >= 0.01
       )
 
       setTokens(tokensWithBalance)
@@ -200,7 +229,7 @@ export function useUserTokens(walletAddress: string | undefined) {
     } catch (err: any) {
       console.error('[useUserTokens] Error:', err)
       setError(err.message || 'Failed to fetch tokens')
-      // Fall back to common tokens on error
+      // Fall back to empty on error
       setTokens([])
     } finally {
       setIsLoading(false)
