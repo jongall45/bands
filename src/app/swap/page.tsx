@@ -26,9 +26,26 @@ export default function SwapPage() {
     return () => clearTimeout(timer)
   }, [isConnected, router])
 
+  // Cleanup body class on unmount
+  useEffect(() => {
+    return () => {
+      document.body.classList.remove('privy-modal-active')
+      document.documentElement.classList.remove('privy-modal-active')
+    }
+  }, [])
+
   const handleStateChange = useCallback((state: SwapState) => {
     console.log('[SwapPage] 🔄 Swap state changed:', state)
     setSwapState(state)
+    
+    // CRITICAL: Add body class to disable ALL blur globally when transaction is active
+    if (state === 'sending' || state === 'confirming' || state === 'pending') {
+      document.body.classList.add('privy-modal-active')
+      document.documentElement.classList.add('privy-modal-active')
+    } else {
+      document.body.classList.remove('privy-modal-active')
+      document.documentElement.classList.remove('privy-modal-active')
+    }
   }, [])
 
   const handleSuccess = useCallback((result: { txHash: string; fromAmount: string; toAmount: string }) => {
@@ -177,31 +194,42 @@ const swapStyles = `
     overflow: hidden;
   }
 
-  /* CRITICAL: When swap is sending/confirming, disable ALL blur effects globally */
-  .swap-page[data-swap-state="sending"] *,
-  .swap-page[data-swap-state="confirming"] *,
-  .swap-page[data-swap-state="pending"] * {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-  }
-
-  /* When swap is active, reduce page to minimal state */
+  /* CRITICAL: When swap is sending/confirming, COMPLETELY disable ALL blur and filters */
   .swap-page[data-swap-state="sending"],
   .swap-page[data-swap-state="confirming"],
   .swap-page[data-swap-state="pending"] {
     filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 
+  .swap-page[data-swap-state="sending"] *,
+  .swap-page[data-swap-state="confirming"] *,
+  .swap-page[data-swap-state="pending"] * {
+    filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* Hide ALL decorative elements during transaction */
   .swap-page[data-swap-state="sending"] .aura,
-  .swap-page[data-swap-state="confirming"] .aura,
-  .swap-page[data-swap-state="pending"] .aura {
-    display: none !important;
-  }
-
+  .swap-page[data-swap-state="sending"] .aura-1,
+  .swap-page[data-swap-state="sending"] .aura-2,
+  .swap-page[data-swap-state="sending"] .aura-3,
   .swap-page[data-swap-state="sending"] .noise-overlay,
+  .swap-page[data-swap-state="confirming"] .aura,
+  .swap-page[data-swap-state="confirming"] .aura-1,
+  .swap-page[data-swap-state="confirming"] .aura-2,
+  .swap-page[data-swap-state="confirming"] .aura-3,
   .swap-page[data-swap-state="confirming"] .noise-overlay,
+  .swap-page[data-swap-state="pending"] .aura,
+  .swap-page[data-swap-state="pending"] .aura-1,
+  .swap-page[data-swap-state="pending"] .aura-2,
+  .swap-page[data-swap-state="pending"] .aura-3,
   .swap-page[data-swap-state="pending"] .noise-overlay {
     display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
   }
 
   .swap-page[data-swap-state="sending"] .bottom-nav,
@@ -212,5 +240,12 @@ const swapStyles = `
     background: rgba(26, 26, 26, 1) !important;
   }
 
-  /* Privy modal styles are now in globals.css for reliability */
+  /* Make sure nothing in the swap widget creates stacking context issues */
+  .swap-page[data-swap-state="sending"] .swap-widget-container,
+  .swap-page[data-swap-state="confirming"] .swap-widget-container,
+  .swap-page[data-swap-state="pending"] .swap-widget-container {
+    isolation: auto !important;
+    transform: none !important;
+    z-index: auto !important;
+  }
 `
