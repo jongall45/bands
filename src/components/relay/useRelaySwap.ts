@@ -426,13 +426,16 @@ export function useRelaySwap() {
       return null
     }
 
-    if (!smartWalletAddress || !getClientForChain) {
+    if (!smartWalletAddress || !smartWalletClient) {
       setError('Wallet not connected')
       return null
     }
 
     setState('confirming')
     setError(null)
+
+    // Cache for chain-specific clients to avoid AA10 error
+    const chainClientCache: Record<number, any> = {}
 
     try {
       let lastTxHash: string | undefined
@@ -448,18 +451,60 @@ export function useRelaySwap() {
 
           setState('sending')
 
-          // Get Privy client for the target chain
-          const client = await getClientForChain({ id: targetChainId })
+          // Get or cache the Privy client for this chain
+          // This helps avoid the "AA10 sender already constructed" error
+          // by reusing the same client instance
+          let client = chainClientCache[targetChainId]
           if (!client) {
-            throw new Error(`Failed to get client for chain ${targetChainId}`)
+            try {
+              client = await getClientForChain({ id: targetChainId })
+              chainClientCache[targetChainId] = client
+            } catch (clientErr: any) {
+              console.warn('[useRelaySwap] getClientForChain error:', clientErr)
+              // Fall back to the main smart wallet client if on Base
+              if (targetChainId === 8453 && smartWalletClient) {
+                client = smartWalletClient
+                chainClientCache[targetChainId] = client
+              } else {
+                throw new Error(`Failed to get client for chain ${targetChainId}`)
+              }
+            }
+          }
+
+          if (!client) {
+            throw new Error(`No client available for chain ${targetChainId}`)
           }
 
           // Send transaction via Privy - THIS SHOWS THE PRIVY POPUP
-          const txHash = await client.sendTransaction({
-            to: item.data.to as `0x${string}`,
-            data: item.data.data as `0x${string}`,
-            value: item.data.value ? BigInt(item.data.value) : BigInt(0),
-          })
+          // Add retry logic for AA10 "already constructed" error
+          let txHash: string
+          try {
+            txHash = await client.sendTransaction({
+              to: item.data.to as `0x${string}`,
+              data: item.data.data as `0x${string}`,
+              value: item.data.value ? BigInt(item.data.value) : BigInt(0),
+            })
+          } catch (sendErr: any) {
+            // Handle AA10 "sender already constructed" error - retry once
+            if (sendErr.message?.includes('AA10') || sendErr.message?.includes('already constructed') || sendErr.message?.includes('already been deployed')) {
+              console.log('[useRelaySwap] AA10 error detected, retrying with fresh client...')
+              
+              // Force get a fresh client
+              const freshClient = await getClientForChain({ id: targetChainId })
+              if (!freshClient) {
+                throw new Error('Failed to get fresh client for retry')
+              }
+              chainClientCache[targetChainId] = freshClient
+              
+              txHash = await freshClient.sendTransaction({
+                to: item.data.to as `0x${string}`,
+                data: item.data.data as `0x${string}`,
+                value: item.data.value ? BigInt(item.data.value) : BigInt(0),
+              })
+            } else {
+              throw sendErr
+            }
+          }
 
           console.log('[useRelaySwap] Transaction sent:', txHash)
           lastTxHash = txHash
@@ -494,6 +539,8 @@ export function useRelaySwap() {
       // Check if user rejected
       if (err.message?.includes('rejected') || err.message?.includes('denied')) {
         setError('Transaction rejected')
+      } else if (err.message?.includes('AA10') || err.message?.includes('already constructed')) {
+        setError('Wallet sync issue - please refresh and try again')
       } else {
         setError(err.message || 'Swap failed')
       }
@@ -501,7 +548,7 @@ export function useRelaySwap() {
       setState('error')
       return null
     }
-  }, [quote, smartWalletAddress, getClientForChain, publicClient])
+  }, [quote, smartWalletAddress, smartWalletClient, getClientForChain, publicClient])
 
   // ============================================
   // RESET
