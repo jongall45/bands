@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { useSendTransaction, useWaitForTransactionReceipt } from 'wagmi'
+import { useSendTransaction, useWaitForTransactionReceipt, useSwitchChain, useChainId } from 'wagmi'
 import { useReadContract } from 'wagmi'
 import { formatUnits, parseUnits, isAddress, encodeFunctionData } from 'viem'
 import { base, arbitrum, optimism, mainnet, polygon } from 'wagmi/chains'
@@ -44,8 +44,11 @@ export default function Dashboard() {
 
   const { sendTransaction, data: txHash, isPending: isSending } = useSendTransaction()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash: txHash })
+  const { switchChainAsync } = useSwitchChain()
+  const currentChainId = useChainId()
   const [selectedToken, setSelectedToken] = useState<PortfolioToken | null>(null)
   const [showTokenSelect, setShowTokenSelect] = useState(false)
+  const [isSwitchingChain, setIsSwitchingChain] = useState(false)
 
   // Cross-chain portfolio from Dune API
   const { data: portfolio, refetch: refetchPortfolio, isLoading: portfolioLoading } = usePortfolio(address)
@@ -148,34 +151,49 @@ export default function Dashboard() {
       return
     }
 
-    const decimals = selectedToken.decimals || 18
-    const amount = parseUnits(sendAmount, decimals)
+    try {
+      // Switch chain if needed
+      if (currentChainId !== selectedChain.id) {
+        setIsSwitchingChain(true)
+        try {
+          await switchChainAsync({ chainId: selectedChain.id })
+        } catch (switchError) {
+          console.error('Failed to switch chain:', switchError)
+          setIsSwitchingChain(false)
+          return
+        }
+        setIsSwitchingChain(false)
+      }
 
-    // Check if it's native token (ETH)
-    const isNative = selectedToken.address === '0x0000000000000000000000000000000000000000' ||
-                     selectedToken.symbol === 'ETH' ||
-                     selectedToken.address === 'native'
+      const decimals = selectedToken.decimals || 18
+      const amount = parseUnits(sendAmount, decimals)
 
-    if (isNative) {
-      // Send native ETH on selected chain
-      sendTransaction({
-        to: sendTo as `0x${string}`,
-        value: amount,
-        chainId: selectedChain.id,
-      })
-    } else {
-      // Send ERC20 token on selected chain
-      const data = encodeFunctionData({
-        abi: ERC20_ABI,
-        functionName: 'transfer',
-        args: [sendTo as `0x${string}`, amount],
-      })
+      // Check if it's native token (ETH)
+      const isNative = selectedToken.address === '0x0000000000000000000000000000000000000000' ||
+                       selectedToken.symbol === 'ETH' ||
+                       selectedToken.address === 'native'
 
-      sendTransaction({
-        to: selectedToken.address as `0x${string}`,
-        data,
-        chainId: selectedChain.id,
-      })
+      if (isNative) {
+        // Send native ETH
+        sendTransaction({
+          to: sendTo as `0x${string}`,
+          value: amount,
+        })
+      } else {
+        // Send ERC20 token
+        const data = encodeFunctionData({
+          abi: ERC20_ABI,
+          functionName: 'transfer',
+          args: [sendTo as `0x${string}`, amount],
+        })
+
+        sendTransaction({
+          to: selectedToken.address as `0x${string}`,
+          data,
+        })
+      }
+    } catch (error) {
+      console.error('Send transaction error:', error)
     }
   }
 
@@ -602,10 +620,15 @@ export default function Dashboard() {
 
           <button
             onClick={handleSend}
-            disabled={isSending || isConfirming || !sendTo || !sendAmount || !selectedToken || !!addressError || parseFloat(sendAmount) > selectedTokenBalance}
+            disabled={isSending || isConfirming || isSwitchingChain || !sendTo || !sendAmount || !selectedToken || !!addressError || parseFloat(sendAmount) > selectedTokenBalance}
             className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-all flex items-center justify-center gap-2"
           >
-            {isSending || isConfirming ? (
+            {isSwitchingChain ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                Switching to {selectedChain.name}...
+              </>
+            ) : isSending || isConfirming ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
                 {isSending ? 'Confirm in wallet...' : 'Sending...'}
