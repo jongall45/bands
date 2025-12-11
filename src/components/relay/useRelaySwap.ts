@@ -73,16 +73,19 @@ export interface SwapResult {
 // ============================================
 const RELAY_API = 'https://api.relay.link'
 
-// Relay uses this address for native tokens (ETH, MATIC, etc.)
+// Native token address (zero address)
 const NATIVE_TOKEN_ADDRESS = '0x0000000000000000000000000000000000000000'
-const RELAY_NATIVE_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'
 
-// Helper to convert address for Relay API
-function toRelayAddress(address: string): string {
-  if (address === NATIVE_TOKEN_ADDRESS || address.toLowerCase() === NATIVE_TOKEN_ADDRESS) {
-    return RELAY_NATIVE_ADDRESS
+// Helper to convert token to Relay currency format
+// Relay accepts: symbol shorthand ("eth", "usdc") or contract addresses
+function toRelayCurrency(token: Token): string {
+  // For native tokens, use symbol shorthand
+  if (token.address === NATIVE_TOKEN_ADDRESS || token.address.toLowerCase() === NATIVE_TOKEN_ADDRESS) {
+    // Return lowercase symbol for native tokens
+    return token.symbol.toLowerCase() // "eth", "matic", etc.
   }
-  return address
+  // For ERC20s, use the contract address
+  return token.address
 }
 
 // Chain map for public clients
@@ -330,14 +333,16 @@ export function useRelaySwap() {
     try {
       const amountInWei = parseUnits(amount, fromToken.decimals).toString()
 
-      // Convert addresses to Relay format (native tokens use special address)
-      const originCurrency = toRelayAddress(fromToken.address)
-      const destinationCurrency = toRelayAddress(toToken.address)
+      // Convert tokens to Relay currency format
+      // Native tokens use symbol shorthand ("eth"), ERC20s use contract address
+      const originCurrency = toRelayCurrency(fromToken)
+      const destinationCurrency = toRelayCurrency(toToken)
 
       console.log('[useRelaySwap] Fetching quote:', {
         from: `${fromToken.symbol} (${originCurrency}) on chain ${fromToken.chainId}`,
         to: `${toToken.symbol} (${destinationCurrency}) on chain ${toToken.chainId}`,
         amount: amountInWei,
+        user: smartWalletAddress,
       })
 
       const response = await fetch(`${RELAY_API}/quote`, {
