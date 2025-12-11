@@ -342,6 +342,52 @@ export function RelaySwapWidget({ onSuccess, onError, onStateChange }: RelaySwap
     onStateChangeRef.current = onStateChange
   })
 
+  /**
+   * FocusTrap helper: ensure Relay dialogs have a focusable description node
+   * and aria-describedby set, so React Aria doesn't crash when no focusable
+   * elements are found. This does NOT hide the dialog or change its layout.
+   */
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const dialogs = document.querySelectorAll('[data-radix-portal] [role="dialog"]')
+      dialogs.forEach(dialog => {
+        const dlg = dialog as HTMLElement
+
+        // If already patched, skip
+        if (dlg.dataset.focusPatched === 'true') return
+
+        // Create offscreen description node
+        const desc = document.createElement('div')
+        desc.id = `relay-desc-${Math.random().toString(36).slice(2)}`
+        desc.tabIndex = 0
+        desc.style.position = 'absolute'
+        desc.style.width = '1px'
+        desc.style.height = '1px'
+        desc.style.overflow = 'hidden'
+        desc.style.clip = 'rect(0 0 0 0)'
+        desc.style.whiteSpace = 'nowrap'
+        desc.style.border = '0'
+        desc.style.padding = '0'
+        desc.style.margin = '-1px'
+        desc.textContent = 'Relay transaction dialog.'
+
+        dlg.appendChild(desc)
+
+        // Ensure aria-describedby points to the node
+        const existing = dlg.getAttribute('aria-describedby')
+        const ids = new Set((existing || '').split(' ').filter(Boolean))
+        ids.add(desc.id)
+        dlg.setAttribute('aria-describedby', Array.from(ids).join(' '))
+
+        // Mark as patched
+        dlg.dataset.focusPatched = 'true'
+      })
+    })
+
+    observer.observe(document.body, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [])
+
   // State change handler that updates both local and parent
   const handleStateChange = useCallback((state: SwapState) => {
     console.log('[RelaySwapWidget] State change:', state)
