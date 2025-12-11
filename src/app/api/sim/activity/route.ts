@@ -26,6 +26,17 @@ const KNOWN_APPS: Record<string, { name: string; category: string }> = {
   '0xba12222222228d8ba445958a75a0704d566bf2c8': { name: 'Balancer', category: 'DEX' },
 }
 
+// Format amount from wei to human readable
+function formatAmount(value: string | number, decimals: number = 18): string {
+  const num = typeof value === 'string' ? parseFloat(value) : value
+  if (num === 0 || isNaN(num)) return '0'
+  const humanAmount = num / Math.pow(10, decimals)
+  if (humanAmount < 0.0001) return '< 0.0001'
+  if (humanAmount < 1) return humanAmount.toFixed(6)
+  if (humanAmount < 1000) return humanAmount.toFixed(4)
+  return humanAmount.toFixed(2)
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const address = searchParams.get('address')
@@ -72,46 +83,43 @@ export async function GET(request: NextRequest) {
     const data = await response.json()
     console.log('[Sim API] Activity response - count:', data.activity?.length || 0)
     if (data.activity?.[0]) {
-      console.log('[Sim API] Activity sample:', JSON.stringify(data.activity[0]).slice(0, 800))
+      console.log('[Sim API] Activity sample:', JSON.stringify(data.activity[0]).slice(0, 1500))
     }
 
     // Transform activities into our transaction format
+    // Dune Activity API format:
+    // - type: "send" | "receive" | "swap" | "approve" | "mint" | "burn" | "call"
+    // - token_metadata: { symbol, decimals, name, logo, price_usd }
+    // - value: amount in wei
+    // - value_usd: USD value
+    // For swaps:
+    // - from_token_metadata, from_token_value
+    // - to_token_metadata, to_token_value
     const transactions = (data.activity || []).map((activity: any) => {
       const chainId = activity.chain_id || 8453
-      const hash = activity.transaction_hash || activity.hash || ''
-      const timestamp = activity.block_time || activity.timestamp || new Date().toISOString()
+      const hash = activity.tx_hash || activity.transaction_hash || ''
+      const timestamp = activity.block_time || new Date().toISOString()
 
-      // Determine activity type
-      const activityType = activity.type || activity.activity_type || 'unknown'
-      const isSwap = activityType === 'swap' || activityType === 'trade'
-      const isTransfer = activityType === 'transfer' || activityType === 'send' || activityType === 'receive'
+      // Activity type from Dune
+      const activityType = activity.type || 'unknown'
+      const isSwap = activityType === 'swap'
+      const isTransfer = activityType === 'send' || activityType === 'receive'
       const isBridge = activityType === 'bridge'
-      const isApproval = activityType === 'approval' || activityType === 'approve'
+      const isApproval = activityType === 'approve'
 
-      // Get token info from activity
-      const fromToken = activity.token_in || activity.from_token || activity.sent_token || null
-      const toToken = activity.token_out || activity.to_token || activity.received_token || null
+      // Token metadata for transfers
+      const tokenMeta = activity.token_metadata || {}
+      const tokenDecimals = tokenMeta.decimals || 18
 
-      // Get amount info
-      const fromAmount = activity.amount_in || activity.from_amount || activity.sent_amount || '0'
-      const toAmount = activity.amount_out || activity.to_amount || activity.received_amount || '0'
+      // Swap tokens
+      const fromTokenMeta = activity.from_token_metadata || {}
+      const toTokenMeta = activity.to_token_metadata || {}
 
-      // Format amounts with decimals
-      const formatAmount = (amount: string | number, decimals: number = 18) => {
-        const num = typeof amount === 'string' ? parseFloat(amount) : amount
-        if (num === 0) return '0'
-        // Check if already in human readable format (small number)
-        if (num < 1e10) return num.toFixed(num < 1 ? 6 : 4)
-        // Otherwise convert from wei
-        return (num / Math.pow(10, decimals)).toFixed(6)
-      }
-
-      // Detect app/protocol
-      const toAddress = (activity.to_address || activity.contract_address || '').toLowerCase()
-      const fromAddress = (activity.from_address || '').toLowerCase()
-      const contractAddress = (activity.contract_address || activity.interacted_with || '').toLowerCase()
-
-      const knownApp = KNOWN_APPS[toAddress] || KNOWN_APPS[fromAddress] || KNOWN_APPS[contractAddress]
+      // Detect app/protocol from addresses
+      const toAddr = (activity.to || '').toLowerCase()
+      const fromAddr = (activity.from || '').toLowerCase()
+      const tokenAddr = (activity.token_address || '').toLowerCase()
+      const knownApp = KNOWN_APPS[toAddr] || KNOWN_APPS[fromAddr] || KNOWN_APPS[tokenAddr]
 
       // Build transaction object
       const tx: any = {
@@ -125,53 +133,55 @@ export async function GET(request: NextRequest) {
         isBridge,
         isApproval,
 
-        // For swaps
-        swapFromToken: isSwap && fromToken ? {
-          symbol: fromToken.symbol || 'UNKNOWN',
-          name: fromToken.name || fromToken.symbol || 'Unknown',
-          address: fromToken.address || '',
-          amount: formatAmount(fromAmount, fromToken.decimals || 18),
-          decimals: fromToken.decimals || 18,
-          logoURI: fromToken.logo_url || `https://api.sim.dune.com/beta/token/logo/${chainId}/${fromToken.address}`,
+        // For swaps - use from_token_metadata and to_token_metadata
+        swapFromToken: isSwap ? {
+          symbol: fromTokenMeta.symbol || 'UNKNOWN',
+          name: fromTokenMeta.name || fromTokenMeta.symbol || 'Unknown',
+          address: activity.from_token_address || '',
+          amount: formatAmount(activity.from_token_value || '0', fromTokenMeta.decimals || 18),
+          decimals: fromTokenMeta.decimals || 18,
+          logoURI: fromTokenMeta.logo || `https://api.sim.dune.com/beta/token/logo/${chainId}/${activity.from_token_address}`,
+          priceUsd: fromTokenMeta.price_usd || 0,
         } : null,
 
-        swapToToken: isSwap && toToken ? {
-          symbol: toToken.symbol || 'UNKNOWN',
-          name: toToken.name || toToken.symbol || 'Unknown',
-          address: toToken.address || '',
-          amount: formatAmount(toAmount, toToken.decimals || 18),
-          decimals: toToken.decimals || 18,
-          logoURI: toToken.logo_url || `https://api.sim.dune.com/beta/token/logo/${chainId}/${toToken.address}`,
+        swapToToken: isSwap ? {
+          symbol: toTokenMeta.symbol || 'UNKNOWN',
+          name: toTokenMeta.name || toTokenMeta.symbol || 'Unknown',
+          address: activity.to_token_address || '',
+          amount: formatAmount(activity.to_token_value || '0', toTokenMeta.decimals || 18),
+          decimals: toTokenMeta.decimals || 18,
+          logoURI: toTokenMeta.logo || `https://api.sim.dune.com/beta/token/logo/${chainId}/${activity.to_token_address}`,
+          priceUsd: toTokenMeta.price_usd || 0,
         } : null,
 
-        // For transfers
-        token: isTransfer && (fromToken || toToken) ? {
-          symbol: (fromToken || toToken).symbol || 'UNKNOWN',
-          name: (fromToken || toToken).name || 'Unknown',
-          address: (fromToken || toToken).address || '',
-          amount: formatAmount(fromAmount || toAmount, (fromToken || toToken).decimals || 18),
-          decimals: (fromToken || toToken).decimals || 18,
-          logoURI: (fromToken || toToken).logo_url || '',
+        // For transfers - use token_metadata and value
+        token: isTransfer ? {
+          symbol: tokenMeta.symbol || (activity.asset_type === 'native' ? 'ETH' : 'UNKNOWN'),
+          name: tokenMeta.name || 'Unknown',
+          address: activity.token_address || '',
+          amount: formatAmount(activity.value || '0', tokenDecimals),
+          decimals: tokenDecimals,
+          logoURI: tokenMeta.logo || '',
+          priceUsd: tokenMeta.price_usd || 0,
         } : null,
 
-        // Direction
-        direction: activity.direction || (
-          fromAddress === address.toLowerCase() ? 'out' :
-          activity.to_address?.toLowerCase() === address.toLowerCase() ? 'in' : 'unknown'
-        ),
+        // Direction based on type
+        direction: activityType === 'receive' ? 'in' : activityType === 'send' ? 'out' : 'unknown',
 
         // App detection
-        app: knownApp?.name || activity.app || activity.protocol || null,
-        appCategory: knownApp?.category || activity.category || null,
+        app: knownApp?.name || null,
+        appCategory: knownApp?.category || null,
 
-        // Additional metadata
-        from: fromAddress,
-        to: toAddress,
-        value: activity.value || activity.amount || '0',
-        valueUsd: activity.value_usd || activity.amount_usd || 0,
+        // Addresses
+        from: fromAddr,
+        to: toAddr,
 
-        // Raw data for debugging
-        raw: activity,
+        // Value in wei and USD
+        value: activity.value || '0',
+        valueUsd: activity.value_usd || 0,
+
+        // Asset type
+        assetType: activity.asset_type || 'unknown',
       }
 
       return tx

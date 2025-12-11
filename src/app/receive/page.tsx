@@ -5,6 +5,10 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, Copy, Check, ExternalLink, Shield } from 'lucide-react'
 import Link from 'next/link'
 import { useAuth } from '@/hooks/useAuth'
+import { CHAIN_CONFIG } from '@/hooks/usePortfolio'
+
+// Supported chains for receiving
+const SUPPORTED_CHAINS = [8453, 42161, 1, 10, 137]
 
 export default function ReceivePage() {
   const { address, isSmartWalletReady, isAuthenticated } = useAuth()
@@ -115,9 +119,27 @@ export default function ReceivePage() {
             View on BaseScan
           </a>
 
-          <p className="text-gray-400 text-xs text-center">
-            This address works on <span className="text-[#ef4444] font-medium">Base, Ethereum, Arbitrum, Optimism</span> & more
-          </p>
+          {/* Supported chains */}
+          <div className="text-center">
+            <p className="text-gray-400 text-xs mb-3">Works on</p>
+            <div className="flex items-center justify-center gap-3">
+              {SUPPORTED_CHAINS.map((chainId) => {
+                const chain = CHAIN_CONFIG[chainId]
+                return chain ? (
+                  <div key={chainId} className="flex flex-col items-center gap-1" title={chain.name}>
+                    <div className="w-10 h-10 bg-white rounded-full border border-gray-200 flex items-center justify-center shadow-sm">
+                      <img
+                        src={chain.logo}
+                        alt={chain.name}
+                        className="w-6 h-6 rounded-full"
+                      />
+                    </div>
+                    <span className="text-gray-500 text-[10px] font-medium">{chain.name}</span>
+                  </div>
+                ) : null
+              })}
+            </div>
+          </div>
         </div>
       </div>
     </div>

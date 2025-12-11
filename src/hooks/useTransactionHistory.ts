@@ -15,6 +15,7 @@ export interface Transaction {
   tokenDecimals: number
   tokenAddress?: string
   tokenLogoUri?: string
+  tokenAmount?: string // Pre-formatted human readable amount
   timestamp: number
   status: 'success' | 'failed' | 'pending'
   blockNumber: string
@@ -56,6 +57,9 @@ async function fetchDuneActivity(address: string, chainIds?: string): Promise<Tr
     }
     const data = await response.json()
     console.log('[Activity] Fetched transactions:', data.transactions?.length || 0)
+    if (data.transactions?.[0]) {
+      console.log('[Activity] First tx sample:', JSON.stringify(data.transactions[0]).slice(0, 500))
+    }
 
     // Transform Dune activity format to our Transaction format
     return (data.transactions || []).map((tx: any) => {
@@ -63,10 +67,12 @@ async function fetchDuneActivity(address: string, chainIds?: string): Promise<Tr
       const chainConfig = CHAIN_CONFIG[chainId]
       const explorer = CHAIN_EXPLORERS[chainId] || 'https://basescan.org'
 
-      // Determine transaction type
+      // Determine transaction type from Dune activity type
       let type: Transaction['type'] = 'contract'
-      if (tx.isSwap) type = 'swap'
-      else if (tx.isBridge) type = 'bridge'
+      if (tx.isSwap || tx.type === 'swap') type = 'swap'
+      else if (tx.isBridge || tx.type === 'bridge') type = 'bridge'
+      else if (tx.type === 'send') type = 'send'
+      else if (tx.type === 'receive') type = 'receive'
       else if (tx.isTransfer) type = tx.direction === 'in' ? 'receive' : 'send'
       else if (tx.app) type = 'app_interaction'
 
@@ -77,6 +83,11 @@ async function fetchDuneActivity(address: string, chainIds?: string): Promise<Tr
         if (!isNaN(parsed)) timestamp = parsed
       }
 
+      // Get token info - for transfers, use tx.token; for swaps, use swapFromToken
+      const tokenInfo = tx.token || tx.swapFromToken || {}
+      const tokenSymbol = tokenInfo.symbol || (tx.assetType === 'native' ? 'ETH' : 'UNKNOWN')
+      const tokenAmount = tokenInfo.amount || '0'
+
       return {
         hash: tx.hash,
         type,
@@ -84,10 +95,12 @@ async function fetchDuneActivity(address: string, chainIds?: string): Promise<Tr
         to: tx.to || '',
         value: tx.value || '0',
         valueUsd: tx.valueUsd || 0,
-        tokenSymbol: tx.token?.symbol || tx.swapFromToken?.symbol || 'ETH',
-        tokenDecimals: tx.token?.decimals || 18,
-        tokenAddress: tx.token?.address || '',
-        tokenLogoUri: tx.token?.logoURI || '',
+        // Token info - use the pre-formatted amount from API
+        tokenSymbol,
+        tokenDecimals: tokenInfo.decimals || 18,
+        tokenAddress: tokenInfo.address || '',
+        tokenLogoUri: tokenInfo.logoURI || '',
+        tokenAmount, // Pre-formatted human readable amount
         timestamp,
         status: 'success' as const,
         blockNumber: String(tx.blockNumber || 0),

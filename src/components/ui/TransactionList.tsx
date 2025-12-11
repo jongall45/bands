@@ -90,8 +90,14 @@ function TransactionRow({ tx, userAddress }: { tx: Transaction; userAddress: str
   const isVaultWithdraw = tx.type === 'vault_withdraw'
   const isVaultTx = isVaultDeposit || isVaultWithdraw
 
-  const amount = formatTxAmount(tx.value, tx.tokenDecimals)
+  // Use pre-formatted amount from API if available, otherwise format from value
+  const amount = tx.tokenAmount || formatTxAmount(tx.value, tx.tokenDecimals)
   const timeAgo = formatRelativeTime(tx.timestamp)
+
+  // Format USD value
+  const valueUsd = tx.valueUsd && tx.valueUsd > 0
+    ? tx.valueUsd < 0.01 ? '< $0.01' : `$${tx.valueUsd.toFixed(2)}`
+    : null
 
   // Determine counterparty
   const counterparty = isReceive || isVaultWithdraw ? tx.from : tx.to
@@ -252,10 +258,13 @@ function TransactionRow({ tx, userAddress }: { tx: Transaction; userAddress: str
             </div>
           ) : (
             <p className={`font-mono font-medium text-sm ${display.amountColor}`}>
-              {display.amountPrefix}{amount} {tx.tokenSymbol}
+              {display.amountPrefix} {amount} {tx.tokenSymbol}
             </p>
           )}
-          <p className="text-white/30 text-xs">{timeAgo}</p>
+          <p className="text-white/30 text-xs">
+            {valueUsd && <span className="mr-1">{valueUsd}</span>}
+            {timeAgo}
+          </p>
         </div>
         <ExternalLink className="w-3.5 h-3.5 text-white/20 group-hover:text-white/40 transition-colors" />
       </div>
