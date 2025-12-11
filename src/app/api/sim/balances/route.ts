@@ -58,10 +58,18 @@ export async function GET(request: NextRequest) {
       const isNative = balance.address === 'native'
       const tokenAddress = isNative ? '0x0000000000000000000000000000000000000000' : (balance.address || '0x0000000000000000000000000000000000000000')
       
-      // Construct logo URL from Sim API pattern
-      // Native tokens use 'native', ERC20s use their address
+      // Construct logo URL
+      // Native tokens don't work with Sim API logo endpoint, use standard logos
+      const NATIVE_LOGOS: Record<number, string> = {
+        1: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
+        8453: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png', // Base uses ETH
+        42161: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png', // Arbitrum uses ETH
+        10: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png', // Optimism uses ETH
+        137: 'https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png', // Polygon MATIC
+      }
+      
       const logoURI = isNative 
-        ? `https://api.sim.dune.com/beta/token/logo/${balance.chain_id}/native`
+        ? NATIVE_LOGOS[balance.chain_id] || 'https://assets.coingecko.com/coins/images/279/small/ethereum.png'
         : `https://api.sim.dune.com/beta/token/logo/${balance.chain_id}/${balance.address}`
       
       return {

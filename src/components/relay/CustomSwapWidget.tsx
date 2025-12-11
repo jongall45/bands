@@ -201,10 +201,12 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
     return false
   }, [isConnected, state, sellAmount, fromBalance, quote])
 
-  // Calculate USD values
-  const fromUsd = parseFloat(sellAmount || '0')
-  const toUsd = quote?.toAmountUsd || 0
-  const priceImpact = quote?.priceImpact || 0
+  // Calculate USD values - ensure all values are numbers
+  const fromUsd = Number(parseFloat(sellAmount || '0')) || 0
+  const toUsd = Number(quote?.toAmountUsd) || 0
+  const priceImpact = Number(quote?.priceImpact) || 0
+  const rate = Number(quote?.rate) || 0
+  const gasFeeUsd = Number(quote?.gasFeeUsd) || 0
 
   return (
     <>
@@ -357,14 +359,14 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-white/50 font-medium">
-                  1 {fromToken.symbol} = {quote.rate.toFixed(4)} {toToken.symbol}
+                  1 {fromToken.symbol} = {rate.toFixed(6)} {toToken.symbol}
                 </span>
                 <div className="flex gap-4 items-center">
                   <span className="flex items-center gap-1 text-green-500 bg-green-500/10 px-1.5 py-0.5 rounded text-xs font-bold">
                     <Zap size={10} /> ~ {quote.estimatedTime}s
                   </span>
                   <span className="flex items-center gap-1 text-white/40 text-xs font-semibold">
-                    <Fuel size={12} /> ${quote.gasFeeUsd.toFixed(2)} <ChevronDown size={10} />
+                    <Fuel size={12} /> ${gasFeeUsd.toFixed(4)} <ChevronDown size={10} />
                   </span>
                 </div>
               </div>

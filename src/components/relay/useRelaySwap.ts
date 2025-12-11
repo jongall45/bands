@@ -378,26 +378,26 @@ export function useRelaySwap() {
       const data = await response.json()
       console.log('[useRelaySwap] Quote received:', data)
 
-      // Parse quote data
+      // Parse quote data - Relay API returns USD values as strings, convert to numbers
+      const fromAmountUsd = parseFloat(data.details?.currencyIn?.amountUsd) || parsedAmount
+      const toAmountUsd = parseFloat(data.details?.currencyOut?.amountUsd) || 0
+      const gasFeeUsd = parseFloat(data.fees?.gas?.amountUsd) || 0
+      const toAmountRaw = data.details?.currencyOut?.amount || '0'
+      const toAmountFormatted = formatUnits(BigInt(toAmountRaw), toToken.decimals)
+      const toAmountNum = parseFloat(toAmountFormatted)
+
       const quoteData: Quote = {
         requestId: data.requestId || '',
         fromAmount: amount,
-        fromAmountUsd: data.details?.currencyIn?.amountUsd || parsedAmount,
-        toAmount: formatUnits(BigInt(data.details?.currencyOut?.amount || '0'), toToken.decimals),
-        toAmountUsd: data.details?.currencyOut?.amountUsd || 0,
-        rate: 0,
-        priceImpact: 0,
+        fromAmountUsd: fromAmountUsd,
+        toAmount: toAmountFormatted,
+        toAmountUsd: toAmountUsd,
+        rate: toAmountNum > 0 && parsedAmount > 0 ? toAmountNum / parsedAmount : 0,
+        priceImpact: fromAmountUsd > 0 ? ((fromAmountUsd - toAmountUsd) / fromAmountUsd) * 100 : 0,
         estimatedTime: data.details?.totalTime || 30,
         gasFee: data.fees?.gas?.amount || '0',
-        gasFeeUsd: data.fees?.gas?.amountUsd || 0,
+        gasFeeUsd: gasFeeUsd,
         steps: data.steps || [],
-      }
-
-      // Calculate rate
-      const toAmountNum = parseFloat(quoteData.toAmount)
-      if (toAmountNum > 0 && parsedAmount > 0) {
-        quoteData.rate = toAmountNum / parsedAmount
-        quoteData.priceImpact = ((quoteData.fromAmountUsd - quoteData.toAmountUsd) / quoteData.fromAmountUsd) * 100
       }
 
       setQuote(quoteData)
