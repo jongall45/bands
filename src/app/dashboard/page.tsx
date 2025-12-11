@@ -44,9 +44,27 @@ export default function Dashboard() {
 
   const { sendTransaction, data: txHash, isPending: isSending } = useSendTransaction()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash: txHash })
+  const [selectedToken, setSelectedToken] = useState<PortfolioToken | null>(null)
+  const [showTokenSelect, setShowTokenSelect] = useState(false)
 
   // Cross-chain portfolio from Dune API
   const { data: portfolio, refetch: refetchPortfolio, isLoading: portfolioLoading } = usePortfolio(address)
+
+  // Filter tokens by selected chain
+  const tokensOnSelectedChain = portfolio?.tokens?.filter(t => t.chainId === selectedChain.id) || []
+
+  // Update selected token when chain changes
+  useEffect(() => {
+    if (tokensOnSelectedChain.length > 0) {
+      // Try to keep same token symbol if available on new chain
+      const sameSymbol = selectedToken
+        ? tokensOnSelectedChain.find(t => t.symbol === selectedToken.symbol)
+        : null
+      setSelectedToken(sameSymbol || tokensOnSelectedChain[0])
+    } else {
+      setSelectedToken(null)
+    }
+  }, [selectedChain.id, portfolio])
 
   // Fallback to on-chain USDC balance for Base
   const { data: usdcBalance, refetch: refetchBalance, isLoading: balanceLoading } = useReadContract({
@@ -124,30 +142,53 @@ export default function Dashboard() {
   }
 
   const handleSend = async () => {
-    if (!sendTo || !sendAmount || addressError || !address) return
+    if (!sendTo || !sendAmount || addressError || !address || !selectedToken) return
     if (!isAddress(sendTo)) {
       setAddressError('Invalid address format')
       return
     }
-    
-    const amount = parseUnits(sendAmount, USDC_DECIMALS)
-    
-    // Encode the transfer call
-    const data = encodeFunctionData({
-      abi: ERC20_ABI,
-      functionName: 'transfer',
-      args: [sendTo as `0x${string}`, amount],
-    })
 
-    sendTransaction({
-      to: USDC_ADDRESS,
-      data,
-    })
+    const decimals = selectedToken.decimals || 18
+    const amount = parseUnits(sendAmount, decimals)
+
+    // Check if it's native token (ETH)
+    const isNative = selectedToken.address === '0x0000000000000000000000000000000000000000' ||
+                     selectedToken.symbol === 'ETH' ||
+                     selectedToken.address === 'native'
+
+    if (isNative) {
+      // Send native ETH
+      sendTransaction({
+        to: sendTo as `0x${string}`,
+        value: amount,
+      })
+    } else {
+      // Send ERC20 token
+      const data = encodeFunctionData({
+        abi: ERC20_ABI,
+        functionName: 'transfer',
+        args: [sendTo as `0x${string}`, amount],
+      })
+
+      sendTransaction({
+        to: selectedToken.address as `0x${string}`,
+        data,
+      })
+    }
   }
 
   const setMaxAmount = () => {
-    setSendAmount(numericBalance.toString())
+    if (selectedToken) {
+      setSendAmount(selectedToken.balance)
+    } else {
+      setSendAmount(numericBalance.toString())
+    }
   }
+
+  // Get selected token balance
+  const selectedTokenBalance = selectedToken
+    ? parseFloat(selectedToken.balance)
+    : numericBalance
 
   if (!isAuthenticated) {
     return (
@@ -454,10 +495,81 @@ export default function Dashboard() {
             {addressError && <p className="mt-2 text-sm text-red-400">{addressError}</p>}
           </div>
 
+          {/* Token Selection */}
+          <div>
+            <label className="block text-white/40 text-sm mb-2 font-medium">Token</label>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowTokenSelect(!showTokenSelect)}
+                disabled={tokensOnSelectedChain.length === 0}
+                className="w-full flex items-center justify-between px-4 py-3 bg-white/[0.03] rounded-2xl border border-white/[0.06] hover:border-white/20 transition-colors disabled:opacity-50"
+              >
+                {selectedToken ? (
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={selectedToken.logoURI}
+                      alt={selectedToken.symbol}
+                      className="w-6 h-6 rounded-full"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png'
+                      }}
+                    />
+                    <div className="text-left">
+                      <span className="text-white font-medium">{selectedToken.symbol}</span>
+                      <p className="text-white/40 text-xs">{formatTokenBalance(selectedToken.balance)} available</p>
+                    </div>
+                  </div>
+                ) : (
+                  <span className="text-white/40">No tokens on {selectedChain.name}</span>
+                )}
+                <ChevronDown className={`w-5 h-5 text-white/40 transition-transform ${showTokenSelect ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showTokenSelect && tokensOnSelectedChain.length > 0 && (
+                <div className="absolute z-10 w-full mt-2 bg-[#1a1a1a] border border-white/10 rounded-xl overflow-hidden shadow-xl max-h-60 overflow-y-auto">
+                  {tokensOnSelectedChain.map((token, index) => (
+                    <button
+                      key={`${token.address}-${index}`}
+                      type="button"
+                      onClick={() => {
+                        setSelectedToken(token)
+                        setShowTokenSelect(false)
+                        setSendAmount('') // Reset amount when switching tokens
+                      }}
+                      className={`w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.05] transition-colors ${
+                        selectedToken?.address === token.address ? 'bg-white/[0.05]' : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={token.logoURI}
+                          alt={token.symbol}
+                          className="w-5 h-5 rounded-full"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png'
+                          }}
+                        />
+                        <div className="text-left">
+                          <span className="text-white text-sm">{token.symbol}</span>
+                          <p className="text-white/40 text-xs">{token.name}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-white text-sm">{formatTokenBalance(token.balance)}</p>
+                        <p className="text-white/40 text-xs">${token.balanceUsd?.toFixed(2)}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-white/40 text-sm font-medium">Amount</label>
-              <button onClick={setMaxAmount} className="text-xs text-[#ef4444] hover:text-[#dc2626] font-semibold">MAX</button>
+              <button onClick={setMaxAmount} disabled={!selectedToken} className="text-xs text-[#ef4444] hover:text-[#dc2626] font-semibold disabled:opacity-50">MAX</button>
             </div>
             <CardInner className="p-5">
               <div className="flex items-center gap-4">
@@ -467,23 +579,37 @@ export default function Dashboard() {
                   value={sendAmount}
                   onChange={(e) => setSendAmount(e.target.value)}
                   placeholder="0.00"
-                  disabled={isSending || isConfirming}
-                  className="flex-1 bg-transparent text-4xl font-semibold text-white placeholder:text-white/20 focus:outline-none"
+                  disabled={isSending || isConfirming || !selectedToken}
+                  className="flex-1 bg-transparent text-4xl font-semibold text-white placeholder:text-white/20 focus:outline-none disabled:opacity-50"
                 />
-                <div className="flex items-center gap-2 bg-white/[0.06] rounded-full px-4 py-2">
-                  <div className="w-6 h-6 rounded-full bg-[#2775ca] flex items-center justify-center">
-                    <span className="text-white text-xs font-bold">$</span>
+                {selectedToken && (
+                  <div className="flex items-center gap-2 bg-white/[0.06] rounded-full px-4 py-2">
+                    <img
+                      src={selectedToken.logoURI}
+                      alt={selectedToken.symbol}
+                      className="w-6 h-6 rounded-full"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png'
+                      }}
+                    />
+                    <span className="text-white font-medium">{selectedToken.symbol}</span>
                   </div>
-                  <span className="text-white font-medium">USDC</span>
-                </div>
+                )}
               </div>
-              <p className="text-white/40 text-sm mt-3">Balance: <span className="text-white/60">${formattedBalance}</span></p>
+              <p className="text-white/40 text-sm mt-3">
+                Balance: <span className="text-white/60">
+                  {selectedToken ? `${formatTokenBalance(selectedToken.balance)} ${selectedToken.symbol}` : '$0.00'}
+                </span>
+                {selectedToken?.balanceUsd ? (
+                  <span className="text-white/40 ml-1">(${selectedToken.balanceUsd.toFixed(2)})</span>
+                ) : null}
+              </p>
             </CardInner>
           </div>
 
           <button
             onClick={handleSend}
-            disabled={isSending || isConfirming || !sendTo || !sendAmount || !!addressError || parseFloat(sendAmount) > numericBalance}
+            disabled={isSending || isConfirming || !sendTo || !sendAmount || !selectedToken || !!addressError || parseFloat(sendAmount) > selectedTokenBalance}
             className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-all flex items-center justify-center gap-2"
           >
             {isSending || isConfirming ? (
@@ -503,8 +629,8 @@ export default function Dashboard() {
             Gas sponsored • No ETH needed
           </p>
 
-          {parseFloat(sendAmount) > numericBalance && sendAmount && (
-            <p className="text-red-400 text-sm text-center">Insufficient balance</p>
+          {selectedToken && parseFloat(sendAmount) > selectedTokenBalance && sendAmount && (
+            <p className="text-red-400 text-sm text-center">Insufficient {selectedToken.symbol} balance</p>
           )}
         </div>
       </Modal>
