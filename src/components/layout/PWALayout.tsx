@@ -33,6 +33,8 @@ export function PWALayout({ children }: PWALayoutProps) {
       className="min-h-screen"
       style={{
         minHeight: 'calc(var(--vh, 1vh) * 100)',
+        // Ensure this doesn't create a stacking context that traps Privy modals
+        isolation: 'auto',
       }}
     >
       {children}

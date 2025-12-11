@@ -212,42 +212,5 @@ const swapStyles = `
     background: rgba(26, 26, 26, 1) !important;
   }
 
-  /* PRIVY MODAL - Ensure clickable and on top */
-  #privy-iframe-container,
-  #privy-dialog,
-  #privy-modal,
-  [id^="privy-"]:not(style):not(script),
-  div[data-privy-dialog],
-  div[data-privy-dialog-container],
-  [data-privy-dialog],
-  .privy-dialog,
-  .privy-modal,
-  [class*="PrivyDialog"],
-  [class*="PrivyModal"],
-  iframe[src*="privy"],
-  iframe[src*="privy.io"] {
-    z-index: 2147483647 !important;
-    filter: none !important;
-    -webkit-filter: none !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-    pointer-events: auto !important;
-    opacity: 1 !important;
-    visibility: visible !important;
-  }
-
-  /* Ensure ALL descendants inside Privy elements are clickable */
-  #privy-iframe-container *,
-  #privy-dialog *,
-  #privy-modal *,
-  [id^="privy-"]:not(style):not(script) *,
-  div[data-privy-dialog] *,
-  div[data-privy-dialog-container] *,
-  [data-privy-dialog] *,
-  .privy-dialog *,
-  .privy-modal *,
-  [class*="PrivyDialog"] *,
-  [class*="PrivyModal"] * {
-    pointer-events: auto !important;
-  }
+  /* Privy modal styles are now in globals.css for reliability */
 `
