@@ -219,8 +219,8 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
     return false
   }, [isConnected, state, sellAmount, fromBalance, quote])
 
-  // Calculate USD values - ensure all values are numbers
-  const fromUsd = Number(parseFloat(sellAmount || '0')) || 0
+  // Calculate USD values - use quote data when available
+  const fromUsd = Number(quote?.fromAmountUsd) || 0
   const toUsd = Number(quote?.toAmountUsd) || 0
   const priceImpact = Number(quote?.priceImpact) || 0
   const rate = Number(quote?.rate) || 0
@@ -469,12 +469,12 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
 
             {result.txHash && (
               <a
-                href={getExplorerUrl(result.toToken.chainId, result.txHash)}
+                href={getExplorerUrl(result.fromToken.chainId, result.txHash)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block text-[#ef4444] hover:underline text-sm mb-6"
               >
-                View on {getExplorerName(result.toToken.chainId)} →
+                View on {getExplorerName(result.fromToken.chainId)} →
               </a>
             )}
 
