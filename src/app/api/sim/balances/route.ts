@@ -42,7 +42,8 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json()
-    console.log('[Sim API] Balances response:', JSON.stringify(data).slice(0, 500))
+    console.log('[Sim API] Balances response keys:', Object.keys(data))
+    console.log('[Sim API] First balance sample:', JSON.stringify(data.balances?.[0]).slice(0, 500))
     
     // Transform data into our Token format
     // Sim API returns: chain, chain_id, address, amount, symbol, name, decimals, price_usd, value_usd, logo
