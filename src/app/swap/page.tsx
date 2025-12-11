@@ -236,7 +236,7 @@ const swapStyles = `
     visibility: visible !important;
   }
 
-  /* CRITICAL: Ensure ALL descendants inside Privy elements are clickable */
+  /* Ensure ALL descendants inside Privy elements are clickable */
   #privy-iframe-container *,
   #privy-dialog *,
   #privy-modal *,
@@ -248,20 +248,6 @@ const swapStyles = `
   .privy-modal *,
   [class*="PrivyDialog"] *,
   [class*="PrivyModal"] * {
-    pointer-events: auto !important;
-  }
-
-  /* When Privy is open, disable pointer events on our app elements */
-  body:has(iframe[src*="privy"]) .swap-page,
-  body:has([data-privy-dialog]) .swap-page {
-    pointer-events: none !important;
-  }
-
-  /* But keep Privy elements clickable */
-  body:has(iframe[src*="privy"]) [id^="privy-"],
-  body:has([data-privy-dialog]) [id^="privy-"],
-  body:has(iframe[src*="privy"]) iframe[src*="privy"],
-  body:has([data-privy-dialog]) iframe[src*="privy"] {
     pointer-events: auto !important;
   }
 `
