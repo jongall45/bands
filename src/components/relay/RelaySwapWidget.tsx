@@ -397,6 +397,41 @@ export function RelaySwapWidget({ onSuccess, onError, onStateChange }: RelaySwap
     return () => observer.disconnect()
   }, [])
 
+  /**
+   * Aggressive removal of Relay's transaction/progress dialog:
+   * - If a Radix portal dialog contains a disabled button or an animating element
+   *   (characteristic of the transaction confirmation dialog), we hide it entirely
+   *   to avoid FocusTrap conflicts and blur.
+   * - Token selector dialogs (search input, no disabled button/loader) are left intact.
+   */
+  useEffect(() => {
+    const hideIfTxDialog = (dlg: HTMLElement) => {
+      const hasDisabledButton = dlg.querySelector('button:disabled')
+      const hasAnimate = Array.from(dlg.querySelectorAll('*')).some(el =>
+        (el as HTMLElement).className?.toString().includes('animate')
+      )
+      if (hasDisabledButton || hasAnimate) {
+        dlg.style.display = 'none'
+        dlg.setAttribute('aria-hidden', 'true')
+        dlg.setAttribute('inert', '')
+        const portal = dlg.closest('[data-radix-portal]') as HTMLElement | null
+        if (portal) {
+          portal.style.display = 'none'
+          portal.style.pointerEvents = 'none'
+          portal.setAttribute('aria-hidden', 'true')
+        }
+      }
+    }
+
+    const observer = new MutationObserver(() => {
+      const dialogs = document.querySelectorAll('[data-radix-portal] [role="dialog"]')
+      dialogs.forEach(dialog => hideIfTxDialog(dialog as HTMLElement))
+    })
+
+    observer.observe(document.body, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [])
+
   // State change handler that updates both local and parent
   const handleStateChange = useCallback((state: SwapState) => {
     console.log('[RelaySwapWidget] State change:', state)
