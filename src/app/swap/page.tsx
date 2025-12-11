@@ -212,7 +212,7 @@ const swapStyles = `
     background: rgba(26, 26, 26, 1) !important;
   }
 
-  /* PRIVY MODAL - Only ensure high z-index and no blur, don't override positioning */
+  /* PRIVY MODAL - Ensure clickable and on top */
   #privy-iframe-container,
   #privy-dialog,
   #privy-modal,
@@ -234,5 +234,34 @@ const swapStyles = `
     pointer-events: auto !important;
     opacity: 1 !important;
     visibility: visible !important;
+  }
+
+  /* CRITICAL: Ensure ALL descendants inside Privy elements are clickable */
+  #privy-iframe-container *,
+  #privy-dialog *,
+  #privy-modal *,
+  [id^="privy-"]:not(style):not(script) *,
+  div[data-privy-dialog] *,
+  div[data-privy-dialog-container] *,
+  [data-privy-dialog] *,
+  .privy-dialog *,
+  .privy-modal *,
+  [class*="PrivyDialog"] *,
+  [class*="PrivyModal"] * {
+    pointer-events: auto !important;
+  }
+
+  /* When Privy is open, disable pointer events on our app elements */
+  body:has(iframe[src*="privy"]) .swap-page,
+  body:has([data-privy-dialog]) .swap-page {
+    pointer-events: none !important;
+  }
+
+  /* But keep Privy elements clickable */
+  body:has(iframe[src*="privy"]) [id^="privy-"],
+  body:has([data-privy-dialog]) [id^="privy-"],
+  body:has(iframe[src*="privy"]) iframe[src*="privy"],
+  body:has([data-privy-dialog]) iframe[src*="privy"] {
+    pointer-events: auto !important;
   }
 `
