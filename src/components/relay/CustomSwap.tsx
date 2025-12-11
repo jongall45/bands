@@ -1,12 +1,17 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useAccount, useBalance, useWalletClient, usePublicClient } from 'wagmi'
 import { formatUnits, parseUnits } from 'viem'
 import { base, arbitrum, optimism, mainnet } from 'viem/chains'
-import { Loader2, ArrowDown, AlertCircle, RefreshCw } from 'lucide-react'
+import { Loader2, ArrowDown, AlertCircle } from 'lucide-react'
+import Image from 'next/image'
+import { CHAIN_INFO, KNOWN_TOKENS, getTokenInfoWithFallback, type TokenInfo } from '@/lib/sim-api'
 
 // Token addresses by chain
+// Relay uses 0xEeee...eeEE for native ETH across all chains
+const NATIVE_ETH_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'
+
 const TOKENS = {
   USDC: {
     [base.id]: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
@@ -15,19 +20,74 @@ const TOKENS = {
     [mainnet.id]: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
   },
   ETH: {
-    [base.id]: '0x0000000000000000000000000000000000000000',
-    [arbitrum.id]: '0x0000000000000000000000000000000000000000',
-    [optimism.id]: '0x0000000000000000000000000000000000000000',
-    [mainnet.id]: '0x0000000000000000000000000000000000000000',
+    [base.id]: NATIVE_ETH_ADDRESS,
+    [arbitrum.id]: NATIVE_ETH_ADDRESS,
+    [optimism.id]: NATIVE_ETH_ADDRESS,
+    [mainnet.id]: NATIVE_ETH_ADDRESS,
   },
 } as const
 
+// Chain configurations with icons from SIM API
 const CHAINS = [
-  { id: base.id, name: 'Base', icon: '🔵' },
-  { id: arbitrum.id, name: 'Arbitrum', icon: '🔷' },
-  { id: optimism.id, name: 'Optimism', icon: '🔴' },
-  { id: mainnet.id, name: 'Ethereum', icon: '⟠' },
+  { id: base.id, name: 'Base', icon: CHAIN_INFO[8453]?.icon },
+  { id: arbitrum.id, name: 'Arbitrum', icon: CHAIN_INFO[42161]?.icon },
+  { id: optimism.id, name: 'Optimism', icon: CHAIN_INFO[10]?.icon },
+  { id: mainnet.id, name: 'Ethereum', icon: CHAIN_INFO[1]?.icon },
 ]
+
+// Token icon component with fallback
+function TokenIcon({ token, size = 24 }: { token: 'USDC' | 'ETH'; size?: number }) {
+  const iconUrl = token === 'USDC'
+    ? KNOWN_TOKENS['0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913']?.logoURI
+    : KNOWN_TOKENS[NATIVE_ETH_ADDRESS]?.logoURI
+
+  if (iconUrl) {
+    return (
+      <img
+        src={iconUrl}
+        alt={token}
+        width={size}
+        height={size}
+        className="rounded-full"
+        onError={(e) => {
+          // Fallback to text if image fails
+          e.currentTarget.style.display = 'none'
+        }}
+      />
+    )
+  }
+
+  return (
+    <div
+      className="bg-white/20 rounded-full flex items-center justify-center text-xs font-bold"
+      style={{ width: size, height: size }}
+    >
+      {token === 'USDC' ? '$' : 'Ξ'}
+    </div>
+  )
+}
+
+// Chain icon component with fallback
+function ChainIcon({ chainId, size = 16 }: { chainId: number; size?: number }) {
+  const chain = CHAINS.find(c => c.id === chainId)
+
+  if (chain?.icon) {
+    return (
+      <img
+        src={chain.icon}
+        alt={chain.name}
+        width={size}
+        height={size}
+        className="rounded-full"
+        onError={(e) => {
+          e.currentTarget.style.display = 'none'
+        }}
+      />
+    )
+  }
+
+  return null
+}
 
 interface Quote {
   amountOut: string
@@ -86,22 +146,28 @@ export function CustomSwap({ onSuccess }: CustomSwapProps) {
       const decimals = fromToken === 'USDC' ? 6 : 18
       const amountWei = parseUnits(amount, decimals).toString()
 
+      const requestBody = {
+        user: address,
+        originChainId: fromChainId,
+        destinationChainId: toChainId,
+        originCurrency: TOKENS[fromToken][fromChainId as keyof typeof TOKENS.USDC],
+        destinationCurrency: TOKENS[toToken][toChainId as keyof typeof TOKENS.USDC],
+        amount: amountWei,
+        tradeType: 'EXACT_INPUT',
+      }
+
+      console.log('[CustomSwap] Requesting quote:', requestBody)
+
       const response = await fetch('https://api.relay.link/quote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user: address,
-          originChainId: fromChainId,
-          destinationChainId: toChainId,
-          originCurrency: TOKENS[fromToken][fromChainId as keyof typeof TOKENS.USDC],
-          destinationCurrency: TOKENS[toToken][toChainId as keyof typeof TOKENS.USDC],
-          amount: amountWei,
-          tradeType: 'EXACT_INPUT',
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (!response.ok) {
-        throw new Error('Failed to get quote')
+        const errorData = await response.json().catch(() => ({}))
+        console.error('[CustomSwap] Quote error response:', errorData)
+        throw new Error(errorData.message || 'Failed to get quote')
       }
 
       const data = await response.json()
@@ -116,8 +182,8 @@ export function CustomSwap({ onSuccess }: CustomSwapProps) {
         route: `${fromToken} → ${toToken}`,
       })
     } catch (err: any) {
-      console.error('Quote error:', err)
-      setError('Unable to get quote')
+      console.error('[CustomSwap] Quote error:', err)
+      setError(err.message || 'Unable to get quote')
       setQuote(null)
     } finally {
       setIsQuoting(false)
@@ -255,9 +321,12 @@ export function CustomSwap({ onSuccess }: CustomSwapProps) {
               <button
                 className="flex items-center gap-2 bg-[#ef4444] hover:bg-[#dc2626] text-white font-semibold rounded-2xl px-4 py-2.5 transition-colors"
               >
-                <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center text-xs">$</div>
+                <TokenIcon token={fromToken} size={24} />
                 <span>{fromToken}</span>
-                <span className="text-white/60 text-xs">{CHAINS.find(c => c.id === fromChainId)?.name}</span>
+                <div className="flex items-center gap-1 text-white/60 text-xs">
+                  <ChainIcon chainId={fromChainId} size={14} />
+                  <span>{CHAINS.find(c => c.id === fromChainId)?.name}</span>
+                </div>
               </button>
             </div>
           </div>
@@ -319,18 +388,21 @@ export function CustomSwap({ onSuccess }: CustomSwapProps) {
             </div>
 
             <div className="flex flex-col items-end gap-2">
-              {/* Token Selector */}
-              <select
-                value={toToken}
-                onChange={(e) => {
-                  setToToken(e.target.value as 'USDC' | 'ETH')
-                  setQuote(null)
-                }}
-                className="flex items-center gap-2 bg-[#ef4444] hover:bg-[#dc2626] text-white font-semibold rounded-2xl px-4 py-2.5 transition-colors outline-none cursor-pointer"
-              >
-                <option value="ETH">ETH</option>
-                <option value="USDC">USDC</option>
-              </select>
+              {/* Token Selector with Icon */}
+              <div className="flex items-center gap-2 bg-[#ef4444] hover:bg-[#dc2626] text-white font-semibold rounded-2xl px-4 py-2.5 transition-colors">
+                <TokenIcon token={toToken} size={24} />
+                <select
+                  value={toToken}
+                  onChange={(e) => {
+                    setToToken(e.target.value as 'USDC' | 'ETH')
+                    setQuote(null)
+                  }}
+                  className="bg-transparent text-white font-semibold outline-none cursor-pointer appearance-none"
+                >
+                  <option value="ETH" className="bg-[#111] text-white">ETH</option>
+                  <option value="USDC" className="bg-[#111] text-white">USDC</option>
+                </select>
+              </div>
             </div>
           </div>
 
