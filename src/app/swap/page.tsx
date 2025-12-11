@@ -177,6 +177,41 @@ const swapStyles = `
     overflow: hidden;
   }
 
+  /* CRITICAL: When swap is sending/confirming, disable ALL blur effects globally */
+  .swap-page[data-swap-state="sending"] *,
+  .swap-page[data-swap-state="confirming"] *,
+  .swap-page[data-swap-state="pending"] * {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* When swap is active, reduce page to minimal state */
+  .swap-page[data-swap-state="sending"],
+  .swap-page[data-swap-state="confirming"],
+  .swap-page[data-swap-state="pending"] {
+    filter: none !important;
+  }
+
+  .swap-page[data-swap-state="sending"] .aura,
+  .swap-page[data-swap-state="confirming"] .aura,
+  .swap-page[data-swap-state="pending"] .aura {
+    display: none !important;
+  }
+
+  .swap-page[data-swap-state="sending"] .noise-overlay,
+  .swap-page[data-swap-state="confirming"] .noise-overlay,
+  .swap-page[data-swap-state="pending"] .noise-overlay {
+    display: none !important;
+  }
+
+  .swap-page[data-swap-state="sending"] .bottom-nav,
+  .swap-page[data-swap-state="confirming"] .bottom-nav,
+  .swap-page[data-swap-state="pending"] .bottom-nav {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(26, 26, 26, 1) !important;
+  }
+
   /* PRIVY MODAL - HIGHEST z-index, always on top */
   #privy-iframe-container,
   #privy-dialog,
@@ -201,21 +236,43 @@ const swapStyles = `
     z-index: 2147483647 !important;
     filter: none !important;
     -webkit-filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
     pointer-events: auto !important;
     opacity: 1 !important;
     visibility: visible !important;
-    display: block !important;
+    transform: none !important;
+    position: fixed !important;
   }
 
-  /* Ensure no blur on Privy elements */
+  /* Ensure Privy parent containers don't block interaction */
+  body > div:has(iframe[src*="privy"]),
+  body > div:has([data-privy-dialog]) {
+    pointer-events: auto !important;
+    z-index: 2147483646 !important;
+  }
+
+  /* Force remove any backdrop/blur on body when Privy is open */
+  body:has(iframe[src*="privy"]),
+  body:has([data-privy-dialog]) {
+    filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
   body:has(iframe[src*="privy"]) .aura,
   body:has([data-privy-dialog]) .aura {
-    filter: none !important;
-    opacity: 0.15 !important;
+    display: none !important;
   }
 
-  body:has(iframe[src*="privy"]) .swap-page,
-  body:has([data-privy-dialog]) .swap-page {
-    filter: none !important;
+  body:has(iframe[src*="privy"]) .noise-overlay,
+  body:has([data-privy-dialog]) .noise-overlay {
+    display: none !important;
+  }
+
+  body:has(iframe[src*="privy"]) .bottom-nav,
+  body:has([data-privy-dialog]) .bottom-nav {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 `
