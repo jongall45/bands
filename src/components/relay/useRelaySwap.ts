@@ -414,8 +414,11 @@ export function useRelaySwap() {
     }
   }, [smartWalletAddress])
 
+  // Get embedded wallet for cross-chain transactions (workaround for Privy AA10 bug)
+  const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
+
   // ============================================
-  // EXECUTE SWAP - Use smartWalletClient directly to avoid AA10 error
+  // EXECUTE SWAP - Smart wallet for Base, embedded wallet for other chains
   // ============================================
   const executeSwap = useCallback(async (
     fromToken: Token,
@@ -429,20 +432,6 @@ export function useRelaySwap() {
     if (!smartWalletAddress || !smartWalletClient) {
       setError('Wallet not connected')
       return null
-    }
-
-    // Check for cross-chain swap - Privy has a bug with AA10 for cross-chain
-    const isCrossChain = fromToken.chainId !== toToken.chainId
-    if (isCrossChain) {
-      // For cross-chain, check if any step requires a different chain
-      const hasMultiChainSteps = quote.steps.some(step => 
-        step.items.some(item => item.data?.chainId && item.data.chainId !== 8453)
-      )
-      
-      if (hasMultiChainSteps) {
-        console.log('[useRelaySwap] Cross-chain swap detected, checking for non-Base transactions')
-        // We can still proceed if all transactions are on Base (Relay handles bridging)
-      }
     }
 
     setState('confirming')
@@ -460,23 +449,46 @@ export function useRelaySwap() {
           const targetChainId = item.data.chainId
           console.log('[useRelaySwap] Sending tx on chain:', targetChainId)
 
-          // For non-Base chains, show error about cross-chain limitation
-          if (targetChainId !== 8453) {
-            console.error('[useRelaySwap] Cross-chain tx required on chain:', targetChainId)
-            throw new Error(`Cross-chain swaps are temporarily unavailable. Please swap on Base only.`)
-          }
-
           setState('sending')
 
-          // Use smartWalletClient directly for Base transactions
-          // This avoids the AA10 error because the client is already initialized
           let txHash: string
 
-          txHash = await smartWalletClient.sendTransaction({
-            to: item.data.to as `0x${string}`,
-            data: item.data.data as `0x${string}`,
-            value: item.data.value ? BigInt(item.data.value) : BigInt(0),
-          })
+          // For Base (8453): Use smart wallet client directly (no AA10 issue)
+          // For other chains: Use embedded wallet via provider (bypasses ERC-4337 bundler)
+          if (targetChainId === 8453) {
+            console.log('[useRelaySwap] Using smartWalletClient for Base')
+            txHash = await smartWalletClient.sendTransaction({
+              to: item.data.to as `0x${string}`,
+              data: item.data.data as `0x${string}`,
+              value: item.data.value ? BigInt(item.data.value) : BigInt(0),
+            })
+          } else {
+            // For non-Base chains, use embedded wallet to avoid AA10 bug
+            console.log('[useRelaySwap] Using embedded wallet for chain:', targetChainId)
+            
+            if (!embeddedWallet) {
+              throw new Error('Embedded wallet not available for cross-chain transaction')
+            }
+
+            // Switch to target chain
+            const currentChainId = embeddedWallet.chainId
+            if (currentChainId !== `eip155:${targetChainId}`) {
+              console.log('[useRelaySwap] Switching embedded wallet to chain:', targetChainId)
+              await embeddedWallet.switchChain(targetChainId)
+            }
+
+            // Get provider and send transaction directly (bypasses ERC-4337)
+            const provider = await embeddedWallet.getEthereumProvider()
+            txHash = await provider.request({
+              method: 'eth_sendTransaction',
+              params: [{
+                from: embeddedWallet.address,
+                to: item.data.to,
+                data: item.data.data,
+                value: item.data.value ? `0x${BigInt(item.data.value).toString(16)}` : '0x0',
+              }],
+            }) as string
+          }
 
           console.log('[useRelaySwap] Transaction sent:', txHash)
           lastTxHash = txHash
@@ -539,7 +551,7 @@ export function useRelaySwap() {
       setState('error')
       return null
     }
-  }, [quote, smartWalletAddress, smartWalletClient, getClientForChain, publicClient])
+  }, [quote, smartWalletAddress, smartWalletClient, embeddedWallet, publicClient])
 
   // ============================================
   // RESET
