@@ -14,13 +14,31 @@ interface CustomSwapWidgetProps {
   onStateChange?: (state: SwapState) => void
 }
 
-// Chain icons
-const CHAIN_ICONS: Record<number, string> = {
-  8453: '🔵',
-  42161: '🔷',
-  1: '⟠',
-  10: '🔴',
-  137: '🟣',
+// Chain explorer URLs
+const CHAIN_EXPLORERS: Record<number, string> = {
+  8453: 'https://basescan.org',
+  42161: 'https://arbiscan.io',
+  1: 'https://etherscan.io',
+  10: 'https://optimistic.etherscan.io',
+  137: 'https://polygonscan.com',
+}
+
+// Get explorer URL for a transaction
+const getExplorerUrl = (chainId: number, txHash: string): string => {
+  const baseUrl = CHAIN_EXPLORERS[chainId] || 'https://basescan.org'
+  return `${baseUrl}/tx/${txHash}`
+}
+
+// Get explorer name
+const getExplorerName = (chainId: number): string => {
+  const names: Record<number, string> = {
+    8453: 'BaseScan',
+    42161: 'Arbiscan',
+    1: 'Etherscan',
+    10: 'Optimism Explorer',
+    137: 'PolygonScan',
+  }
+  return names[chainId] || 'Explorer'
 }
 
 // ============================================
@@ -451,12 +469,12 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
 
             {result.txHash && (
               <a
-                href={`https://basescan.org/tx/${result.txHash}`}
+                href={getExplorerUrl(result.toToken.chainId, result.txHash)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block text-[#ef4444] hover:underline text-sm mb-6"
               >
-                View on Explorer →
+                View on {getExplorerName(result.toToken.chainId)} →
               </a>
             )}
 
