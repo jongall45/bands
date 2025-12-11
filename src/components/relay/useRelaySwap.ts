@@ -73,18 +73,14 @@ export interface SwapResult {
 // ============================================
 const RELAY_API = 'https://api.relay.link'
 
-// Native token address (zero address)
+// Native token address (zero address) - Relay uses this directly
 const NATIVE_TOKEN_ADDRESS = '0x0000000000000000000000000000000000000000'
 
-// Helper to convert token to Relay currency format
-// Relay accepts: symbol shorthand ("eth", "usdc") or contract addresses
+// Helper to get currency for Relay API
+// Per Relay docs: use zero address for native, contract address for ERC20s
 function toRelayCurrency(token: Token): string {
-  // For native tokens, use symbol shorthand
-  if (token.address === NATIVE_TOKEN_ADDRESS || token.address.toLowerCase() === NATIVE_TOKEN_ADDRESS) {
-    // Return lowercase symbol for native tokens
-    return token.symbol.toLowerCase() // "eth", "matic", etc.
-  }
-  // For ERC20s, use the contract address
+  // Relay uses the zero address for native tokens (ETH, MATIC, etc)
+  // and contract addresses for ERC20s
   return token.address
 }
 
@@ -338,29 +334,31 @@ export function useRelaySwap() {
       const originCurrency = toRelayCurrency(fromToken)
       const destinationCurrency = toRelayCurrency(toToken)
 
+      // Build request body per Relay API spec
+      const requestBody = {
+        user: smartWalletAddress,
+        originChainId: fromToken.chainId,
+        destinationChainId: toToken.chainId,
+        originCurrency,
+        destinationCurrency,
+        amount: amountInWei,
+        recipient: smartWalletAddress,
+        tradeType: 'EXACT_INPUT',
+        referrer: 'bands.cash',
+      }
+
       console.log('[useRelaySwap] Fetching quote:', {
         from: `${fromToken.symbol} (${originCurrency}) on chain ${fromToken.chainId}`,
         to: `${toToken.symbol} (${destinationCurrency}) on chain ${toToken.chainId}`,
         amount: amountInWei,
-        user: smartWalletAddress,
+        requestBody,
       })
 
       const response = await fetch(`${RELAY_API}/quote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: abortControllerRef.current.signal,
-        body: JSON.stringify({
-          user: smartWalletAddress,
-          originChainId: fromToken.chainId,
-          destinationChainId: toToken.chainId,
-          originCurrency,
-          destinationCurrency,
-          amount: amountInWei,
-          recipient: smartWalletAddress,
-          tradeType: 'EXACT_INPUT',
-          referrer: 'bands.cash',
-          useExternalLiquidity: true,
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (!response.ok) {
