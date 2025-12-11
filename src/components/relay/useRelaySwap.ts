@@ -431,6 +431,20 @@ export function useRelaySwap() {
       return null
     }
 
+    // Check for cross-chain swap - Privy has a bug with AA10 for cross-chain
+    const isCrossChain = fromToken.chainId !== toToken.chainId
+    if (isCrossChain) {
+      // For cross-chain, check if any step requires a different chain
+      const hasMultiChainSteps = quote.steps.some(step => 
+        step.items.some(item => item.data?.chainId && item.data.chainId !== 8453)
+      )
+      
+      if (hasMultiChainSteps) {
+        console.log('[useRelaySwap] Cross-chain swap detected, checking for non-Base transactions')
+        // We can still proceed if all transactions are on Base (Relay handles bridging)
+      }
+    }
+
     setState('confirming')
     setError(null)
 
@@ -446,43 +460,23 @@ export function useRelaySwap() {
           const targetChainId = item.data.chainId
           console.log('[useRelaySwap] Sending tx on chain:', targetChainId)
 
+          // For non-Base chains, show error about cross-chain limitation
+          if (targetChainId !== 8453) {
+            console.error('[useRelaySwap] Cross-chain tx required on chain:', targetChainId)
+            throw new Error(`Cross-chain swaps are temporarily unavailable. Please swap on Base only.`)
+          }
+
           setState('sending')
 
-          // IMPORTANT: Use smartWalletClient directly - it's already initialized
-          // and knows the account is deployed, avoiding the AA10 error.
-          // getClientForChain creates a fresh client that doesn't know the account state.
+          // Use smartWalletClient directly for Base transactions
+          // This avoids the AA10 error because the client is already initialized
           let txHash: string
 
-          try {
-            // Try using the main smartWalletClient first
-            // It should handle chain switching internally
-            txHash = await smartWalletClient.sendTransaction({
-              to: item.data.to as `0x${string}`,
-              data: item.data.data as `0x${string}`,
-              value: item.data.value ? BigInt(item.data.value) : BigInt(0),
-              chain: chainMap[targetChainId],
-            })
-          } catch (sendErr: any) {
-            console.log('[useRelaySwap] smartWalletClient.sendTransaction error:', sendErr.message)
-            
-            // If smartWalletClient fails, try getClientForChain as fallback
-            // This might be needed for cross-chain transactions
-            if (sendErr.message?.includes('chain') || sendErr.message?.includes('Chain')) {
-              console.log('[useRelaySwap] Trying getClientForChain for chain:', targetChainId)
-              const chainClient = await getClientForChain({ id: targetChainId })
-              if (!chainClient) {
-                throw new Error(`Failed to get client for chain ${targetChainId}`)
-              }
-              
-              txHash = await chainClient.sendTransaction({
-                to: item.data.to as `0x${string}`,
-                data: item.data.data as `0x${string}`,
-                value: item.data.value ? BigInt(item.data.value) : BigInt(0),
-              })
-            } else {
-              throw sendErr
-            }
-          }
+          txHash = await smartWalletClient.sendTransaction({
+            to: item.data.to as `0x${string}`,
+            data: item.data.data as `0x${string}`,
+            value: item.data.value ? BigInt(item.data.value) : BigInt(0),
+          })
 
           console.log('[useRelaySwap] Transaction sent:', txHash)
           lastTxHash = txHash
