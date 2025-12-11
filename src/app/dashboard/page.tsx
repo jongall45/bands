@@ -7,10 +7,11 @@ import { useReadContract } from 'wagmi'
 import { formatUnits, parseUnits, isAddress, encodeFunctionData } from 'viem'
 import { base } from 'wagmi/chains'
 import { useAuth } from '@/hooks/useAuth'
+import { usePortfolio, formatUsdValue, CHAIN_CONFIG } from '@/hooks/usePortfolio'
 import { USDC_ADDRESS, USDC_DECIMALS, ERC20_ABI } from '@/lib/wagmi'
-import { 
-  ArrowUpRight, ArrowDownLeft, Copy, Check, LogOut, 
-  Send, RefreshCw, ExternalLink, Plus, QrCode
+import {
+  ArrowUpRight, ArrowDownLeft, Copy, Check, LogOut,
+  Send, RefreshCw, ExternalLink, Plus, QrCode, Shield, Wallet
 } from 'lucide-react'
 import Link from 'next/link'
 import { Modal } from '@/components/ui/Modal'
@@ -21,7 +22,7 @@ import { TransactionList } from '@/components/ui/TransactionList'
 import { InstallPrompt } from '@/components/pwa/InstallPrompt'
 
 export default function Dashboard() {
-  const { isAuthenticated, isConnected, address, logout } = useAuth()
+  const { isAuthenticated, isConnected, address, isSmartWalletReady, logout } = useAuth()
   const router = useRouter()
   const [copied, setCopied] = useState(false)
   const [showSend, setShowSend] = useState(false)
@@ -33,6 +34,10 @@ export default function Dashboard() {
   const { sendTransaction, data: txHash, isPending: isSending } = useSendTransaction()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash: txHash })
 
+  // Cross-chain portfolio from Dune API
+  const { data: portfolio, refetch: refetchPortfolio, isLoading: portfolioLoading } = usePortfolio(address)
+
+  // Fallback to on-chain USDC balance for Base
   const { data: usdcBalance, refetch: refetchBalance, isLoading: balanceLoading } = useReadContract({
     address: USDC_ADDRESS,
     abi: ERC20_ABI,
@@ -58,16 +63,34 @@ export default function Dashboard() {
     }
   }, [isSuccess, refetchBalance])
 
-  const formattedBalance = usdcBalance 
+  // Use portfolio total if available, fallback to USDC balance
+  const totalValue = portfolio?.totalValueUsd || 0
+  const formattedBalance = totalValue > 0
+    ? totalValue.toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    : usdcBalance
     ? parseFloat(formatUnits(usdcBalance, USDC_DECIMALS)).toLocaleString('en-US', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       })
     : '0.00'
 
-  const numericBalance = usdcBalance 
+  const numericBalance = usdcBalance
     ? parseFloat(formatUnits(usdcBalance, USDC_DECIMALS))
     : 0
+
+  // Refresh all balances
+  const handleRefresh = useCallback(() => {
+    refetchBalance()
+    refetchPortfolio()
+  }, [refetchBalance, refetchPortfolio])
+
+  // Get unique chains in portfolio
+  const portfolioChains = portfolio?.tokens
+    ? [...new Set(portfolio.tokens.map(t => t.chainId))]
+    : []
 
   const copyAddress = useCallback(() => {
     if (address) {
@@ -159,38 +182,65 @@ export default function Dashboard() {
         
         {/* Balance Card */}
         <div className="card">
-          
+
           {/* Balance Display */}
           <div className="text-center py-6">
             <p className="text-gray-400 text-sm mb-1">Total Balance</p>
-            {balanceLoading ? (
+            {portfolioLoading || balanceLoading ? (
               <div className="h-12 w-40 mx-auto bg-gray-700/30 rounded-xl animate-pulse" />
             ) : (
               <h1 className="text-5xl font-bold text-white tracking-tight font-mono">
                 ${formattedBalance}
               </h1>
             )}
-            <p className="text-[#ef4444] text-sm mt-2 font-medium">USDC on Base</p>
-            
+
+            {/* Multi-chain indicator */}
+            <div className="flex items-center justify-center gap-2 mt-2">
+              {portfolioChains.length > 0 ? (
+                <div className="flex items-center gap-1">
+                  {portfolioChains.slice(0, 4).map(chainId => (
+                    <img
+                      key={chainId}
+                      src={CHAIN_CONFIG[chainId]?.logo || CHAIN_CONFIG[8453].logo}
+                      alt={CHAIN_CONFIG[chainId]?.name || 'Chain'}
+                      className="w-5 h-5 rounded-full"
+                    />
+                  ))}
+                  {portfolioChains.length > 4 && (
+                    <span className="text-white/40 text-xs">+{portfolioChains.length - 4}</span>
+                  )}
+                </div>
+              ) : (
+                <p className="text-[#ef4444] text-sm font-medium">USDC on Base</p>
+              )}
+            </div>
+
             {/* Refresh button */}
-            <button 
-              onClick={() => refetchBalance()}
+            <button
+              onClick={handleRefresh}
               className="mt-3 p-2 text-gray-500 hover:text-gray-300 transition-colors"
             >
-              <RefreshCw className={`w-4 h-4 ${balanceLoading ? 'animate-spin' : ''}`} strokeWidth={2} />
+              <RefreshCw className={`w-4 h-4 ${portfolioLoading || balanceLoading ? 'animate-spin' : ''}`} strokeWidth={2} />
             </button>
           </div>
 
           {/* Wallet Address Row */}
           <div className="flex items-center justify-between py-3 px-4 bg-white/[0.02] rounded-2xl mb-4">
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-[#ef4444] rounded" />
+              {isSmartWalletReady ? (
+                <div className="flex items-center gap-1 px-2 py-1 bg-green-500/10 rounded-lg border border-green-500/20">
+                  <Shield className="w-3 h-3 text-green-400" />
+                  <span className="text-green-400 text-xs font-medium">Smart</span>
+                </div>
+              ) : (
+                <div className="w-4 h-4 bg-[#ef4444] rounded" />
+              )}
               <span className="text-gray-400 text-sm font-mono">
                 {address?.slice(0, 6)}...{address?.slice(-4)}
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <a 
+              <a
                 href={`https://basescan.org/address/${address}`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -199,7 +249,7 @@ export default function Dashboard() {
                 BaseScan
                 <ExternalLink className="w-3 h-3" />
               </a>
-              <button 
+              <button
                 onClick={copyAddress}
                 className="p-1.5 text-gray-400 hover:text-gray-300 transition-colors"
               >
@@ -341,15 +391,32 @@ export default function Dashboard() {
       </Modal>
 
       {/* Receive Modal */}
-      <Modal isOpen={showReceive} onClose={() => setShowReceive(false)} title="Receive USDC">
+      <Modal isOpen={showReceive} onClose={() => setShowReceive(false)} title="Receive">
         <div className="text-center">
-          <div className="w-48 h-48 mx-auto mb-6 rounded-2xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-center">
-            <div className="w-32 h-32 bg-white rounded-xl flex items-center justify-center">
-              <QrCode className="w-16 h-16 text-[#111]" />
+          {/* Smart wallet badge */}
+          {isSmartWalletReady && (
+            <div className="flex items-center justify-center gap-1.5 mb-4 px-3 py-1.5 mx-auto w-fit bg-green-500/10 rounded-full border border-green-500/20">
+              <Shield className="w-3.5 h-3.5 text-green-400" />
+              <span className="text-green-400 text-xs font-medium">Smart Wallet</span>
+            </div>
+          )}
+
+          {/* QR Code */}
+          <div className="w-48 h-48 mx-auto mb-6 rounded-2xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-center p-2">
+            <div className="w-full h-full bg-white rounded-xl flex items-center justify-center p-2">
+              {address ? (
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${address}&bgcolor=ffffff&color=111111`}
+                  alt="Wallet QR Code"
+                  className="w-full h-full"
+                />
+              ) : (
+                <QrCode className="w-16 h-16 text-[#111]" />
+              )}
             </div>
           </div>
 
-          <p className="text-white/40 text-sm mb-4">Share your address to receive USDC on Base</p>
+          <p className="text-white/40 text-sm mb-4">Share your address to receive tokens</p>
 
           <div className="bg-white/[0.02] rounded-2xl border border-white/[0.04] p-4 mb-4">
             <p className="font-mono text-xs text-white/60 break-all">{address}</p>
@@ -363,7 +430,9 @@ export default function Dashboard() {
             Copy Address
           </button>
 
-          <p className="text-white/30 text-xs mt-4">Only send USDC on the <span className="text-[#ef4444]">Base</span> network</p>
+          <p className="text-white/30 text-xs mt-4">
+            Works on <span className="text-[#ef4444]">Base, Ethereum, Arbitrum, Optimism</span> & more
+          </p>
         </div>
       </Modal>
 

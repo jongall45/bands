@@ -1,6 +1,7 @@
 'use client'
 
 import { usePrivy, useWallets } from '@privy-io/react-auth'
+import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { useAccount, useBalance, useWalletClient, usePublicClient, useSwitchChain } from 'wagmi'
 import { base, arbitrum } from 'viem/chains'
 import { formatUnits } from 'viem'
@@ -11,26 +12,35 @@ const USDC_ARBITRUM = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'
 
 export function useAuth() {
   // Privy hooks
-  const { 
-    login, 
-    logout, 
-    authenticated, 
-    ready, 
+  const {
+    login,
+    logout,
+    authenticated,
+    ready,
     user,
     linkEmail,
     linkGoogle,
   } = usePrivy()
-  
+
   const { wallets } = useWallets()
-  
+
+  // Smart wallet hook - ERC-4337 account abstraction
+  const { client: smartWalletClient, getClientForChain } = useSmartWallets()
+
   // Wagmi hooks
-  const { address, isConnected, chain } = useAccount()
+  const { address: eoaAddress, isConnected, chain } = useAccount()
   const { data: walletClient } = useWalletClient()
   const publicClient = usePublicClient()
   const { switchChain } = useSwitchChain()
-  
+
   // Get the embedded wallet specifically
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
+
+  // Smart wallet address (ERC-4337) - this is the primary address for the app
+  const smartWalletAddress = smartWalletClient?.account?.address as `0x${string}` | undefined
+
+  // Use smart wallet address if available, fallback to EOA
+  const address = smartWalletAddress || eoaAddress
   
   // ETH Balances
   const { data: ethBalanceBase, refetch: refetchEthBase } = useBalance({ 
@@ -104,20 +114,25 @@ export function useAuth() {
     isLoading: !ready, // Auth is loading until ready
     isAuthenticated: authenticated,
     isConnected: authenticated && isConnected,
+    isSmartWalletReady: !!smartWalletClient && !!smartWalletAddress,
     user,
-    address,
+    address, // Smart wallet address (or EOA fallback)
+    eoaAddress, // Original EOA address
+    smartWalletAddress, // Smart wallet address (undefined if not ready)
     displayAddress,
     displayEmail,
     loginMethod,
     chain,
     chainId: chain?.id,
-    
+
     // Wallets
     walletClient,
     publicClient,
     embeddedWallet,
     wallets,
-    
+    smartWalletClient,
+    getClientForChain,
+
     // Balances (formatted)
     balances: {
       ethBase: ethBalanceBase ? formatUnits(ethBalanceBase.value, 18) : '0',
@@ -125,7 +140,7 @@ export function useAuth() {
       usdcBase: usdcBalanceBase ? formatUnits(usdcBalanceBase.value, 6) : '0',
       usdcArb: usdcBalanceArb ? formatUnits(usdcBalanceArb.value, 6) : '0',
     },
-    
+
     // Raw balances
     rawBalances: {
       ethBase: ethBalanceBase?.value ?? BigInt(0),
@@ -133,7 +148,7 @@ export function useAuth() {
       usdcBase: usdcBalanceBase?.value ?? BigInt(0),
       usdcArb: usdcBalanceArb?.value ?? BigInt(0),
     },
-    
+
     // Actions
     login,
     logout,

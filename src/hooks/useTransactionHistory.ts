@@ -5,42 +5,98 @@ import { formatUnits } from 'viem'
 
 export interface Transaction {
   hash: string
-  type: 'send' | 'receive' | 'swap' | 'approve' | 'contract' | 'vault_deposit' | 'vault_withdraw'
+  type: 'send' | 'receive' | 'swap' | 'approve' | 'contract' | 'vault_deposit' | 'vault_withdraw' | 'bridge' | 'app_interaction'
   from: string
   to: string
   value: string
+  valueUsd?: number
   tokenSymbol: string
   tokenDecimals: number
+  tokenAddress?: string
+  tokenLogoUri?: string
   timestamp: number
-  status: 'success' | 'failed'
+  status: 'success' | 'failed' | 'pending'
   blockNumber: string
+  chainId?: number
+  chainName?: string
+  chainLogo?: string
+  explorerUrl?: string
+  // Swap-specific fields
+  swapFromToken?: { symbol: string; amount: string; logoUri?: string }
+  swapToToken?: { symbol: string; amount: string; logoUri?: string }
+  // App interaction fields
+  appName?: string
+  appCategory?: string
   // Vault-specific fields
   vaultName?: string | null
   vaultApy?: number | null
 }
 
-async function fetchTransactionHistory(address: string): Promise<Transaction[]> {
-  if (!address) return []
-
+// Fetch from Blockscout (Base only, legacy)
+async function fetchBlockscoutTransactions(address: string): Promise<Transaction[]> {
   try {
     const response = await fetch(`/api/transactions?address=${address}`)
-    
-    if (!response.ok) {
-      throw new Error('Failed to fetch transactions')
+    if (!response.ok) return []
+    const data = await response.json()
+    // Add default chainId for legacy transactions
+    return (data.result || []).map((tx: Transaction) => ({
+      ...tx,
+      chainId: 8453,
+      chainName: 'base',
+      explorerUrl: `https://basescan.org/tx/${tx.hash}`,
+    }))
+  } catch {
+    return []
+  }
+}
+
+// Fetch from Dune SimAPI (cross-chain)
+async function fetchDuneTransactions(address: string, chainIds?: string): Promise<Transaction[]> {
+  try {
+    const params = new URLSearchParams({ address })
+    if (chainIds) params.set('chainIds', chainIds)
+
+    const response = await fetch(`/api/sim/transactions?${params}`)
+    if (!response.ok) return []
+    const data = await response.json()
+    return data.transactions || []
+  } catch {
+    return []
+  }
+}
+
+async function fetchTransactionHistory(
+  address: string,
+  options: { crossChain?: boolean; chainIds?: string } = {}
+): Promise<Transaction[]> {
+  if (!address) return []
+
+  const { crossChain = true, chainIds } = options
+
+  try {
+    if (crossChain) {
+      // Try Dune API first for cross-chain
+      const duneTransactions = await fetchDuneTransactions(address, chainIds)
+      if (duneTransactions.length > 0) {
+        return duneTransactions
+      }
     }
 
-    const data = await response.json()
-    return data.result || []
+    // Fallback to Blockscout for Base-only transactions
+    return await fetchBlockscoutTransactions(address)
   } catch (error) {
     console.error('Error fetching transactions:', error)
     return []
   }
 }
 
-export function useTransactionHistory(address: string | undefined) {
+export function useTransactionHistory(
+  address: string | undefined,
+  options: { crossChain?: boolean; chainIds?: string } = {}
+) {
   return useQuery({
-    queryKey: ['transaction-history', address],
-    queryFn: () => fetchTransactionHistory(address!),
+    queryKey: ['transaction-history', address, options.crossChain, options.chainIds],
+    queryFn: () => fetchTransactionHistory(address!, options),
     enabled: !!address,
     refetchInterval: 30000, // Refresh every 30 seconds
     staleTime: 15000,

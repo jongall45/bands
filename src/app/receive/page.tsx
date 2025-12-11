@@ -1,21 +1,21 @@
 'use client'
 
-import { useAccount } from 'wagmi'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Copy, Check, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Copy, Check, ExternalLink, Shield } from 'lucide-react'
 import Link from 'next/link'
+import { useAuth } from '@/hooks/useAuth'
 
 export default function ReceivePage() {
-  const { address, isConnected } = useAccount()
+  const { address, isSmartWalletReady, isAuthenticated } = useAuth()
   const router = useRouter()
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    if (!isConnected) {
+    if (!isAuthenticated) {
       router.push('/')
     }
-  }, [isConnected, router])
+  }, [isAuthenticated, router])
 
   const copyAddress = () => {
     if (address) {
@@ -25,9 +25,9 @@ export default function ReceivePage() {
     }
   }
 
-  if (!isConnected || !address) return null
+  if (!isAuthenticated || !address) return null
 
-  // Generate a simple QR code using a data URL approach
+  // Generate QR code using QR Server API - works with smart wallet address
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${address}&bgcolor=ffffff&color=111111`
 
   return (
@@ -45,14 +45,14 @@ export default function ReceivePage() {
 
       <div className="max-w-[430px] mx-auto relative z-10">
         {/* Header with safe area */}
-        <header 
+        <header
           className="px-5 py-4 flex items-center gap-4"
           style={{ paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))' }}
         >
           <Link href="/dashboard" className="text-gray-500 hover:text-gray-700 p-1 -ml-1">
             <ArrowLeft className="w-6 h-6" />
           </Link>
-          <h1 className="text-gray-900 font-semibold text-lg">Receive USDC</h1>
+          <h1 className="text-gray-900 font-semibold text-lg">Receive</h1>
         </header>
 
         <div className="p-5 space-y-5">
@@ -62,16 +62,24 @@ export default function ReceivePage() {
             <div className="absolute inset-0 bg-gradient-to-br from-[#FF3B30]/25 via-[#FF3B30]/10 to-transparent pointer-events-none" />
             
             <div className="relative z-10 flex flex-col items-center">
+              {/* Smart wallet badge */}
+              {isSmartWalletReady && (
+                <div className="flex items-center gap-1.5 mb-4 px-3 py-1.5 bg-green-500/10 rounded-full border border-green-500/20">
+                  <Shield className="w-3.5 h-3.5 text-green-400" />
+                  <span className="text-green-400 text-xs font-medium">Smart Wallet</span>
+                </div>
+              )}
+
               {/* QR Code */}
               <div className="bg-white p-4 rounded-2xl mb-6">
-                <img 
-                  src={qrCodeUrl} 
-                  alt="Wallet QR Code" 
+                <img
+                  src={qrCodeUrl}
+                  alt="Wallet QR Code"
                   className="w-48 h-48"
                 />
               </div>
-              
-              <p className="text-white/40 text-sm mb-2">Your Base Address</p>
+
+              <p className="text-white/40 text-sm mb-2">Your Wallet Address</p>
               <p className="text-white font-mono text-xs text-center break-all px-4 leading-relaxed">
                 {address}
               </p>
@@ -108,7 +116,7 @@ export default function ReceivePage() {
           </a>
 
           <p className="text-gray-400 text-xs text-center">
-            Only send USDC on the <span className="text-[#ef4444] font-medium">Base</span> network
+            This address works on <span className="text-[#ef4444] font-medium">Base, Ethereum, Arbitrum, Optimism</span> & more
           </p>
         </div>
       </div>
