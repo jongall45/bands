@@ -46,22 +46,32 @@ export async function GET(request: NextRequest) {
     console.log('[Sim API] First balance sample:', JSON.stringify(data.balances?.[0]).slice(0, 500))
     
     // Transform data into our Token format
-    // Sim API returns: chain, chain_id, address, amount, symbol, name, decimals, price_usd, value_usd, logo
+    // Sim API returns: chain, chain_id, address, amount, symbol, name, decimals, price_usd, value_usd
+    // Logo URL pattern: https://api.sim.dune.com/beta/token/logo/{chainId}/{address}
     const tokens = (data.balances || []).map((balance: any) => {
       // Convert amount from smallest unit to human-readable
       const decimals = balance.decimals || 18
       const rawAmount = balance.amount || '0'
       const humanAmount = parseFloat(rawAmount) / Math.pow(10, decimals)
       
+      // Get token address (native returns 'native')
+      const isNative = balance.address === 'native'
+      const tokenAddress = isNative ? '0x0000000000000000000000000000000000000000' : (balance.address || '0x0000000000000000000000000000000000000000')
+      
+      // Construct logo URL from Sim API pattern
+      // Native tokens use 'native', ERC20s use their address
+      const logoURI = isNative 
+        ? `https://api.sim.dune.com/beta/token/logo/${balance.chain_id}/native`
+        : `https://api.sim.dune.com/beta/token/logo/${balance.chain_id}/${balance.address}`
+      
       return {
         symbol: balance.symbol || 'UNKNOWN',
         name: balance.name || balance.symbol || 'Unknown Token',
-        // For native tokens, Sim returns 'native' as address
-        address: balance.address === 'native' ? '0x0000000000000000000000000000000000000000' : (balance.address || '0x0000000000000000000000000000000000000000'),
+        address: tokenAddress,
         chainId: balance.chain_id,
         chain: balance.chain,
         decimals: decimals,
-        logoURI: balance.logo || null,
+        logoURI: logoURI,
         balance: humanAmount.toString(),
         balanceUsd: balance.value_usd || 0,
         price: balance.price_usd || 0,
