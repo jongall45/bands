@@ -20,15 +20,30 @@ export async function GET(request: NextRequest) {
     await Promise.all(
       chainIds.map(async (cid) => {
         try {
-          const response = await fetch(`${RELAY_API}/currencies/v1?chainId=${cid}&limit=100`)
+          // Try the currencies endpoint with term search
+          const response = await fetch(`${RELAY_API}/currencies/v1?chainId=${cid}&term=${encodeURIComponent(query)}&limit=20`, {
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          })
+
           if (response.ok) {
             const data = await response.json()
-            if (data && Array.isArray(data)) {
-              allTokens.push(...data.map((token: any) => ({
-                ...token,
+            console.log(`[Token Search] Chain ${cid} response:`, JSON.stringify(data).slice(0, 200))
+
+            // Handle both array and object responses
+            const tokens = Array.isArray(data) ? data : (data.currencies || data.tokens || [])
+
+            tokens.forEach((token: any) => {
+              allTokens.push({
+                symbol: token.symbol,
+                name: token.name,
+                address: token.address || token.id || '0x0000000000000000000000000000000000000000',
                 chainId: parseInt(cid),
-              })))
-            }
+                decimals: token.decimals || 18,
+                logoURI: token.metadata?.logoURI || token.logoURI || token.icon,
+              })
+            })
           }
         } catch (e) {
           console.warn(`[Token Search] Failed to fetch tokens for chain ${cid}:`, e)
@@ -36,24 +51,13 @@ export async function GET(request: NextRequest) {
       })
     )
 
-    // Filter tokens by search query (symbol or name)
-    const queryLower = query.toLowerCase()
-    const matchedTokens = allTokens
-      .filter(token =>
-        token.symbol?.toLowerCase().includes(queryLower) ||
-        token.name?.toLowerCase().includes(queryLower)
-      )
-      .slice(0, 20) // Limit results
-      .map(token => ({
-        symbol: token.symbol,
-        name: token.name,
-        address: token.address || '0x0000000000000000000000000000000000000000',
-        chainId: token.chainId,
-        decimals: token.decimals || 18,
-        logoURI: token.metadata?.logoURI || token.logoURI,
-      }))
+    // Remove duplicates and invalid tokens
+    const uniqueTokens = allTokens
+      .filter(t => t.symbol && t.address)
+      .slice(0, 20)
 
-    return NextResponse.json({ tokens: matchedTokens })
+    console.log(`[Token Search] Found ${uniqueTokens.length} tokens for query: ${query}`)
+    return NextResponse.json({ tokens: uniqueTokens })
   } catch (error) {
     console.error('[Token Search] Error:', error)
     return NextResponse.json({ tokens: [], error: 'Search failed' }, { status: 500 })

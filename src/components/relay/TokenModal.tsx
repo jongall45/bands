@@ -222,7 +222,11 @@ const TokenModal: React.FC<TokenModalProps> = ({
 
   // Render a token row
   const renderTokenRow = (token: Token, showBalance = false) => {
+    // Safety check for malformed tokens
+    if (!token || !token.address) return null
+
     const hasBalance = token.balance && parseFloat(token.balance) > 0
+    const tokenSymbol = token.symbol || '?'
 
     return (
       <div
@@ -231,30 +235,33 @@ const TokenModal: React.FC<TokenModalProps> = ({
         className="px-6 py-3.5 hover:bg-white/5 cursor-pointer flex justify-between items-center group transition-colors"
       >
         <div className="flex items-center gap-3">
-          {/* Token Icon */}
-          <div className="w-10 h-10 rounded-full bg-white/10 relative flex items-center justify-center overflow-hidden">
-            {token.logoURI ? (
-              <img 
-                src={token.logoURI} 
-                alt={token.symbol} 
-                className="w-8 h-8 rounded-full object-cover"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none'
-                }}
-              />
-            ) : (
-              <span className="text-lg font-bold text-white/60">
-                {token.symbol.charAt(0)}
-              </span>
-            )}
-            {/* Chain Badge */}
-            <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-[#0f0f0f] flex items-center justify-center p-0.5">
-              <ChainIcon chainId={token.chainId} size={14} />
+          {/* Token Icon with Chain Badge */}
+          <div className="relative w-10 h-10">
+            {/* Token Logo */}
+            <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center overflow-hidden">
+              {token.logoURI ? (
+                <img
+                  src={token.logoURI}
+                  alt={tokenSymbol}
+                  className="w-10 h-10 rounded-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none'
+                  }}
+                />
+              ) : (
+                <span className="text-lg font-bold text-white/60">
+                  {tokenSymbol.charAt(0)}
+                </span>
+              )}
+            </div>
+            {/* Chain Badge - positioned outside the overflow:hidden container */}
+            <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#0f0f0f] border-2 border-[#0f0f0f] flex items-center justify-center">
+              <ChainIcon chainId={token.chainId} size={16} />
             </div>
           </div>
 
           <div className="flex flex-col">
-            <span className="font-bold text-white text-[15px]">{token.symbol}</span>
+            <span className="font-bold text-white text-[15px]">{tokenSymbol}</span>
             <span className="text-xs font-medium text-white/40 flex items-center gap-1">
               {getChainName(token.chainId)}
               <span className="text-white/20">|</span>
