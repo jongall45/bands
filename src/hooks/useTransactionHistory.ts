@@ -71,19 +71,22 @@ async function fetchTransactionHistory(
 ): Promise<Transaction[]> {
   if (!address) return []
 
-  const { crossChain = true, chainIds } = options
+  const { crossChain = false, chainIds } = options
 
   try {
-    if (crossChain) {
-      // Try Dune API first for cross-chain
+    // Use Blockscout for Base transactions (better swap detection)
+    const blockscoutTransactions = await fetchBlockscoutTransactions(address)
+
+    if (crossChain && chainIds) {
+      // Also fetch from Dune for other chains
       const duneTransactions = await fetchDuneTransactions(address, chainIds)
-      if (duneTransactions.length > 0) {
-        return duneTransactions
-      }
+      // Merge and sort by timestamp
+      const allTransactions = [...blockscoutTransactions, ...duneTransactions]
+      allTransactions.sort((a, b) => b.timestamp - a.timestamp)
+      return allTransactions
     }
 
-    // Fallback to Blockscout for Base-only transactions
-    return await fetchBlockscoutTransactions(address)
+    return blockscoutTransactions
   } catch (error) {
     console.error('Error fetching transactions:', error)
     return []

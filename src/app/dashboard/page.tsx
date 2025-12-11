@@ -5,13 +5,13 @@ import { useRouter } from 'next/navigation'
 import { useSendTransaction, useWaitForTransactionReceipt } from 'wagmi'
 import { useReadContract } from 'wagmi'
 import { formatUnits, parseUnits, isAddress, encodeFunctionData } from 'viem'
-import { base } from 'wagmi/chains'
+import { base, arbitrum, optimism, mainnet, polygon } from 'wagmi/chains'
 import { useAuth } from '@/hooks/useAuth'
-import { usePortfolio, formatUsdValue, CHAIN_CONFIG } from '@/hooks/usePortfolio'
+import { usePortfolio, formatUsdValue, formatTokenBalance, CHAIN_CONFIG, type PortfolioToken } from '@/hooks/usePortfolio'
 import { USDC_ADDRESS, USDC_DECIMALS, ERC20_ABI } from '@/lib/wagmi'
 import {
   ArrowUpRight, ArrowDownLeft, Copy, Check, LogOut,
-  Send, RefreshCw, ExternalLink, Plus, QrCode, Shield, Wallet
+  Send, RefreshCw, ExternalLink, Plus, QrCode, Shield, Wallet, ChevronDown, Coins
 } from 'lucide-react'
 import Link from 'next/link'
 import { Modal } from '@/components/ui/Modal'
@@ -20,6 +20,15 @@ import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
 import { TransactionList } from '@/components/ui/TransactionList'
 import { InstallPrompt } from '@/components/pwa/InstallPrompt'
+
+// Supported chains for sending
+const SEND_CHAINS = [
+  { id: 8453, name: 'Base', logo: CHAIN_CONFIG[8453]?.logo },
+  { id: 42161, name: 'Arbitrum', logo: CHAIN_CONFIG[42161]?.logo },
+  { id: 10, name: 'Optimism', logo: CHAIN_CONFIG[10]?.logo },
+  { id: 1, name: 'Ethereum', logo: CHAIN_CONFIG[1]?.logo },
+  { id: 137, name: 'Polygon', logo: CHAIN_CONFIG[137]?.logo },
+]
 
 export default function Dashboard() {
   const { isAuthenticated, isConnected, address, isSmartWalletReady, logout } = useAuth()
@@ -30,6 +39,8 @@ export default function Dashboard() {
   const [sendTo, setSendTo] = useState('')
   const [sendAmount, setSendAmount] = useState('')
   const [addressError, setAddressError] = useState('')
+  const [selectedChain, setSelectedChain] = useState(SEND_CHAINS[0])
+  const [showChainSelect, setShowChainSelect] = useState(false)
 
   const { sendTransaction, data: txHash, isPending: isSending } = useSendTransaction()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash: txHash })
@@ -288,12 +299,74 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Holdings/Portfolio Card */}
+        {portfolio && portfolio.tokens && portfolio.tokens.length > 0 && (
+          <div className="card mt-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-white font-semibold flex items-center gap-2">
+                <Coins className="w-4 h-4 text-white/60" />
+                Holdings
+              </h2>
+              <span className="text-white/40 text-xs">{portfolio.tokens.length} assets</span>
+            </div>
+
+            <div className="space-y-2 max-h-[280px] overflow-y-auto">
+              {portfolio.tokens.slice(0, 10).map((token: PortfolioToken, index: number) => (
+                <div
+                  key={`${token.chainId}-${token.address}-${index}`}
+                  className="flex items-center justify-between p-3 bg-white/[0.02] rounded-xl hover:bg-white/[0.04] transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    {/* Token logo with chain badge */}
+                    <div className="relative">
+                      <img
+                        src={token.logoURI || `https://api.dicebear.com/7.x/shapes/svg?seed=${token.symbol}`}
+                        alt={token.symbol}
+                        className="w-9 h-9 rounded-full bg-white/10"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/shapes/svg?seed=${token.symbol}`
+                        }}
+                      />
+                      {/* Chain badge */}
+                      <img
+                        src={CHAIN_CONFIG[token.chainId]?.logo || CHAIN_CONFIG[8453].logo}
+                        alt={CHAIN_CONFIG[token.chainId]?.name || 'Chain'}
+                        className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-[#111]"
+                      />
+                    </div>
+
+                    <div>
+                      <p className="text-white font-medium text-sm">{token.symbol}</p>
+                      <p className="text-white/40 text-xs">{CHAIN_CONFIG[token.chainId]?.name || 'Unknown'}</p>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="text-white font-mono text-sm">
+                      {formatTokenBalance(token.balance)}
+                    </p>
+                    <p className="text-white/40 text-xs">
+                      {token.balanceUsd > 0 ? formatUsdValue(token.balanceUsd) : '-'}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {portfolio.tokens.length > 10 && (
+              <p className="text-white/40 text-xs text-center mt-3">
+                +{portfolio.tokens.length - 10} more assets
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Recent Activity Card */}
         <div className="card mt-4">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-white font-semibold">Recent Activity</h2>
-            <a 
-              href={`https://basescan.org/address/${address}`}
+            <a
+              href={`https://debank.com/profile/${address}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-white/40 text-xs hover:text-white/60 transition-colors flex items-center gap-1"
@@ -302,7 +375,7 @@ export default function Dashboard() {
               <ExternalLink className="w-3 h-3" />
             </a>
           </div>
-          
+
           <TransactionList address={address} limit={5} />
         </div>
 
@@ -315,8 +388,54 @@ export default function Dashboard() {
       <InstallPrompt />
 
       {/* Send Modal */}
-      <Modal isOpen={showSend} onClose={() => !isSending && !isConfirming && setShowSend(false)} title="Send USDC">
+      <Modal isOpen={showSend} onClose={() => !isSending && !isConfirming && setShowSend(false)} title="Send">
         <div className="space-y-5">
+          {/* Chain Selection */}
+          <div>
+            <label className="block text-white/40 text-sm mb-2 font-medium">Network</label>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowChainSelect(!showChainSelect)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-white/[0.03] rounded-2xl border border-white/[0.06] hover:border-white/20 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <img
+                    src={selectedChain.logo}
+                    alt={selectedChain.name}
+                    className="w-6 h-6 rounded-full"
+                  />
+                  <span className="text-white font-medium">{selectedChain.name}</span>
+                </div>
+                <ChevronDown className={`w-5 h-5 text-white/40 transition-transform ${showChainSelect ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showChainSelect && (
+                <div className="absolute z-10 w-full mt-2 bg-[#1a1a1a] border border-white/10 rounded-xl overflow-hidden shadow-xl">
+                  {SEND_CHAINS.map((chain) => (
+                    <button
+                      key={chain.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedChain(chain)
+                        setShowChainSelect(false)
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-white/[0.05] transition-colors ${
+                        selectedChain.id === chain.id ? 'bg-white/[0.05]' : ''
+                      }`}
+                    >
+                      <img src={chain.logo} alt={chain.name} className="w-5 h-5 rounded-full" />
+                      <span className="text-white text-sm">{chain.name}</span>
+                      {selectedChain.id === chain.id && (
+                        <Check className="w-4 h-4 text-green-400 ml-auto" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
           <div>
             <label className="block text-white/40 text-sm mb-2 font-medium">Recipient Address</label>
             <div className={`bg-white/[0.03] rounded-2xl border transition-all ${addressError ? 'border-red-500/50' : 'border-white/[0.06] focus-within:border-white/20'}`}>
@@ -375,13 +494,13 @@ export default function Dashboard() {
             ) : (
               <>
                 <Send className="w-4 h-4" />
-                Send USDC
+                Send on {selectedChain.name}
               </>
             )}
           </button>
 
           <p className="text-white/30 text-xs text-center">
-            Gas paid in USDC • No ETH needed
+            Gas sponsored • No ETH needed
           </p>
 
           {parseFloat(sendAmount) > numericBalance && sendAmount && (
