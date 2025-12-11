@@ -414,9 +414,6 @@ export function useRelaySwap() {
     }
   }, [smartWalletAddress])
 
-  // Get embedded wallet as fallback for AA10 errors
-  const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
-
   // ============================================
   // EXECUTE SWAP - Use getClientForChain to get chain-specific smart wallet client
   // This ensures the bundler URL is correct for the target chain
@@ -452,56 +449,20 @@ export function useRelaySwap() {
 
           setState('sending')
 
-          let txHash: string
+          // Get chain-specific client to ensure correct bundler URL
+          console.log('[useRelaySwap] Getting smart wallet client for chain:', targetChainId)
+          const chainClient = await getClientForChain({ id: targetChainId })
 
-          try {
-            // Get chain-specific client to ensure correct bundler URL
-            console.log('[useRelaySwap] Getting client for chain:', targetChainId)
-            const chainClient = await getClientForChain({ id: targetChainId })
-
-            if (!chainClient) {
-              throw new Error(`Failed to get client for chain ${targetChainId}`)
-            }
-
-            console.log('[useRelaySwap] Using chain-specific smart wallet client')
-            txHash = await chainClient.sendTransaction({
-              to: item.data.to as `0x${string}`,
-              data: item.data.data as `0x${string}`,
-              value: item.data.value ? BigInt(item.data.value) : BigInt(0),
-            })
-          } catch (smartWalletErr: any) {
-            // If AA10 error or smart wallet fails, try embedded wallet as fallback
-            if (smartWalletErr.message?.includes('AA10') ||
-                smartWalletErr.message?.includes('already constructed') ||
-                smartWalletErr.message?.includes('already deployed')) {
-              console.warn('[useRelaySwap] Smart wallet AA10 error, trying embedded wallet fallback')
-
-              if (!embeddedWallet) {
-                throw new Error('Smart wallet failed and no embedded wallet available')
-              }
-
-              // Switch embedded wallet to target chain
-              const currentChainId = embeddedWallet.chainId
-              if (currentChainId !== `eip155:${targetChainId}`) {
-                console.log('[useRelaySwap] Switching embedded wallet to chain:', targetChainId)
-                await embeddedWallet.switchChain(targetChainId)
-              }
-
-              // Get provider and send transaction directly (bypasses ERC-4337)
-              const provider = await embeddedWallet.getEthereumProvider()
-              txHash = await provider.request({
-                method: 'eth_sendTransaction',
-                params: [{
-                  from: embeddedWallet.address,
-                  to: item.data.to,
-                  data: item.data.data,
-                  value: item.data.value ? `0x${BigInt(item.data.value).toString(16)}` : '0x0',
-                }],
-              }) as string
-            } else {
-              throw smartWalletErr
-            }
+          if (!chainClient) {
+            throw new Error(`Failed to get smart wallet client for chain ${targetChainId}`)
           }
+
+          console.log('[useRelaySwap] Sending transaction via smart wallet')
+          const txHash = await chainClient.sendTransaction({
+            to: item.data.to as `0x${string}`,
+            data: item.data.data as `0x${string}`,
+            value: item.data.value ? BigInt(item.data.value) : BigInt(0),
+          })
 
           console.log('[useRelaySwap] Transaction sent:', txHash)
           lastTxHash = txHash
@@ -564,7 +525,7 @@ export function useRelaySwap() {
       setState('error')
       return null
     }
-  }, [quote, smartWalletAddress, smartWalletClient, getClientForChain, embeddedWallet, publicClient])
+  }, [quote, smartWalletAddress, smartWalletClient, getClientForChain, publicClient])
 
   // ============================================
   // RESET
