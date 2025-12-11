@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { usePublicClient } from 'wagmi'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
@@ -19,6 +19,17 @@ export interface Token {
   chainId: number
   decimals: number
   logoURI?: string
+  // Extended fields from Sim API
+  balance?: string
+  balanceUsd?: number
+  price?: number
+}
+
+export interface UserTokensData {
+  tokens: Token[]
+  totalValueUsd: number
+  isLoading: boolean
+  error: string | null
 }
 
 export interface Quote {
@@ -61,6 +72,18 @@ export interface SwapResult {
 // CONSTANTS
 // ============================================
 const RELAY_API = 'https://api.relay.link'
+
+// Relay uses this address for native tokens (ETH, MATIC, etc.)
+const NATIVE_TOKEN_ADDRESS = '0x0000000000000000000000000000000000000000'
+const RELAY_NATIVE_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'
+
+// Helper to convert address for Relay API
+function toRelayAddress(address: string): string {
+  if (address === NATIVE_TOKEN_ADDRESS || address.toLowerCase() === NATIVE_TOKEN_ADDRESS) {
+    return RELAY_NATIVE_ADDRESS
+  }
+  return address
+}
 
 // Chain map for public clients
 const chainMap: Record<number, Chain> = {
@@ -138,7 +161,68 @@ function getPublicClientForChain(targetChainId: number, defaultClient: any) {
 }
 
 // ============================================
-// HOOK
+// HOOK: Fetch User Tokens from Sim API
+// ============================================
+export function useUserTokens(walletAddress: string | undefined) {
+  const [tokens, setTokens] = useState<Token[]>([])
+  const [totalValueUsd, setTotalValueUsd] = useState(0)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchUserTokens = useCallback(async () => {
+    if (!walletAddress) {
+      setTokens([])
+      return
+    }
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      // Fetch balances for supported chains
+      const chainIds = SUPPORTED_CHAINS.map(c => c.id).join(',')
+      const response = await fetch(`/api/sim/balances?address=${walletAddress}&chainIds=${chainIds}`)
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch balances')
+      }
+
+      const data = await response.json()
+      console.log('[useUserTokens] Fetched tokens:', data)
+
+      // Filter out tokens with no balance or very small balances
+      const tokensWithBalance = (data.tokens || []).filter(
+        (t: Token) => t.balance && parseFloat(t.balance) > 0
+      )
+
+      setTokens(tokensWithBalance)
+      setTotalValueUsd(data.totalValueUsd || 0)
+    } catch (err: any) {
+      console.error('[useUserTokens] Error:', err)
+      setError(err.message || 'Failed to fetch tokens')
+      // Fall back to common tokens on error
+      setTokens([])
+    } finally {
+      setIsLoading(false)
+    }
+  }, [walletAddress])
+
+  // Auto-fetch on wallet change
+  useEffect(() => {
+    fetchUserTokens()
+  }, [fetchUserTokens])
+
+  return {
+    tokens,
+    totalValueUsd,
+    isLoading,
+    error,
+    refetch: fetchUserTokens,
+  }
+}
+
+// ============================================
+// HOOK: Main Swap Hook
 // ============================================
 export function useRelaySwap() {
   const { login, authenticated } = usePrivy()
@@ -217,6 +301,16 @@ export function useRelaySwap() {
     try {
       const amountInWei = parseUnits(amount, fromToken.decimals).toString()
 
+      // Convert addresses to Relay format (native tokens use special address)
+      const originCurrency = toRelayAddress(fromToken.address)
+      const destinationCurrency = toRelayAddress(toToken.address)
+
+      console.log('[useRelaySwap] Fetching quote:', {
+        from: `${fromToken.symbol} (${originCurrency}) on chain ${fromToken.chainId}`,
+        to: `${toToken.symbol} (${destinationCurrency}) on chain ${toToken.chainId}`,
+        amount: amountInWei,
+      })
+
       const response = await fetch(`${RELAY_API}/quote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -225,8 +319,8 @@ export function useRelaySwap() {
           user: smartWalletAddress,
           originChainId: fromToken.chainId,
           destinationChainId: toToken.chainId,
-          originCurrency: fromToken.address,
-          destinationCurrency: toToken.address,
+          originCurrency,
+          destinationCurrency,
           amount: amountInWei,
           recipient: smartWalletAddress,
           tradeType: 'EXACT_INPUT',

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Settings, ChevronDown, ArrowDown, Fuel, Loader2, Zap, CheckCircle, X, AlertCircle } from 'lucide-react'
-import { useRelaySwap, SUPPORTED_CHAINS, COMMON_TOKENS, type Token, type SwapState } from './useRelaySwap'
+import { useRelaySwap, useUserTokens, SUPPORTED_CHAINS, COMMON_TOKENS, type Token, type SwapState } from './useRelaySwap'
 import TokenModal from './TokenModal'
 
 // ============================================
@@ -42,10 +42,17 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
     reset,
   } = useRelaySwap()
 
-  // Local state
+  // Fetch user tokens from Sim API
+  const { 
+    tokens: userTokens, 
+    isLoading: isLoadingUserTokens,
+    refetch: refetchUserTokens,
+  } = useUserTokens(walletAddress)
+
+  // Local state - Default to USDC Base → ETH Base (same-chain swap is more reliable)
   const [sellAmount, setSellAmount] = useState('')
-  const [fromToken, setFromToken] = useState<Token>(COMMON_TOKENS[8453][0]) // ETH on Base
-  const [toToken, setToToken] = useState<Token>(COMMON_TOKENS[42161][1]) // USDC on Arbitrum
+  const [fromToken, setFromToken] = useState<Token>(COMMON_TOKENS[8453][1]) // USDC on Base
+  const [toToken, setToToken] = useState<Token>(COMMON_TOKENS[8453][0]) // ETH on Base
   const [fromBalance, setFromBalance] = useState('0')
   const [toBalance, setToBalance] = useState('0')
   const [isFromModalOpen, setIsFromModalOpen] = useState(false)
@@ -69,24 +76,38 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
         fromAmount: result.fromAmount,
         toAmount: result.toAmount,
       })
+      // Refetch user tokens after successful swap
+      setTimeout(() => refetchUserTokens(), 2000)
     }
-  }, [result, state, onSuccess])
+  }, [result, state, onSuccess, refetchUserTokens])
 
-  // Fetch balances on token change
+  // Update balances from user tokens or fetch directly
   useEffect(() => {
     if (!isConnected) return
 
-    const loadBalances = async () => {
-      const [from, to] = await Promise.all([
-        fetchBalance(fromToken),
-        fetchBalance(toToken),
-      ])
-      setFromBalance(from)
-      setToBalance(to)
+    // Try to find balance from user tokens first (faster)
+    const fromUserToken = userTokens.find(
+      t => t.chainId === fromToken.chainId && 
+           t.address.toLowerCase() === fromToken.address.toLowerCase()
+    )
+    const toUserToken = userTokens.find(
+      t => t.chainId === toToken.chainId && 
+           t.address.toLowerCase() === toToken.address.toLowerCase()
+    )
+
+    if (fromUserToken?.balance) {
+      setFromBalance(fromUserToken.balance)
+    } else {
+      // Fallback to fetching directly
+      fetchBalance(fromToken).then(setFromBalance)
     }
 
-    loadBalances()
-  }, [isConnected, fromToken, toToken, fetchBalance])
+    if (toUserToken?.balance) {
+      setToBalance(toUserToken.balance)
+    } else {
+      fetchBalance(toToken).then(setToBalance)
+    }
+  }, [isConnected, fromToken, toToken, userTokens, fetchBalance])
 
   // Fetch quote on amount change (debounced)
   useEffect(() => {
@@ -382,6 +403,8 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
         onClose={() => setIsFromModalOpen(false)}
         onSelect={handleFromTokenSelect}
         selectedChainId={fromToken.chainId}
+        userTokens={userTokens}
+        isLoadingUserTokens={isLoadingUserTokens}
         side="from"
       />
       <TokenModal
@@ -389,6 +412,8 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
         onClose={() => setIsToModalOpen(false)}
         onSelect={handleToTokenSelect}
         selectedChainId={toToken.chainId}
+        userTokens={userTokens}
+        isLoadingUserTokens={isLoadingUserTokens}
         side="to"
       />
 
