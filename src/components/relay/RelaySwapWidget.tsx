@@ -146,6 +146,9 @@ function createSmartWalletAdapter(
             dialogs.push(dialog)
             console.log('[SmartWalletAdapter] Made Relay dialog inert')
           }
+          // Hard-disable the dialog visibility to avoid FocusTrap/blur conflicts
+          const dlgEl = dialog as HTMLElement
+          dlgEl.style.display = 'none'
         })
 
         // Also hide the dialog overlay to prevent visual conflicts
@@ -184,6 +187,8 @@ function createSmartWalletAdapter(
         // Remove inert from dialogs (cleanup)
         dialogs.forEach(dialog => {
           dialog.removeAttribute('inert')
+          const dlgEl = dialog as HTMLElement
+          dlgEl.style.display = ''
         })
         
         // Restore visual state
@@ -248,6 +253,8 @@ function createSmartWalletAdapter(
             dialogs.push(dialog)
             console.log('[SmartWalletAdapter] Made Relay dialog inert (batch)')
           }
+          const dlgEl = dialog as HTMLElement
+          dlgEl.style.display = 'none'
         })
 
         document.querySelectorAll('[data-radix-portal]').forEach(portal => {
@@ -291,6 +298,8 @@ function createSmartWalletAdapter(
         // Remove inert from dialogs (cleanup)
         dialogs.forEach(dialog => {
           dialog.removeAttribute('inert')
+          const dlgEl = dialog as HTMLElement
+          dlgEl.style.display = ''
         })
       }
     },
