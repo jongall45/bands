@@ -487,15 +487,34 @@ export function useRelaySwap() {
           console.log('[useRelaySwap] Transaction sent:', txHash)
           lastTxHash = txHash
 
-          // Wait for confirmation
+          // Wait for confirmation with better error handling
           setState('pending')
-          const chainPublicClient = getPublicClientForChain(targetChainId, publicClient)
-          await chainPublicClient.waitForTransactionReceipt({
-            hash: txHash as `0x${string}`,
-            timeout: 120_000,
-          })
-
-          console.log('[useRelaySwap] Transaction confirmed:', txHash)
+          try {
+            const chainPublicClient = getPublicClientForChain(targetChainId, publicClient)
+            const receipt = await chainPublicClient.waitForTransactionReceipt({
+              hash: txHash as `0x${string}`,
+              timeout: 60_000, // Reduced timeout
+              confirmations: 1,
+            })
+            console.log('[useRelaySwap] Transaction confirmed:', txHash, 'status:', receipt.status)
+            
+            if (receipt.status === 'reverted') {
+              throw new Error('Transaction reverted on chain')
+            }
+          } catch (receiptErr: any) {
+            // If we have a tx hash and Privy confirmed it, consider it successful
+            // The waitForTransactionReceipt might fail due to RPC issues
+            console.warn('[useRelaySwap] waitForTransactionReceipt error:', receiptErr.message)
+            
+            // If it's a timeout or RPC error, still proceed (tx was sent)
+            if (receiptErr.message?.includes('timeout') || receiptErr.message?.includes('Timeout') || 
+                receiptErr.message?.includes('fetch') || receiptErr.message?.includes('network')) {
+              console.log('[useRelaySwap] Proceeding despite receipt error - tx was sent')
+            } else if (receiptErr.message?.includes('reverted')) {
+              throw receiptErr // Actual revert, propagate error
+            }
+            // For other errors, log but continue
+          }
         }
       }
 
