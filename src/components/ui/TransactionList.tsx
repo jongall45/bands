@@ -142,13 +142,48 @@ function TransactionRow({ tx, userAddress }: { tx: Transaction; userAddress: str
       }
     }
 
-    // App interaction
+    // App interaction (including Perps trades)
     if (isAppInteraction && tx.appName) {
+      // Special handling for Perps/Trading apps
+      if (tx.appCategory === 'Perps') {
+        return {
+          label: tx.appName,
+          sublabel: 'Perps Trade',
+          icon: <TrendingUp className="w-5 h-5 text-orange-400" />,
+          iconBg: 'bg-orange-500/10',
+          amountColor: 'text-white',
+          amountPrefix: '',
+        }
+      }
+      // Special handling for DEX
+      if (tx.appCategory === 'DEX') {
+        return {
+          label: tx.appName,
+          sublabel: 'Trade',
+          icon: <Repeat className="w-5 h-5 text-purple-400" />,
+          iconBg: 'bg-purple-500/10',
+          amountColor: 'text-white',
+          amountPrefix: '',
+        }
+      }
+      // Default app interaction
       return {
         label: tx.appName,
         sublabel: tx.appCategory || 'App',
         icon: <Zap className="w-5 h-5 text-yellow-400" />,
         iconBg: 'bg-yellow-500/10',
+        amountColor: 'text-white',
+        amountPrefix: '-',
+      }
+    }
+
+    // Generic contract interaction (without known app)
+    if (tx.type === 'contract') {
+      return {
+        label: 'Contract',
+        sublabel: `To ${shortenAddress(tx.to)}`,
+        icon: <Zap className="w-5 h-5 text-gray-400" />,
+        iconBg: 'bg-white/[0.05]',
         amountColor: 'text-white',
         amountPrefix: '-',
       }

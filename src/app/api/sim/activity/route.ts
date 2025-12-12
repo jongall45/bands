@@ -21,8 +21,14 @@ const KNOWN_APPS: Record<string, { name: string; category: string }> = {
   '0xa17581a9e3356d9a858b789d68b4d866e593ae94': { name: 'Compound', category: 'Lending' },
   '0x78d0677032a35c63d142a48a2037048871212a8c': { name: 'Aave', category: 'Lending' },
 
-  // Perpetuals
+  // Perpetuals - Ostium contracts on Arbitrum
   '0xb1dde8de54d75c4e2dc6a2dafbb17aa258f32a7b': { name: 'Ostium', category: 'Perps' },
+  '0x5f0e4a7de44db4e2d828bfb8b6f6b2e64f2e25a1': { name: 'Ostium', category: 'Perps' },
+  '0x240d7e71df23c0ee3d46cfbe6eb838cdc8432d5e': { name: 'Ostium', category: 'Perps' },
+  '0xf1d292c10a4f5c5d11ae8c2f22f7a2c2d9b53f43': { name: 'Ostium', category: 'Perps' },
+  '0xe8ce7e7c6a654df45d764f80dc6e99afdb52d2c6': { name: 'Ostium', category: 'Perps' },
+
+  // Other DEX
   '0xba12222222228d8ba445958a75a0704d566bf2c8': { name: 'Balancer', category: 'DEX' },
 }
 
@@ -121,13 +127,19 @@ export async function GET(request: NextRequest) {
       const tokenAddr = (activity.token_address || '').toLowerCase()
       const knownApp = KNOWN_APPS[toAddr] || KNOWN_APPS[fromAddr] || KNOWN_APPS[tokenAddr]
 
+      // Determine final type - if known app detected on non-transfer/swap, treat as app_interaction
+      let finalType = activityType
+      if (knownApp && !isSwap && !isTransfer && !isBridge) {
+        finalType = 'app_interaction'
+      }
+
       // Build transaction object
       const tx: any = {
         hash,
         chainId,
         timestamp,
         blockNumber: activity.block_number || 0,
-        type: activityType,
+        type: finalType,
         isSwap,
         isTransfer,
         isBridge,

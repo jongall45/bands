@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { useSendTransaction, useWaitForTransactionReceipt, useSwitchChain, useChainId } from 'wagmi'
+import { useWaitForTransactionReceipt } from 'wagmi'
 import { useReadContract } from 'wagmi'
 import { formatUnits, parseUnits, isAddress, encodeFunctionData } from 'viem'
 import { base, arbitrum, optimism, mainnet, polygon } from 'wagmi/chains'
@@ -31,7 +31,7 @@ const SEND_CHAINS = [
 ]
 
 export default function Dashboard() {
-  const { isAuthenticated, isConnected, address, isSmartWalletReady, logout } = useAuth()
+  const { isAuthenticated, isConnected, address, isSmartWalletReady, logout, getClientForChain } = useAuth()
   const router = useRouter()
   const [copied, setCopied] = useState(false)
   const [showSend, setShowSend] = useState(false)
@@ -42,13 +42,12 @@ export default function Dashboard() {
   const [selectedChain, setSelectedChain] = useState(SEND_CHAINS[0])
   const [showChainSelect, setShowChainSelect] = useState(false)
 
-  const { sendTransaction, data: txHash, isPending: isSending } = useSendTransaction()
+  const [txHash, setTxHash] = useState<`0x${string}` | undefined>(undefined)
+  const [isSending, setIsSending] = useState(false)
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash: txHash })
-  const { switchChainAsync } = useSwitchChain()
-  const currentChainId = useChainId()
   const [selectedToken, setSelectedToken] = useState<PortfolioToken | null>(null)
   const [showTokenSelect, setShowTokenSelect] = useState(false)
-  const [isSwitchingChain, setIsSwitchingChain] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
 
   // Cross-chain portfolio from Dune API
   const { data: portfolio, refetch: refetchPortfolio, isLoading: portfolioLoading } = usePortfolio(address)
@@ -151,18 +150,26 @@ export default function Dashboard() {
       return
     }
 
+    setIsSending(true)
+    setSendError(null)
+
     try {
-      // Switch chain if needed
-      if (currentChainId !== selectedChain.id) {
-        setIsSwitchingChain(true)
-        try {
-          await switchChainAsync({ chainId: selectedChain.id })
-        } catch (switchError) {
-          console.error('Failed to switch chain:', switchError)
-          setIsSwitchingChain(false)
-          return
-        }
-        setIsSwitchingChain(false)
+      // Get smart wallet client for the target chain
+      const chainConfig = {
+        8453: base,
+        42161: arbitrum,
+        10: optimism,
+        1: mainnet,
+        137: polygon,
+      }[selectedChain.id]
+
+      if (!chainConfig) {
+        throw new Error('Unsupported chain')
+      }
+
+      const smartClient = await getClientForChain({ id: chainConfig.id })
+      if (!smartClient) {
+        throw new Error('Smart wallet not available')
       }
 
       const decimals = selectedToken.decimals || 18
@@ -173,27 +180,39 @@ export default function Dashboard() {
                        selectedToken.symbol === 'ETH' ||
                        selectedToken.address === 'native'
 
+      let hash: `0x${string}`
+
       if (isNative) {
-        // Send native ETH
-        sendTransaction({
+        // Send native ETH using smart wallet
+        hash = await smartClient.sendTransaction({
           to: sendTo as `0x${string}`,
           value: amount,
+          account: smartClient.account,
+          chain: chainConfig,
         })
       } else {
-        // Send ERC20 token
+        // Send ERC20 token using smart wallet
         const data = encodeFunctionData({
           abi: ERC20_ABI,
           functionName: 'transfer',
           args: [sendTo as `0x${string}`, amount],
         })
 
-        sendTransaction({
+        hash = await smartClient.sendTransaction({
           to: selectedToken.address as `0x${string}`,
           data,
+          account: smartClient.account,
+          chain: chainConfig,
         })
       }
+
+      setTxHash(hash)
+      console.log('Transaction sent via smart wallet:', hash)
     } catch (error) {
       console.error('Send transaction error:', error)
+      setSendError(error instanceof Error ? error.message : 'Transaction failed')
+    } finally {
+      setIsSending(false)
     }
   }
 
@@ -336,8 +355,12 @@ export default function Dashboard() {
 
           {/* Action Buttons Row */}
           <div className="grid grid-cols-3 gap-2">
-            <button 
-              onClick={() => setShowSend(true)}
+            <button
+              onClick={() => {
+                setShowSend(true)
+                setTxHash(undefined)
+                setSendError(null)
+              }}
               className="action-btn"
             >
               <ArrowUpRight className="w-5 h-5 text-gray-300" strokeWidth={1.5} />
@@ -620,18 +643,13 @@ export default function Dashboard() {
 
           <button
             onClick={handleSend}
-            disabled={isSending || isConfirming || isSwitchingChain || !sendTo || !sendAmount || !selectedToken || !!addressError || parseFloat(sendAmount) > selectedTokenBalance}
+            disabled={isSending || isConfirming || !sendTo || !sendAmount || !selectedToken || !!addressError || parseFloat(sendAmount) > selectedTokenBalance}
             className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-all flex items-center justify-center gap-2"
           >
-            {isSwitchingChain ? (
+            {isSending || isConfirming ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                Switching to {selectedChain.name}...
-              </>
-            ) : isSending || isConfirming ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                {isSending ? 'Confirm in wallet...' : 'Sending...'}
+                {isSending ? 'Sending...' : 'Confirming...'}
               </>
             ) : (
               <>
@@ -645,7 +663,11 @@ export default function Dashboard() {
             Gas sponsored • No ETH needed
           </p>
 
-          {selectedToken && parseFloat(sendAmount) > selectedTokenBalance && sendAmount && (
+          {sendError && (
+            <p className="text-red-400 text-sm text-center">{sendError}</p>
+          )}
+
+          {selectedToken && parseFloat(sendAmount) > selectedTokenBalance && sendAmount && !sendError && (
             <p className="text-red-400 text-sm text-center">Insufficient {selectedToken.symbol} balance</p>
           )}
         </div>
