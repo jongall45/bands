@@ -1,8 +1,12 @@
 // Polymarket Contract Addresses on Polygon
 export const POLYGON_CHAIN_ID = 137
 
-// USDC on Polygon (PoS)
-export const POLYGON_USDC = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' as const
+// Native USDC on Polygon (NOT USDC.e bridged version)
+// Polymarket uses native USDC: https://docs.polymarket.com
+export const POLYGON_USDC = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' as const
+
+// Legacy USDC.e (bridged) - kept for reference, DO NOT USE
+export const POLYGON_USDC_E_DEPRECATED = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' as const
 
 // Polymarket Conditional Token Framework (CTF)
 export const CTF_EXCHANGE = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E' as const
