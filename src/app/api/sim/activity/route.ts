@@ -92,15 +92,17 @@ export async function GET(request: NextRequest) {
     const data = await response.json()
     console.log('[Sim API] Activity response - count:', data.activity?.length || 0)
     if (data.activity?.[0]) {
-      console.log('[Sim API] Activity sample:', JSON.stringify(data.activity[0]).slice(0, 2000))
+      // Log ALL fields of first activity to understand Dune's structure
+      console.log('[Sim API] First activity ALL FIELDS:', Object.keys(data.activity[0]).join(', '))
+      console.log('[Sim API] Activity sample:', JSON.stringify(data.activity[0]))
     }
-    // Log any USDC sends to help debug Ostium detection
-    const usdcSends = (data.activity || []).filter((a: any) =>
-      a.type === 'send' && a.token_metadata?.symbol === 'USDC'
+    // Log USDC receive transactions to debug Ostium
+    const usdcReceives = (data.activity || []).filter((a: any) =>
+      a.type === 'receive' && a.token_metadata?.symbol === 'USDC'
     )
-    if (usdcSends.length > 0) {
-      console.log('[Sim API] USDC sends found:', usdcSends.length)
-      console.log('[Sim API] First USDC send full object:', JSON.stringify(usdcSends[0]))
+    if (usdcReceives.length > 0) {
+      console.log('[Sim API] USDC receives found:', usdcReceives.length)
+      console.log('[Sim API] First USDC receive FULL:', JSON.stringify(usdcReceives[0]))
     }
 
     // Transform activities into our transaction format
@@ -133,18 +135,18 @@ export async function GET(request: NextRequest) {
       const toTokenMeta = activity.to_token_metadata || {}
 
       // Detect app/protocol from addresses
-      // For ERC-4337 (Account Abstraction), the 'to' might be Entry Point, so also check 'recipient'
-      const toAddr = (activity.to || '').toLowerCase()
-      const fromAddr = (activity.from || '').toLowerCase()
+      // For ERC-4337 (Account Abstraction), the 'to' might be Entry Point, so also check alternative fields
+      const toAddr = (activity.to || activity.recipient || activity.transfer_to || '').toLowerCase()
+      // Check multiple possible field names for sender
+      const fromAddr = (activity.from || activity.sender || activity.counterparty || '').toLowerCase()
       const tokenAddr = (activity.token_address || '').toLowerCase()
-      // Some APIs return the actual token recipient in a separate field
-      const recipientAddr = (activity.recipient || activity.transfer_to || '').toLowerCase()
+      // For receive transactions, the counterparty might be the sender
+      const counterpartyAddr = (activity.counterparty || activity.other_address || '').toLowerCase()
 
       // Check if destination is a known app (for transfers/deposits)
-      // Check both 'to' and 'recipient' fields for AA transaction compatibility
-      const toApp = KNOWN_APPS[toAddr] || KNOWN_APPS[recipientAddr]
-      // Check if source or token address is a known app
-      const fromApp = KNOWN_APPS[fromAddr]
+      const toApp = KNOWN_APPS[toAddr]
+      // Check if source, counterparty, or token address is a known app
+      const fromApp = KNOWN_APPS[fromAddr] || KNOWN_APPS[counterpartyAddr]
       const tokenApp = KNOWN_APPS[tokenAddr]
       const knownApp = toApp || fromApp || tokenApp
 
@@ -167,17 +169,20 @@ export async function GET(request: NextRequest) {
         finalType = 'app_interaction'
       }
 
-      // Log for debugging Ostium detection - check USDC transfers involving known apps
-      if (tokenMeta.symbol === 'USDC' && knownApp) {
-        console.log(`[Activity] USDC with known app:`, {
-          type: activityType,
+      // Log for debugging Ostium detection - check USDC transfers
+      if (tokenMeta.symbol === 'USDC' && (activityType === 'receive' || activityType === 'send')) {
+        console.log(`[Activity] USDC ${activityType}:`, {
           finalType,
-          from: fromAddr,
-          to: toAddr,
-          fromApp: fromApp?.name,
-          toApp: toApp?.name,
-          knownApp: knownApp?.name,
+          from: fromAddr || '(empty)',
+          to: toAddr || '(empty)',
+          counterparty: counterpartyAddr || '(empty)',
+          fromApp: fromApp?.name || null,
+          toApp: toApp?.name || null,
+          knownApp: knownApp?.name || null,
           amount: formatAmount(activity.value || '0', tokenDecimals),
+          rawFrom: activity.from,
+          rawTo: activity.to,
+          rawCounterparty: activity.counterparty,
           hash: hash.slice(0, 16),
         })
       }
@@ -261,7 +266,7 @@ export async function GET(request: NextRequest) {
       return tx
     })
 
-    // Filter out approvals and dust transactions (< $0.01) to show only meaningful activity
+    // Filter out approvals, dust, and transactions without meaningful data
     const filteredTx = transactions.filter((tx: any) => {
       // Always filter out approvals
       if (tx.isApproval) return false
@@ -276,6 +281,13 @@ export async function GET(request: NextRequest) {
 
       // Filter out transactions with USD value less than $0.01
       if (tx.valueUsd && tx.valueUsd < 0.01) return false
+
+      // Filter out bridge/app transactions that have no token info and no value
+      // These are often internal contract calls that aren't useful to display
+      if ((tx.type === 'bridge' || tx.type === 'app_interaction' || tx.type === 'call') &&
+          !tx.token && !tx.swapFromToken && !tx.valueUsd) {
+        return false
+      }
 
       return true
     })
