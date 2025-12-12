@@ -3,13 +3,15 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAccount } from 'wagmi'
-import { ArrowLeft, Search, RefreshCw, ExternalLink, TrendingUp, TrendingDown, X, Info, ChevronRight, BarChart3 } from 'lucide-react'
+import { ArrowLeft, Search, RefreshCw, ExternalLink, TrendingUp, TrendingDown, X, ChevronRight, BarChart3, Wallet } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useTrendingEvents, useEventsByTag, useMarketSearch, POLYMARKET_CATEGORIES } from '@/hooks/usePolymarket'
 import { formatVolume, formatProbability, parseMarket } from '@/lib/polymarket/api'
 import type { PolymarketEvent, PolymarketMarket } from '@/lib/polymarket/api'
 import { BottomNav } from '@/components/ui/BottomNav'
+import { PolymarketTradingPanel } from '@/components/polymarket/PolymarketTradingPanel'
+import { PositionsPanel } from '@/components/polymarket/PositionsPanel'
 
 export default function PolymarketPage() {
   const { isConnected } = useAccount()
@@ -17,6 +19,7 @@ export default function PolymarketPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<PolymarketEvent | null>(null)
   const [selectedMarket, setSelectedMarket] = useState<PolymarketMarket | null>(null)
+  const [showPositions, setShowPositions] = useState(false)
 
   // Fetch data
   const { data: trendingEvents, isLoading: trendingLoading, refetch: refetchTrending } = useTrendingEvents(15)
@@ -84,6 +87,13 @@ export default function PolymarketPage() {
               <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
               Live
             </span>
+            <button
+              onClick={() => setShowPositions(true)}
+              className="p-2 hover:bg-white/[0.05] rounded-xl transition-colors"
+              title="View Positions"
+            >
+              <Wallet className="w-4 h-4 text-white/40" />
+            </button>
             <a
               href="https://polymarket.com"
               target="_blank"
@@ -208,8 +218,11 @@ export default function PolymarketPage() {
 
       {/* Trading Modal */}
       {selectedMarket && (
-        <TradingPanel market={selectedMarket} onClose={() => setSelectedMarket(null)} />
+        <PolymarketTradingPanel market={selectedMarket} onClose={() => setSelectedMarket(null)} />
       )}
+
+      {/* Positions Panel */}
+      <PositionsPanel isOpen={showPositions} onClose={() => setShowPositions(false)} />
 
       <BottomNav />
 
@@ -456,153 +469,7 @@ function EventDetailPanel({
   )
 }
 
-// Trading Panel - Constrained width
-function TradingPanel({ market, onClose }: { market: PolymarketMarket; onClose: () => void }) {
-  const [side, setSide] = useState<'YES' | 'NO'>('YES')
-  const [amount, setAmount] = useState('')
-  
-  const parsed = parseMarket(market)
-  const price = side === 'YES' ? parsed.yesPrice : parsed.noPrice
-  const amountNum = parseFloat(amount) || 0
-  const shares = amountNum / price
-  const potentialPayout = shares * 1
-  const potentialProfit = potentialPayout - amountNum
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={onClose} />
-      
-      <div 
-        className="relative w-full max-w-[430px] bg-[#0a0a0a] border-t border-white/[0.1] rounded-t-3xl max-h-[85vh] overflow-y-auto"
-        style={{ paddingBottom: 'calc(100px + env(safe-area-inset-bottom, 0px))' }}
-      >
-        {/* Handle */}
-        <div className="flex justify-center pt-3 pb-2">
-          <div className="w-10 h-1 bg-white/20 rounded-full" />
-        </div>
-
-        <div className="px-5 pb-6">
-          {/* Header */}
-          <div className="flex items-start justify-between mb-4">
-            <h2 className="text-white font-semibold text-base leading-tight flex-1 pr-4">
-              {market.question}
-            </h2>
-            <button onClick={onClose} className="p-2 hover:bg-white/[0.05] rounded-full -mr-2">
-              <X className="w-5 h-5 text-white/60" />
-            </button>
-          </div>
-
-          {/* Volume */}
-          <div className="flex items-center gap-3 mb-4">
-            <span className="text-white/40 text-xs">{formatVolume(market.volume)} volume</span>
-          </div>
-
-          {/* Side Selector - Shows both probabilities */}
-          <div className="flex gap-2 mb-4">
-            <button
-              onClick={() => setSide('YES')}
-              className={`flex-1 py-3.5 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
-                side === 'YES' ? 'bg-green-500 text-white' : 'bg-white/[0.05] text-white/60 hover:bg-white/[0.08]'
-              }`}
-            >
-              <TrendingUp className="w-4 h-4" />
-              YES {formatProbability(parsed.yesPrice)}
-            </button>
-            <button
-              onClick={() => setSide('NO')}
-              className={`flex-1 py-3.5 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
-                side === 'NO' ? 'bg-red-500 text-white' : 'bg-white/[0.05] text-white/60 hover:bg-white/[0.08]'
-              }`}
-            >
-              <TrendingDown className="w-4 h-4" />
-              NO {formatProbability(parsed.noPrice)}
-            </button>
-          </div>
-
-          {/* Amount */}
-          <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4 mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-white/40 text-sm">Amount</span>
-              <span className="text-white/40 text-xs">USDC</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-white/40 text-xl">$</span>
-              <input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                className="flex-1 bg-transparent text-white text-2xl font-medium outline-none placeholder:text-white/20"
-              />
-            </div>
-            <div className="flex gap-2 mt-3">
-              {[5, 10, 25, 50].map((amt) => (
-                <button
-                  key={amt}
-                  onClick={() => setAmount(amt.toString())}
-                  className="flex-1 py-2 bg-white/[0.05] hover:bg-white/[0.08] rounded-lg text-white/60 text-sm font-medium transition-colors"
-                >
-                  ${amt}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Payout */}
-          {amountNum > 0 && (
-            <div className={`rounded-2xl p-4 mb-4 ${
-              side === 'YES' ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'
-            }`}>
-              <div className="flex justify-between mb-1">
-                <span className={side === 'YES' ? 'text-green-400/60' : 'text-red-400/60'}>Payout if {side}</span>
-                <span className={`font-semibold ${side === 'YES' ? 'text-green-400' : 'text-red-400'}`}>
-                  ${potentialPayout.toFixed(2)}
-                </span>
-              </div>
-              <div className="flex justify-between mb-1">
-                <span className={side === 'YES' ? 'text-green-400/60' : 'text-red-400/60'}>Profit</span>
-                <span className={`font-semibold ${side === 'YES' ? 'text-green-400' : 'text-red-400'}`}>
-                  +${potentialProfit.toFixed(2)} ({((potentialProfit / amountNum) * 100).toFixed(0)}%)
-                </span>
-              </div>
-              <div className="flex justify-between pt-2 border-t border-white/[0.05]">
-                <span className="text-white/40 text-xs">Shares</span>
-                <span className="text-white/60 text-xs">{shares.toFixed(2)}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Why External Link Notice */}
-          <div className="bg-[#3B5EE8]/10 border border-[#3B5EE8]/20 rounded-xl p-3 mb-4">
-            <div className="flex items-start gap-2">
-              <Info className="w-4 h-4 text-[#7B9EFF] mt-0.5 flex-shrink-0" />
-              <div className="text-[#7B9EFF] text-xs space-y-1">
-                <p className="font-medium">Trade on Polymarket.com</p>
-                <p className="text-[#7B9EFF]/70">
-                  Polymarket requires Polygon network + their specific wallet registration. 
-                  Connect your wallet on their site to trade.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Trade Button */}
-          <a
-            href={`https://polymarket.com/event/${market.slug || market.conditionId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`w-full py-4 rounded-2xl font-semibold flex items-center justify-center gap-2 ${
-              side === 'YES' ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'
-            } text-white transition-colors`}
-          >
-            Trade on Polymarket
-            <ExternalLink className="w-4 h-4" />
-          </a>
-        </div>
-      </div>
-    </div>
-  )
-}
+// TradingPanel moved to src/components/polymarket/PolymarketTradingPanel.tsx
 
 function LoadingState() {
   return (
