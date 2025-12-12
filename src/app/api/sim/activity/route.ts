@@ -29,6 +29,7 @@ const KNOWN_APPS: Record<string, { name: string; category: string }> = {
   '0xe8ce7e7c6a654df45d764f80dc6e99afdb52d2c6': { name: 'Ostium', category: 'Perps' },
   // Ostium Trading Storage - receives USDC deposits for trades
   '0x68494ace6d88d3fb22ebc6c57d62f0ab54d5c2e1': { name: 'Ostium', category: 'Perps' },
+  '0xccd5891083a8acd2074690f65d3024e7d13d66e7': { name: 'Ostium', category: 'Perps' },
 
   // Other DEX
   '0xba12222222228d8ba445958a75a0704d566bf2c8': { name: 'Balancer', category: 'DEX' },
@@ -91,7 +92,15 @@ export async function GET(request: NextRequest) {
     const data = await response.json()
     console.log('[Sim API] Activity response - count:', data.activity?.length || 0)
     if (data.activity?.[0]) {
-      console.log('[Sim API] Activity sample:', JSON.stringify(data.activity[0]).slice(0, 1500))
+      console.log('[Sim API] Activity sample:', JSON.stringify(data.activity[0]).slice(0, 2000))
+    }
+    // Log any USDC sends to help debug Ostium detection
+    const usdcSends = (data.activity || []).filter((a: any) =>
+      a.type === 'send' && a.token_metadata?.symbol === 'USDC'
+    )
+    if (usdcSends.length > 0) {
+      console.log('[Sim API] USDC sends found:', usdcSends.length)
+      console.log('[Sim API] First USDC send full object:', JSON.stringify(usdcSends[0]))
     }
 
     // Transform activities into our transaction format
@@ -124,16 +133,32 @@ export async function GET(request: NextRequest) {
       const toTokenMeta = activity.to_token_metadata || {}
 
       // Detect app/protocol from addresses
+      // For ERC-4337 (Account Abstraction), the 'to' might be Entry Point, so also check 'recipient'
       const toAddr = (activity.to || '').toLowerCase()
       const fromAddr = (activity.from || '').toLowerCase()
       const tokenAddr = (activity.token_address || '').toLowerCase()
+      // Some APIs return the actual token recipient in a separate field
+      const recipientAddr = (activity.recipient || activity.transfer_to || '').toLowerCase()
 
       // Check if destination is a known app (for transfers/deposits)
-      const toApp = KNOWN_APPS[toAddr]
+      // Check both 'to' and 'recipient' fields for AA transaction compatibility
+      const toApp = KNOWN_APPS[toAddr] || KNOWN_APPS[recipientAddr]
       // Check if source or token address is a known app
       const fromApp = KNOWN_APPS[fromAddr]
       const tokenApp = KNOWN_APPS[tokenAddr]
       const knownApp = toApp || fromApp || tokenApp
+
+      // Log for debugging Ostium detection
+      if (activity.type === 'send' && tokenMeta.symbol === 'USDC') {
+        console.log('[Activity] USDC send detected:', {
+          to: toAddr,
+          recipient: recipientAddr,
+          from: fromAddr,
+          hash: hash.slice(0, 20),
+          toApp: toApp?.name,
+          allFields: Object.keys(activity).join(', ')
+        })
+      }
 
       // Determine final type
       let finalType = activityType
