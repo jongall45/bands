@@ -196,6 +196,19 @@ export async function GET(request: NextRequest) {
         assetType: activity.asset_type || 'unknown',
       }
 
+      // Calculate USD value if not provided but we have token price
+      if ((!tx.valueUsd || tx.valueUsd === 0) && isTransfer && tx.token) {
+        let tokenPriceUsd = tokenMeta.price_usd || 0
+        // Fallback ETH price if not provided (~$3200)
+        if (tokenPriceUsd === 0 && (tx.token.symbol === 'ETH' || activity.asset_type === 'native')) {
+          tokenPriceUsd = 3200
+        }
+        if (tokenPriceUsd > 0) {
+          const amountNum = parseFloat(tx.token.amount) || 0
+          tx.valueUsd = amountNum * tokenPriceUsd
+        }
+      }
+
       return tx
     })
 

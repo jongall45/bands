@@ -43,8 +43,12 @@ export default function Dashboard() {
   const [showChainSelect, setShowChainSelect] = useState(false)
 
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>(undefined)
+  const [txChainId, setTxChainId] = useState<number | undefined>(undefined)
   const [isSending, setIsSending] = useState(false)
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash: txHash })
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+    hash: txHash,
+    chainId: txChainId,
+  })
   const [selectedToken, setSelectedToken] = useState<PortfolioToken | null>(null)
   const [showTokenSelect, setShowTokenSelect] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
@@ -207,6 +211,7 @@ export default function Dashboard() {
       }
 
       setTxHash(hash)
+      setTxChainId(chainConfig.id)
       console.log('Transaction sent via smart wallet:', hash)
     } catch (error) {
       console.error('Send transaction error:', error)
@@ -359,6 +364,7 @@ export default function Dashboard() {
               onClick={() => {
                 setShowSend(true)
                 setTxHash(undefined)
+                setTxChainId(undefined)
                 setSendError(null)
               }}
               className="action-btn"
