@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAccount } from 'wagmi'
+import { useAuth } from '@/hooks/useAuth'
 import { ArrowLeft, Loader2, DollarSign, Info, CreditCard, Building2, Smartphone, CheckCircle, Copy, Check, Wallet, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 import { BottomNav } from '@/components/ui/BottomNav'
@@ -14,7 +14,8 @@ type FundMethod = 'coinbase' | 'transfer'
 
 export default function FundPage() {
   const router = useRouter()
-  const { address, isConnected } = useAccount()
+  // Use useAuth to get smart wallet address (not EOA from useAccount)
+  const { address, isConnected } = useAuth()
   const [amount, setAmount] = useState<string>('50')
   const [copied, setCopied] = useState(false)
   const [method, setMethod] = useState<FundMethod>('coinbase')

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useAccount } from 'wagmi'
+import { useAuth } from '@/hooks/useAuth'
 import { X, CreditCard, Building2, Smartphone, Loader2, AlertCircle } from 'lucide-react'
 
 interface OnrampModalProps {
@@ -13,7 +13,8 @@ interface OnrampModalProps {
 const PRESET_AMOUNTS = [25, 50, 100, 250]
 
 export function OnrampModal({ isOpen, onClose, onSuccess }: OnrampModalProps) {
-  const { address } = useAccount()
+  // Use useAuth to get smart wallet address (not EOA from useAccount)
+  const { address } = useAuth()
   const [amount, setAmount] = useState('50')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

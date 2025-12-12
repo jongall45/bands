@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useAccount } from 'wagmi'
+import { useAuth } from '@/hooks/useAuth'
 
 interface UseOnrampOptions {
   amount?: number
@@ -18,7 +18,8 @@ interface UseOnrampOptions {
  * opening the Coinbase Pay window.
  */
 export function useOnramp(options: UseOnrampOptions = {}) {
-  const { address } = useAccount()
+  // Use useAuth to get smart wallet address (not EOA from useAccount)
+  const { address } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
