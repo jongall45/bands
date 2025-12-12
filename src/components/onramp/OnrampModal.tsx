@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { X, CreditCard, Building2, Smartphone, Loader2, AlertCircle } from 'lucide-react'
 
@@ -8,19 +8,24 @@ interface OnrampModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess?: () => void
+  initialAmount?: string
 }
 
 const PRESET_AMOUNTS = [25, 50, 100, 250]
 
-export function OnrampModal({ isOpen, onClose, onSuccess }: OnrampModalProps) {
-  // Use useAuth to get smart wallet address (not EOA from useAccount)
+export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: OnrampModalProps) {
   const { address } = useAuth()
-  const [amount, setAmount] = useState('50')
+  const [amount, setAmount] = useState(initialAmount || '50')
+  
+  useEffect(() => {
+    if (initialAmount) {
+      setAmount(initialAmount)
+    }
+  }, [initialAmount])
+  
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Fetch a FRESH session token from backend - called only when user clicks Buy
-  // This ensures each token is generated just-in-time and used only once
   const fetchSessionToken = useCallback(async (): Promise<string | null> => {
     if (!address) return null
 
@@ -47,15 +52,11 @@ export function OnrampModal({ isOpen, onClose, onSuccess }: OnrampModalProps) {
     }
   }, [address])
 
-  // Handle amount change - no longer triggers re-initialization
   const handleAmountChange = (newAmount: string) => {
     setAmount(newAmount)
     setError(null)
   }
 
-  // Launch Coinbase Onramp with a FRESH session token
-  // This is the key fix: we generate a new token right before each launch
-  // ensuring the token is never reused
   const handleBuy = async () => {
     if (!address) {
       setError('Wallet not connected')
@@ -66,17 +67,12 @@ export function OnrampModal({ isOpen, onClose, onSuccess }: OnrampModalProps) {
     setError(null)
 
     try {
-      // Generate fresh session token just-in-time
-      console.log('🔑 Generating fresh session token...')
       const sessionToken = await fetchSessionToken()
 
       if (!sessionToken) {
         throw new Error('Failed to get session token. Please try again.')
       }
 
-      console.log('✅ Session token generated, launching Coinbase Onramp...')
-
-      // Build the Coinbase Pay URL with the fresh token
       const url = new URL('https://pay.coinbase.com/buy/select-asset')
       url.searchParams.set('sessionToken', sessionToken)
       url.searchParams.set('defaultAsset', 'USDC')
@@ -84,7 +80,6 @@ export function OnrampModal({ isOpen, onClose, onSuccess }: OnrampModalProps) {
       url.searchParams.set('presetFiatAmount', amount)
       url.searchParams.set('fiatCurrency', 'USD')
 
-      // Open in a centered popup window
       const width = 450
       const height = 700
       const left = window.screenX + (window.innerWidth - width) / 2
@@ -100,10 +95,6 @@ export function OnrampModal({ isOpen, onClose, onSuccess }: OnrampModalProps) {
         throw new Error('Popup blocked. Please allow popups for this site.')
       }
 
-      // Optional: Monitor popup for completion
-      // Note: We can't directly detect success due to cross-origin restrictions
-      // The user will see the success in their wallet balance
-
     } catch (err) {
       console.error('Onramp launch error:', err)
       setError(err instanceof Error ? err.message : 'Failed to open Coinbase')
@@ -115,20 +106,17 @@ export function OnrampModal({ isOpen, onClose, onSuccess }: OnrampModalProps) {
   if (!isOpen) return null
 
   const amountNum = parseFloat(amount) || 0
-  const estimatedFee = amountNum * 0.02 // ~2% fee
+  const estimatedFee = amountNum * 0.02
   const estimatedReceive = amountNum - estimatedFee
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
-      {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/80 backdrop-blur-sm"
         onClick={onClose}
       />
 
-      {/* Modal */}
       <div className="relative w-full max-w-[430px] bg-[#0a0a0a] border border-white/[0.1] rounded-t-3xl sm:rounded-3xl p-6 max-h-[90vh] overflow-y-auto">
-        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-white font-semibold text-lg">Add Money</h2>
@@ -142,11 +130,9 @@ export function OnrampModal({ isOpen, onClose, onSuccess }: OnrampModalProps) {
           </button>
         </div>
 
-        {/* Amount Selection */}
         <div className="mb-6">
           <label className="text-white/40 text-sm mb-2 block">Amount (USD)</label>
           
-          {/* Quick amounts */}
           <div className="grid grid-cols-4 gap-2 mb-3">
             {PRESET_AMOUNTS.map((preset) => (
               <button
@@ -163,7 +149,6 @@ export function OnrampModal({ isOpen, onClose, onSuccess }: OnrampModalProps) {
             ))}
           </div>
 
-          {/* Custom amount input */}
           <div className="relative">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 text-lg">$</span>
             <input
@@ -176,7 +161,6 @@ export function OnrampModal({ isOpen, onClose, onSuccess }: OnrampModalProps) {
           </div>
         </div>
 
-        {/* Payment Methods Info */}
         <div className="bg-white/[0.02] border border-white/[0.04] rounded-2xl p-4 mb-6">
           <p className="text-white/40 text-xs mb-3">Available payment methods:</p>
           <div className="flex items-center gap-4">
@@ -195,7 +179,6 @@ export function OnrampModal({ isOpen, onClose, onSuccess }: OnrampModalProps) {
           </div>
         </div>
 
-        {/* What you'll get */}
         {amountNum > 0 && (
           <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4 mb-6">
             <div className="flex items-center justify-between mb-2">
@@ -215,7 +198,6 @@ export function OnrampModal({ isOpen, onClose, onSuccess }: OnrampModalProps) {
           </div>
         )}
 
-        {/* Error */}
         {error && (
           <div className="flex items-center gap-2 mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
             <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
@@ -223,7 +205,6 @@ export function OnrampModal({ isOpen, onClose, onSuccess }: OnrampModalProps) {
           </div>
         )}
 
-        {/* Buy Button */}
         <button
           onClick={handleBuy}
           disabled={isLoading || !amount || parseFloat(amount) <= 0}
@@ -242,7 +223,6 @@ export function OnrampModal({ isOpen, onClose, onSuccess }: OnrampModalProps) {
           )}
         </button>
 
-        {/* Footer */}
         <div className="flex items-center justify-center gap-2 text-white/20 text-xs mt-4">
           <span>Powered by</span>
           <span className="text-white/40 font-medium">Coinbase</span>

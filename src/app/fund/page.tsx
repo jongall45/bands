@@ -332,6 +332,7 @@ export default function FundPage() {
       <OnrampModal
         isOpen={showOnrampModal}
         onClose={() => setShowOnrampModal(false)}
+        initialAmount={amount}
         onSuccess={() => {
           router.push('/dashboard')
         }}
