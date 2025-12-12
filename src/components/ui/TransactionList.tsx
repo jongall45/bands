@@ -14,6 +14,7 @@ import {
   XCircle, Loader2, PiggyBank, TrendingUp,
   ArrowLeftRight, Zap, Globe, Repeat, Plus, ChevronDown, ArrowRight
 } from 'lucide-react'
+import { getSwapByHash } from '@/lib/swapHistory'
 
 // Extended transaction type that can include paired bridge info
 interface DisplayTransaction extends Transaction {
@@ -559,6 +560,61 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
           : 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png'
         
         
+        // Look up swap history for exact amounts on both sides
+        const swapRecord = tx.hash ? getSwapByHash(tx.hash) : null
+        
+        // If we have swap history, show both sides of the trade
+        if (swapRecord) {
+          const fromToken = swapRecord.fromToken
+          const toToken = swapRecord.toToken
+          const fromChainLogo = CHAIN_LOGOS[fromToken.chainId] || ''
+          const toChainLogo = CHAIN_LOGOS[toToken.chainId] || ''
+          const fromChainName = chainNames[fromToken.chainId] || 'Chain'
+          const toChainName = chainNames[toToken.chainId] || 'Chain'
+          
+          return {
+            label: tx.appName || 'Relay',
+            sublabel: 'Cross-chain Swap',
+            icon: isRelay ? (
+              <img src={RELAY_LOGO} alt="Relay" className="w-5 h-5 rounded-full object-cover" />
+            ) : <Globe className="w-5 h-5 text-blue-400" />,
+            iconBg: isRelay ? 'bg-[#7B3FE4]/20' : 'bg-blue-500/10',
+            amountColor: 'text-green-400',
+            amountPrefix: '+',
+            customAmount: (
+              <div className="flex flex-col items-end gap-0.5">
+                {/* What you received (green, on top) */}
+                <div className="flex items-center gap-1">
+                  <span className="text-green-400">
+                    +{parseFloat(toToken.amount).toFixed(toToken.symbol === 'USDC' ? 2 : 6)}
+                  </span>
+                  <TokenWithChainBadge 
+                    tokenImg={toToken.logoURI || destTokenLogo} 
+                    tokenAlt={toToken.symbol}
+                    chainImg={toChainLogo}
+                    chainAlt={toChainName}
+                    size="sm"
+                  />
+                </div>
+                {/* What you sent (white/gray, below) */}
+                <div className="flex items-center gap-1 text-[11px]">
+                  <span className="text-white/70">
+                    -{parseFloat(fromToken.amount).toFixed(fromToken.symbol === 'USDC' ? 2 : 6)}
+                  </span>
+                  <TokenWithChainBadge 
+                    tokenImg={fromToken.logoURI || tokenLogo} 
+                    tokenAlt={fromToken.symbol}
+                    chainImg={fromChainLogo}
+                    chainAlt={fromChainName}
+                    size="sm"
+                  />
+                </div>
+              </div>
+            ),
+          }
+        }
+        
+        // Fallback: No swap history, show what Dune gave us
         return {
           label: tx.appName || 'Bridge',
           sublabel: isSending ? 'Cross-chain Swap' : `Bridge · ${chainName}`,
@@ -583,7 +639,7 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
                   size="sm"
                 />
               </div>
-              {/* What you're getting (for sends) - show destination token with badge */}
+              {/* What you're getting (for sends) - show destination token */}
               {isSending && (
                 <div className="flex items-center gap-1 text-[11px]">
                   <span className="text-green-400">→</span>

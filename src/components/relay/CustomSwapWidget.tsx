@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Settings, ChevronDown, ArrowDown, Fuel, Loader2, Zap, CheckCircle, X, AlertCircle } from 'lucide-react'
 import { useRelaySwap, useUserTokens, SUPPORTED_CHAINS, COMMON_TOKENS, type Token, type SwapState } from './useRelaySwap'
 import TokenModal from './TokenModal'
+import { saveSwapRecord } from '@/lib/swapHistory'
 
 // ============================================
 // TYPES
@@ -93,6 +94,23 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
         txHash: result.txHash,
         fromAmount: result.fromAmount,
         toAmount: result.toAmount,
+      })
+      // Save swap record for Recent Activity
+      saveSwapRecord({
+        txHash: result.txHash,
+        timestamp: Date.now(),
+        fromToken: {
+          symbol: result.fromToken.symbol,
+          amount: result.fromAmount,
+          chainId: result.fromToken.chainId,
+          logoURI: result.fromToken.logoURI,
+        },
+        toToken: {
+          symbol: result.toToken.symbol,
+          amount: result.toAmount,
+          chainId: result.toToken.chainId,
+          logoURI: result.toToken.logoURI,
+        },
       })
       // Refetch user tokens after successful swap
       setTimeout(() => refetchUserTokens(), 2000)
@@ -456,14 +474,48 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
             <h3 className="text-2xl font-bold text-white mb-2">Swap Successful!</h3>
             <p className="text-white/60 mb-6">Your transaction has been confirmed</p>
 
-            <div className="bg-white/5 rounded-xl p-4 mb-6 text-left space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-white/50">Sent</span>
-                <span className="text-white font-medium">{result.fromAmount} {result.fromToken.symbol}</span>
+            <div className="bg-white/5 rounded-xl p-4 mb-6 text-left space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-white/50 text-sm">Sent</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-white font-medium">{result.fromAmount}</span>
+                  <div className="relative">
+                    {result.fromToken.logoURI ? (
+                      <img src={result.fromToken.logoURI} className="w-5 h-5 rounded-full" alt={result.fromToken.symbol} />
+                    ) : (
+                      <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold text-white">
+                        {result.fromToken.symbol.charAt(0)}
+                      </div>
+                    )}
+                    <img 
+                      src={SUPPORTED_CHAINS.find(c => c.id === result.fromToken.chainId)?.logo || ''} 
+                      className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-black/50" 
+                      alt="chain"
+                    />
+                  </div>
+                  <span className="text-white font-medium">{result.fromToken.symbol}</span>
+                </div>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-white/50">Received</span>
-                <span className="text-white font-medium">{result.toAmount} {result.toToken.symbol}</span>
+              <div className="flex justify-between items-center">
+                <span className="text-white/50 text-sm">Received</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-green-400 font-medium">{result.toAmount}</span>
+                  <div className="relative">
+                    {result.toToken.logoURI ? (
+                      <img src={result.toToken.logoURI} className="w-5 h-5 rounded-full" alt={result.toToken.symbol} />
+                    ) : (
+                      <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold text-white">
+                        {result.toToken.symbol.charAt(0)}
+                      </div>
+                    )}
+                    <img 
+                      src={SUPPORTED_CHAINS.find(c => c.id === result.toToken.chainId)?.logo || ''} 
+                      className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-black/50" 
+                      alt="chain"
+                    />
+                  </div>
+                  <span className="text-green-400 font-medium">{result.toToken.symbol}</span>
+                </div>
               </div>
             </div>
 
