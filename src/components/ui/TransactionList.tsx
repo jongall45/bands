@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   useTransactionHistory,
   formatTxAmount,
@@ -14,6 +14,58 @@ import {
   XCircle, Loader2, PiggyBank, TrendingUp,
   ArrowLeftRight, Zap, Globe, Repeat, Plus, ChevronDown
 } from 'lucide-react'
+
+// Ostium logo URL
+const OSTIUM_LOGO = 'https://media.licdn.com/dms/image/v2/D4E0BAQEvzvW_jYImMw/company-logo_200_200/company-logo_200_200/0/1729111585394/ostium_labs_logo?e=2147483647&v=beta&t=QjJtNudNDTTZHEPlshMDMhku-BkYdLJU2RPFlRIR62M'
+
+// Ostium trade details interface
+interface OstiumTradeDetails {
+  type: 'open' | 'close' | 'unknown'
+  pair: string | null
+  pairIndex: number | null
+  direction: 'long' | 'short' | null
+  collateral: string | null
+  leverage: number | null
+  positionSize: string | null
+}
+
+// Cache for Ostium trade details
+const tradeDetailsCache = new Map<string, OstiumTradeDetails | null>()
+
+// Fetch Ostium trade details from our API (uses Ostium subgraph)
+async function fetchOstiumTradeDetails(
+  hash: string, 
+  address: string, 
+  timestamp: number
+): Promise<OstiumTradeDetails | null> {
+  const cacheKey = `${hash}-${address}`
+  if (tradeDetailsCache.has(cacheKey)) {
+    return tradeDetailsCache.get(cacheKey) || null
+  }
+  
+  try {
+    const params = new URLSearchParams({
+      hash,
+      address,
+      timestamp: String(timestamp),
+    })
+    const response = await fetch(`/api/ostium/trade-details?${params}`)
+    if (!response.ok) {
+      tradeDetailsCache.set(cacheKey, null)
+      return null
+    }
+    const data = await response.json()
+    // Only cache if we got valid data
+    if (data.pair || data.direction) {
+      tradeDetailsCache.set(cacheKey, data)
+    }
+    return data
+  } catch (error) {
+    console.error('[Ostium] Failed to fetch trade details:', error)
+    tradeDetailsCache.set(cacheKey, null)
+    return null
+  }
+}
 
 interface TransactionListProps {
   address: string | undefined
@@ -84,6 +136,9 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
 }
 
 function TransactionRow({ tx, userAddress }: { tx: Transaction; userAddress: string }) {
+  const [tradeDetails, setTradeDetails] = useState<OstiumTradeDetails | null>(null)
+  const [loadingDetails, setLoadingDetails] = useState(false)
+  
   const isReceive = tx.type === 'receive'
   const isSwap = tx.type === 'swap'
   const isBridge = tx.type === 'bridge'
@@ -91,6 +146,18 @@ function TransactionRow({ tx, userAddress }: { tx: Transaction; userAddress: str
   const isVaultDeposit = tx.type === 'vault_deposit'
   const isVaultWithdraw = tx.type === 'vault_withdraw'
   const isVaultTx = isVaultDeposit || isVaultWithdraw
+  const isOstium = isAppInteraction && tx.appName === 'Ostium'
+
+  // Fetch Ostium trade details from subgraph
+  useEffect(() => {
+    if (isOstium && tx.hash && userAddress && !tradeDetails && !loadingDetails) {
+      setLoadingDetails(true)
+      fetchOstiumTradeDetails(tx.hash, userAddress, tx.timestamp).then(details => {
+        setTradeDetails(details)
+        setLoadingDetails(false)
+      })
+    }
+  }, [isOstium, tx.hash, userAddress, tx.timestamp, tradeDetails, loadingDetails])
 
   // Use pre-formatted amount from API if available, otherwise format from value
   const amount = tx.tokenAmount || formatTxAmount(tx.value, tx.tokenDecimals)
@@ -144,15 +211,83 @@ function TransactionRow({ tx, userAddress }: { tx: Transaction; userAddress: str
 
     // App interaction (including Perps trades)
     if (isAppInteraction && tx.appName) {
-      // Special handling for Perps/Trading apps
+      // Special handling for Perps/Trading apps (like Ostium)
       if (tx.appCategory === 'Perps') {
+        // Use trade details if available, otherwise fall back to direction-based detection
+        const isOpening = tradeDetails?.type === 'open' || 
+          (!tradeDetails && (tx.direction === 'out' || (tx as any).to?.toLowerCase().includes('ccd5891')))
+        const isClosing = tradeDetails?.type === 'close' || 
+          (!tradeDetails && !isOpening)
+        
+        // Build sublabel with trade details
+        let sublabel = isOpening ? 'Open Position' : 'Close Position'
+        if (tradeDetails) {
+          const parts: string[] = []
+          if (tradeDetails.pair) {
+            // Extract just the asset symbol (e.g., "BTC" from "BTC-USD")
+            const asset = tradeDetails.pair.split('-')[0]
+            parts.push(asset)
+          }
+          if (tradeDetails.direction) {
+            parts.push(tradeDetails.direction.toUpperCase())
+          }
+          if (parts.length > 0) {
+            sublabel = parts.join(' · ')
+          }
+        }
+        
+        // Build display amount from trade details or fallback (just the collateral, no leverage)
+        let displayAmount: string | null = null
+        if (tradeDetails?.collateral) {
+          displayAmount = `$${tradeDetails.collateral}`
+        } else if (tx.valueUsd && tx.valueUsd > 0.01) {
+          displayAmount = `$${tx.valueUsd.toFixed(2)}`
+        }
+        
+        // Direction indicator colors
+        const isLong = tradeDetails?.direction === 'long'
+        const isShort = tradeDetails?.direction === 'short'
+        const directionColor = isLong ? 'text-green-400' : isShort ? 'text-red-400' : 'text-white'
+        
         return {
           label: tx.appName,
-          sublabel: 'Perps Trade',
-          icon: <TrendingUp className="w-5 h-5 text-orange-400" />,
-          iconBg: 'bg-orange-500/10',
-          amountColor: 'text-white',
-          amountPrefix: '',
+          sublabel: loadingDetails ? 'Loading...' : sublabel,
+          icon: (
+            <img 
+              src={OSTIUM_LOGO} 
+              alt="Ostium" 
+              className="w-5 h-5 rounded-full"
+              onError={(e) => {
+                // Fallback to trending icon if logo fails to load
+                (e.target as HTMLImageElement).style.display = 'none'
+              }}
+            />
+          ),
+          iconBg: isLong ? 'bg-green-500/10' : isShort ? 'bg-red-500/10' : 'bg-orange-500/10',
+          amountColor: directionColor,
+          amountPrefix: isOpening ? '-' : '+',
+          // Show custom amount with trade details
+          customAmount: displayAmount ? (
+            <div className="text-right">
+              <div className={isClosing ? 'text-green-400' : 'text-white'}>
+                {isClosing ? '+' : '-'}{displayAmount} USDC
+              </div>
+              {(tradeDetails?.leverage || tradeDetails?.direction) && (
+                <div className="text-[10px] text-white/40">
+                  {tradeDetails?.leverage && `${tradeDetails.leverage}x `}
+                  {tradeDetails?.direction && (
+                    <span className={isLong ? 'text-green-400/70' : 'text-red-400/70'}>
+                      {tradeDetails.direction.toUpperCase()}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <span className="text-white/40 text-xs">
+              {loadingDetails ? '...' : (isOpening ? 'Open' : 'Close')}
+            </span>
+          ),
         }
       }
       // Special handling for DEX

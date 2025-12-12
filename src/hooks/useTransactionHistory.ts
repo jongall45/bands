@@ -57,19 +57,26 @@ async function fetchDuneActivity(address: string, chainIds?: string): Promise<Tr
     }
     const data = await response.json()
     console.log('[Activity] Fetched transactions:', data.transactions?.length || 0)
-    if (data.transactions?.[0]) {
-      console.log('[Activity] First tx sample:', JSON.stringify(data.transactions[0]).slice(0, 500))
-    }
+
+    // Deduplicate transactions by hash (Dune sometimes returns duplicates)
+    const seen = new Set<string>()
+    const uniqueTxs = (data.transactions || []).filter((tx: any) => {
+      if (seen.has(tx.hash)) return false
+      seen.add(tx.hash)
+      return true
+    })
 
     // Transform Dune activity format to our Transaction format
-    return (data.transactions || []).map((tx: any) => {
+    return uniqueTxs.map((tx: any) => {
       const chainId = tx.chainId || 8453
       const chainConfig = CHAIN_CONFIG[chainId]
       const explorer = CHAIN_EXPLORERS[chainId] || 'https://basescan.org'
 
       // Determine transaction type from Dune activity type
+      // IMPORTANT: Check for app_interaction FIRST since API already classified it
       let type: Transaction['type'] = 'contract'
-      if (tx.isSwap || tx.type === 'swap') type = 'swap'
+      if (tx.type === 'app_interaction' && tx.app) type = 'app_interaction'
+      else if (tx.isSwap || tx.type === 'swap') type = 'swap'
       else if (tx.isBridge || tx.type === 'bridge') type = 'bridge'
       else if (tx.type === 'send') type = 'send'
       else if (tx.type === 'receive') type = 'receive'

@@ -91,19 +91,6 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json()
     console.log('[Sim API] Activity response - count:', data.activity?.length || 0)
-    if (data.activity?.[0]) {
-      // Log ALL fields of first activity to understand Dune's structure
-      console.log('[Sim API] First activity ALL FIELDS:', Object.keys(data.activity[0]).join(', '))
-      console.log('[Sim API] Activity sample:', JSON.stringify(data.activity[0]))
-    }
-    // Log USDC receive transactions to debug Ostium
-    const usdcReceives = (data.activity || []).filter((a: any) =>
-      a.type === 'receive' && a.token_metadata?.symbol === 'USDC'
-    )
-    if (usdcReceives.length > 0) {
-      console.log('[Sim API] USDC receives found:', usdcReceives.length)
-      console.log('[Sim API] First USDC receive FULL:', JSON.stringify(usdcReceives[0]))
-    }
 
     // Transform activities into our transaction format
     // Dune Activity API format:
@@ -114,6 +101,7 @@ export async function GET(request: NextRequest) {
     // For swaps:
     // - from_token_metadata, from_token_value
     // - to_token_metadata, to_token_value
+
     const transactions = (data.activity || []).map((activity: any) => {
       const chainId = activity.chain_id || 8453
       const hash = activity.tx_hash || activity.transaction_hash || ''
@@ -167,24 +155,6 @@ export async function GET(request: NextRequest) {
       // If contract interaction with known app, treat as app_interaction
       else if (knownApp && !isSwap && !isTransfer && !isBridge) {
         finalType = 'app_interaction'
-      }
-
-      // Log for debugging Ostium detection - check USDC transfers
-      if (tokenMeta.symbol === 'USDC' && (activityType === 'receive' || activityType === 'send')) {
-        console.log(`[Activity] USDC ${activityType}:`, {
-          finalType,
-          from: fromAddr || '(empty)',
-          to: toAddr || '(empty)',
-          counterparty: counterpartyAddr || '(empty)',
-          fromApp: fromApp?.name || null,
-          toApp: toApp?.name || null,
-          knownApp: knownApp?.name || null,
-          amount: formatAmount(activity.value || '0', tokenDecimals),
-          rawFrom: activity.from,
-          rawTo: activity.to,
-          rawCounterparty: activity.counterparty,
-          hash: hash.slice(0, 16),
-        })
       }
 
       // Build transaction object
@@ -271,10 +241,24 @@ export async function GET(request: NextRequest) {
       // Always filter out approvals
       if (tx.isApproval) return false
 
+      // NEVER filter out app_interaction transactions with a detected app (like Ostium)
+      // These are meaningful protocol interactions regardless of displayed amount
+      if (tx.type === 'app_interaction' && tx.app) {
+        return true // Keep all detected app interactions
+      }
+
       // Filter out dust transactions (very small amounts)
       // For transfers, check the token amount
       if (tx.isTransfer && tx.token) {
-        const amount = parseFloat(tx.token.amount) || 0
+        const amountStr = tx.token.amount || '0'
+        // Handle "< 0.0001" format - don't filter these as they might be valid
+        if (amountStr.startsWith('<')) {
+          // Small amount, but if it has USD value, keep it
+          if (tx.valueUsd && tx.valueUsd >= 0.01) return true
+          // Otherwise filter as dust
+          return false
+        }
+        const amount = parseFloat(amountStr) || 0
         // Filter out amounts less than 0.001 (for stablecoins this is < $0.001)
         if (amount < 0.001) return false
       }
@@ -282,9 +266,9 @@ export async function GET(request: NextRequest) {
       // Filter out transactions with USD value less than $0.01
       if (tx.valueUsd && tx.valueUsd < 0.01) return false
 
-      // Filter out bridge/app transactions that have no token info and no value
-      // These are often internal contract calls that aren't useful to display
-      if ((tx.type === 'bridge' || tx.type === 'app_interaction' || tx.type === 'call') &&
+      // Filter out bridge/call transactions that have no token info and no value
+      // But keep app_interaction even without token info if they have a detected app
+      if ((tx.type === 'bridge' || tx.type === 'call') &&
           !tx.token && !tx.swapFromToken && !tx.valueUsd) {
         return false
       }
