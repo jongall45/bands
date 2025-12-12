@@ -166,8 +166,15 @@ export async function GET(request: NextRequest) {
       if (toApp && activityType === 'send') {
         finalType = 'app_interaction'
       }
-      // If receiving from a known app (like withdrawal), still show as receive but with app context
-      // If contract call to known app, treat as app_interaction
+      // If receiving tokens FROM a known app (like withdrawal from Ostium), treat as app_interaction
+      else if (fromApp && activityType === 'receive') {
+        finalType = 'app_interaction'
+      }
+      // If it's a "call" type and involves a known app, treat as app_interaction
+      else if (knownApp && activityType === 'call') {
+        finalType = 'app_interaction'
+      }
+      // If contract interaction with known app, treat as app_interaction
       else if (knownApp && !isSwap && !isTransfer && !isBridge) {
         finalType = 'app_interaction'
       }
