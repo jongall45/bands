@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useCallback } from 'react'
 import { useAccount } from 'wagmi'
 import { X, CreditCard, Building2, Smartphone, Loader2, AlertCircle } from 'lucide-react'
-import { initOnRamp, CBPayInstanceType } from '@coinbase/cbpay-js'
 
 interface OnrampModalProps {
   isOpen: boolean
@@ -17,14 +16,10 @@ export function OnrampModal({ isOpen, onClose, onSuccess }: OnrampModalProps) {
   const { address } = useAccount()
   const [amount, setAmount] = useState('50')
   const [isLoading, setIsLoading] = useState(false)
-  const [isInitializing, setIsInitializing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const onrampInstanceRef = useRef<CBPayInstanceType | null>(null)
-  const [isReady, setIsReady] = useState(false)
 
-  const projectId = process.env.NEXT_PUBLIC_CDP_PROJECT_ID
-
-  // Fetch session token from backend
+  // Fetch a FRESH session token from backend - called only when user clicks Buy
+  // This ensures each token is generated just-in-time and used only once
   const fetchSessionToken = useCallback(async (): Promise<string | null> => {
     if (!address) return null
 
@@ -51,110 +46,18 @@ export function OnrampModal({ isOpen, onClose, onSuccess }: OnrampModalProps) {
     }
   }, [address])
 
-  // Initialize onramp with session token
-  const initializeOnramp = useCallback(async () => {
-    if (!address || !projectId || !isOpen) return
-
-    setIsInitializing(true)
-    setError(null)
-
-    try {
-      // Destroy existing instance
-      if (onrampInstanceRef.current) {
-        onrampInstanceRef.current.destroy()
-        onrampInstanceRef.current = null
-        setIsReady(false)
-      }
-
-      // Fetch session token for secure initialization
-      const sessionToken = await fetchSessionToken()
-      
-      const amountNum = parseFloat(amount) || 50
-
-      const initConfig: any = {
-        appId: projectId,
-        widgetParameters: {
-          addresses: { [address]: ['base'] },
-          assets: ['USDC'],
-          defaultNetwork: 'base',
-          defaultAsset: 'USDC',
-          presetFiatAmount: amountNum,
-          fiatCurrency: 'USD',
-        },
-        onSuccess: () => {
-          console.log('✅ Onramp success')
-          onSuccess?.()
-          onClose()
-        },
-        onExit: () => {
-          console.log('Onramp exit')
-        },
-        onEvent: (event: any) => {
-          console.log('Onramp event:', event)
-        },
-        experienceLoggedIn: 'popup',
-        experienceLoggedOut: 'popup',
-        closeOnExit: true,
-        closeOnSuccess: true,
-      }
-
-      // Add session token if available (required for secure initialization)
-      if (sessionToken) {
-        initConfig.sessionToken = sessionToken
-        console.log('✅ Using secure initialization with session token')
-      } else {
-        console.warn('⚠️ No session token, initialization may fail')
-      }
-
-      initOnRamp(initConfig, (err, instance) => {
-        setIsInitializing(false)
-        
-        if (err) {
-          console.error('Onramp init error:', err)
-          setError(err.message || 'Failed to initialize Coinbase')
-          setIsReady(false)
-        } else if (instance) {
-          onrampInstanceRef.current = instance
-          setIsReady(true)
-          setError(null)
-          console.log('✅ Onramp initialized')
-        }
-      })
-    } catch (err) {
-      setIsInitializing(false)
-      console.error('Initialization error:', err)
-      setError(err instanceof Error ? err.message : 'Failed to initialize')
-    }
-  }, [address, projectId, amount, isOpen, fetchSessionToken, onSuccess, onClose])
-
-  // Initialize when modal opens
-  useEffect(() => {
-    if (isOpen && address && projectId) {
-      initializeOnramp()
-    }
-
-    return () => {
-      if (onrampInstanceRef.current) {
-        onrampInstanceRef.current.destroy()
-        onrampInstanceRef.current = null
-        setIsReady(false)
-      }
-    }
-  }, [isOpen, address, projectId])
-
-  // Handle amount change
+  // Handle amount change - no longer triggers re-initialization
   const handleAmountChange = (newAmount: string) => {
     setAmount(newAmount)
-    // Reinitialize with new amount after a short delay
-    setTimeout(() => {
-      if (isOpen) initializeOnramp()
-    }, 300)
+    setError(null)
   }
 
+  // Launch Coinbase Onramp with a FRESH session token
+  // This is the key fix: we generate a new token right before each launch
+  // ensuring the token is never reused
   const handleBuy = async () => {
-    if (!isReady || !onrampInstanceRef.current) {
-      // Try URL fallback
-      await openWithSessionToken()
+    if (!address) {
+      setError('Wallet not connected')
       return
     }
 
@@ -162,48 +65,46 @@ export function OnrampModal({ isOpen, onClose, onSuccess }: OnrampModalProps) {
     setError(null)
 
     try {
-      onrampInstanceRef.current.open()
-    } catch (err) {
-      console.error('Open error:', err)
-      // Try URL fallback
-      await openWithSessionToken()
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Fallback: open via session token URL
-  const openWithSessionToken = async () => {
-    if (!address) return
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
+      // Generate fresh session token just-in-time
+      console.log('🔑 Generating fresh session token...')
       const sessionToken = await fetchSessionToken()
-      
+
       if (!sessionToken) {
-        throw new Error('Failed to get session token')
+        throw new Error('Failed to get session token. Please try again.')
       }
-      
+
+      console.log('✅ Session token generated, launching Coinbase Onramp...')
+
+      // Build the Coinbase Pay URL with the fresh token
       const url = new URL('https://pay.coinbase.com/buy/select-asset')
       url.searchParams.set('sessionToken', sessionToken)
       url.searchParams.set('defaultAsset', 'USDC')
       url.searchParams.set('defaultNetwork', 'base')
       url.searchParams.set('presetFiatAmount', amount)
       url.searchParams.set('fiatCurrency', 'USD')
-      
+
+      // Open in a centered popup window
       const width = 450
       const height = 700
       const left = window.screenX + (window.innerWidth - width) / 2
       const top = window.screenY + (window.innerHeight - height) / 2
-      
-      window.open(
+
+      const popup = window.open(
         url.toString(),
         'coinbase-onramp',
         `width=${width},height=${height},left=${left},top=${top}`
       )
+
+      if (!popup) {
+        throw new Error('Popup blocked. Please allow popups for this site.')
+      }
+
+      // Optional: Monitor popup for completion
+      // Note: We can't directly detect success due to cross-origin restrictions
+      // The user will see the success in their wallet balance
+
     } catch (err) {
+      console.error('Onramp launch error:', err)
       setError(err instanceof Error ? err.message : 'Failed to open Coinbase')
     } finally {
       setIsLoading(false)
@@ -239,14 +140,6 @@ export function OnrampModal({ isOpen, onClose, onSuccess }: OnrampModalProps) {
             <X className="w-5 h-5 text-white/60" />
           </button>
         </div>
-
-        {/* Initialization Status */}
-        {isInitializing && (
-          <div className="flex items-center gap-2 mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-            <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
-            <span className="text-blue-400 text-sm">Initializing secure connection...</span>
-          </div>
-        )}
 
         {/* Amount Selection */}
         <div className="mb-6">
@@ -332,13 +225,13 @@ export function OnrampModal({ isOpen, onClose, onSuccess }: OnrampModalProps) {
         {/* Buy Button */}
         <button
           onClick={handleBuy}
-          disabled={isLoading || isInitializing || !amount || parseFloat(amount) <= 0}
+          disabled={isLoading || !amount || parseFloat(amount) <= 0}
           className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-[#ef4444]/30 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2"
         >
-          {isLoading || isInitializing ? (
+          {isLoading ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              {isInitializing ? 'Initializing...' : 'Opening Coinbase...'}
+              Opening Coinbase...
             </>
           ) : (
             <>
