@@ -23,6 +23,8 @@ export interface Transaction {
   chainName?: string
   chainLogo?: string
   explorerUrl?: string
+  // Direction for transfers (in = receive, out = send)
+  direction?: 'in' | 'out' | 'unknown'
   // Swap-specific fields
   swapFromToken?: { symbol: string; amount: string; logoUri?: string }
   swapToToken?: { symbol: string; amount: string; logoUri?: string }
@@ -126,6 +128,8 @@ async function fetchDuneActivity(address: string, chainIds?: string): Promise<Tr
           amount: tx.swapToToken.amount,
           logoUri: tx.swapToToken.logoURI,
         } : undefined,
+        // Direction (in = receive, out = send)
+        direction: tx.direction || undefined,
         // App info
         appName: tx.app || undefined,
         appCategory: tx.appCategory || undefined,
