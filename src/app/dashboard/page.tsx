@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useWaitForTransactionReceipt } from 'wagmi'
 import { useReadContract } from 'wagmi'
+import { useQueryClient } from '@tanstack/react-query'
 import { formatUnits, parseUnits, isAddress, encodeFunctionData } from 'viem'
 import { base, arbitrum, optimism, mainnet, polygon } from 'wagmi/chains'
 import { useAuth } from '@/hooks/useAuth'
@@ -33,6 +34,7 @@ const SEND_CHAINS = [
 export default function Dashboard() {
   const { isAuthenticated, isConnected, address, isSmartWalletReady, logout, getClientForChain } = useAuth()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [copied, setCopied] = useState(false)
   const [showSend, setShowSend] = useState(false)
   const [showReceive, setShowReceive] = useState(false)
@@ -95,8 +97,11 @@ export default function Dashboard() {
       setSendTo('')
       setSendAmount('')
       refetchBalance()
+      refetchPortfolio()
+      // Immediately refresh transaction history
+      queryClient.invalidateQueries({ queryKey: ['transaction-history'] })
     }
-  }, [isSuccess, refetchBalance])
+  }, [isSuccess, refetchBalance, refetchPortfolio, queryClient])
 
   // Use portfolio total if available, fallback to USDC balance
   const totalValue = portfolio?.totalValueUsd || 0
@@ -636,7 +641,18 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
-              <p className="text-white/40 text-sm mt-3">
+              {/* USD value of amount being sent */}
+              {selectedToken && sendAmount && parseFloat(sendAmount) > 0 && (
+                <p className="text-white/60 text-lg mt-2 font-medium">
+                  ≈ ${(() => {
+                    const tokenBalance = parseFloat(selectedToken.balance) || 0
+                    const pricePerToken = tokenBalance > 0 ? (selectedToken.balanceUsd || 0) / tokenBalance : 0
+                    const usdValue = parseFloat(sendAmount) * pricePerToken
+                    return usdValue < 0.01 ? '< 0.01' : usdValue.toFixed(2)
+                  })()}
+                </p>
+              )}
+              <p className="text-white/40 text-sm mt-2">
                 Balance: <span className="text-white/60">
                   {selectedToken ? `${formatTokenBalance(selectedToken.balance)} ${selectedToken.symbol}` : '$0.00'}
                 </span>

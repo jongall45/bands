@@ -184,8 +184,8 @@ export function useTransactionHistory(
     queryKey: ['transaction-history', address, options.crossChain, options.chainIds],
     queryFn: () => fetchTransactionHistory(address!, options),
     enabled: !!address,
-    refetchInterval: 30000, // Refresh every 30 seconds
-    staleTime: 15000,
+    refetchInterval: 10000, // Refresh every 10 seconds for faster updates
+    staleTime: 5000,
   })
 }
 

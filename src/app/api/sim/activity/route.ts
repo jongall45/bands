@@ -27,6 +27,8 @@ const KNOWN_APPS: Record<string, { name: string; category: string }> = {
   '0x240d7e71df23c0ee3d46cfbe6eb838cdc8432d5e': { name: 'Ostium', category: 'Perps' },
   '0xf1d292c10a4f5c5d11ae8c2f22f7a2c2d9b53f43': { name: 'Ostium', category: 'Perps' },
   '0xe8ce7e7c6a654df45d764f80dc6e99afdb52d2c6': { name: 'Ostium', category: 'Perps' },
+  // Ostium Trading Storage - receives USDC deposits for trades
+  '0x68494ace6d88d3fb22ebc6c57d62f0ab54d5c2e1': { name: 'Ostium', category: 'Perps' },
 
   // Other DEX
   '0xba12222222228d8ba445958a75a0704d566bf2c8': { name: 'Balancer', category: 'DEX' },
@@ -125,11 +127,23 @@ export async function GET(request: NextRequest) {
       const toAddr = (activity.to || '').toLowerCase()
       const fromAddr = (activity.from || '').toLowerCase()
       const tokenAddr = (activity.token_address || '').toLowerCase()
-      const knownApp = KNOWN_APPS[toAddr] || KNOWN_APPS[fromAddr] || KNOWN_APPS[tokenAddr]
 
-      // Determine final type - if known app detected on non-transfer/swap, treat as app_interaction
+      // Check if destination is a known app (for transfers/deposits)
+      const toApp = KNOWN_APPS[toAddr]
+      // Check if source or token address is a known app
+      const fromApp = KNOWN_APPS[fromAddr]
+      const tokenApp = KNOWN_APPS[tokenAddr]
+      const knownApp = toApp || fromApp || tokenApp
+
+      // Determine final type
       let finalType = activityType
-      if (knownApp && !isSwap && !isTransfer && !isBridge) {
+      // If sending tokens TO a known app (like depositing to Ostium), treat as app_interaction
+      if (toApp && activityType === 'send') {
+        finalType = 'app_interaction'
+      }
+      // If receiving from a known app (like withdrawal), still show as receive but with app context
+      // If contract call to known app, treat as app_interaction
+      else if (knownApp && !isSwap && !isTransfer && !isBridge) {
         finalType = 'app_interaction'
       }
 
