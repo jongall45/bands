@@ -478,7 +478,16 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
               <div className="flex justify-between items-center">
                 <span className="text-white/50 text-sm">Sent</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-white font-medium">{result.fromAmount}</span>
+                  <span className="text-white font-medium">
+                    {(() => {
+                      const num = parseFloat(result.fromAmount)
+                      // Stablecoins: 2 decimals, others: up to 6 (trim trailing zeros)
+                      if (['USDC', 'USDT', 'DAI'].includes(result.fromToken.symbol)) {
+                        return num.toFixed(2)
+                      }
+                      return num.toFixed(6).replace(/\.?0+$/, '')
+                    })()}
+                  </span>
                   <div className="relative">
                     {result.fromToken.logoURI ? (
                       <img src={result.fromToken.logoURI} className="w-5 h-5 rounded-full" alt={result.fromToken.symbol} />
@@ -499,7 +508,16 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
               <div className="flex justify-between items-center">
                 <span className="text-white/50 text-sm">Received</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-green-400 font-medium">{result.toAmount}</span>
+                  <span className="text-green-400 font-medium">
+                    {(() => {
+                      const num = parseFloat(result.toAmount)
+                      // Stablecoins: 2 decimals, others: up to 6 (trim trailing zeros)
+                      if (['USDC', 'USDT', 'DAI'].includes(result.toToken.symbol)) {
+                        return num.toFixed(2)
+                      }
+                      return num.toFixed(6).replace(/\.?0+$/, '')
+                    })()}
+                  </span>
                   <div className="relative">
                     {result.toToken.logoURI ? (
                       <img src={result.toToken.logoURI} className="w-5 h-5 rounded-full" alt={result.toToken.symbol} />

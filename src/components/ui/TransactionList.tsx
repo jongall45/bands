@@ -448,24 +448,24 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
           return num.toLocaleString(undefined, { maximumFractionDigits: 2 })
         }
         
-        // Token with chain badge component
-        const TokenWithChainBadge = ({ 
-          tokenImg, tokenAlt, chainImg, chainAlt, size = 'sm' 
-        }: { 
-          tokenImg: string; tokenAlt: string; chainImg: string; chainAlt: string; size?: 'sm' | 'md' | 'lg'
+        // Token with chain badge component - smaller sizes for better UI fit
+        const TokenWithChainBadge = ({
+          tokenImg, tokenAlt, chainImg, chainAlt, size = 'sm'
+        }: {
+          tokenImg: string; tokenAlt: string; chainImg: string; chainAlt: string; size?: 'xs' | 'sm' | 'md' | 'lg'
         }) => (
-          <div className={`relative ${size === 'sm' ? 'w-5 h-5' : size === 'md' ? 'w-6 h-6' : 'w-7 h-7'} flex-shrink-0`}>
-            <img 
-              src={tokenImg} 
-              alt={tokenAlt} 
-              className={`${size === 'sm' ? 'w-5 h-5' : size === 'md' ? 'w-6 h-6' : 'w-7 h-7'} rounded-full`}
+          <div className={`relative ${size === 'xs' ? 'w-3.5 h-3.5' : size === 'sm' ? 'w-4 h-4' : size === 'md' ? 'w-5 h-5' : 'w-6 h-6'} flex-shrink-0`}>
+            <img
+              src={tokenImg}
+              alt={tokenAlt}
+              className={`${size === 'xs' ? 'w-3.5 h-3.5' : size === 'sm' ? 'w-4 h-4' : size === 'md' ? 'w-5 h-5' : 'w-6 h-6'} rounded-full`}
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
             />
             {chainImg && (
-              <img 
-                src={chainImg} 
-                alt={chainAlt} 
-                className={`absolute ${size === 'sm' ? '-bottom-0.5 -right-0.5 w-2.5 h-2.5' : '-bottom-0.5 -right-0.5 w-3 h-3'} rounded-full border border-black/50`}
+              <img
+                src={chainImg}
+                alt={chainAlt}
+                className={`absolute ${size === 'xs' ? '-bottom-0.5 -right-0.5 w-1.5 h-1.5' : size === 'sm' ? '-bottom-0.5 -right-0.5 w-2 h-2' : '-bottom-0.5 -right-0.5 w-2.5 h-2.5'} rounded-full border border-black/50`}
                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
               />
             )}
