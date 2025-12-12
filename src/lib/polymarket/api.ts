@@ -110,25 +110,35 @@ export function parseMarket(market: PolymarketMarket): ParsedMarket {
 }
 
 // Format volume for display
-export function formatVolume(volume: number | undefined | null): string {
-  if (volume === undefined || volume === null || isNaN(volume)) {
+export function formatVolume(volume: number | string | undefined | null): string {
+  if (volume === undefined || volume === null) {
     return '$0'
   }
-  if (volume >= 1_000_000) {
-    return `$${(volume / 1_000_000).toFixed(1)}M`
+  // Convert to number if string
+  const num = typeof volume === 'string' ? parseFloat(volume) : volume
+  if (isNaN(num)) {
+    return '$0'
   }
-  if (volume >= 1_000) {
-    return `$${(volume / 1_000).toFixed(1)}K`
+  if (num >= 1_000_000) {
+    return `$${(num / 1_000_000).toFixed(1)}M`
   }
-  return `$${volume.toFixed(0)}`
+  if (num >= 1_000) {
+    return `$${(num / 1_000).toFixed(1)}K`
+  }
+  return `$${num.toFixed(0)}`
 }
 
 // Format probability for display
-export function formatProbability(price: number | undefined | null): string {
-  if (price === undefined || price === null || isNaN(price)) {
+export function formatProbability(price: number | string | undefined | null): string {
+  if (price === undefined || price === null) {
     return '50%'
   }
-  return `${(price * 100).toFixed(0)}%`
+  // Convert to number if string
+  const num = typeof price === 'string' ? parseFloat(price) : price
+  if (isNaN(num)) {
+    return '50%'
+  }
+  return `${(num * 100).toFixed(0)}%`
 }
 
 // Categories for filtering
