@@ -148,18 +148,6 @@ export async function GET(request: NextRequest) {
       const tokenApp = KNOWN_APPS[tokenAddr]
       const knownApp = toApp || fromApp || tokenApp
 
-      // Log for debugging Ostium detection
-      if (activity.type === 'send' && tokenMeta.symbol === 'USDC') {
-        console.log('[Activity] USDC send detected:', {
-          to: toAddr,
-          recipient: recipientAddr,
-          from: fromAddr,
-          hash: hash.slice(0, 20),
-          toApp: toApp?.name,
-          allFields: Object.keys(activity).join(', ')
-        })
-      }
-
       // Determine final type
       let finalType = activityType
       // If sending tokens TO a known app (like depositing to Ostium), treat as app_interaction
@@ -177,6 +165,21 @@ export async function GET(request: NextRequest) {
       // If contract interaction with known app, treat as app_interaction
       else if (knownApp && !isSwap && !isTransfer && !isBridge) {
         finalType = 'app_interaction'
+      }
+
+      // Log for debugging Ostium detection - check USDC transfers involving known apps
+      if (tokenMeta.symbol === 'USDC' && knownApp) {
+        console.log(`[Activity] USDC with known app:`, {
+          type: activityType,
+          finalType,
+          from: fromAddr,
+          to: toAddr,
+          fromApp: fromApp?.name,
+          toApp: toApp?.name,
+          knownApp: knownApp?.name,
+          amount: formatAmount(activity.value || '0', tokenDecimals),
+          hash: hash.slice(0, 16),
+        })
       }
 
       // Build transaction object
@@ -258,8 +261,26 @@ export async function GET(request: NextRequest) {
       return tx
     })
 
-    // Filter out approvals by default (they're not interesting to users)
-    const filteredTx = transactions.filter((tx: any) => !tx.isApproval)
+    // Filter out approvals and dust transactions (< $0.01) to show only meaningful activity
+    const filteredTx = transactions.filter((tx: any) => {
+      // Always filter out approvals
+      if (tx.isApproval) return false
+
+      // Filter out dust transactions (very small amounts)
+      // For transfers, check the token amount
+      if (tx.isTransfer && tx.token) {
+        const amount = parseFloat(tx.token.amount) || 0
+        // Filter out amounts less than 0.001 (for stablecoins this is < $0.001)
+        if (amount < 0.001) return false
+      }
+
+      // Filter out transactions with USD value less than $0.01
+      if (tx.valueUsd && tx.valueUsd < 0.01) return false
+
+      return true
+    })
+
+    console.log(`[Sim API] After filtering: ${filteredTx.length} transactions (removed ${transactions.length - filteredTx.length} dust/approvals)`)
 
     return NextResponse.json({
       address,
