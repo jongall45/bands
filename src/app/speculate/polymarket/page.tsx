@@ -340,9 +340,15 @@ function EventDetailPanel({
   
   // Sort markets by YES probability descending
   const sortedMarkets = [...markets].sort((a, b) => {
-    const aPrice = parseFloat(JSON.parse(a.outcomePrices || '["0.5"]')[0])
-    const bPrice = parseFloat(JSON.parse(b.outcomePrices || '["0.5"]')[0])
-    return bPrice - aPrice
+    try {
+      const aPrices = a.outcomePrices ? JSON.parse(a.outcomePrices) : ['0.5']
+      const bPrices = b.outcomePrices ? JSON.parse(b.outcomePrices) : ['0.5']
+      const aPrice = parseFloat(aPrices[0]) || 0.5
+      const bPrice = parseFloat(bPrices[0]) || 0.5
+      return bPrice - aPrice
+    } catch {
+      return 0
+    }
   })
 
   return (

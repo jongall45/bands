@@ -110,7 +110,10 @@ export function parseMarket(market: PolymarketMarket): ParsedMarket {
 }
 
 // Format volume for display
-export function formatVolume(volume: number): string {
+export function formatVolume(volume: number | undefined | null): string {
+  if (volume === undefined || volume === null || isNaN(volume)) {
+    return '$0'
+  }
   if (volume >= 1_000_000) {
     return `$${(volume / 1_000_000).toFixed(1)}M`
   }
@@ -121,7 +124,10 @@ export function formatVolume(volume: number): string {
 }
 
 // Format probability for display
-export function formatProbability(price: number): string {
+export function formatProbability(price: number | undefined | null): string {
+  if (price === undefined || price === null || isNaN(price)) {
+    return '50%'
+  }
   return `${(price * 100).toFixed(0)}%`
 }
 
