@@ -8,6 +8,7 @@ import { polygon } from 'viem/chains'
 import { useQuery } from '@tanstack/react-query'
 import {
   POLYGON_USDC,
+  POLYGON_USDC_E_DEPRECATED,
   CTF_EXCHANGE,
   NEG_RISK_CTF_EXCHANGE,
   CONDITIONAL_TOKENS,
@@ -386,22 +387,34 @@ export function usePolygonUsdcBalance() {
     transport: http(),
   }), [])
 
-  const { data: balance, isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['polygon-usdc', smartWalletAddress],
     queryFn: async () => {
-      if (!smartWalletAddress) return '0'
+      if (!smartWalletAddress) return { native: '0', bridged: '0' }
       
       try {
-        const bal = await publicClient.readContract({
+        // Fetch native USDC balance (what Polymarket uses)
+        const nativeBal = await publicClient.readContract({
           address: POLYGON_USDC,
           abi: USDC_ABI,
           functionName: 'balanceOf',
           args: [smartWalletAddress],
         }) as bigint
         
-        return formatUnits(bal, 6)
+        // Also fetch USDC.e balance (legacy bridged version)
+        const bridgedBal = await publicClient.readContract({
+          address: POLYGON_USDC_E_DEPRECATED,
+          abi: USDC_ABI,
+          functionName: 'balanceOf',
+          args: [smartWalletAddress],
+        }) as bigint
+        
+        return {
+          native: formatUnits(nativeBal, 6),
+          bridged: formatUnits(bridgedBal, 6),
+        }
       } catch {
-        return '0'
+        return { native: '0', bridged: '0' }
       }
     },
     enabled: !!smartWalletAddress,
@@ -410,7 +423,10 @@ export function usePolygonUsdcBalance() {
   })
 
   return {
-    balance: balance || '0',
+    balance: data?.native || '0',
+    nativeUsdcBalance: data?.native || '0',
+    bridgedUsdcBalance: data?.bridged || '0', // USDC.e
+    hasBridgedUsdc: parseFloat(data?.bridged || '0') > 0,
     isLoading,
     refetch,
   }

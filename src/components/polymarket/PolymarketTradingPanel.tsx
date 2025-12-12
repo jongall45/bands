@@ -15,11 +15,12 @@ import {
   Wallet,
   ArrowRight,
   Zap,
+  ArrowLeftRight,
 } from 'lucide-react'
 import { formatProbability, formatVolume, parseMarket } from '@/lib/polymarket/api'
 import type { PolymarketMarket } from '@/lib/polymarket/api'
 import { usePolymarketTrade, usePolygonUsdcBalance } from '@/hooks/usePolymarketTrade'
-import Link from 'next/link'
+import { BridgeModal } from '@/components/bridge/BridgeModal'
 
 interface PolymarketTradingPanelProps {
   market: PolymarketMarket
@@ -34,6 +35,7 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
   
   const [selectedOutcome, setSelectedOutcome] = useState<Outcome>('YES')
   const [amount, setAmount] = useState('')
+  const [showBridgeModal, setShowBridgeModal] = useState(false)
   
   const {
     isReady,
@@ -58,13 +60,16 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
     },
   })
 
+  // Get full balance info including USDC.e
+  const { nativeUsdcBalance, bridgedUsdcBalance, hasBridgedUsdc, refetch: refetchBalance } = usePolygonUsdcBalance()
+
   // Calculate estimate
   const amountNum = parseFloat(amount) || 0
   const estimate = amountNum > 0 ? estimateTrade(amount, selectedOutcome) : null
   const currentPrice = selectedOutcome === 'YES' ? yesPrice : noPrice
   
   // Check if user needs to bridge
-  const needsBridge = parseFloat(usdcBalance) < 1
+  const needsBridge = parseFloat(nativeUsdcBalance) < 1
   const hasInsufficientBalance = amountNum > 0 && !hasEnoughUsdc(amount)
 
   // Reset on modal open
@@ -134,7 +139,7 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
         </button>
       </div>
 
-      {/* Wallet Balance */}
+      {/* Wallet Balance with Bridge Button */}
       <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 mb-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -143,9 +148,36 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
             </div>
             <span className="text-white/60 text-sm">Polygon USDC</span>
           </div>
-          <span className="text-white font-medium">${parseFloat(usdcBalance).toFixed(2)}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-white font-medium">${parseFloat(nativeUsdcBalance).toFixed(2)}</span>
+            <button
+              onClick={() => setShowBridgeModal(true)}
+              className="p-1.5 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg transition-colors"
+              title="Bridge USDC to Polygon"
+            >
+              <ArrowLeftRight className="w-4 h-4 text-purple-400" />
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* USDC.e Warning */}
+      {hasBridgedUsdc && (
+        <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 mb-4">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-orange-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-orange-400 text-xs font-medium">
+                You have ${parseFloat(bridgedUsdcBalance).toFixed(2)} USDC.e (bridged)
+              </p>
+              <p className="text-orange-400/70 text-xs mt-1">
+                Polymarket requires <strong>native USDC</strong>, not USDC.e. 
+                You&apos;ll need to swap USDC.e → USDC on Polygon or bridge native USDC from another chain.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bridge Prompt */}
       {needsBridge && (
@@ -154,18 +186,18 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
             <Info className="w-5 h-5 text-[#7B9EFF] flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-[#7B9EFF] text-sm font-medium mb-1">
-                No USDC on Polygon
+                No Native USDC on Polygon
               </p>
               <p className="text-[#7B9EFF]/70 text-xs mb-3">
-                Bridge USDC from Base to Polygon to start trading on Polymarket.
+                Bridge native USDC from Base or Arbitrum to Polygon to trade on Polymarket.
               </p>
-              <Link
-                href="/swap"
+              <button
+                onClick={() => setShowBridgeModal(true)}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-[#3B5EE8] hover:bg-[#2D4BC0] text-white text-sm font-medium rounded-lg transition-colors"
               >
+                <ArrowLeftRight className="w-4 h-4" />
                 Bridge to Polygon
-                <ArrowRight className="w-4 h-4" />
-              </Link>
+              </button>
             </div>
           </div>
         </div>
@@ -204,11 +236,11 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
         <div className="flex items-center justify-between mb-2">
           <span className="text-white/40 text-sm">Amount</span>
           <button
-            onClick={() => setAmount(usdcBalance)}
+            onClick={() => setAmount(nativeUsdcBalance)}
             className="text-[#7B9EFF] text-xs hover:underline"
             disabled={isLoading}
           >
-            Max: ${parseFloat(usdcBalance).toFixed(2)}
+            Max: ${parseFloat(nativeUsdcBalance).toFixed(2)}
           </button>
         </div>
 
@@ -356,6 +388,19 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
           Each share pays $1 if the outcome occurs. Trades execute via smart wallet on Polygon.
         </p>
       </div>
+
+      {/* Bridge Modal */}
+      <BridgeModal
+        isOpen={showBridgeModal}
+        onClose={() => setShowBridgeModal(false)}
+        onSuccess={() => {
+          setShowBridgeModal(false)
+          refetchBalance()
+        }}
+        destinationChain="polygon"
+        title="Bridge to Polygon"
+        subtitle="Move USDC to trade on Polymarket"
+      />
     </TradingPanelWrapper>
   )
 }

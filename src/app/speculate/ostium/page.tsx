@@ -8,7 +8,7 @@ import { useBalance } from 'wagmi'
 import { arbitrum } from 'viem/chains'
 import { formatUnits } from 'viem'
 import { BottomNav } from '@/components/ui/BottomNav'
-import { BridgeToArbitrumModal } from '@/components/bridge/BridgeToArbitrumModal'
+import { BridgeModal } from '@/components/bridge/BridgeModal'
 import { SwapForGasModal } from '@/components/bridge/SwapForGasModal'
 import { OstiumMarketSelector } from '@/components/ostium/MarketSelector'
 import { OstiumTradePanel } from '@/components/ostium/TradePanel'
@@ -375,13 +375,16 @@ export default function OstiumTradingPage() {
         <BottomNav />
 
         {/* Bridge Modal */}
-        <BridgeToArbitrumModal
+        <BridgeModal
           isOpen={showBridgeModal}
           onClose={() => setShowBridgeModal(false)}
           onSuccess={() => {
             refetchSmartBalances()
             setShowBridgeModal(false)
           }}
+          destinationChain="arbitrum"
+          title="Bridge to Arbitrum"
+          subtitle="Move USDC to trade on Ostium"
         />
 
         {/* Gas Swap Modal */}
