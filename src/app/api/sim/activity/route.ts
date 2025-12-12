@@ -10,9 +10,13 @@ const KNOWN_APPS: Record<string, { name: string; category: string }> = {
   '0xcf77a3ba9a5ca399b7c97c74d54e5b1beb874e43': { name: 'Aerodrome', category: 'DEX' },
   '0x111111125421ca6dc452d289314280a0f8842a65': { name: '1inch', category: 'DEX' },
 
-  // Bridge
+  // Bridge - Relay (multiple chains and solvers)
   '0xa5f565650890fba1824ee0f21ebbbf660a179934': { name: 'Relay', category: 'Bridge' },
   '0xe5c7b4865d7f2b08faadf3f6d392e6d6fa7b903c': { name: 'Relay', category: 'Bridge' },
+  '0xf70da97812cb96acdf810712aa562db8dfa3dbef': { name: 'Relay', category: 'Bridge' }, // Relay Solver (confirmed from user tx)
+  '0xa2a276640bd6b8a9e73f08f36a44c1d51d05e2c8': { name: 'Relay', category: 'Bridge' },
+  '0x00000000f3f57102a8f2f6b7cf34a33ca3c33c0f': { name: 'Relay', category: 'Bridge' },
+  // Other bridges
   '0x3a23f943181408eac424116af7b7790c94cb97a5': { name: 'Socket', category: 'Bridge' },
   '0x2ddf16ba6d0180e5357d5e170ef1917a01b41fc0': { name: 'Across', category: 'Bridge' },
 
@@ -116,7 +120,10 @@ export async function GET(request: NextRequest) {
 
       // Token metadata for transfers
       const tokenMeta = activity.token_metadata || {}
-      const tokenDecimals = tokenMeta.decimals || 18
+      // Known stablecoins have 6 decimals (USDC, USDT on most chains)
+      const tokenSymbol = (tokenMeta.symbol || '').toUpperCase()
+      const isKnownStablecoin = ['USDC', 'USDT'].includes(tokenSymbol)
+      const tokenDecimals = tokenMeta.decimals || (isKnownStablecoin ? 6 : 18)
 
       // Swap tokens
       const fromTokenMeta = activity.from_token_metadata || {}
@@ -137,7 +144,7 @@ export async function GET(request: NextRequest) {
       const fromApp = KNOWN_APPS[fromAddr] || KNOWN_APPS[counterpartyAddr]
       const tokenApp = KNOWN_APPS[tokenAddr]
       const knownApp = toApp || fromApp || tokenApp
-
+      
       // Determine final type
       let finalType = activityType
       // If sending tokens TO a known app (like depositing to Ostium), treat as app_interaction
@@ -201,8 +208,25 @@ export async function GET(request: NextRequest) {
           priceUsd: tokenMeta.price_usd || 0,
         } : null,
 
-        // Direction based on type
-        direction: activityType === 'receive' ? 'in' : activityType === 'send' ? 'out' : 'unknown',
+        // For Bridge "call" transactions - extract native ETH value
+        bridgeToken: (knownApp?.category === 'Bridge' && activityType === 'call' && activity.value) ? {
+          symbol: 'ETH',
+          name: 'Ethereum',
+          address: '',
+          amount: formatAmount(activity.value || '0', 18),
+          decimals: 18,
+          logoURI: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
+          priceUsd: 0, // Will be calculated on frontend if needed
+          rawValueWei: activity.value,
+        } : null,
+
+        // Direction based on type and source/destination for Bridge
+        direction: activityType === 'receive' ? 'in' : 
+                   activityType === 'send' ? 'out' : 
+                   // For "call" types, check if FROM a known bridge (incoming) or TO a known bridge (outgoing)
+                   (knownApp?.category === 'Bridge' && fromApp) ? 'in' :
+                   (knownApp?.category === 'Bridge' && toApp) ? 'out' :
+                   'unknown',
 
         // App detection
         app: knownApp?.name || null,
@@ -241,33 +265,63 @@ export async function GET(request: NextRequest) {
       // Always filter out approvals
       if (tx.isApproval) return false
 
-      // NEVER filter out app_interaction transactions with a detected app (like Ostium)
-      // These are meaningful protocol interactions regardless of displayed amount
+      // For app_interactions, apply different rules based on category
       if (tx.type === 'app_interaction' && tx.app) {
-        return true // Keep all detected app interactions
+        // For Perps (like Ostium), keep all - they're meaningful trades
+        if (tx.appCategory === 'Perps') {
+          return true
+        }
+        
+        // For Bridge transactions, filter out dust
+        if (tx.appCategory === 'Bridge') {
+          // If we have token info, check the amount
+          if (tx.token) {
+            const amountStr = tx.token.amount || '0'
+            if (amountStr.startsWith('<')) {
+              // "< 0.0001" - filter out unless it has meaningful USD value
+              if (tx.valueUsd && tx.valueUsd >= 0.50) return true
+              return false
+            }
+            const amount = parseFloat(amountStr) || 0
+            // Keep if amount >= 0.01 (for 6-decimal tokens like USDC, this is $0.01)
+            // Or if value in USD is >= $0.50
+            if (amount >= 0.01 || (tx.valueUsd && tx.valueUsd >= 0.50)) return true
+            return false
+          }
+          // If we have bridgeToken, check that
+          if (tx.bridgeToken) {
+            const amount = parseFloat(tx.bridgeToken.amount || '0') || 0
+            // For ETH, 0.0001 ETH is about $0.30 - filter very small amounts
+            if (amount >= 0.0001 || (tx.valueUsd && tx.valueUsd >= 0.50)) return true
+            return false
+          }
+          // No token info but has decent USD value - keep it
+          if (tx.valueUsd && tx.valueUsd >= 0.50) return true
+          return false
+        }
+        
+        // For other app categories (DEX, Lending), keep all
+        return true
       }
 
       // Filter out dust transactions (very small amounts)
       // For transfers, check the token amount
       if (tx.isTransfer && tx.token) {
         const amountStr = tx.token.amount || '0'
-        // Handle "< 0.0001" format - don't filter these as they might be valid
+        // Handle "< 0.0001" format
         if (amountStr.startsWith('<')) {
-          // Small amount, but if it has USD value, keep it
-          if (tx.valueUsd && tx.valueUsd >= 0.01) return true
-          // Otherwise filter as dust
+          if (tx.valueUsd && tx.valueUsd >= 0.50) return true
           return false
         }
         const amount = parseFloat(amountStr) || 0
-        // Filter out amounts less than 0.001 (for stablecoins this is < $0.001)
-        if (amount < 0.001) return false
+        // Filter out amounts less than 0.01 
+        if (amount < 0.01) return false
       }
 
-      // Filter out transactions with USD value less than $0.01
-      if (tx.valueUsd && tx.valueUsd < 0.01) return false
+      // Filter out transactions with USD value less than $0.10
+      if (tx.valueUsd !== undefined && tx.valueUsd < 0.10) return false
 
       // Filter out bridge/call transactions that have no token info and no value
-      // But keep app_interaction even without token info if they have a detected app
       if ((tx.type === 'bridge' || tx.type === 'call') &&
           !tx.token && !tx.swapFromToken && !tx.valueUsd) {
         return false

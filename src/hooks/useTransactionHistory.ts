@@ -25,9 +25,13 @@ export interface Transaction {
   explorerUrl?: string
   // Direction for transfers (in = receive, out = send)
   direction?: 'in' | 'out' | 'unknown'
+  // Token info (from API)
+  token?: { symbol: string; amount: string; logoURI?: string; logo?: string; decimals?: number; address?: string }
   // Swap-specific fields
   swapFromToken?: { symbol: string; amount: string; logoUri?: string }
   swapToToken?: { symbol: string; amount: string; logoUri?: string }
+  // Bridge-specific fields
+  bridgeToken?: { symbol: string; amount: string; logoURI?: string; rawValueWei?: string }
   // App interaction fields
   appName?: string
   appCategory?: string
@@ -117,6 +121,15 @@ async function fetchDuneActivity(address: string, chainIds?: string): Promise<Tr
         chainName: chainConfig?.name || 'Base',
         chainLogo: chainConfig?.logo || '',
         explorerUrl: `${explorer}/tx/${tx.hash}`,
+        // Full token object for bridge grouping
+        token: tx.token ? {
+          symbol: tx.token.symbol,
+          amount: tx.token.amount,
+          logoURI: tx.token.logoURI || tx.token.logo,
+          logo: tx.token.logo,
+          decimals: tx.token.decimals,
+          address: tx.token.address,
+        } : undefined,
         // Swap fields
         swapFromToken: tx.swapFromToken ? {
           symbol: tx.swapFromToken.symbol,
@@ -127,6 +140,13 @@ async function fetchDuneActivity(address: string, chainIds?: string): Promise<Tr
           symbol: tx.swapToToken.symbol,
           amount: tx.swapToToken.amount,
           logoUri: tx.swapToToken.logoURI,
+        } : undefined,
+        // Bridge token info (for Relay, Socket, etc.)
+        bridgeToken: tx.bridgeToken ? {
+          symbol: tx.bridgeToken.symbol,
+          amount: tx.bridgeToken.amount,
+          logoURI: tx.bridgeToken.logoURI,
+          rawValueWei: tx.bridgeToken.rawValueWei,
         } : undefined,
         // Direction (in = receive, out = send)
         direction: tx.direction || undefined,

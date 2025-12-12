@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   useTransactionHistory,
   formatTxAmount,
@@ -12,11 +12,24 @@ import { CHAIN_CONFIG } from '@/hooks/usePortfolio'
 import {
   ArrowUpRight, ArrowDownLeft, RefreshCw, ExternalLink,
   XCircle, Loader2, PiggyBank, TrendingUp,
-  ArrowLeftRight, Zap, Globe, Repeat, Plus, ChevronDown
+  ArrowLeftRight, Zap, Globe, Repeat, Plus, ChevronDown, ArrowRight
 } from 'lucide-react'
+
+// Extended transaction type that can include paired bridge info
+interface DisplayTransaction extends Transaction {
+  // For grouped bridge swaps
+  bridgePair?: {
+    fromToken: { symbol: string; amount: string; logo: string; chainId: number; chainName: string; chainLogo: string }
+    toToken: { symbol: string; amount: string; logo: string; chainId: number; chainName: string; chainLogo: string }
+  }
+  isGroupedSwap?: boolean
+}
 
 // Ostium logo URL
 const OSTIUM_LOGO = 'https://media.licdn.com/dms/image/v2/D4E0BAQEvzvW_jYImMw/company-logo_200_200/company-logo_200_200/0/1729111585394/ostium_labs_logo?e=2147483647&v=beta&t=QjJtNudNDTTZHEPlshMDMhku-BkYdLJU2RPFlRIR62M'
+
+// Relay logo URL
+const RELAY_LOGO = 'https://pbs.twimg.com/profile_images/1960334543052816384/ejODKCzq_400x400.jpg'
 
 // Ostium trade details interface
 interface OstiumTradeDetails {
@@ -73,10 +86,127 @@ interface TransactionListProps {
   crossChain?: boolean
 }
 
+// Chain info helpers (outside component to avoid recreation)
+const CHAIN_LOGOS: Record<number, string> = {
+  1: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
+  8453: 'https://assets.coingecko.com/asset_platforms/images/131/small/base.jpeg',
+  42161: 'https://assets.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg',
+  10: 'https://assets.coingecko.com/coins/images/25244/small/Optimism.png',
+  137: 'https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png',
+}
+const CHAIN_NAMES: Record<number, string> = {
+  1: 'ETH', 8453: 'Base', 42161: 'ARB', 10: 'OP', 137: 'MATIC'
+}
+
 export function TransactionList({ address, limit = 5, crossChain = true }: TransactionListProps) {
   const { data: transactions, isLoading, isError, refetch } = useTransactionHistory(address, { crossChain })
   const [displayCount, setDisplayCount] = useState(limit)
+  
 
+  // Group bridge send/receive pairs into swap views - MUST be before any early returns
+  const groupedTransactions = useMemo(() => {
+    if (!transactions || transactions.length === 0) return []
+    
+    const result: DisplayTransaction[] = []
+    const usedHashes = new Set<string>()
+    
+    // Sort by timestamp descending
+    const sorted = [...transactions].sort((a, b) => b.timestamp - a.timestamp)
+    
+    for (const tx of sorted) {
+      if (usedHashes.has(tx.hash)) continue
+      
+      // Check if this is a Bridge send (outgoing) - more flexible matching
+      const isBridgeSend = (
+        (tx.appCategory === 'Bridge' && (tx.direction === 'out' || tx.type === 'send')) ||
+        // Also match if it's a send to a Relay address
+        (tx.type === 'send' && tx.appName === 'Relay')
+      )
+      
+      if (isBridgeSend) {
+        // Look for a matching receive within 10 minutes
+        const sendTime = tx.timestamp
+        const sendTokenSymbol = tx.token?.symbol || tx.tokenSymbol || ''
+        
+        const matchingReceive = sorted.find(other => {
+          if (usedHashes.has(other.hash)) return false
+          if (other.hash === tx.hash) return false
+          
+          // Check for incoming bridge transaction
+          const isReceive = (
+            (other.appCategory === 'Bridge' && (other.direction === 'in' || other.type === 'receive')) ||
+            // Also match call type from Relay
+            (other.appName === 'Relay' && other.type === 'app_interaction' && other.direction === 'in')
+          )
+          
+          if (!isReceive) return false
+          
+          // Must be different token OR different chain (cross-chain swap)
+          const otherTokenSymbol = other.token?.symbol || other.tokenSymbol || ''
+          const isDifferentToken = otherTokenSymbol && sendTokenSymbol && otherTokenSymbol !== sendTokenSymbol
+          const isDifferentChain = other.chainId !== tx.chainId
+          
+          if (!isDifferentToken && !isDifferentChain) return false
+          
+          // Within 10 minute window
+          const timeDiff = Math.abs(other.timestamp - sendTime)
+          return timeDiff < 10 * 60 * 1000 // 10 minutes in ms
+        })
+        
+        if (matchingReceive) {
+          // Create grouped swap transaction
+          usedHashes.add(tx.hash)
+          usedHashes.add(matchingReceive.hash)
+          
+          const sendToken = tx.token || (tx as any).bridgeToken
+          const receiveToken = matchingReceive.token || (matchingReceive as any).bridgeToken
+          
+          const sendChainId = tx.chainId || 8453
+          const receiveChainId = matchingReceive.chainId || 8453
+          
+          const groupedTx: DisplayTransaction = {
+            ...tx,
+            isGroupedSwap: true,
+            bridgePair: {
+              fromToken: {
+                symbol: sendToken?.symbol || tx.tokenSymbol || 'Unknown',
+                amount: sendToken?.amount || tx.tokenAmount || '0',
+                logo: sendToken?.logoURI || sendToken?.logo || 
+                  (sendToken?.symbol === 'USDC' ? 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png' :
+                   sendToken?.symbol === 'ETH' ? 'https://assets.coingecko.com/coins/images/279/small/ethereum.png' : ''),
+                chainId: sendChainId,
+                chainName: CHAIN_NAMES[sendChainId] || 'Chain',
+                chainLogo: CHAIN_LOGOS[sendChainId] || '',
+              },
+              toToken: {
+                symbol: receiveToken?.symbol || matchingReceive.tokenSymbol || 'Unknown',
+                amount: receiveToken?.amount || matchingReceive.tokenAmount || '0',
+                logo: receiveToken?.logoURI || receiveToken?.logo ||
+                  (receiveToken?.symbol === 'USDC' ? 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png' :
+                   receiveToken?.symbol === 'ETH' ? 'https://assets.coingecko.com/coins/images/279/small/ethereum.png' : ''),
+                chainId: receiveChainId,
+                chainName: CHAIN_NAMES[receiveChainId] || 'Chain',
+                chainLogo: CHAIN_LOGOS[receiveChainId] || '',
+              }
+            }
+          }
+          result.push(groupedTx)
+        } else {
+          // No matching receive found, show as individual
+          usedHashes.add(tx.hash)
+          result.push(tx as DisplayTransaction)
+        }
+      } else {
+        // Not a bridge send, add as-is
+        usedHashes.add(tx.hash)
+        result.push(tx as DisplayTransaction)
+      }
+    }
+    
+    return result
+  }, [transactions])
+
+  // Early returns AFTER hooks
   if (!address) {
     return <EmptyState message="Connect wallet to see activity" />
   }
@@ -109,17 +239,17 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
     return <EmptyState message="No transactions yet" submessage="Send or receive to get started" />
   }
 
-  const displayedTxs = transactions.slice(0, displayCount)
-  const hasMore = transactions.length > displayCount
+  const displayedTxs = groupedTransactions.slice(0, displayCount)
+  const hasMore = groupedTransactions.length > displayCount
 
   const showMore = () => {
-    setDisplayCount(prev => Math.min(prev + 5, transactions.length))
+    setDisplayCount(prev => Math.min(prev + 5, groupedTransactions.length))
   }
 
   return (
     <div className="space-y-2">
       {displayedTxs.map((tx) => (
-        <TransactionRow key={tx.hash} tx={tx} userAddress={address} />
+        <TransactionRow key={tx.hash} tx={tx} userAddress={address!} />
       ))}
 
       {hasMore && (
@@ -128,20 +258,21 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
           className="w-full flex items-center justify-center gap-2 py-3 text-[#ef4444] text-sm hover:text-[#dc2626] transition-colors"
         >
           <Plus className="w-4 h-4" />
-          Show more ({transactions.length - displayCount} remaining)
+          Show more ({groupedTransactions.length - displayCount} remaining)
         </button>
       )}
     </div>
   )
 }
 
-function TransactionRow({ tx, userAddress }: { tx: Transaction; userAddress: string }) {
+function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddress: string }) {
   const [tradeDetails, setTradeDetails] = useState<OstiumTradeDetails | null>(null)
   const [loadingDetails, setLoadingDetails] = useState(false)
   
   const isReceive = tx.type === 'receive'
   const isSwap = tx.type === 'swap'
   const isBridge = tx.type === 'bridge'
+  const isGroupedSwap = tx.isGroupedSwap && tx.bridgePair
   const isAppInteraction = tx.type === 'app_interaction'
   const isVaultDeposit = tx.type === 'vault_deposit'
   const isVaultWithdraw = tx.type === 'vault_withdraw'
@@ -299,6 +430,175 @@ function TransactionRow({ tx, userAddress }: { tx: Transaction; userAddress: str
           iconBg: 'bg-purple-500/10',
           amountColor: 'text-white',
           amountPrefix: '',
+        }
+      }
+      // Special handling for Bridge (Relay, Socket, Across, etc.)
+      if (tx.appCategory === 'Bridge' || isGroupedSwap) {
+        // Determine if this is Relay specifically
+        const isRelay = tx.appName === 'Relay'
+        
+        // Format amount helper
+        const formatBridgeAmount = (amt: string) => {
+          const num = parseFloat(amt)
+          if (isNaN(num) || num === 0) return '0'
+          if (num < 0.0001) return num.toFixed(6)
+          if (num < 1) return num.toFixed(4)
+          if (num < 1000) return num.toFixed(2)
+          return num.toLocaleString(undefined, { maximumFractionDigits: 2 })
+        }
+        
+        // Token with chain badge component
+        const TokenWithChainBadge = ({ 
+          tokenImg, tokenAlt, chainImg, chainAlt, size = 'sm' 
+        }: { 
+          tokenImg: string; tokenAlt: string; chainImg: string; chainAlt: string; size?: 'sm' | 'md' | 'lg'
+        }) => (
+          <div className={`relative ${size === 'sm' ? 'w-5 h-5' : size === 'md' ? 'w-6 h-6' : 'w-7 h-7'} flex-shrink-0`}>
+            <img 
+              src={tokenImg} 
+              alt={tokenAlt} 
+              className={`${size === 'sm' ? 'w-5 h-5' : size === 'md' ? 'w-6 h-6' : 'w-7 h-7'} rounded-full`}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+            />
+            {chainImg && (
+              <img 
+                src={chainImg} 
+                alt={chainAlt} 
+                className={`absolute ${size === 'sm' ? '-bottom-0.5 -right-0.5 w-2.5 h-2.5' : '-bottom-0.5 -right-0.5 w-3 h-3'} rounded-full border border-black/50`}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+              />
+            )}
+          </div>
+        )
+        
+        // GROUPED SWAP: Show both sides of the cross-chain swap
+        if (isGroupedSwap && tx.bridgePair) {
+          const { fromToken, toToken } = tx.bridgePair
+          const fromAmount = formatBridgeAmount(fromToken.amount)
+          const toAmount = formatBridgeAmount(toToken.amount)
+          
+          return {
+            label: tx.appName || 'Bridge',
+            sublabel: `${fromToken.chainName} → ${toToken.chainName}`,
+            icon: isRelay ? (
+              <img src={RELAY_LOGO} alt="Relay" className="w-5 h-5 rounded-full object-cover" />
+            ) : <Globe className="w-5 h-5 text-blue-400" />,
+            iconBg: isRelay ? 'bg-[#7B3FE4]/20' : 'bg-blue-500/10',
+            amountColor: 'text-white',
+            amountPrefix: '',
+            customAmount: (
+              <div className="flex flex-col items-end gap-0.5">
+                {/* From token - what you sold */}
+                <div className="flex items-center gap-1">
+                  <span className="text-white">-{fromAmount}</span>
+                  <TokenWithChainBadge 
+                    tokenImg={fromToken.logo} 
+                    tokenAlt={fromToken.symbol}
+                    chainImg={fromToken.chainLogo}
+                    chainAlt={fromToken.chainName}
+                    size="sm"
+                  />
+                </div>
+                {/* To token - what you received */}
+                <div className="flex items-center gap-1 text-[11px]">
+                  <span className="text-green-400">+{toAmount}</span>
+                  <TokenWithChainBadge 
+                    tokenImg={toToken.logo} 
+                    tokenAlt={toToken.symbol}
+                    chainImg={toToken.chainLogo}
+                    chainAlt={toToken.chainName}
+                    size="sm"
+                  />
+                </div>
+              </div>
+            ),
+          }
+        }
+        
+        // SINGLE BRIDGE TX: Show one side only
+        // Get token info - prefer regular token over bridgeToken for better accuracy
+        const tokenInfo = tx.token || (tx as any).bridgeToken
+        const tokenSymbol = tokenInfo?.symbol || tx.tokenSymbol || 'Unknown'
+        const tokenAmount = tokenInfo?.amount || tx.tokenAmount || '0'
+        const tokenLogo = tokenInfo?.logoURI || tokenInfo?.logo || 
+          (tokenSymbol === 'USDC' ? 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png' :
+           tokenSymbol === 'ETH' ? 'https://assets.coingecko.com/coins/images/279/small/ethereum.png' : '')
+        
+        // Chain logos
+        const chainLogos: Record<number, string> = {
+          1: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
+          8453: 'https://raw.githubusercontent.com/base-org/brand-kit/main/logo/symbol/Base_Symbol_Blue.png',
+          42161: 'https://assets.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg',
+          10: 'https://assets.coingecko.com/coins/images/25244/small/Optimism.png',
+          137: 'https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png',
+        }
+        const chainNames: Record<number, string> = {
+          1: 'ETH', 8453: 'Base', 42161: 'ARB', 10: 'OP', 137: 'MATIC'
+        }
+        const txChainId = tx.chainId || 8453
+        const chainLogo = chainLogos[txChainId] || ''
+        const chainName = chainNames[txChainId] || 'Chain'
+        
+        const displayAmount = formatBridgeAmount(tokenAmount)
+        const numAmount = parseFloat(tokenAmount)
+        
+        // Determine if this is sending (out) or receiving (in)
+        const isSending = tx.direction === 'out' || tx.type === 'send'
+        
+        // For sends, show what asset they're getting (likely on another chain)
+        // Relay cross-chain swaps: USDC on ARB -> ETH on Base
+        const destChain = txChainId === 42161 ? 'Base' : txChainId === 8453 ? 'ARB' : 'ETH'
+        const destToken = tokenSymbol === 'USDC' ? 'ETH' : 'USDC'
+        const destChainLogo = txChainId === 42161 
+          ? CHAIN_LOGOS[8453] // ARB -> Base
+          : txChainId === 8453 
+            ? CHAIN_LOGOS[42161] // Base -> ARB
+            : CHAIN_LOGOS[1]
+        const destTokenLogo = destToken === 'ETH' 
+          ? 'https://assets.coingecko.com/coins/images/279/small/ethereum.png'
+          : 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png'
+        
+        
+        return {
+          label: tx.appName || 'Bridge',
+          sublabel: isSending ? 'Cross-chain Swap' : `Bridge · ${chainName}`,
+          icon: isRelay ? (
+            <img src={RELAY_LOGO} alt="Relay" className="w-5 h-5 rounded-full object-cover" />
+          ) : <Globe className="w-5 h-5 text-blue-400" />,
+          iconBg: isRelay ? 'bg-[#7B3FE4]/20' : 'bg-blue-500/10',
+          amountColor: isSending ? 'text-white' : 'text-green-400',
+          amountPrefix: isSending ? '-' : '+',
+          customAmount: numAmount > 0 ? (
+            <div className="flex flex-col items-end gap-0.5">
+              {/* What you sent/received */}
+              <div className="flex items-center gap-1">
+                <span className={isSending ? 'text-white' : 'text-green-400'}>
+                  {isSending ? '-' : '+'}{displayAmount}
+                </span>
+                <TokenWithChainBadge 
+                  tokenImg={tokenLogo} 
+                  tokenAlt={tokenSymbol}
+                  chainImg={chainLogo}
+                  chainAlt={chainName}
+                  size="sm"
+                />
+              </div>
+              {/* What you're getting (for sends) - show destination token with badge */}
+              {isSending && (
+                <div className="flex items-center gap-1 text-[11px]">
+                  <span className="text-green-400">→</span>
+                  <TokenWithChainBadge 
+                    tokenImg={destTokenLogo} 
+                    tokenAlt={destToken}
+                    chainImg={destChainLogo}
+                    chainAlt={destChain}
+                    size="sm"
+                  />
+                  <span className="text-green-400">{destToken}</span>
+                </div>
+              )}
+            </div>
+          ) : undefined,
         }
       }
       // Default app interaction
