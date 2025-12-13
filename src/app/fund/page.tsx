@@ -3,13 +3,13 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
-import { ArrowLeft, Copy, Check, Zap, ExternalLink, Wallet } from 'lucide-react'
+import { ArrowLeft, Copy, Check, QrCode } from 'lucide-react'
 import Link from 'next/link'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { OnrampModal } from '@/components/onramp/OnrampModal'
 
 // USDC Logo component
-const USDCLogo = ({ className = "w-10 h-10" }: { className?: string }) => (
+const USDCLogo = ({ className = "w-8 h-8" }: { className?: string }) => (
   <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
     <circle cx="16" cy="16" r="16" fill="#2775CA"/>
     <path d="M20.5 18.5C20.5 16.5 19.25 15.75 16.75 15.45C15 15.25 14.65 14.75 14.65 13.95C14.65 13.15 15.25 12.6 16.4 12.6C17.45 12.6 18.05 12.95 18.3 13.75C18.35 13.9 18.5 14 18.65 14H19.55C19.75 14 19.9 13.85 19.9 13.65V13.6C19.65 12.35 18.65 11.4 17.25 11.2V10.15C17.25 9.95 17.1 9.8 16.85 9.75H16.05C15.85 9.75 15.65 9.9 15.6 10.15V11.15C13.9 11.4 12.8 12.55 12.8 14.05C12.8 15.95 14 16.75 16.5 17.05C18.15 17.3 18.65 17.7 18.65 18.6C18.65 19.5 17.85 20.15 16.7 20.15C15.15 20.15 14.6 19.5 14.45 18.7C14.4 18.5 14.25 18.4 14.05 18.4H13.1C12.9 18.4 12.75 18.55 12.75 18.75V18.8C13 20.2 13.95 21.2 15.65 21.5V22.55C15.65 22.75 15.8 22.95 16.1 23H16.9C17.1 23 17.3 22.85 17.35 22.55V21.5C19.05 21.2 20.5 20.05 20.5 18.5Z" fill="white"/>
@@ -26,17 +26,16 @@ const BaseBadge = ({ className = "w-4 h-4" }: { className?: string }) => (
   </svg>
 )
 
-// Apple Pay Logo
-const ApplePayLogo = ({ className = "h-8" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 165.52 105.97" xmlns="http://www.w3.org/2000/svg">
-    <g fill="currentColor">
-      <path d="M150.7 0H14.82A33.42 33.42 0 000 2.85v100.27A32.86 32.86 0 0014.82 106h135.88c8.56-.51 14.82-7.28 14.82-17.07V17.07C165.52 6.28 159.26.51 150.7 0z"/>
-      <path fill="#fff" d="M43.08 35.45a8.22 8.22 0 006.62-3.35 9.62 9.62 0 001.61-6.42 5.92 5.92 0 00-.1-1 9.06 9.06 0 00-5.92 3.15 8.93 8.93 0 00-1.71 6.41 4.22 4.22 0 00-.5 1.21z"/>
-      <path fill="#fff" d="M49.6 36.35c-3.65-.2-6.72 2.04-8.47 2.04s-4.42-1.94-7.27-1.84a10.86 10.86 0 00-9.18 5.52c-3.95 6.82-1 16.91 2.75 22.44 1.91 2.75 4.16 5.82 7.12 5.72 2.85-.1 3.86-1.81 7.27-1.81s4.36 1.81 7.32 1.71c3.05-.1 5-2.75 6.92-5.52a24.09 24.09 0 003.05-6.31A9.81 9.81 0 0153 48.66a10.07 10.07 0 00-3.4-12.31z"/>
-      <path fill="#fff" d="M80.55 26.33a12.21 12.21 0 0112.82 13.62c0 7-3.85 11.87-10.86 11.87h-8.29v12.26h-5.83V26.33zm-6.33 20.42h6.82c5.13 0 7.58-2.85 7.58-7.48 0-4.33-2.54-7.08-7.58-7.08h-6.82z"/>
-      <path fill="#fff" d="M95.32 55.3c0-5.63 4.23-9.17 11.66-9.57l8.69-.5v-2.45c0-3.65-2.44-5.83-6.42-5.83-3.55 0-5.93 1.81-6.42 4.63h-5.33c.2-5.32 4.83-9.27 12.05-9.27 7.08 0 11.66 3.75 11.66 9.57v20.2h-5.43v-5h-.1c-1.61 3.45-5.22 5.62-9.27 5.62-5.83.01-10.09-3.64-10.09-9.4zm20.35-2.85v-2.54l-7.68.5c-4.23.3-6.42 2.04-6.42 5 0 2.94 2.24 4.93 5.92 4.93 4.83.01 8.18-3.24 8.18-7.89z"/>
-      <path fill="#fff" d="M127.04 71.49v-4.63c.4.1 1.41.1 1.91.1 2.85 0 4.36-1.21 5.32-4.23l.6-1.91-11.06-28.08h6.22l7.98 24.23h.1l7.98-24.23h6.12l-11.56 29.69c-2.65 7.18-5.63 9.47-11.96 9.47-.5 0-1.25-.1-1.65-.41z"/>
-    </g>
+// Apple Pay Mark (official Apple Pay button mark)
+const ApplePayMark = ({ className = "h-6" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 165.521 105.965" xmlns="http://www.w3.org/2000/svg">
+    <path fill="currentColor" d="M150.698 0H14.823c-.566 0-1.133 0-1.698.003-.477.004-.953.009-1.43.022-1.039.028-2.087.09-3.113.274a10.51 10.51 0 0 0-2.958.975 9.932 9.932 0 0 0-4.35 4.35 10.463 10.463 0 0 0-.975 2.96C.113 9.611.052 10.658.024 11.696a69.755 69.755 0 0 0-.022 1.43C0 13.69 0 14.256 0 14.823v76.318c0 .567 0 1.132.002 1.699.003.476.009.953.022 1.43.028 1.036.09 2.084.275 3.11a10.46 10.46 0 0 0 .974 2.96 9.897 9.897 0 0 0 1.83 2.52 9.874 9.874 0 0 0 2.52 1.83c.947.483 1.917.79 2.96.977 1.025.183 2.073.245 3.112.273.477.011.953.017 1.43.02.565.004 1.132.004 1.698.004h135.875c.565 0 1.132 0 1.697-.004.476-.002.952-.009 1.431-.02 1.037-.028 2.085-.09 3.113-.273a10.478 10.478 0 0 0 2.958-.977 9.955 9.955 0 0 0 4.35-4.35c.483-.947.789-1.917.974-2.96.186-1.026.246-2.074.274-3.11.013-.477.02-.954.022-1.43.004-.567.004-1.132.004-1.699V14.824c0-.567 0-1.133-.004-1.699a63.067 63.067 0 0 0-.022-1.429c-.028-1.038-.088-2.085-.274-3.112a10.4 10.4 0 0 0-.974-2.96 9.94 9.94 0 0 0-4.35-4.35A10.52 10.52 0 0 0 156.939.3c-1.028-.185-2.076-.246-3.113-.274a71.417 71.417 0 0 0-1.431-.022C151.83 0 151.263 0 150.698 0z"/>
+    <path fill="#FFF" d="M150.698 3.532l1.672.003c.452.003.905.008 1.36.02.793.022 1.719.065 2.583.22.75.135 1.38.34 1.984.648a6.392 6.392 0 0 1 2.804 2.807c.306.6.51 1.226.645 1.983.154.854.197 1.783.218 2.58.013.45.019.9.02 1.36.005.557.005 1.113.005 1.671v76.318c0 .558 0 1.114-.004 1.682-.002.45-.008.9-.02 1.35-.022.796-.065 1.725-.221 2.589a6.855 6.855 0 0 1-.645 1.975 6.397 6.397 0 0 1-2.808 2.807c-.6.306-1.228.512-1.971.644-.881.157-1.847.2-2.574.22-.457.01-.912.017-1.379.019-.555.004-1.113.004-1.669.004H14.801c-.55 0-1.1 0-1.66-.004a74.993 74.993 0 0 1-1.35-.018c-.744-.02-1.71-.064-2.584-.22a6.938 6.938 0 0 1-1.986-.65 6.337 6.337 0 0 1-1.622-1.18 6.355 6.355 0 0 1-1.178-1.623 6.935 6.935 0 0 1-.646-1.985c-.156-.863-.2-1.788-.22-2.578a66.088 66.088 0 0 1-.02-1.355l-.003-1.327V14.474l.002-1.325a66.7 66.7 0 0 1 .02-1.357c.022-.792.065-1.717.222-2.587a6.924 6.924 0 0 1 .646-1.981c.304-.598.7-1.144 1.18-1.623a6.386 6.386 0 0 1 1.624-1.18 6.96 6.96 0 0 1 1.98-.646c.865-.155 1.792-.198 2.586-.22.468-.012.935-.018 1.4-.02l1.319-.003h135.875"/>
+    <path fill="#000" d="M43.508 35.77c1.404-1.755 2.356-4.112 2.105-6.52-2.054.102-4.56 1.355-6.012 3.112-1.303 1.504-2.456 3.959-2.156 6.266 2.306.2 4.61-1.152 6.063-2.858"/>
+    <path fill="#000" d="M45.587 39.079c-3.35-.2-6.196 1.9-7.795 1.9-1.6 0-4.049-1.8-6.698-1.751-3.447.05-6.645 2-8.395 5.1-3.598 6.2-.95 15.4 2.55 20.45 1.699 2.5 3.747 5.25 6.445 5.151 2.55-.1 3.549-1.65 6.647-1.65 3.097 0 3.997 1.65 6.696 1.6 2.798-.05 4.548-2.5 6.247-5 1.95-2.85 2.747-5.6 2.797-5.75-.05-.05-5.396-2.101-5.446-8.251-.05-5.15 4.198-7.6 4.398-7.751-2.399-3.548-6.147-3.948-7.447-4.048"/>
+    <path fill="#000" d="M78.973 32.11c7.278 0 12.347 5.017 12.347 12.321 0 7.33-5.173 12.373-12.529 12.373h-8.058V69.62h-5.822V32.11h14.062zm-8.24 19.807h6.68c5.07 0 7.954-2.729 7.954-7.46 0-4.73-2.885-7.434-7.928-7.434h-6.706v14.894z"/>
+    <path fill="#000" d="M92.764 61.847c0-4.809 3.665-7.564 10.423-7.98l7.252-.442v-2.08c0-3.04-2.001-4.704-5.562-4.704-2.938 0-5.07 1.507-5.51 3.82h-5.252c.286-5.096 4.625-8.793 10.918-8.793 6.812 0 10.996 3.485 10.996 9.074v19.078h-5.38v-4.55h-.13c-1.586 3.119-4.964 5.043-8.474 5.043-5.64 0-9.281-3.432-9.281-8.466zm17.675-2.417v-2.106l-6.472.416c-3.64.234-5.536 1.585-5.536 3.95 0 2.288 1.975 3.82 5.017 3.82 3.978 0 6.991-2.73 6.991-6.08z"/>
+    <path fill="#000" d="M124.099 80.512v-4.496c.39.078 1.3.078 1.716.078 2.573 0 4.029-1.09 4.913-3.898l.52-1.742-9.962-27.576h6.137l6.994 22.461h.104l6.994-22.461h5.98l-10.32 29.058c-2.573 7.226-5.46 9.412-11.596 9.412-.416 0-1.352-.052-1.48-.078v-.758z"/>
   </svg>
 )
 
@@ -46,7 +45,6 @@ export default function FundPage() {
   const [copied, setCopied] = useState(false)
   const [showOnrampModal, setShowOnrampModal] = useState(false)
 
-  // Redirect if not connected
   useEffect(() => {
     if (!isConnected) {
       router.push('/')
@@ -84,132 +82,98 @@ export default function FundPage() {
           <Link href="/dashboard" className="text-gray-600 hover:text-gray-900 p-1 -ml-1 transition-colors">
             <ArrowLeft className="w-6 h-6" />
           </Link>
-          <h1 className="text-gray-900 font-semibold text-lg">Add Money</h1>
         </header>
 
-        <div className="px-5 space-y-4">
-          {/* Hero - Buy USDC */}
-          <div className="card">
-            <div className="flex items-center justify-center gap-3 py-4">
-              <div className="relative">
-                <USDCLogo className="w-12 h-12" />
-                <div className="absolute -bottom-1 -right-1">
-                  <BaseBadge className="w-5 h-5 border-2 border-[#111] rounded-full" />
-                </div>
-              </div>
-              <div>
-                <h2 className="text-white text-xl font-bold">Buy USDC</h2>
-                <p className="text-white/50 text-sm">On Base network</p>
+        <div className="px-5 space-y-3">
+          {/* Slim Header - Buy USDC on Base */}
+          <div className="flex items-center gap-3 mb-2">
+            <div className="relative">
+              <USDCLogo className="w-10 h-10" />
+              <div className="absolute -bottom-0.5 -right-0.5">
+                <BaseBadge className="w-4 h-4 border-2 border-[#111] rounded-full" />
               </div>
             </div>
-
-            {/* Instant badge */}
-            <div className="flex justify-center mb-4">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 rounded-full">
-                <Zap className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-emerald-400 text-xs font-medium">Arrives instantly</span>
-              </div>
+            <div>
+              <h1 className="text-white text-lg font-bold">Deposit USDC</h1>
+              <p className="text-white/50 text-xs">On Base network</p>
             </div>
           </div>
 
           {/* Option 1: Apple Pay */}
           <button
             onClick={() => setShowOnrampModal(true)}
-            className="card w-full text-left hover:border-white/20 transition-all active:scale-[0.99]"
+            className="option-card w-full text-left"
           >
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
-                  <ApplePayLogo className="h-7" />
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="text-white font-semibold">Apple Pay</h3>
+                  <span className="px-1.5 py-0.5 bg-[#5856D6] text-white text-[10px] font-semibold rounded">New</span>
                 </div>
-                <div>
-                  <h3 className="text-white font-semibold text-lg">Apple Pay</h3>
-                  <p className="text-white/50 text-sm">Card or bank • Instant</p>
-                </div>
+                <p className="text-white/40 text-sm">Buy USDC instantly with card</p>
               </div>
-              <div className="text-white/30">
-                <ArrowLeft className="w-5 h-5 rotate-180" />
+              <div className="bg-white rounded-lg px-3 py-2">
+                <ApplePayMark className="h-6" />
               </div>
             </div>
           </button>
 
-          {/* Option 2: Transfer from External Wallet */}
-          <div className="card">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="w-14 h-14 bg-white/[0.08] rounded-2xl flex items-center justify-center">
-                <Wallet className="w-7 h-7 text-white/60" />
-              </div>
+          {/* Option 2: External Wallet / Crypto */}
+          <div className="option-card">
+            <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-white font-semibold text-lg">External Wallet</h3>
-                <p className="text-white/50 text-sm">Send from Coinbase, MetaMask, etc.</p>
+                <h3 className="text-white font-semibold">Crypto</h3>
+                <p className="text-white/40 text-sm">Receive USDC from a wallet</p>
+              </div>
+              <div className="w-12 h-12 bg-white/[0.08] rounded-xl flex items-center justify-center">
+                <QrCode className="w-6 h-6 text-white/60" />
+              </div>
+            </div>
+
+            {/* QR Code */}
+            <div className="flex justify-center mb-4">
+              <div className="w-40 h-40 bg-white rounded-2xl p-2">
+                {address && (
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${address}&bgcolor=ffffff&color=111111&margin=1`}
+                    alt="Wallet QR Code"
+                    className="w-full h-full rounded-xl"
+                  />
+                )}
               </div>
             </div>
 
             {/* Wallet Address */}
-            <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 mb-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-white/40 text-xs font-medium">Your wallet address (Base)</span>
+            <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-white/40 text-[10px] font-medium mb-1">USDC on Base only</p>
+                  <p className="font-mono text-xs text-white/70 truncate">{address}</p>
+                </div>
                 <button
                   onClick={copyAddress}
-                  className="flex items-center gap-1.5 text-xs font-medium transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-2 bg-white/[0.08] hover:bg-white/[0.12] rounded-lg transition-colors flex-shrink-0"
                 >
                   {copied ? (
                     <>
                       <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      <span className="text-emerald-400">Copied!</span>
+                      <span className="text-emerald-400 text-xs font-medium">Copied</span>
                     </>
                   ) : (
                     <>
-                      <Copy className="w-3.5 h-3.5 text-[#ef4444]" />
-                      <span className="text-[#ef4444]">Copy</span>
+                      <Copy className="w-3.5 h-3.5 text-white/60" />
+                      <span className="text-white/60 text-xs font-medium">Copy</span>
                     </>
                   )}
                 </button>
               </div>
-              <button
-                onClick={copyAddress}
-                className="w-full font-mono text-xs text-white/70 break-all text-left hover:text-white/90 transition-colors"
-              >
-                {address}
-              </button>
             </div>
-
-            {/* Copy Button */}
-            <button
-              onClick={copyAddress}
-              className="w-full py-3.5 bg-white/[0.06] hover:bg-white/[0.1] text-white font-semibold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-            >
-              {copied ? (
-                <>
-                  <Check className="w-4 h-4 text-emerald-400" />
-                  <span className="text-emerald-400">Address Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-4 h-4" />
-                  Copy Address
-                </>
-              )}
-            </button>
           </div>
 
-          {/* Warning Note */}
-          <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3">
-            <p className="text-orange-400/90 text-xs text-center">
-              Only send <strong>USDC on Base</strong>. Other networks may result in lost funds.
-            </p>
-          </div>
-
-          {/* External link */}
-          <a
-            href="https://www.coinbase.com/price/usd-coin"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 text-white/40 text-sm hover:text-white/60 transition-colors py-2"
-          >
-            Don&apos;t have USDC? Buy on Coinbase
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
+          {/* Network Warning */}
+          <p className="text-white/30 text-xs text-center px-4">
+            Only send <span className="text-white/50 font-medium">USDC on Base</span>. Other tokens or networks may result in permanent loss.
+          </p>
         </div>
       </div>
 
@@ -310,16 +274,21 @@ export default function FundPage() {
           50% { transform: translate(-10vw, 5vh) scale(1.2); border-radius: 60% 40% 70% 30% / 40% 60% 50% 70%; }
         }
 
-        .fund-page .card {
+        .fund-page .option-card {
           background: #111111;
-          border: 1px solid rgba(255, 255, 255, 0.06);
-          border-radius: 20px;
-          padding: 20px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 16px;
+          padding: 16px;
           position: relative;
           overflow: hidden;
+          transition: all 0.15s ease;
         }
 
-        .fund-page .card::before {
+        .fund-page .option-card:hover {
+          border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .fund-page .option-card::before {
           content: '';
           position: absolute;
           top: 0;
@@ -328,15 +297,15 @@ export default function FundPage() {
           height: 100%;
           background: radial-gradient(
             ellipse at 0% 0%,
-            rgba(255, 59, 48, 0.15) 0%,
-            rgba(255, 59, 48, 0.05) 30%,
+            rgba(255, 59, 48, 0.1) 0%,
+            rgba(255, 59, 48, 0.03) 30%,
             transparent 60%
           );
           pointer-events: none;
           z-index: 0;
         }
 
-        .fund-page .card > * {
+        .fund-page .option-card > * {
           position: relative;
           z-index: 1;
         }
