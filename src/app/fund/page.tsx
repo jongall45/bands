@@ -84,96 +84,95 @@ export default function FundPage() {
           </Link>
         </header>
 
-        <div className="px-5 space-y-3">
-          {/* Slim Header - Buy USDC on Base */}
-          <div className="flex items-center gap-3 mb-2">
-            <div className="relative">
-              <USDCLogo className="w-10 h-10" />
-              <div className="absolute -bottom-0.5 -right-0.5">
-                <BaseBadge className="w-4 h-4 border-2 border-[#111] rounded-full" />
+        <div className="px-5">
+          {/* Combined Card */}
+          <div className="main-card">
+            {/* Header Row */}
+            <div className="flex items-center gap-3 pb-4 mb-4 border-b border-white/[0.06]">
+              <div className="relative">
+                <USDCLogo className="w-10 h-10" />
+                <div className="absolute -bottom-0.5 -right-0.5">
+                  <BaseBadge className="w-4 h-4 border-2 border-[#111] rounded-full" />
+                </div>
+              </div>
+              <div>
+                <h1 className="text-white text-lg font-semibold">Deposit USDC</h1>
+                <p className="text-white/40 text-xs">On Base network</p>
               </div>
             </div>
-            <div>
-              <h1 className="text-white text-lg font-bold">Deposit USDC</h1>
-              <p className="text-white/50 text-xs">On Base network</p>
-            </div>
-          </div>
 
-          {/* Option 1: Apple Pay */}
-          <button
-            onClick={() => setShowOnrampModal(true)}
-            className="option-card w-full text-left"
-          >
-            <div className="flex items-center justify-between">
+            {/* Option 1: Apple Pay */}
+            <button
+              onClick={() => setShowOnrampModal(true)}
+              className="w-full flex items-center justify-between p-4 bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] rounded-xl mb-3 transition-all active:scale-[0.99]"
+            >
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="text-white font-semibold">Apple Pay</h3>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-white font-medium">Apple Pay</span>
                   <span className="px-1.5 py-0.5 bg-[#5856D6] text-white text-[10px] font-semibold rounded">New</span>
                 </div>
                 <p className="text-white/40 text-sm">Buy USDC instantly with card</p>
               </div>
               <div className="bg-white rounded-lg px-3 py-2">
-                <ApplePayMark className="h-6" />
+                <ApplePayMark className="h-5" />
               </div>
-            </div>
-          </button>
+            </button>
 
-          {/* Option 2: External Wallet / Crypto */}
-          <div className="option-card">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-white font-semibold">Crypto</h3>
-                <p className="text-white/40 text-sm">Receive USDC from a wallet</p>
+            {/* Option 2: Crypto / External Wallet */}
+            <div className="p-4 bg-white/[0.03] border border-white/[0.06] rounded-xl">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <span className="text-white font-medium">Crypto</span>
+                  <p className="text-white/40 text-sm">Receive USDC from a wallet</p>
+                </div>
+                <div className="w-10 h-10 bg-white/[0.06] rounded-xl flex items-center justify-center">
+                  <QrCode className="w-5 h-5 text-white/50" />
+                </div>
               </div>
-              <div className="w-12 h-12 bg-white/[0.08] rounded-xl flex items-center justify-center">
-                <QrCode className="w-6 h-6 text-white/60" />
-              </div>
-            </div>
 
-            {/* QR Code */}
-            <div className="flex justify-center mb-4">
-              <div className="w-40 h-40 bg-white rounded-2xl p-2">
-                {address && (
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${address}&bgcolor=ffffff&color=111111&margin=1`}
-                    alt="Wallet QR Code"
-                    className="w-full h-full rounded-xl"
-                  />
-                )}
+              {/* QR Code */}
+              <div className="flex justify-center mb-4">
+                <div className="w-36 h-36 bg-white rounded-xl p-1.5">
+                  {address && (
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${address}&bgcolor=ffffff&color=111111&margin=1`}
+                      alt="Wallet QR Code"
+                      className="w-full h-full rounded-lg"
+                    />
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* Wallet Address */}
-            <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3">
-              <div className="flex items-center justify-between gap-2">
+              {/* Wallet Address */}
+              <div className="flex items-center justify-between gap-2 p-3 bg-black/30 rounded-lg">
                 <div className="flex-1 min-w-0">
-                  <p className="text-white/40 text-[10px] font-medium mb-1">USDC on Base only</p>
-                  <p className="font-mono text-xs text-white/70 truncate">{address}</p>
+                  <p className="text-white/30 text-[10px] font-medium mb-0.5">USDC on Base only</p>
+                  <p className="font-mono text-[11px] text-white/60 truncate">{address}</p>
                 </div>
                 <button
                   onClick={copyAddress}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-white/[0.08] hover:bg-white/[0.12] rounded-lg transition-colors flex-shrink-0"
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-white/[0.08] hover:bg-white/[0.12] rounded-lg transition-colors flex-shrink-0"
                 >
                   {copied ? (
                     <>
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <Check className="w-3 h-3 text-emerald-400" />
                       <span className="text-emerald-400 text-xs font-medium">Copied</span>
                     </>
                   ) : (
                     <>
-                      <Copy className="w-3.5 h-3.5 text-white/60" />
-                      <span className="text-white/60 text-xs font-medium">Copy</span>
+                      <Copy className="w-3 h-3 text-white/50" />
+                      <span className="text-white/50 text-xs font-medium">Copy</span>
                     </>
                   )}
                 </button>
               </div>
             </div>
-          </div>
 
-          {/* Network Warning */}
-          <p className="text-white/30 text-xs text-center px-4">
-            Only send <span className="text-white/50 font-medium">USDC on Base</span>. Other tokens or networks may result in permanent loss.
-          </p>
+            {/* Network Warning */}
+            <p className="text-white/25 text-[11px] text-center mt-4">
+              Only send <span className="text-white/40">USDC on Base</span>. Other tokens or networks may be lost.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -274,21 +273,16 @@ export default function FundPage() {
           50% { transform: translate(-10vw, 5vh) scale(1.2); border-radius: 60% 40% 70% 30% / 40% 60% 50% 70%; }
         }
 
-        .fund-page .option-card {
+        .fund-page .main-card {
           background: #111111;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 16px;
-          padding: 16px;
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-radius: 20px;
+          padding: 20px;
           position: relative;
           overflow: hidden;
-          transition: all 0.15s ease;
         }
 
-        .fund-page .option-card:hover {
-          border-color: rgba(255, 255, 255, 0.15);
-        }
-
-        .fund-page .option-card::before {
+        .fund-page .main-card::before {
           content: '';
           position: absolute;
           top: 0;
@@ -297,15 +291,15 @@ export default function FundPage() {
           height: 100%;
           background: radial-gradient(
             ellipse at 0% 0%,
-            rgba(255, 59, 48, 0.1) 0%,
-            rgba(255, 59, 48, 0.03) 30%,
+            rgba(255, 59, 48, 0.12) 0%,
+            rgba(255, 59, 48, 0.04) 30%,
             transparent 60%
           );
           pointer-events: none;
           z-index: 0;
         }
 
-        .fund-page .option-card > * {
+        .fund-page .main-card > * {
           position: relative;
           z-index: 1;
         }
