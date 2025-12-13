@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
-import { useOstiumPositions, type OstiumPosition } from '@/hooks/useOstiumPositions'
+import { useQueryClient } from '@tanstack/react-query'
+import { useOstiumPositions, type OstiumPosition, markPositionClosing } from '@/hooks/useOstiumPositions'
 import { useOstiumPrices } from '@/hooks/useOstiumPrices'
 import { arbitrum } from 'viem/chains'
 import { encodeFunctionData, decodeFunctionResult } from 'viem'
@@ -10,6 +11,7 @@ import { OSTIUM_CONTRACTS, DEFAULT_SLIPPAGE_BPS } from '@/lib/ostium/constants'
 import { OSTIUM_TRADING_ABI, OSTIUM_STORAGE_ABI } from '@/lib/ostium/abi'
 import { Loader2, X, TrendingUp, TrendingDown, Clock } from 'lucide-react'
 import { AssetIcon } from './AssetIcon'
+import { CloseSuccessModal } from './CloseSuccessModal'
 
 // Helper to read on-chain position data directly from TradingStorage contract
 // Uses the corrected ABI from: https://github.com/0xOstium/smart-contracts-public/blob/main/src/interfaces/IOstiumTradingStorage.sol
@@ -238,12 +240,28 @@ interface OstiumPositionsProps {
   onSelectPair?: (pairId: number) => void
 }
 
+// Close success modal data type
+interface CloseSuccessData {
+  txHash: string
+  pairSymbol: string
+  isLong: boolean
+  collateral: number
+  leverage: number
+  entryPrice: number
+  exitPrice: number
+  pnl: number
+  pnlPercent: number
+}
+
 export function OstiumPositions({ onSelectPair }: OstiumPositionsProps) {
   const { data: positions, isLoading, refetch } = useOstiumPositions()
   const { data: prices } = useOstiumPrices()
   const { client } = useSmartWallets()
+  const queryClient = useQueryClient()
   // Track closing state with both pairId and index to handle multiple positions
   const [closingKey, setClosingKey] = useState<string | null>(null)
+  // Close success modal state
+  const [closeSuccess, setCloseSuccess] = useState<CloseSuccessData | null>(null)
 
   const closePosition = async (position: OstiumPosition, closePercent: number = 100) => {
     if (!client) {
@@ -485,45 +503,47 @@ export function OstiumPositions({ onSelectPair }: OstiumPositionsProps) {
 
       console.log('✅ Close position tx submitted:', hash)
       console.log('🔗 Arbiscan:', `https://arbiscan.io/tx/${hash}`)
-      console.log('')
-      console.log('⏳ IMPORTANT: Ostium closes are ASYNCHRONOUS')
-      console.log('   1. This tx requests the close and pays 0.10 USDC oracle fee')
-      console.log('   2. An oracle/keeper will fulfill the price request')
-      console.log('   3. Your collateral + PnL will be returned in a follow-up tx')
-      console.log('   4. This usually takes 5-30 seconds to settle')
-      console.log('')
-      console.log('🔍 Checking if position closed in 15 seconds...')
 
-      // Check if position still exists after 15 seconds
-      setTimeout(async () => {
-        const postClosePosition = await readOnChainPosition(
-          smartWalletAddress,
-          position.pairId,
-          position.index
-        )
-        if (!postClosePosition || postClosePosition.positionSizeUSDC === 0) {
-          console.log('✅ SUCCESS! Position is now closed on-chain!')
-          alert('Position successfully closed! Your funds should be in your wallet.')
-        } else {
-          console.log('⚠️ Position STILL EXISTS after close attempt!')
-          console.log('   Remaining collateral:', postClosePosition.positionSizeUSDC, 'USDC')
-          console.log('')
-          console.log('📋 TROUBLESHOOTING:')
-          console.log('   1. Check Arbiscan Events tab for the transaction')
-          console.log('   2. Look for "MarketOrderExecuted" or "CloseRejected" events')
-          console.log('   3. The oracle callback may have failed due to:')
-          console.log('      - Price validation failure')
-          console.log('      - Insufficient protocol liquidity')
-          console.log('      - Position data corruption')
-          console.log('')
-          console.log('   Consider contacting Ostium support about this position.')
-          alert('⚠️ Position still open!\n\nThe close transaction was submitted but the position remains open. This could be due to:\n1. Oracle callback failure\n2. Price validation issue\n3. Protocol-level rejection\n\nCheck the Arbiscan Events tab for details.\nYou may need to contact Ostium support.')
-        }
-        refetch()
+      // Calculate PNL for the close confirmation
+      const exitPrice = currentPrice
+      const priceDiff = exitPrice - position.entryPrice
+      const pnl = position.isLong
+        ? priceDiff * position.collateral * position.leverage / position.entryPrice
+        : -priceDiff * position.collateral * position.leverage / position.entryPrice
+      const pnlPercent = (pnl / position.collateral) * 100
+
+      // ========== OPTIMISTIC UI ==========
+      // Mark position as closing - hides it IMMEDIATELY from UI
+      markPositionClosing(position.pairId, position.index)
+
+      // Show close success modal
+      setCloseSuccess({
+        txHash: hash,
+        pairSymbol: position.symbol,
+        isLong: position.isLong,
+        collateral: position.collateral,
+        leverage: position.leverage,
+        entryPrice: position.entryPrice,
+        exitPrice: exitPrice,
+        pnl: pnl,
+        pnlPercent: pnlPercent,
+      })
+
+      // Clear loading state
+      setClosingKey(null)
+
+      // Invalidate cache
+      queryClient.invalidateQueries({ queryKey: ['ostium-positions'] })
+
+      // Background: Refresh after oracle processes
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['ostium-positions'] })
+      }, 5000)
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['ostium-positions'] })
       }, 15000)
 
-      // Additional refetch as backup
-      setTimeout(() => refetch(), 30000)
+      return // Early return - we've handled everything
     } catch (error: any) {
       console.error('❌ Close position failed:', error)
 
@@ -603,20 +623,39 @@ export function OstiumPositions({ onSelectPair }: OstiumPositionsProps) {
   })
 
   return (
-    <div className="p-3 space-y-2">
-      {enrichedPositions.map((position) => {
-        const positionKey = `${position.pairId}-${position.index}`
-        return (
-          <PositionCard
-            key={positionKey}
-            position={position}
-            onClose={(percent) => closePosition(position, percent)}
-            isClosing={closingKey === positionKey}
-            onSelect={() => onSelectPair?.(position.pairId)}
-          />
-        )
-      })}
-    </div>
+    <>
+      <div className="p-3 space-y-2">
+        {enrichedPositions.map((position) => {
+          const positionKey = `${position.pairId}-${position.index}`
+          return (
+            <PositionCard
+              key={positionKey}
+              position={position}
+              onClose={(percent) => closePosition(position, percent)}
+              isClosing={closingKey === positionKey}
+              onSelect={() => onSelectPair?.(position.pairId)}
+            />
+          )
+        })}
+      </div>
+      
+      {/* Close Success Modal */}
+      {closeSuccess && (
+        <CloseSuccessModal
+          isOpen={true}
+          onClose={() => setCloseSuccess(null)}
+          txHash={closeSuccess.txHash}
+          pairSymbol={closeSuccess.pairSymbol}
+          isLong={closeSuccess.isLong}
+          collateral={closeSuccess.collateral}
+          leverage={closeSuccess.leverage}
+          entryPrice={closeSuccess.entryPrice}
+          exitPrice={closeSuccess.exitPrice}
+          pnl={closeSuccess.pnl}
+          pnlPercent={closeSuccess.pnlPercent}
+        />
+      )}
+    </>
   )
 }
 
@@ -690,9 +729,16 @@ function PositionCard({ position, onClose, isClosing, onSelect }: PositionCardPr
             </div>
           </div>
           <div>
-            <p className="text-white font-medium text-sm">{position.symbol}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-white font-medium text-sm">{position.symbol}</p>
+              {position.isPending && (
+                <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 text-[9px] font-semibold rounded animate-pulse">
+                  PENDING
+                </span>
+              )}
+            </div>
             <p className="text-white/40 text-[10px]">
-              {position.leverage}x {position.isLong ? 'Long' : 'Short'} · {timeSinceOpen()}
+              {position.leverage}x {position.isLong ? 'Long' : 'Short'} · {position.isPending ? 'Just now' : timeSinceOpen()}
             </p>
           </div>
         </div>
@@ -843,6 +889,11 @@ function PositionCard({ position, onClose, isClosing, onSelect }: PositionCardPr
               Close {closePercent}%
             </button>
           </div>
+        </div>
+      ) : position.isPending ? (
+        <div className="w-full py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-yellow-400/60 text-xs font-medium flex items-center justify-center gap-1.5 relative">
+          <Loader2 className="w-3 h-3 animate-spin" />
+          Confirming on-chain...
         </div>
       ) : (
         <button

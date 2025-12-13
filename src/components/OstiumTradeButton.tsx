@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
+import { useQueryClient } from '@tanstack/react-query'
 import { arbitrum } from 'viem/chains'
 import { encodeFunctionData, encodeAbiParameters, parseUnits, formatUnits, maxUint256, zeroAddress, toHex, concat } from 'viem'
 import { Loader2, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react'
@@ -9,6 +10,7 @@ import { OSTIUM_TRADING_ABI, OSTIUM_STORAGE_ABI, ERC20_ABI } from '@/lib/ostium/
 import { OSTIUM_CONTRACTS, ORDER_TYPE, calculateSlippage, DEFAULT_SLIPPAGE_BPS, OSTIUM_PAIRS, OSTIUM_API } from '@/lib/ostium/constants'
 import { TransactionSuccessModal } from '@/components/ostium/TransactionSuccessModal'
 import { addTradeRecord } from '@/components/ostium/TradeHistory'
+import { addOptimisticPosition } from '@/hooks/useOstiumPositions'
 
 // Cross-validate price against Ostium's direct API
 // This ensures we're using the exact price format the protocol expects
@@ -110,6 +112,7 @@ export function OstiumTradeButton({
   onError,
 }: Partial<SmartWalletTradeButtonProps> = {}) {
   const { client } = useSmartWallets()
+  const queryClient = useQueryClient()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [balance, setBalance] = useState<string>('0')
@@ -232,24 +235,43 @@ export function OstiumTradeButton({
 
     setLoading(true)
     setError(null)
+    
+    // #region agent log
+    const tradeStartTime = Date.now()
+    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OstiumTradeButton.tsx:trade-start',message:'Trade execution started',data:{pairIndex,isLong,collateralUSDC,leverage},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'TIMING'})}).catch(()=>{});
+    // #endregion
 
     try {
-      // CRITICAL: Fetch and cross-validate price from multiple sources
-      // This ensures we're using the exact price format Ostium expects
-      console.log('🔒 Cross-validating price before trade execution...')
-      const { price: freshPrice, error: priceError } = await fetchAndValidatePrice(pairIndex)
-
-      if (priceError || freshPrice <= 0) {
-        setError(priceError || 'Failed to fetch valid price. Please try again.')
-        setLoading(false)
-        return
+      // FAST PATH: Use cached price (already refreshing every 5s)
+      // Skip expensive cross-validation for speed - Ostium oracle will validate anyway
+      let freshPrice = currentPrice
+      
+      // Only fetch if we have no cached price at all
+      if (!freshPrice || freshPrice <= 0) {
+        console.log('⚡ No cached price, fetching...')
+        const { price, error: priceError } = await fetchAndValidatePrice(pairIndex)
+        if (priceError || price <= 0) {
+          setError(priceError || 'Failed to fetch price. Please try again.')
+          setLoading(false)
+          return
+        }
+        freshPrice = price
+        setCurrentPrice(freshPrice)
       }
-
-      // Update the displayed price
-      setCurrentPrice(freshPrice)
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OstiumTradeButton.tsx:price-validation',message:'Using cached price (fast path)',data:{durationMs:0,freshPrice,cached:true},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
+      console.log('⚡ Using cached price:', freshPrice)
 
       // Switch to Arbitrum if needed
+      // #region agent log
+      const chainCheckStart = Date.now()
+      // #endregion
       const chainId = await client.getChainId()
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OstiumTradeButton.tsx:chain-check',message:'Chain ID check complete',data:{durationMs:Date.now()-chainCheckStart,chainId,needsSwitch:chainId!==42161},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
       if (chainId !== arbitrum.id) {
         console.log('🔄 Switching to Arbitrum...')
         await client.switchChain({ id: arbitrum.id })
@@ -365,150 +387,41 @@ export function OstiumTradeButton({
       console.log('🚀 Sending batched transaction via smart wallet...')
       console.log('Total calls:', calls.length)
 
+      // #region agent log
+      const sendTxStart = Date.now()
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OstiumTradeButton.tsx:send-tx-start',message:'Sending transaction to bundler',data:{callsCount:calls.length,hasApproval:calls.length>1},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+
       const hash = await client.sendTransaction({ calls })
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OstiumTradeButton.tsx:send-tx-complete',message:'Transaction submitted to bundler',data:{durationMs:Date.now()-sendTxStart,hash},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
 
       console.log('✅ Transaction submitted:', hash)
       console.log('🔗 Arbiscan:', `https://arbiscan.io/tx/${hash}`)
 
-      // Wait for confirmation and verify the stored entry price
-      // NOTE: Ostium uses a 2-step async process for market orders:
-      // 1. Our tx initiates the order and requests price from oracle
-      // 2. Oracle keeper sends SEPARATE callback tx with actual price
-      // We need to wait for the callback before reading the position!
-      console.log('⏳ Waiting for transaction confirmation...')
-      console.log('📋 Note: Market orders use async oracle callback - entry price is set by oracle, not our tx')
-      try {
-        // Poll for transaction receipt
-        let confirmed = false
-        for (let i = 0; i < 30 && !confirmed; i++) {
-          await new Promise(r => setTimeout(r, 2000)) // Wait 2 seconds
-          try {
-            const receiptResponse = await fetch('https://arb1.arbitrum.io/rpc', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0',
-                id: 1,
-                method: 'eth_getTransactionReceipt',
-                params: [hash],
-              }),
-            })
-            const receiptResult = await receiptResponse.json()
-            if (receiptResult.result && receiptResult.result.blockNumber) {
-              confirmed = true
-              console.log('🟢 Transaction confirmed! Block:', parseInt(receiptResult.result.blockNumber, 16))
-            }
-          } catch (e) {
-            // Continue polling
-          }
-        }
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OstiumTradeButton.tsx:optimistic-success',message:'Showing success immediately (optimistic UI)',data:{totalDurationMs:Date.now()-tradeStartTime,hash},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FIX'})}).catch(()=>{});
+      // #endregion
 
-        if (confirmed) {
-          // Wait additional time for oracle callback to complete
-          // The oracle keeper needs to send a SEPARATE transaction with the actual price
-          console.log('⏳ Waiting 10 seconds for oracle callback to complete...')
-          await new Promise(r => setTimeout(r, 10000))
-
-          // Now verify the stored position - check multiple indices in case user has existing positions
-          console.log('🔍 Verifying stored position on-chain...')
-          console.log('🔍 Checking indices 0, 1, 2 for pairIndex:', pairIndex)
-
-          // Try multiple indices to find the position
-          for (let tradeIndex = 0; tradeIndex < 3; tradeIndex++) {
-            console.log(`\n🔍 Checking index ${tradeIndex}...`)
-            const verifyCalldata = encodeFunctionData({
-              abi: OSTIUM_STORAGE_ABI,
-              functionName: 'openTrades',
-              args: [smartWalletAddress, pairIndex, tradeIndex],
-            })
-
-          const verifyResponse = await fetch('https://arb1.arbitrum.io/rpc', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              method: 'eth_call',
-              params: [{
-                to: OSTIUM_CONTRACTS.TRADING_STORAGE,
-                data: verifyCalldata,
-              }, 'latest'],
-            }),
-          })
-
-          const verifyResult = await verifyResponse.json()
-          if (verifyResult.result && verifyResult.result.length > 66) {
-            // Parse ALL fields to see where values actually landed
-            const data = verifyResult.result.slice(2)
-
-            // Decode all 9 slots (each 32 bytes = 64 hex chars)
-            const slot0 = BigInt('0x' + data.slice(0, 64))      // First field
-            const slot1 = BigInt('0x' + data.slice(64, 128))    // Second field
-            const slot2 = BigInt('0x' + data.slice(128, 192))   // Third field
-            const slot3 = BigInt('0x' + data.slice(192, 256))   // Fourth field
-            const slot4 = '0x' + data.slice(256, 320).slice(24) // Address (last 20 bytes)
-            const slot5 = BigInt('0x' + data.slice(320, 384))   // Sixth field
-            const slot6 = BigInt('0x' + data.slice(384, 448))   // Seventh field
-            const slot7 = BigInt('0x' + data.slice(448, 512))   // Eighth field
-            const slot8 = BigInt('0x' + data.slice(512, 576))   // Ninth field
-
-            console.log('╔═══════════════════════════════════════════╗')
-            console.log('║  🔬 RAW STRUCT DECODE                     ║')
-            console.log('╚═══════════════════════════════════════════╝')
-            console.log('Slot 0:', slot0.toString(), '| /1e18:', Number(slot0) / 1e18, '| /1e6:', Number(slot0) / 1e6)
-            console.log('Slot 1:', slot1.toString(), '| /1e18:', Number(slot1) / 1e18, '| /1e6:', Number(slot1) / 1e6)
-            console.log('Slot 2:', slot2.toString(), '| /1e18:', Number(slot2) / 1e18)
-            console.log('Slot 3:', slot3.toString(), '| /1e18:', Number(slot3) / 1e18)
-            console.log('Slot 4 (addr):', slot4)
-            console.log('Slot 5:', slot5.toString())
-            console.log('Slot 6:', slot6.toString())
-            console.log('Slot 7:', slot7.toString())
-            console.log('Slot 8:', slot8.toString())
-            console.log('')
-            console.log('🎯 LOOKING FOR THESE VALUES:')
-            console.log('   collateral (6 dec):', collateralWei.toString())
-            console.log('   openPrice (18 dec):', openPriceWei.toString())
-            console.log('   leverage:', leverage * 100)
-            console.log('   pairIndex:', pairIndex)
-            console.log('   trader:', smartWalletAddress)
-            console.log('═══════════════════════════════════════════')
-
-            // Try to find where the openPrice actually landed
-            const storedOpenPrice = slot1
-            const storedPriceHuman = Number(storedOpenPrice) / 1e18
-
-            console.log('')
-            console.log('Sent openPrice (18 dec):', openPriceWei.toString())
-            console.log('Stored openPrice (18 dec):', storedOpenPrice.toString())
-            console.log('Sent price (human):', freshPrice)
-            console.log('Stored price (human):', storedPriceHuman)
-
-            const priceDiff = Math.abs(freshPrice - storedPriceHuman)
-            if (priceDiff < 1) {
-              console.log('🎉 Price match: ✅ YES - Entry price stored correctly!')
-            } else {
-              console.error('🚨 Price match: ❌ NO - CORRUPTED!')
-              console.error('Expected:', freshPrice)
-              console.error('Got:', storedPriceHuman)
-              console.error('Difference:', priceDiff)
-            }
-            console.log('═══════════════════════════════════════════')
-
-            // If we found a position with non-zero collateral, stop checking
-            if (slot0 > 0) {
-              console.log(`✅ Found position at index ${tradeIndex}`)
-              break
-            }
-          }
-          } // end for loop
-        }
-      } catch (verifyError) {
-        console.log('⚠️ Could not verify position:', verifyError)
-      }
-
-      // Show success modal
+      // ========== OPTIMISTIC UI ==========
+      // Show success IMMEDIATELY after bundler accepts transaction
+      // Don't wait for on-chain confirmation - that happens in background
       setLastTxHash(hash)
       setShowSuccessModal(true)
+
+      // Add optimistic position to show in Positions tab IMMEDIATELY
+      addOptimisticPosition({
+        pairId: pairIndex,
+        symbol: pairSymbol,
+        collateral: collateralNum,
+        leverage: leverage,
+        isLong: isLong,
+        entryPrice: freshPrice,
+        takeProfit: null,
+        stopLoss: null,
+      }, hash)
 
       // Record trade in history with the validated fresh price
       if (smartWalletAddress) {
@@ -519,9 +432,56 @@ export function OstiumTradeButton({
           isLong: isLong,
           collateral: collateralNum,
           leverage: leverage,
-          entryPrice: freshPrice, // Use the validated fresh price, NOT stale currentPrice
+          entryPrice: freshPrice,
         })
       }
+
+      // Instantly invalidate positions cache
+      queryClient.invalidateQueries({ queryKey: ['ostium-positions'] })
+
+      // ========== BACKGROUND CONFIRMATION ==========
+      // Run verification in background - don't block the UI
+      ;(async () => {
+        console.log('⏳ [Background] Waiting for transaction confirmation...')
+        try {
+          // Poll for transaction receipt
+          let confirmed = false
+          for (let i = 0; i < 15 && !confirmed; i++) {
+            await new Promise(r => setTimeout(r, 2000))
+            try {
+              const receiptResponse = await fetch('https://arb1.arbitrum.io/rpc', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  jsonrpc: '2.0',
+                  id: 1,
+                  method: 'eth_getTransactionReceipt',
+                  params: [hash],
+                }),
+              })
+              const receiptResult = await receiptResponse.json()
+              if (receiptResult.result?.blockNumber) {
+                confirmed = true
+                console.log('🟢 [Background] Transaction confirmed! Block:', parseInt(receiptResult.result.blockNumber, 16))
+              }
+            } catch (e) {
+              // Continue polling
+            }
+          }
+
+          if (confirmed) {
+            // Refresh positions after confirmation
+            queryClient.invalidateQueries({ queryKey: ['ostium-positions'] })
+            
+            // Wait for oracle callback then refresh again
+            setTimeout(() => {
+              queryClient.invalidateQueries({ queryKey: ['ostium-positions'] })
+            }, 5000)
+          }
+        } catch (e) {
+          console.log('⚠️ [Background] Verification error:', e)
+        }
+      })()
 
       onSuccess?.(hash)
     } catch (e: any) {

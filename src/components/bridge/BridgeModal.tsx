@@ -9,6 +9,13 @@ import { useBalance } from 'wagmi'
 import { parseUnits, encodeFunctionData, formatUnits } from 'viem'
 import { base, arbitrum, polygon } from 'viem/chains'
 
+// Chain ID to viem chain mapping
+const VIEM_CHAINS = {
+  8453: base,
+  42161: arbitrum,
+  137: polygon,
+} as const
+
 // Chain configurations with logos
 const CHAINS = {
   base: {
@@ -69,7 +76,7 @@ interface DepositQuote {
 
 export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, title, subtitle }: Props) {
   const { wallets } = useWallets()
-  const { client: smartWalletClient } = useSmartWallets()
+  const { client: smartWalletClient, getClientForChain } = useSmartWallets()
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
   const smartWalletAddress = smartWalletClient?.account?.address
 
@@ -268,18 +275,30 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
       })
 
       console.log('📤 Sending USDC to deposit address:', quote.depositAddress)
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'BridgeModal.tsx:executeBridge',message:'Executing bridge',data:{sourceChain,sourceChainId:sourceConfig.id,destChain:destinationChain,depositAddress:quote.depositAddress},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
+      // #endregion
 
       setStatus('depositing')
 
-      // Get chain-specific smart wallet client and send
-      const { getClientForChain } = useSmartWallets as any
-      const chainClient = await smartWalletClient
+      // Get chain-specific smart wallet client using getClientForChain
+      // This ensures the transaction is sent on the correct chain!
+      const chainClient = await getClientForChain({ id: sourceConfig.id })
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'BridgeModal.tsx:sendTx',message:'Got chain-specific client',data:{usdcAddress:sourceConfig.usdc,chainId:sourceConfig.id,hasChainClient:!!chainClient},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
+      // #endregion
 
+      if (!chainClient) {
+        throw new Error(`Failed to get smart wallet client for ${sourceConfig.name}`)
+      }
+
+      // Send transaction on the correct chain
       const hash = await chainClient.sendTransaction({
         to: sourceConfig.usdc,
         data: data,
         value: BigInt(0),
-        chain: { id: sourceConfig.id } as any,
       })
 
       console.log('✅ Transaction sent:', hash)

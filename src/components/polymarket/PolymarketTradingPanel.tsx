@@ -1,8 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { usePrivy } from '@privy-io/react-auth'
-import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { useQuery } from '@tanstack/react-query'
 import {
   X,
@@ -33,23 +32,59 @@ type TradeAction = 'BUY' | 'SELL'
 
 export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPanelProps) {
   const { authenticated, login } = usePrivy()
-  const { client: smartWalletClient } = useSmartWallets()
-  const smartWalletAddress = smartWalletClient?.account?.address
+  const { wallets } = useWallets()
+  
+  // Get the Privy embedded wallet (EOA that signs for the Safe)
+  const embeddedWallet = useMemo(() => {
+    return wallets.find(w => w.walletClientType === 'privy')
+  }, [wallets])
+  
+  const walletAddress = embeddedWallet?.address
   
   const [selectedOutcome, setSelectedOutcome] = useState<Outcome>('YES')
   const [tradeAction, setTradeAction] = useState<TradeAction>('BUY')
   const [amount, setAmount] = useState('')
   const [showBridgeModal, setShowBridgeModal] = useState(false)
   
+  // Use the new trade hook with embedded wallet + Safe architecture
+  const {
+    isReady,
+    isLoading,
+    state,
+    error,
+    eoaAddress,
+    safeAddress,
+    isSafeDeployed,
+    usdcBalance,
+    hasEnoughUsdc,
+    hasAllApprovals,
+    parsedMarket,
+    yesPrice,
+    noPrice,
+    estimateTrade,
+    executeTrade,
+    initializeSession,
+    reset,
+  } = usePolymarketTrade({
+    market,
+    onSuccess: (txHash) => {
+      console.log('Trade successful:', txHash)
+      refetchPosition()
+    },
+    onError: (err) => {
+      console.error('Trade failed:', err)
+    },
+  })
+
   // Fetch user's position in this market
   const { data: positionData, refetch: refetchPosition } = useQuery({
-    queryKey: ['market-position', market.id, smartWalletAddress],
+    queryKey: ['market-position', market.id, safeAddress],
     queryFn: async () => {
-      if (!smartWalletAddress) return null
+      if (!safeAddress) return null
       const parsed = parseMarket(market)
       
       // Check position for both YES and NO tokens
-      const response = await fetch(`/api/polymarket/positions?address=${smartWalletAddress}`)
+      const response = await fetch(`/api/polymarket/positions?address=${safeAddress}`)
       if (!response.ok) return null
       
       const data = await response.json()
@@ -66,36 +101,13 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
         noValue: parseFloat(noPosition?.value || '0'),
       }
     },
-    enabled: !!smartWalletAddress,
+    enabled: !!safeAddress,
     staleTime: 10000,
   })
   
   const userYesShares = positionData?.yesShares || 0
   const userNoShares = positionData?.noShares || 0
   const hasPosition = userYesShares > 0 || userNoShares > 0
-  
-  const {
-    isReady,
-    isLoading,
-    state,
-    error,
-    usdcBalance,
-    hasEnoughUsdc,
-    parsedMarket,
-    yesPrice,
-    noPrice,
-    estimateTrade,
-    executeTrade,
-    reset,
-  } = usePolymarketTrade({
-    market,
-    onSuccess: (txHash) => {
-      console.log('Trade successful:', txHash)
-    },
-    onError: (err) => {
-      console.error('Trade failed:', err)
-    },
-  })
 
   // Get full balance info including USDC.e
   const { nativeUsdcBalance, bridgedUsdcBalance, hasBridgedUsdc, refetch: refetchBalance } = usePolygonUsdcBalance()
@@ -148,8 +160,8 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
     )
   }
 
-  // Waiting for smart wallet
-  if (!smartWalletClient) {
+  // Waiting for embedded wallet
+  if (!embeddedWallet) {
     return (
       <TradingPanelWrapper onClose={onClose}>
         <div className="flex items-center justify-center gap-3 py-12 text-white/60">
@@ -170,6 +182,11 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
           </h2>
           <div className="flex items-center gap-2 mt-2">
             <span className="text-white/40 text-xs">Volume: {formatVolume(market.volume)}</span>
+            {isSafeDeployed && (
+              <span className="text-green-400/60 text-xs flex items-center gap-1">
+                <Check className="w-3 h-3" /> Connected
+              </span>
+            )}
           </div>
         </div>
         <button
@@ -446,9 +463,21 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
 
       {/* Error Display */}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-4 flex items-start gap-2">
-          <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-          <span className="text-red-400 text-sm">{error}</span>
+        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-4">
+          <div className="flex items-start gap-2 mb-2">
+            <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+            <span className="text-red-400 text-sm">{error}</span>
+          </div>
+          {state.txHash && state.txHash.startsWith('https://polymarket') && (
+            <a
+              href={state.txHash}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-[#7B9EFF] text-xs hover:underline ml-6"
+            >
+              Trade on Polymarket <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
         </div>
       )}
 

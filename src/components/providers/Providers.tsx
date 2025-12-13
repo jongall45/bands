@@ -77,6 +77,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
           ethereum: {
             createOnLogin: 'all-users',
           },
+          // CRITICAL: Hide wallet UIs for "no prompt" experience
+          // This prevents confirmation modals from appearing
+          showWalletUIs: false,
         },
 
         // Chain config - default to Base, support multiple chains

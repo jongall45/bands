@@ -21,7 +21,17 @@ export const CLOB_API = 'https://clob.polymarket.com' as const
 export const GAMMA_API = 'https://gamma-api.polymarket.com' as const
 
 // Builder Relayer endpoint (for gasless transactions)
-export const BUILDER_RELAYER_API = 'https://relayer.polymarket.com' as const
+export const BUILDER_RELAYER_API = 'https://relayer-v2.polymarket.com/' as const
+
+// Signature Types for CLOB authentication
+// 0 = EOA (standard wallet)
+// 1 = Poly Proxy (Magic wallet)  
+// 2 = Poly Gnosis Safe (EOA signs for Safe)
+export const CLOB_SIGNATURE_TYPES = {
+  EOA: 0,
+  POLY_PROXY: 1,
+  POLY_GNOSIS_SAFE: 2,
+} as const
 
 // Order Types
 export const ORDER_TYPES = {

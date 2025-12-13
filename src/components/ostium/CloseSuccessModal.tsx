@@ -3,7 +3,6 @@
 import { CheckCircle, ExternalLink, TrendingUp, TrendingDown } from 'lucide-react'
 import Image from 'next/image'
 
-// Asset icons mapping
 const ASSET_ICONS: Record<string, string> = {
   BTC: 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png',
   ETH: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
@@ -11,18 +10,21 @@ const ASSET_ICONS: Record<string, string> = {
   USDC: 'https://assets.coingecko.com/coins/images/6319/small/usdc.png',
 }
 
-interface TransactionSuccessModalProps {
+interface CloseSuccessModalProps {
   isOpen: boolean
   onClose: () => void
   txHash: string
   pairSymbol: string
   isLong: boolean
-  collateral: string
+  collateral: number
   leverage: number
   entryPrice: number
+  exitPrice: number
+  pnl: number
+  pnlPercent: number
 }
 
-export function TransactionSuccessModal({
+export function CloseSuccessModal({
   isOpen,
   onClose,
   txHash,
@@ -31,12 +33,16 @@ export function TransactionSuccessModal({
   collateral,
   leverage,
   entryPrice,
-}: TransactionSuccessModalProps) {
+  exitPrice,
+  pnl,
+  pnlPercent,
+}: CloseSuccessModalProps) {
   if (!isOpen) return null
 
   const asset = pairSymbol.split('-')[0]
-  const positionSize = parseFloat(collateral) * leverage
+  const positionSize = collateral * leverage
   const assetIcon = ASSET_ICONS[asset] || ASSET_ICONS.BTC
+  const isProfitable = pnl >= 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
@@ -45,45 +51,65 @@ export function TransactionSuccessModal({
 
       {/* Compact Modal */}
       <div className="relative bg-[#141414] border border-white/10 rounded-2xl w-full max-w-xs overflow-hidden animate-in slide-in-from-bottom-4 duration-200">
-        {/* Header with asset */}
-        <div className={`px-4 py-3 flex items-center gap-3 ${isLong ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
+        {/* Header */}
+        <div className={`px-4 py-3 flex items-center gap-3 ${isProfitable ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
           <div className="relative">
             <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center overflow-hidden">
               <Image src={assetIcon} alt={asset} width={32} height={32} />
             </div>
-            <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center ${
-              isLong ? 'bg-green-500' : 'bg-red-500'
-            }`}>
-              {isLong ? <TrendingUp className="w-2.5 h-2.5 text-white" /> : <TrendingDown className="w-2.5 h-2.5 text-white" />}
+            <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center bg-white/20`}>
+              <CheckCircle className="w-3 h-3 text-white" />
             </div>
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2">
-              <CheckCircle className={`w-4 h-4 ${isLong ? 'text-green-400' : 'text-red-400'}`} />
-              <span className="text-white font-semibold text-sm">Trade Executed</span>
+              <CheckCircle className={`w-4 h-4 ${isProfitable ? 'text-green-400' : 'text-red-400'}`} />
+              <span className="text-white font-semibold text-sm">Position Closed</span>
             </div>
-            <p className={`text-xs font-medium ${isLong ? 'text-green-400' : 'text-red-400'}`}>
+            <p className="text-white/60 text-xs">
               {leverage}x {isLong ? 'Long' : 'Short'} {asset}
             </p>
           </div>
         </div>
 
-        {/* Trade Details - Compact */}
+        {/* PNL Banner */}
+        <div className={`px-4 py-3 ${isProfitable ? 'bg-green-500/5' : 'bg-red-500/5'} border-b border-white/5`}>
+          <div className="flex items-center justify-between">
+            <span className="text-white/40 text-xs">Realized P&L</span>
+            <div className="text-right">
+              <span className={`font-mono font-bold text-lg ${isProfitable ? 'text-green-400' : 'text-red-400'}`}>
+                {isProfitable ? '+' : '-'}${Math.abs(pnl).toFixed(2)}
+              </span>
+              <span className={`ml-2 text-xs font-medium ${isProfitable ? 'text-green-400/70' : 'text-red-400/70'}`}>
+                {isProfitable ? '+' : ''}{pnlPercent.toFixed(2)}%
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Trade Details */}
         <div className="px-4 py-3 space-y-2">
           <div className="flex justify-between text-xs">
             <span className="text-white/40">Size</span>
-            <span className="text-white font-mono font-medium">${positionSize.toFixed(2)}</span>
+            <span className="text-white font-mono">${positionSize.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-white/40">Collateral</span>
             <div className="flex items-center gap-1">
               <Image src={ASSET_ICONS.USDC} alt="USDC" width={12} height={12} className="rounded-full" />
-              <span className="text-white font-mono">${parseFloat(collateral).toFixed(2)}</span>
+              <span className="text-white font-mono">${collateral.toFixed(2)}</span>
             </div>
           </div>
+          <div className="h-px bg-white/5 my-1" />
           <div className="flex justify-between text-xs">
             <span className="text-white/40">Entry</span>
             <span className="text-white font-mono">${entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-white/40">Exit</span>
+            <span className={`font-mono ${isProfitable ? 'text-green-400' : 'text-red-400'}`}>
+              ${exitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
           </div>
         </div>
 
@@ -101,7 +127,7 @@ export function TransactionSuccessModal({
           <button
             onClick={onClose}
             className={`flex-1 py-2.5 rounded-xl font-semibold text-white text-sm transition-all ${
-              isLong ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'
+              isProfitable ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'
             }`}
           >
             Done
