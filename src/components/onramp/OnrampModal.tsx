@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
-import { X, CreditCard, Building2, Smartphone, Loader2, AlertCircle } from 'lucide-react'
+import { X, Loader2, AlertCircle, CheckCircle, ArrowLeft, Smartphone } from 'lucide-react'
+import { CrossmintProvider, CrossmintEmbeddedCheckout } from '@crossmint/client-sdk-react-ui'
 
 interface OnrampModalProps {
   isOpen: boolean
@@ -13,114 +14,127 @@ interface OnrampModalProps {
 
 const PRESET_AMOUNTS = [25, 50, 100, 250]
 
+type OrderStatus = 'idle' | 'creating' | 'checkout' | 'completed' | 'failed'
+
+// Get client API key from env (must be NEXT_PUBLIC_)
+const CLIENT_API_KEY = process.env.NEXT_PUBLIC_CROSSMINT_CLIENT_SIDE_API_KEY || ''
+
 export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: OnrampModalProps) {
   const { address } = useAuth()
   const [amount, setAmount] = useState(initialAmount || '50')
+  const [status, setStatus] = useState<OrderStatus>('idle')
+  const [error, setError] = useState<string | null>(null)
+  const [orderId, setOrderId] = useState<string | null>(null)
+  const [clientSecret, setClientSecret] = useState<string | null>(null)
   
   useEffect(() => {
     if (initialAmount) {
       setAmount(initialAmount)
     }
   }, [initialAmount])
-  
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  const fetchSessionToken = useCallback(async (): Promise<string | null> => {
-    if (!address) return null
-
-    try {
-      const response = await fetch('/api/onramp/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          addresses: [{ address, blockchains: ['base'] }],
-          assets: ['USDC'],
-        }),
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to fetch session token')
-      }
-
-      const data = await response.json()
-      return data.token
-    } catch (err) {
-      console.error('Session token fetch error:', err)
-      return null
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setTimeout(() => {
+        setStatus('idle')
+        setError(null)
+        setOrderId(null)
+        setClientSecret(null)
+      }, 300)
     }
-  }, [address])
+  }, [isOpen])
 
   const handleAmountChange = (newAmount: string) => {
     setAmount(newAmount)
     setError(null)
   }
 
-  const handleBuy = async () => {
+  const handleCreateOrder = async () => {
     if (!address) {
       setError('Wallet not connected')
       return
     }
 
-    setIsLoading(true)
+    const amountNum = parseFloat(amount)
+    if (isNaN(amountNum) || amountNum < 5) {
+      setError('Minimum amount is $5')
+      return
+    }
+
+    setStatus('creating')
     setError(null)
 
     try {
-      const sessionToken = await fetchSessionToken()
+      const response = await fetch('/api/crossmint/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          walletAddress: address,
+          amountUsd: amount,
+        }),
+      })
 
-      if (!sessionToken) {
-        throw new Error('Failed to get session token. Please try again.')
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create order')
       }
 
-      const url = new URL('https://pay.coinbase.com/buy/select-asset')
-      url.searchParams.set('sessionToken', sessionToken)
-      url.searchParams.set('defaultAsset', 'USDC')
-      url.searchParams.set('defaultNetwork', 'base')
-      url.searchParams.set('presetFiatAmount', amount)
-      url.searchParams.set('fiatCurrency', 'USD')
-
-      const width = 450
-      const height = 700
-      const left = window.screenX + (window.innerWidth - width) / 2
-      const top = window.screenY + (window.innerHeight - height) / 2
-
-      const popup = window.open(
-        url.toString(),
-        'coinbase-onramp',
-        `width=${width},height=${height},left=${left},top=${top}`
-      )
-
-      if (!popup) {
-        throw new Error('Popup blocked. Please allow popups for this site.')
-      }
+      console.log('✅ Order created:', data.orderId)
+      setOrderId(data.orderId)
+      setClientSecret(data.clientSecret)
+      setStatus('checkout')
 
     } catch (err) {
-      console.error('Onramp launch error:', err)
-      setError(err instanceof Error ? err.message : 'Failed to open Coinbase')
-    } finally {
-      setIsLoading(false)
+      console.error('Create order error:', err)
+      setError(err instanceof Error ? err.message : 'Failed to create order')
+      setStatus('idle')
     }
+  }
+
+  const handleBack = () => {
+    setStatus('idle')
+    setOrderId(null)
+    setClientSecret(null)
+  }
+
+  const handleCheckoutSuccess = () => {
+    console.log('✅ Checkout completed!')
+    setStatus('completed')
+    onSuccess?.()
   }
 
   if (!isOpen) return null
 
   const amountNum = parseFloat(amount) || 0
-  const estimatedFee = amountNum * 0.02
-  const estimatedReceive = amountNum - estimatedFee
+  const estimatedReceive = amountNum * 0.975 // ~2.5% fee
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
       <div 
         className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-        onClick={onClose}
+        onClick={status !== 'checkout' ? onClose : undefined}
       />
 
       <div className="relative w-full max-w-[430px] bg-[#0a0a0a] border border-white/[0.1] rounded-t-3xl sm:rounded-3xl p-6 max-h-[90vh] overflow-y-auto">
+        {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-white font-semibold text-lg">Add Money</h2>
-            <p className="text-white/40 text-sm">Buy USDC with card or bank</p>
+          <div className="flex items-center gap-3">
+            {status === 'checkout' && (
+              <button
+                onClick={handleBack}
+                className="p-1.5 hover:bg-white/[0.05] rounded-full transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5 text-white/60" />
+              </button>
+            )}
+            <div>
+              <h2 className="text-white font-semibold text-lg">Add Money</h2>
+              <p className="text-white/40 text-sm">
+                {status === 'checkout' ? 'Complete payment' : 'Buy USDC instantly'}
+              </p>
+            </div>
           </div>
           <button 
             onClick={onClose}
@@ -130,103 +144,148 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
           </button>
         </div>
 
-        <div className="mb-6">
-          <label className="text-white/40 text-sm mb-2 block">Amount (USD)</label>
-          
-          <div className="grid grid-cols-4 gap-2 mb-3">
-            {PRESET_AMOUNTS.map((preset) => (
-              <button
-                key={preset}
-                onClick={() => handleAmountChange(preset.toString())}
-                className={`py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                  amount === preset.toString()
-                    ? 'bg-[#ef4444] text-white'
-                    : 'bg-white/[0.05] text-white/60 hover:bg-white/[0.08]'
-                }`}
-              >
-                ${preset}
-              </button>
-            ))}
-          </div>
-
-          <div className="relative">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 text-lg">$</span>
-            <input
-              type="number"
-              value={amount}
-              onChange={(e) => handleAmountChange(e.target.value)}
-              placeholder="50.00"
-              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-2xl pl-10 pr-4 py-4 text-white text-xl font-medium outline-none focus:border-white/[0.1] transition-colors"
-            />
-          </div>
-        </div>
-
-        <div className="bg-white/[0.02] border border-white/[0.04] rounded-2xl p-4 mb-6">
-          <p className="text-white/40 text-xs mb-3">Available payment methods:</p>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-white/60">
-              <CreditCard className="w-4 h-4" />
-              <span className="text-sm">Card</span>
+        {/* Success State */}
+        {status === 'completed' && (
+          <div className="text-center py-8">
+            <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-8 h-8 text-green-400" />
             </div>
-            <div className="flex items-center gap-2 text-white/60">
-              <Building2 className="w-4 h-4" />
-              <span className="text-sm">Bank</span>
-            </div>
-            <div className="flex items-center gap-2 text-white/60">
-              <Smartphone className="w-4 h-4" />
-              <span className="text-sm">Apple Pay</span>
-            </div>
+            <h3 className="text-white font-semibold text-lg mb-2">Payment Complete!</h3>
+            <p className="text-white/60 text-sm mb-6">USDC is on its way to your wallet</p>
+            <button
+              onClick={onClose}
+              className="w-full py-3 bg-white/10 hover:bg-white/15 text-white font-medium rounded-xl transition-colors"
+            >
+              Done
+            </button>
           </div>
-        </div>
+        )}
 
-        {amountNum > 0 && (
-          <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4 mb-6">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-white/60 text-sm">You'll receive (approx)</span>
-              <div className="flex items-center gap-2">
-                <span className="text-white font-semibold">~{estimatedReceive.toFixed(2)}</span>
-                <span className="text-[#ef4444] font-medium">USDC</span>
+        {/* Checkout State - Embedded Crossmint Checkout */}
+        {status === 'checkout' && orderId && clientSecret && CLIENT_API_KEY && (
+          <div className="min-h-[400px]">
+            <CrossmintProvider apiKey={CLIENT_API_KEY}>
+              <CrossmintEmbeddedCheckout
+                orderId={orderId}
+                clientSecret={clientSecret}
+                payment={{
+                  crypto: { enabled: false },
+                  fiat: { 
+                    enabled: true,
+                    allowedMethods: {
+                      card: true,
+                      applePay: true,
+                      googlePay: true,
+                    },
+                  },
+                  defaultMethod: 'fiat',
+                }}
+                appearance={{
+                  colors: {
+                    backgroundPrimary: '#0a0a0a',
+                    backgroundSecondary: '#1a1a1a',
+                    textPrimary: '#ffffff',
+                    textSecondary: '#a0a0a0',
+                    accent: '#ef4444',
+                    danger: '#ef4444',
+                  },
+                }}
+                onEvent={(event) => {
+                  console.log('Crossmint event:', event)
+                  if (event.type === 'payment:process.succeeded' || 
+                      event.type === 'order:process.finished') {
+                    handleCheckoutSuccess()
+                  }
+                }}
+              />
+            </CrossmintProvider>
+          </div>
+        )}
+
+        {/* Form State */}
+        {(status === 'idle' || status === 'creating') && (
+          <>
+            {/* Amount Selection */}
+            <div className="mb-5">
+              <div className="grid grid-cols-4 gap-2 mb-3">
+                {PRESET_AMOUNTS.map((preset) => (
+                  <button
+                    key={preset}
+                    onClick={() => handleAmountChange(preset.toString())}
+                    disabled={status === 'creating'}
+                    className={`py-3 rounded-xl text-sm font-semibold transition-colors ${
+                      amount === preset.toString()
+                        ? 'bg-[#ef4444] text-white'
+                        : 'bg-white/[0.05] text-white/60 hover:bg-white/[0.08]'
+                    } disabled:opacity-50`}
+                  >
+                    ${preset}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 text-2xl">$</span>
+                <input
+                  type="number"
+                  value={amount}
+                  onChange={(e) => handleAmountChange(e.target.value)}
+                  placeholder="50"
+                  disabled={status === 'creating'}
+                  className="w-full bg-white/[0.03] border border-white/[0.06] rounded-2xl pl-12 pr-4 py-5 text-white text-3xl font-bold outline-none focus:border-white/[0.1] transition-colors disabled:opacity-50"
+                />
               </div>
             </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-white/30">Est. fee (~2%)</span>
-              <span className="text-white/40">~${estimatedFee.toFixed(2)}</span>
-            </div>
-            <p className="text-white/30 text-xs mt-2">
-              On Base network • Arrives in your wallet
+
+            {/* Estimate */}
+            {amountNum > 0 && (
+              <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4 mb-5">
+                <div className="flex items-center justify-between">
+                  <span className="text-white/60 text-sm">You&apos;ll receive</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-white font-bold text-lg">~{estimatedReceive.toFixed(2)}</span>
+                    <span className="text-[#ef4444] font-semibold">USDC</span>
+                  </div>
+                </div>
+                <p className="text-white/30 text-xs mt-2">
+                  On Base • Arrives instantly
+                </p>
+              </div>
+            )}
+
+            {/* Error */}
+            {error && (
+              <div className="flex items-center gap-2 mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                <span className="text-red-400 text-sm">{error}</span>
+              </div>
+            )}
+
+            {/* Apple Pay Button */}
+            <button
+              onClick={handleCreateOrder}
+              disabled={status === 'creating' || !amount || parseFloat(amount) < 5}
+              className="w-full py-4 bg-black hover:bg-gray-900 disabled:bg-black/50 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-3 border border-white/10"
+            >
+              {status === 'creating' ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <Smartphone className="w-5 h-5" />
+                  Pay with Apple Pay
+                </>
+              )}
+            </button>
+
+            {/* Secondary option */}
+            <p className="text-white/30 text-xs text-center mt-3">
+              Card & Google Pay also available
             </p>
-          </div>
+          </>
         )}
-
-        {error && (
-          <div className="flex items-center gap-2 mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-            <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-            <span className="text-red-400 text-sm">{error}</span>
-          </div>
-        )}
-
-        <button
-          onClick={handleBuy}
-          disabled={isLoading || !amount || parseFloat(amount) <= 0}
-          className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-[#ef4444]/30 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-colors flex items-center justify-center gap-2"
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Opening Coinbase...
-            </>
-          ) : (
-            <>
-              <CreditCard className="w-5 h-5" />
-              Buy ${amount || '0'} USDC
-            </>
-          )}
-        </button>
-
-        <div className="flex items-center justify-center gap-2 text-white/20 text-xs mt-4">
-          <span>Powered by</span>
-          <span className="text-white/40 font-medium">Coinbase</span>
-        </div>
       </div>
     </div>
   )

@@ -74,30 +74,53 @@ export async function POST(request: NextRequest) {
     }
 
     // Map event type to order status
+    // Crossmint event types: orders.delivery.*, orders.payment.*, orders.quote.*
     let newStatus: CrossmintOrderStatus | null = null
 
     switch (eventType) {
+      // Delivery events
+      case 'orders.delivery.completed':
+        newStatus = 'completed'
+        console.log(`[${requestId}] ✅ Order delivered successfully!`)
+        break
+
+      case 'orders.delivery.failed':
+        newStatus = 'failed'
+        console.log(`[${requestId}] ❌ Order delivery failed`)
+        break
+
+      case 'orders.delivery.initiated':
+        newStatus = 'pending'
+        console.log(`[${requestId}] 🚀 Order delivery initiated`)
+        break
+
+      // Payment events
+      case 'orders.payment.succeeded':
+        newStatus = 'pending' // Payment done, awaiting delivery
+        console.log(`[${requestId}] 💳 Payment succeeded, awaiting delivery`)
+        break
+
+      case 'orders.payment.failed':
+        newStatus = 'failed'
+        console.log(`[${requestId}] ❌ Payment failed`)
+        break
+
+      // Quote events
+      case 'orders.quote.created':
+      case 'orders.quote.updated':
+        // Quote events don't change order status
+        console.log(`[${requestId}] 📝 Quote event: ${eventType}`)
+        return NextResponse.json({ received: true })
+
+      // Legacy event names (backwards compatibility)
       case 'order.completed':
-      case 'orders.completed':
-      case 'payment.success':
+      case 'purchase.succeeded':
         newStatus = 'completed'
         break
 
       case 'order.failed':
-      case 'orders.failed':
-      case 'payment.failed':
+      case 'purchase.failed':
         newStatus = 'failed'
-        break
-
-      case 'order.pending':
-      case 'orders.pending':
-      case 'payment.pending':
-        newStatus = 'pending'
-        break
-
-      case 'order.created':
-      case 'orders.created':
-        newStatus = 'created'
         break
 
       default:

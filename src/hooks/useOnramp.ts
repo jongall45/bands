@@ -7,53 +7,55 @@ interface UseOnrampOptions {
   amount?: number
   onSuccess?: () => void
   onExit?: () => void
-  onEvent?: (event: any) => void
+  onEvent?: (event: unknown) => void
+}
+
+interface CrossmintOrderResponse {
+  orderId: string
+  clientSecret: string
+  error?: string
 }
 
 /**
- * Hook for launching Coinbase Onramp with proper session token handling.
- *
- * IMPORTANT: Session tokens are single-use and must be generated fresh for each
- * onramp launch attempt. This hook ensures a new token is fetched right before
- * opening the Coinbase Pay window.
+ * Hook for launching Crossmint Onramp for purchasing USDC.
+ * Creates an order via our backend API and opens Crossmint checkout.
  */
 export function useOnramp(options: UseOnrampOptions = {}) {
-  // Use useAuth to get smart wallet address (not EOA from useAccount)
   const { address } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [orderId, setOrderId] = useState<string | null>(null)
 
-  // Fetch a FRESH session token from our backend
-  // This is called right before opening Coinbase Pay to ensure single-use compliance
-  const fetchSessionToken = useCallback(async (): Promise<string | null> => {
+  // Create a Crossmint order via our backend
+  const createOrder = useCallback(async (amountUsd: string, email?: string): Promise<CrossmintOrderResponse | null> => {
     if (!address) return null
 
     try {
-      const response = await fetch('/api/onramp/session', {
+      const response = await fetch('/api/crossmint/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          addresses: [{ address, blockchains: ['base'] }],
-          assets: ['USDC'],
+          walletAddress: address,
+          amountUsd,
+          receiptEmail: email,
         }),
       })
 
+      const data = await response.json()
+      
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to fetch session token')
+        throw new Error(data.error || 'Failed to create order')
       }
 
-      const data = await response.json()
-      return data.token
+      return data
     } catch (err) {
-      console.error('Failed to fetch session token:', err)
+      console.error('Failed to create Crossmint order:', err)
       return null
     }
   }, [address])
 
-  // Open onramp via URL with a fresh session token
-  // This is the primary method - generates a new token for each launch
-  const openOnramp = useCallback(async () => {
+  // Open Crossmint checkout
+  const openOnramp = useCallback(async (amountUsd?: string, email?: string) => {
     if (!address) {
       setError('Wallet not connected')
       return
@@ -63,35 +65,36 @@ export function useOnramp(options: UseOnrampOptions = {}) {
     setError(null)
 
     try {
-      // Generate fresh session token just-in-time
-      console.log('🔑 Generating fresh session token for onramp...')
-      const sessionToken = await fetchSessionToken()
+      const amount = amountUsd || options.amount?.toString() || '50'
+      
+      console.log('💳 Creating Crossmint order...')
+      const order = await createOrder(amount, email)
 
-      if (!sessionToken) {
-        throw new Error('Failed to get session token. Please try again.')
+      if (!order || order.error) {
+        throw new Error(order?.error || 'Failed to create order. Please try again.')
       }
 
-      console.log('✅ Session token generated, launching Coinbase Onramp...')
+      console.log('✅ Order created:', order.orderId)
+      setOrderId(order.orderId)
 
-      const amount = options.amount || 50
-
-      // Build URL with fresh token
-      const url = new URL('https://pay.coinbase.com/buy/select-asset')
-      url.searchParams.set('sessionToken', sessionToken)
-      url.searchParams.set('defaultAsset', 'USDC')
-      url.searchParams.set('defaultNetwork', 'base')
-      url.searchParams.set('presetFiatAmount', amount.toString())
-      url.searchParams.set('fiatCurrency', 'USD')
+      // Build Crossmint checkout URL
+      const isStaging = process.env.NEXT_PUBLIC_CROSSMINT_ENV === 'staging' || 
+                        !process.env.NEXT_PUBLIC_CROSSMINT_ENV
+      const baseUrl = isStaging 
+        ? 'https://staging.crossmint.com' 
+        : 'https://www.crossmint.com'
+      
+      const checkoutUrl = `${baseUrl}/checkout/mint?clientSecret=${order.clientSecret}`
 
       // Open in popup
-      const width = 450
-      const height = 700
+      const width = 500
+      const height = 750
       const left = window.screenX + (window.innerWidth - width) / 2
       const top = window.screenY + (window.innerHeight - height) / 2
 
       const popup = window.open(
-        url.toString(),
-        'coinbase-onramp',
+        checkoutUrl,
+        'crossmint-checkout',
         `width=${width},height=${height},left=${left},top=${top}`
       )
 
@@ -99,28 +102,64 @@ export function useOnramp(options: UseOnrampOptions = {}) {
         throw new Error('Popup blocked. Please allow popups for this site.')
       }
 
-      // Note: We can't directly detect success due to cross-origin restrictions
-      // The onSuccess callback would need to be triggered by checking wallet balance
-      // or using postMessage if Coinbase supports it
+      // Poll for order status
+      pollOrderStatus(order.orderId)
 
     } catch (err) {
       console.error('Onramp error:', err)
-      setError(err instanceof Error ? err.message : 'Failed to open onramp')
+      setError(err instanceof Error ? err.message : 'Failed to open checkout')
     } finally {
       setIsLoading(false)
     }
-  }, [address, options.amount, fetchSessionToken])
+  }, [address, options.amount, createOrder])
 
-  // Alias for backwards compatibility
-  const openOnrampViaUrl = openOnramp
+  // Poll order status for completion
+  const pollOrderStatus = useCallback(async (orderIdToPoll: string) => {
+    const maxAttempts = 60 // 5 minutes with 5 second intervals
+    let attempts = 0
+
+    const poll = async () => {
+      if (attempts >= maxAttempts) {
+        console.log('Order status polling timed out')
+        return
+      }
+
+      try {
+        const response = await fetch(`/api/crossmint/order-status?orderId=${orderIdToPoll}`)
+        const data = await response.json()
+
+        if (data.status === 'completed') {
+          console.log('✅ Order completed!')
+          options.onSuccess?.()
+          return
+        }
+
+        if (data.status === 'failed') {
+          console.log('❌ Order failed')
+          setError('Payment failed. Please try again.')
+          return
+        }
+
+        // Continue polling
+        attempts++
+        setTimeout(poll, 5000)
+      } catch (err) {
+        console.error('Status poll error:', err)
+        attempts++
+        setTimeout(poll, 5000)
+      }
+    }
+
+    // Start polling after a short delay
+    setTimeout(poll, 3000)
+  }, [options])
 
   return {
     openOnramp,
-    openOnrampViaUrl,
     isLoading,
     error,
-    isReady: !!address, // Ready when wallet is connected
-    reinitialize: async () => {}, // No-op, no pre-initialization needed
+    orderId,
+    isReady: !!address,
     clearError: () => setError(null),
   }
 }

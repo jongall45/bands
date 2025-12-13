@@ -104,8 +104,7 @@ export async function POST(request: NextRequest) {
         },
       ],
       payment: {
-        method: 'fiat',
-        currency: 'usd',
+        method: 'checkoutcom-flow',
         ...(receiptEmail ? { receiptEmail } : {}),
       },
       recipient: {

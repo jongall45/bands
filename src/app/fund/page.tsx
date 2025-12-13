@@ -237,7 +237,7 @@ export default function FundPage() {
 
               {/* Powered by */}
               <p className="text-gray-400 text-xs text-center">
-                Powered by Coinbase
+                Powered by Crossmint
               </p>
             </>
           ) : (

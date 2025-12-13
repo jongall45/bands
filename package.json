@@ -12,6 +12,7 @@
     "@coinbase/cbpay-js": "^2.4.0",
     "@coinbase/cdp-sdk": "^1.40.1",
     "@coinbase/onchainkit": "^1.1.2",
+    "@crossmint/client-sdk-react-ui": "^2.6.11",
     "@lifi/sdk": "^3.13.6",
     "@noble/curves": "^2.0.1",
     "@polymarket/builder-relayer-client": "^0.0.8",
