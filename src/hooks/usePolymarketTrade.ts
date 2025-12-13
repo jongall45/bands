@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
-import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
+import { useSmartWallets, type SmartWalletClient } from '@privy-io/react-auth/smart-wallets'
 import { createPublicClient, http, formatUnits, parseUnits, encodeFunctionData, erc20Abi } from 'viem'
 import { polygon } from 'viem/chains'
 import { useQuery } from '@tanstack/react-query'
@@ -68,7 +68,7 @@ export function usePolymarketTrade({
 }: UsePolymarketTradeOptions): TradeResult {
   const { authenticated } = usePrivy()
   const { wallets } = useWallets()
-  const { client: smartWalletClient } = useSmartWallets()
+  const { client: smartWalletClient, getClientForChain } = useSmartWallets()
   
   // State
   const [state, setState] = useState<TradeExecutionState>({ status: 'idle' })
@@ -235,10 +235,19 @@ export function usePolymarketTrade({
       console.log('   Token ID:', tokenId)
       console.log('   Calls:', calls.length)
 
-      // Execute via smart wallet (batched, gasless on Polygon)
+      // Get Polygon-specific smart wallet client
+      // This ensures the transaction is sent on Polygon, not Base!
+      console.log('   Getting Polygon smart wallet client...')
+      const polygonClient = await getClientForChain({ id: POLYGON_CHAIN_ID })
+      
+      if (!polygonClient) {
+        throw new Error('Failed to get Polygon smart wallet client')
+      }
+
+      // Execute via smart wallet on Polygon (batched)
       setState({ status: 'submitting', message: 'Submitting to Polygon...' })
       
-      const hash = await smartWalletClient.sendTransaction({
+      const hash = await polygonClient.sendTransaction({
         calls,
       })
 
@@ -290,6 +299,7 @@ export function usePolymarketTrade({
     hasCtfApproval,
     publicClient,
     fetchBalancesAndAllowances,
+    getClientForChain,
     onSuccess,
     onError,
   ])

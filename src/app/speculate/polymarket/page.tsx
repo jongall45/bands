@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAccount } from 'wagmi'
-import { ArrowLeft, Search, RefreshCw, ExternalLink, TrendingUp, TrendingDown, X, ChevronRight, BarChart3, Wallet } from 'lucide-react'
+import { useAccount, useBalance } from 'wagmi'
+import { polygon } from 'viem/chains'
+import { formatUnits } from 'viem'
+import { ArrowLeft, Search, RefreshCw, ExternalLink, TrendingUp, TrendingDown, X, ChevronRight, BarChart3, Wallet, ArrowRightLeft } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useTrendingEvents, useEventsByTag, useMarketSearch, POLYMARKET_CATEGORIES } from '@/hooks/usePolymarket'
@@ -12,14 +14,40 @@ import type { PolymarketEvent, PolymarketMarket } from '@/lib/polymarket/api'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { PolymarketTradingPanel } from '@/components/polymarket/PolymarketTradingPanel'
 import { PositionsPanel } from '@/components/polymarket/PositionsPanel'
+import { BridgeModal } from '@/components/bridge/BridgeModal'
+import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
+
+// Native USDC on Polygon (what Polymarket uses)
+const POLYGON_USDC = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'
 
 export default function PolymarketPage() {
   const { isConnected } = useAccount()
   const router = useRouter()
+  const { client: smartWalletClient } = useSmartWallets()
+  const smartWalletAddress = smartWalletClient?.account?.address
+
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<PolymarketEvent | null>(null)
   const [selectedMarket, setSelectedMarket] = useState<PolymarketMarket | null>(null)
   const [showPositions, setShowPositions] = useState(false)
+  const [showBridgeModal, setShowBridgeModal] = useState(false)
+
+  // Fetch Polygon USDC balance
+  const { data: polygonUsdcBalance, refetch: refetchBalance } = useBalance({
+    address: smartWalletAddress,
+    token: POLYGON_USDC as `0x${string}`,
+    chainId: polygon.id,
+  })
+
+  // Fetch Polygon native token (POL/MATIC) balance for gas
+  const { data: polygonNativeBalance } = useBalance({
+    address: smartWalletAddress,
+    chainId: polygon.id,
+  })
+
+  const usdcBalance = polygonUsdcBalance ? formatUnits(polygonUsdcBalance.value, 6) : '0'
+  const nativeBalance = polygonNativeBalance ? formatUnits(polygonNativeBalance.value, 18) : '0'
+  const hasPolygonUsdc = parseFloat(usdcBalance) > 0
 
   // Fetch data
   const { data: trendingEvents, isLoading: trendingLoading, refetch: refetchTrending } = useTrendingEvents(15)
@@ -56,52 +84,78 @@ export default function PolymarketPage() {
       {/* Header */}
       <header className="sticky top-0 z-40 bg-black/95 backdrop-blur-lg border-b border-white/[0.06]">
         <div 
-          className="max-w-[430px] mx-auto px-4 py-3 flex items-center justify-between"
+          className="max-w-[430px] mx-auto px-4 py-3"
           style={{ paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))' }}
         >
-          <div className="flex items-center gap-3">
-            <Link href="/speculate" className="p-2 -ml-2 hover:bg-white/[0.05] rounded-xl transition-colors">
-              <ArrowLeft className="w-5 h-5 text-white/60" />
-            </Link>
-            {/* Polymarket Logo */}
-            <div className="w-9 h-9 bg-[#3B5EE8] rounded-xl flex items-center justify-center flex-shrink-0">
-              <svg viewBox="0 0 100 100" className="w-5 h-5" fill="none">
-                <path d="M18 22 L18 78 L50 50 Z" stroke="white" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                <path d="M82 22 L50 50 L82 78" stroke="white" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                <path d="M18 78 L82 78" stroke="white" strokeWidth="7" strokeLinecap="round" fill="none"/>
-              </svg>
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-white font-semibold">Polymarket</h1>
-                <span className="text-[10px] bg-[#3B5EE8]/20 text-[#7B9EFF] px-2 py-0.5 rounded-full font-medium">
-                  Polygon
-                </span>
+          {/* Top Row: Logo + Actions */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Link href="/speculate" className="p-2 -ml-2 hover:bg-white/[0.05] rounded-xl transition-colors">
+                <ArrowLeft className="w-5 h-5 text-white/60" />
+              </Link>
+              {/* Polymarket Logo */}
+              <div className="w-9 h-9 bg-[#3B5EE8] rounded-xl flex items-center justify-center flex-shrink-0">
+                <svg viewBox="0 0 100 100" className="w-5 h-5" fill="none">
+                  <path d="M18 22 L18 78 L50 50 Z" stroke="white" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                  <path d="M82 22 L50 50 L82 78" stroke="white" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                  <path d="M18 78 L82 78" stroke="white" strokeWidth="7" strokeLinecap="round" fill="none"/>
+                </svg>
               </div>
-              <p className="text-white/40 text-xs">Prediction Markets</p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-white font-semibold">Polymarket</h1>
+                  <span className="text-[10px] bg-[#3B5EE8]/20 text-[#7B9EFF] px-2 py-0.5 rounded-full font-medium">
+                    Polygon
+                  </span>
+                </div>
+                <p className="text-white/40 text-xs">Prediction Markets</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5 text-green-400 text-xs bg-green-500/10 px-2.5 py-1 rounded-full">
+                <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+                Live
+              </span>
+              <button
+                onClick={() => setShowPositions(true)}
+                className="p-2 hover:bg-white/[0.05] rounded-xl transition-colors"
+                title="View Positions"
+              >
+                <Wallet className="w-4 h-4 text-white/40" />
+              </button>
+              <a
+                href="https://polymarket.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 hover:bg-white/[0.05] rounded-xl transition-colors"
+              >
+                <ExternalLink className="w-4 h-4 text-white/40" />
+              </a>
             </div>
           </div>
-          
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1.5 text-green-400 text-xs bg-green-500/10 px-2.5 py-1 rounded-full">
-              <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-              Live
-            </span>
+
+          {/* Balance Row */}
+          <div className="flex items-center justify-between mt-3 px-1">
+            <div className="flex items-center gap-4">
+              <div>
+                <p className="text-white/40 text-[10px] uppercase tracking-wide">USDC Balance</p>
+                <p className="text-white font-bold text-lg">${parseFloat(usdcBalance).toFixed(2)}</p>
+              </div>
+              <div className="w-px h-8 bg-white/10" />
+              <div>
+                <p className="text-white/40 text-[10px] uppercase tracking-wide">POL (Gas)</p>
+                <p className="text-white/70 font-medium">{parseFloat(nativeBalance).toFixed(4)}</p>
+              </div>
+            </div>
+            
             <button
-              onClick={() => setShowPositions(true)}
-              className="p-2 hover:bg-white/[0.05] rounded-xl transition-colors"
-              title="View Positions"
+              onClick={() => setShowBridgeModal(true)}
+              className="flex items-center gap-1.5 bg-[#3B5EE8] hover:bg-[#2D4BC0] px-3 py-2 rounded-xl text-white text-xs font-semibold transition-colors"
             >
-              <Wallet className="w-4 h-4 text-white/40" />
+              <ArrowRightLeft className="w-3.5 h-3.5" />
+              Bridge
             </button>
-            <a
-              href="https://polymarket.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="p-2 hover:bg-white/[0.05] rounded-xl transition-colors"
-            >
-              <ExternalLink className="w-4 h-4 text-white/40" />
-            </a>
           </div>
         </div>
       </header>
@@ -223,6 +277,19 @@ export default function PolymarketPage() {
 
       {/* Positions Panel */}
       <PositionsPanel isOpen={showPositions} onClose={() => setShowPositions(false)} />
+
+      {/* Bridge Modal */}
+      <BridgeModal
+        isOpen={showBridgeModal}
+        onClose={() => setShowBridgeModal(false)}
+        onSuccess={() => {
+          setShowBridgeModal(false)
+          refetchBalance()
+        }}
+        destinationChain="polygon"
+        title="Bridge to Polygon"
+        subtitle="Move USDC to trade on Polymarket"
+      />
 
       <BottomNav />
 
