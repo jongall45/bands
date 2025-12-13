@@ -239,10 +239,16 @@ export function useUserTokens(walletAddress: string | undefined) {
       const data = await response.json()
       console.log('[useUserTokens] Fetched tokens:', data)
 
-      // Filter out tokens with no balance or very small balances (> $0.01)
+      // Filter out tokens with no balance
+      // Keep tokens with balance > 0 even if no USD price data (for native tokens like POL)
       // Also normalize display names (e.g., relabel USDC.e properly)
       const tokensWithBalance = (data.tokens || [])
-        .filter((t: Token) => t.balance && parseFloat(t.balance) > 0 && (t.balanceUsd || 0) >= 0.01)
+        .filter((t: Token) => {
+          const balance = parseFloat(t.balance || '0')
+          if (balance <= 0) return false
+          // Keep if has USD value >= $0.01 OR if balance > 0.0001 (for tokens without price data)
+          return (t.balanceUsd || 0) >= 0.01 || balance > 0.0001
+        })
         .map((t: Token) => normalizeTokenDisplay(t))
 
       setTokens(tokensWithBalance)
