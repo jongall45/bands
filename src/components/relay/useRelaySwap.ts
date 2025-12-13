@@ -104,6 +104,27 @@ export const SUPPORTED_CHAINS = [
   { id: 137, name: 'Polygon', logo: 'https://cryptologos.cc/logos/polygon-matic-logo.png' },
 ]
 
+// Known USDC.e (bridged USDC) addresses - NOT native USDC
+// These need special labeling so users don't confuse them with native USDC
+const USDC_E_ADDRESSES: Record<number, string> = {
+  137: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', // Polygon USDC.e (bridged)
+  42161: '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8', // Arbitrum USDC.e (bridged)
+}
+
+// Helper to detect and relabel USDC.e tokens
+export function normalizeTokenDisplay(token: Token): Token {
+  const usdcEAddress = USDC_E_ADDRESSES[token.chainId]
+  if (usdcEAddress && token.address.toLowerCase() === usdcEAddress.toLowerCase()) {
+    // This is USDC.e (bridged), relabel it
+    return {
+      ...token,
+      symbol: 'USDC.e',
+      name: 'Bridged USDC (Legacy)',
+    }
+  }
+  return token
+}
+
 // Common tokens - order matters for default selection
 export const COMMON_TOKENS: Record<number, Token[]> = {
   8453: [ // Base
@@ -219,9 +240,10 @@ export function useUserTokens(walletAddress: string | undefined) {
       console.log('[useUserTokens] Fetched tokens:', data)
 
       // Filter out tokens with no balance or very small balances (> $0.01)
-      const tokensWithBalance = (data.tokens || []).filter(
-        (t: Token) => t.balance && parseFloat(t.balance) > 0 && (t.balanceUsd || 0) >= 0.01
-      )
+      // Also normalize display names (e.g., relabel USDC.e properly)
+      const tokensWithBalance = (data.tokens || [])
+        .filter((t: Token) => t.balance && parseFloat(t.balance) > 0 && (t.balanceUsd || 0) >= 0.01)
+        .map((t: Token) => normalizeTokenDisplay(t))
 
       setTokens(tokensWithBalance)
       setTotalValueUsd(data.totalValueUsd || 0)

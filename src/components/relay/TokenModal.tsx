@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { Search, X, Star, ChevronRight, Wallet, Loader2, ArrowLeftRight, AlertTriangle } from 'lucide-react'
-import { SUPPORTED_CHAINS, COMMON_TOKENS, fetchTokenInfo, type Token } from './useRelaySwap'
+import { SUPPORTED_CHAINS, COMMON_TOKENS, fetchTokenInfo, normalizeTokenDisplay, type Token } from './useRelaySwap'
 
 interface TokenModalProps {
   isOpen: boolean
@@ -225,8 +225,11 @@ const TokenModal: React.FC<TokenModalProps> = ({
     // Safety check for malformed tokens
     if (!token || !token.address) return null
 
+    // Normalize token display (e.g., show USDC.e instead of USDC for bridged tokens)
+    const displayToken = normalizeTokenDisplay(token)
     const hasBalance = token.balance && parseFloat(token.balance) > 0
-    const tokenSymbol = token.symbol || '?'
+    const tokenSymbol = displayToken.symbol || '?'
+    const isLegacyBridged = displayToken.symbol !== token.symbol // Was renamed to USDC.e
 
     return (
       <div
@@ -261,7 +264,14 @@ const TokenModal: React.FC<TokenModalProps> = ({
           </div>
 
           <div className="flex flex-col">
-            <span className="font-bold text-white text-[15px]">{tokenSymbol}</span>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-white text-[15px]">{tokenSymbol}</span>
+              {isLegacyBridged && (
+                <span className="text-[9px] font-bold bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded">
+                  LEGACY
+                </span>
+              )}
+            </div>
             <span className="text-xs font-medium text-white/40 flex items-center gap-1">
               {getChainName(token.chainId)}
               <span className="text-white/20">|</span>
