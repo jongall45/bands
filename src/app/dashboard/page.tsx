@@ -281,6 +281,17 @@ export default function Dashboard() {
       {/* Main Content */}
       <main className="dashboard-main">
         
+        {/* Top Action - Add Money Button */}
+        <div className="flex justify-end mb-3">
+          <Link 
+            href="/fund"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#ef4444] hover:bg-[#dc2626] text-white font-semibold rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-red-500/25"
+          >
+            <Plus className="w-4 h-4" strokeWidth={2.5} />
+            <span className="text-sm">Add Money</span>
+          </Link>
+        </div>
+
         {/* Balance Card */}
         <div className="card">
 
@@ -364,7 +375,7 @@ export default function Dashboard() {
           </div>
 
           {/* Action Buttons Row */}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => {
                 setShowSend(true)
@@ -384,13 +395,6 @@ export default function Dashboard() {
               <ArrowDownLeft className="w-5 h-5 text-gray-300" strokeWidth={1.5} />
               <span className="text-gray-300 text-sm">Receive</span>
             </button>
-            <Link 
-              href="/fund"
-              className="action-btn buy-btn"
-            >
-              <Plus className="w-5 h-5 text-[#ef4444]" strokeWidth={2} />
-              <span className="text-[#ef4444] text-sm font-medium">Buy USDC</span>
-            </Link>
           </div>
         </div>
 
