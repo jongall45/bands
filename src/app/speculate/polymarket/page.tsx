@@ -664,7 +664,7 @@ function EventDetailPanel({
                 className="w-full bg-[#121214] hover:bg-[#18181b] border border-[#27272a] rounded-2xl p-4 text-left transition-colors"
               >
                 <h3 className="text-white font-medium text-sm mb-2 line-clamp-2">
-                  {market.groupItemTitle || market.question}
+                  {market.question}
                 </h3>
                 <div className="flex items-center justify-between">
                   <span className="text-[#71717a] text-xs">{formatVolume(market.volume)} vol</span>
