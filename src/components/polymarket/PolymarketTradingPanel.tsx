@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
+import { useQuery } from '@tanstack/react-query'
 import {
   X,
   TrendingUp,
@@ -28,14 +29,50 @@ interface PolymarketTradingPanelProps {
 }
 
 type Outcome = 'YES' | 'NO'
+type TradeAction = 'BUY' | 'SELL'
 
 export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPanelProps) {
   const { authenticated, login } = usePrivy()
   const { client: smartWalletClient } = useSmartWallets()
+  const smartWalletAddress = smartWalletClient?.account?.address
   
   const [selectedOutcome, setSelectedOutcome] = useState<Outcome>('YES')
+  const [tradeAction, setTradeAction] = useState<TradeAction>('BUY')
   const [amount, setAmount] = useState('')
   const [showBridgeModal, setShowBridgeModal] = useState(false)
+  
+  // Fetch user's position in this market
+  const { data: positionData, refetch: refetchPosition } = useQuery({
+    queryKey: ['market-position', market.id, smartWalletAddress],
+    queryFn: async () => {
+      if (!smartWalletAddress) return null
+      const parsed = parseMarket(market)
+      
+      // Check position for both YES and NO tokens
+      const response = await fetch(`/api/polymarket/positions?address=${smartWalletAddress}`)
+      if (!response.ok) return null
+      
+      const data = await response.json()
+      const positions = data.positions || []
+      
+      // Find positions matching this market's token IDs
+      const yesPosition = positions.find((p: any) => p.tokenId === parsed.yesTokenId)
+      const noPosition = positions.find((p: any) => p.tokenId === parsed.noTokenId)
+      
+      return {
+        yesShares: parseFloat(yesPosition?.shares || '0'),
+        noShares: parseFloat(noPosition?.shares || '0'),
+        yesValue: parseFloat(yesPosition?.value || '0'),
+        noValue: parseFloat(noPosition?.value || '0'),
+      }
+    },
+    enabled: !!smartWalletAddress,
+    staleTime: 10000,
+  })
+  
+  const userYesShares = positionData?.yesShares || 0
+  const userNoShares = positionData?.noShares || 0
+  const hasPosition = userYesShares > 0 || userNoShares > 0
   
   const {
     isReady,
@@ -186,7 +223,7 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
       )}
 
       {/* Bridge Prompt */}
-      {needsBridge && (
+      {needsBridge && tradeAction === 'BUY' && (
         <div className="bg-[#3B5EE8]/10 border border-[#3B5EE8]/20 rounded-xl p-4 mb-4">
           <div className="flex items-start gap-3">
             <Info className="w-5 h-5 text-[#7B9EFF] flex-shrink-0 mt-0.5" />
@@ -208,6 +245,65 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
           </div>
         </div>
       )}
+
+      {/* Your Position */}
+      {hasPosition && (
+        <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 mb-4">
+          <p className="text-white/40 text-xs mb-2">Your Position</p>
+          <div className="flex gap-3">
+            {userYesShares > 0 && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 rounded-lg">
+                <TrendingUp className="w-3.5 h-3.5 text-green-400" />
+                <span className="text-green-400 text-sm font-medium">
+                  {userYesShares.toFixed(2)} YES
+                </span>
+                <span className="text-green-400/60 text-xs">
+                  @ {formatProbability(yesPrice)}
+                </span>
+              </div>
+            )}
+            {userNoShares > 0 && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 rounded-lg">
+                <TrendingDown className="w-3.5 h-3.5 text-red-400" />
+                <span className="text-red-400 text-sm font-medium">
+                  {userNoShares.toFixed(2)} NO
+                </span>
+                <span className="text-red-400/60 text-xs">
+                  @ {formatProbability(noPrice)}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Buy/Sell Toggle */}
+      <div className="flex gap-2 mb-4 p-1 bg-white/[0.03] rounded-xl">
+        <button
+          onClick={() => setTradeAction('BUY')}
+          disabled={isLoading}
+          className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
+            tradeAction === 'BUY'
+              ? 'bg-green-500/20 text-green-400'
+              : 'text-white/40 hover:text-white/60'
+          }`}
+        >
+          Buy
+        </button>
+        <button
+          onClick={() => setTradeAction('SELL')}
+          disabled={isLoading || !hasPosition}
+          className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
+            tradeAction === 'SELL'
+              ? 'bg-red-500/20 text-red-400'
+              : hasPosition 
+                ? 'text-white/40 hover:text-white/60'
+                : 'text-white/20 cursor-not-allowed'
+          }`}
+        >
+          Sell {!hasPosition && <span className="text-xs">(no position)</span>}
+        </button>
+      </div>
 
       {/* Outcome Selector */}
       <div className="flex gap-2 mb-4">
@@ -240,14 +336,30 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
       {/* Amount Input */}
       <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4 mb-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-white/40 text-sm">Amount</span>
-          <button
-            onClick={() => setAmount(displayBalance)}
-            className="text-[#7B9EFF] text-xs hover:underline"
-            disabled={isLoading}
-          >
-            Max: ${balanceNum.toFixed(2)}
-          </button>
+          <span className="text-white/40 text-sm">
+            {tradeAction === 'BUY' ? 'Amount' : 'Shares to Sell'}
+          </span>
+          {tradeAction === 'BUY' ? (
+            <button
+              onClick={() => setAmount(displayBalance)}
+              className="text-[#7B9EFF] text-xs hover:underline"
+              disabled={isLoading}
+            >
+              Max: ${balanceNum.toFixed(2)}
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                const maxShares = selectedOutcome === 'YES' ? userYesShares : userNoShares
+                const maxValue = maxShares * currentPrice
+                setAmount(maxValue.toFixed(2))
+              }}
+              className="text-[#7B9EFF] text-xs hover:underline"
+              disabled={isLoading}
+            >
+              Max: {(selectedOutcome === 'YES' ? userYesShares : userNoShares).toFixed(2)} shares
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -260,22 +372,42 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
             disabled={isLoading}
             className="flex-1 bg-transparent text-white text-2xl font-medium outline-none placeholder:text-white/20 disabled:opacity-50"
           />
-          <span className="text-white/40 text-sm">USDC</span>
+          <span className="text-white/40 text-sm">{tradeAction === 'BUY' ? 'USDC' : 'value'}</span>
         </div>
 
         {/* Quick amounts */}
-        <div className="flex gap-2 mt-3">
-          {[5, 10, 25, 50].map((amt) => (
-            <button
-              key={amt}
-              onClick={() => setAmount(amt.toString())}
-              disabled={isLoading}
-              className="flex-1 py-1.5 bg-white/[0.05] hover:bg-white/[0.08] rounded-lg text-white/60 text-xs transition-colors disabled:opacity-50"
-            >
-              ${amt}
-            </button>
-          ))}
-        </div>
+        {tradeAction === 'BUY' && (
+          <div className="flex gap-2 mt-3">
+            {[5, 10, 25, 50].map((amt) => (
+              <button
+                key={amt}
+                onClick={() => setAmount(amt.toString())}
+                disabled={isLoading}
+                className="flex-1 py-1.5 bg-white/[0.05] hover:bg-white/[0.08] rounded-lg text-white/60 text-xs transition-colors disabled:opacity-50"
+              >
+                ${amt}
+              </button>
+            ))}
+          </div>
+        )}
+        {tradeAction === 'SELL' && (
+          <div className="flex gap-2 mt-3">
+            {[25, 50, 75, 100].map((pct) => (
+              <button
+                key={pct}
+                onClick={() => {
+                  const maxShares = selectedOutcome === 'YES' ? userYesShares : userNoShares
+                  const maxValue = maxShares * currentPrice * (pct / 100)
+                  setAmount(maxValue.toFixed(2))
+                }}
+                disabled={isLoading}
+                className="flex-1 py-1.5 bg-white/[0.05] hover:bg-white/[0.08] rounded-lg text-white/60 text-xs transition-colors disabled:opacity-50"
+              >
+                {pct}%
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Trade Estimate */}
@@ -360,11 +492,19 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
       ) : (
         <button
           onClick={handleTrade}
-          disabled={!isReady || !amountNum || hasInsufficientBalance || isLoading || needsBridge}
+          disabled={
+            !isReady || 
+            !amountNum || 
+            (tradeAction === 'BUY' && (hasInsufficientBalance || needsBridge)) ||
+            (tradeAction === 'SELL' && (selectedOutcome === 'YES' ? userYesShares : userNoShares) <= 0) ||
+            isLoading
+          }
           className={`w-full py-4 font-semibold rounded-2xl flex items-center justify-center gap-2 transition-colors ${
-            selectedOutcome === 'YES'
-              ? 'bg-green-500 hover:bg-green-600 disabled:bg-green-500/30'
-              : 'bg-red-500 hover:bg-red-600 disabled:bg-red-500/30'
+            tradeAction === 'BUY'
+              ? selectedOutcome === 'YES'
+                ? 'bg-green-500 hover:bg-green-600 disabled:bg-green-500/30'
+                : 'bg-red-500 hover:bg-red-600 disabled:bg-red-500/30'
+              : 'bg-orange-500 hover:bg-orange-600 disabled:bg-orange-500/30'
           } text-white disabled:cursor-not-allowed`}
         >
           {isLoading ? (
@@ -372,16 +512,18 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
               <Loader2 className="w-5 h-5 animate-spin" />
               {state.message || 'Processing...'}
             </>
-          ) : needsBridge ? (
+          ) : tradeAction === 'BUY' && needsBridge ? (
             'Bridge USDC First'
           ) : !amountNum ? (
             'Enter Amount'
-          ) : hasInsufficientBalance ? (
+          ) : tradeAction === 'BUY' && hasInsufficientBalance ? (
             'Insufficient Balance'
+          ) : tradeAction === 'SELL' && (selectedOutcome === 'YES' ? userYesShares : userNoShares) <= 0 ? (
+            `No ${selectedOutcome} shares to sell`
           ) : (
             <>
               <Zap className="w-5 h-5" />
-              Buy {selectedOutcome} @ {formatProbability(currentPrice)}
+              {tradeAction === 'BUY' ? 'Buy' : 'Sell'} {selectedOutcome} @ {formatProbability(currentPrice)}
             </>
           )}
         </button>

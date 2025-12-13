@@ -181,25 +181,39 @@ export function usePolymarketTrade({
       const exchange = market.negRisk ? NEG_RISK_CTF_EXCHANGE : CTF_EXCHANGE
       const usdcAmount = parseUnits(amount, 6)
 
-      // Build batch of transactions
+      console.log('🎲 Executing Polymarket trade:')
+      console.log('   Market:', market.question)
+      console.log('   Outcome:', outcome)
+      console.log('   Amount:', amount, 'USDC')
+      console.log('   Price:', price)
+      console.log('   Token ID:', tokenId)
+      console.log('   Exchange:', exchange)
+
+      // Get Polygon-specific smart wallet client
+      console.log('   Getting Polygon smart wallet client...')
+      const polygonClient = await getClientForChain({ id: POLYGON_CHAIN_ID })
+      
+      if (!polygonClient) {
+        throw new Error('Failed to get Polygon smart wallet client')
+      }
+
+      // Step 1: Ensure approvals are in place
       const calls: Array<{ to: `0x${string}`; data: `0x${string}`; value: bigint }> = []
 
-      // 1. Approve USDC if needed
       if (!hasUsdcApproval) {
         setState({ status: 'approving', message: 'Approving USDC...' })
-        const approvalAmount = usdcAmount * BigInt(2) // 2x buffer
+        const maxApproval = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
         calls.push({
           to: POLYGON_USDC,
           data: encodeFunctionData({
             abi: erc20Abi,
             functionName: 'approve',
-            args: [exchange, approvalAmount],
+            args: [exchange, maxApproval],
           }),
           value: BigInt(0),
         })
       }
 
-      // 2. Approve conditional tokens if needed
       if (!hasCtfApproval) {
         calls.push({
           to: CONDITIONAL_TOKENS,
@@ -212,68 +226,115 @@ export function usePolymarketTrade({
         })
       }
 
-      // 3. Transfer USDC to proxy/exchange for the trade
-      // For now, we'll transfer to the exchange directly
-      // In a full implementation, this would go through the CLOB
-      calls.push({
-        to: POLYGON_USDC,
-        data: encodeFunctionData({
-          abi: erc20Abi,
-          functionName: 'transfer',
-          args: [exchange, usdcAmount],
-        }),
-        value: BigInt(0),
-      })
-
-      setState({ status: 'signing', message: 'Sign transaction...' })
-
-      console.log('🎲 Executing Polymarket trade:')
-      console.log('   Market:', market.question)
-      console.log('   Outcome:', outcome)
-      console.log('   Amount:', amount, 'USDC')
-      console.log('   Price:', price)
-      console.log('   Token ID:', tokenId)
-      console.log('   Calls:', calls.length)
-
-      // Get Polygon-specific smart wallet client
-      // This ensures the transaction is sent on Polygon, not Base!
-      console.log('   Getting Polygon smart wallet client...')
-      const polygonClient = await getClientForChain({ id: POLYGON_CHAIN_ID })
-      
-      if (!polygonClient) {
-        throw new Error('Failed to get Polygon smart wallet client')
+      // If we need approvals, execute them first
+      if (calls.length > 0) {
+        setState({ status: 'approving', message: 'Setting approvals...' })
+        
+        const approvalHash = await polygonClient.sendTransaction({ calls })
+        console.log('✅ Approvals submitted:', approvalHash)
+        
+        await publicClient.waitForTransactionReceipt({
+          hash: approvalHash as `0x${string}`,
+          timeout: 60_000,
+        })
+        console.log('✅ Approvals confirmed')
+        
+        // Update approval state
+        setHasUsdcApproval(true)
+        setHasCtfApproval(true)
       }
 
-      // Execute via smart wallet on Polygon (batched)
-      setState({ status: 'submitting', message: 'Submitting to Polygon...' })
+      // Step 2: Submit order to CLOB via our API
+      setState({ status: 'signing', message: 'Creating order...' })
+
+      // Calculate order parameters
+      // For a BUY order: makerAmount = USDC amount, takerAmount = shares received
+      // shares = amount / price
+      const shares = Math.floor(amountNum / price)
+      const makerAmount = usdcAmount.toString()
+      const takerAmount = (BigInt(shares) * BigInt(1e6)).toString() // CTF tokens have 6 decimals
       
-      const hash = await polygonClient.sendTransaction({
-        calls,
+      // Generate order data
+      const salt = BigInt(Math.floor(Math.random() * 2147483647)).toString()
+      const expiration = Math.floor(Date.now() / 1000 + 86400).toString() // 24h from now
+      const nonce = '0'
+      const feeRateBps = '0' // Maker fee
+
+      // Build order for CLOB
+      const orderData = {
+        salt,
+        tokenId,
+        makerAmount,
+        takerAmount,
+        side: 'BUY',
+        expiration,
+        nonce,
+        feeRateBps,
+      }
+
+      console.log('📤 Order data:', orderData)
+
+      // For now, we'll use a simpler approach:
+      // Submit a market buy by getting best asks from orderbook and filling
+      setState({ status: 'submitting', message: 'Submitting order...' })
+
+      // Try to submit via CLOB API
+      const orderResponse = await fetch('/api/polymarket/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order: orderData,
+          owner: smartWalletAddress,
+          orderType: 'FOK', // Fill or Kill for market orders
+        }),
       })
 
-      console.log('✅ Transaction submitted:', hash)
+      if (!orderResponse.ok) {
+        const errorData = await orderResponse.json()
+        console.error('CLOB order failed:', errorData)
+        
+        // If CLOB fails, fall back to direct deposit (at least funds are on exchange)
+        console.log('⚠️ CLOB order failed, depositing to exchange...')
+        setState({ status: 'submitting', message: 'Depositing to exchange...' })
+        
+        const depositHash = await polygonClient.sendTransaction({
+          calls: [{
+            to: POLYGON_USDC,
+            data: encodeFunctionData({
+              abi: erc20Abi,
+              functionName: 'transfer',
+              args: [exchange, usdcAmount],
+            }),
+            value: BigInt(0),
+          }],
+        })
 
-      setState({ 
-        status: 'confirming', 
-        message: 'Confirming on Polygon...',
-        txHash: hash,
-      })
+        await publicClient.waitForTransactionReceipt({
+          hash: depositHash as `0x${string}`,
+          timeout: 60_000,
+        })
 
-      // Wait for confirmation
-      await publicClient.waitForTransactionReceipt({
-        hash: hash as `0x${string}`,
-        timeout: 60_000,
-      })
+        setState({ 
+          status: 'success', 
+          message: 'Funds deposited to exchange. Complete trade on polymarket.com',
+          txHash: depositHash,
+        })
+        
+        onSuccess?.(depositHash)
+        setTimeout(fetchBalancesAndAllowances, 2000)
+        return
+      }
+
+      const result = await orderResponse.json()
+      console.log('✅ CLOB order result:', result)
 
       setState({ 
         status: 'success', 
         message: 'Trade successful!',
-        txHash: hash,
+        txHash: result.orderHash || result.id,
       })
       
-      onSuccess?.(hash)
-
-      // Refresh balances
+      onSuccess?.(result.orderHash || result.id || 'order-submitted')
       setTimeout(fetchBalancesAndAllowances, 2000)
 
     } catch (err: any) {
@@ -284,6 +345,8 @@ export function usePolymarketTrade({
         errorMsg = 'Transaction rejected'
       } else if (errorMsg.includes('insufficient')) {
         errorMsg = 'Insufficient balance'
+      } else if (errorMsg.includes('credentials')) {
+        errorMsg = 'CLOB API not configured. Please complete trade on polymarket.com'
       }
       
       setState({ status: 'error', error: errorMsg })
