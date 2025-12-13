@@ -476,7 +476,7 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
           {/* Submit Button */}
           <button
             onClick={handleSubmit}
-            disabled={!canSubmit || status === 'pending'}
+            disabled={!canSubmit}
             className={`w-full py-4 rounded-xl font-semibold text-base transition-colors flex items-center justify-center gap-2 ${
               canSubmit
                 ? mode === 'deposit' ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-orange-500 hover:bg-orange-600 text-white'
