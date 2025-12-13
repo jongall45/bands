@@ -9,7 +9,7 @@ import { createPublicClient, http, formatUnits } from 'viem'
 import { arbitrum, base, polygon } from 'viem/chains'
 
 // Chain configurations
-const CHAINS = {
+const CHAINS: Record<number, typeof arbitrum | typeof base | typeof polygon> = {
   [arbitrum.id]: arbitrum,
   [base.id]: base,
   [polygon.id]: polygon,

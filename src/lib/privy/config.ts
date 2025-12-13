@@ -42,7 +42,7 @@ export const privyConfig: PrivyClientConfig = {
   // Appearance
   appearance: {
     theme: 'dark',
-    accentColor: '#22c55e', // Green to match your app
+    accentColor: '#22c55e' as `#${string}`, // Green to match your app
     logo: '/icons/logo.svg',
     // Hide Privy branding for cleaner UX
     showWalletLoginFirst: false,
@@ -53,12 +53,10 @@ export const privyConfig: PrivyClientConfig = {
   
   // Embedded wallet configuration
   embeddedWallets: {
-    // Auto-create wallet for ALL users on login
-    createOnLogin: 'all-users',
-    
-    // DEPRECATED: noPromptOnSignature - use Dashboard setting instead
-    // noPromptOnSignature: true, // ❌ DO NOT USE
-    
+    ethereum: {
+      // Auto-create wallet for ALL users on login
+      createOnLogin: 'all-users',
+    },
     // Show wallet UI only when explicitly requested
     // This hides the default Privy wallet modal
     showWalletUIs: false,
@@ -66,12 +64,12 @@ export const privyConfig: PrivyClientConfig = {
   
   // Chain configuration
   defaultChain: DEFAULT_CHAIN,
-  supportedChains: SUPPORTED_CHAINS,
+  supportedChains: [...SUPPORTED_CHAINS],
   
   // External wallets (we disable these for embedded-only flow)
   externalWallets: {
     coinbaseWallet: {
-      connectionOptions: 'smartWalletOnly',
+      // Use smart wallet configuration
     },
   },
   

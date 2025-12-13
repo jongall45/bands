@@ -22,7 +22,7 @@ import { createPublicClient, http, formatUnits, parseUnits, type WalletClient } 
 import { polygon } from 'viem/chains'
 import { useQuery } from '@tanstack/react-query'
 import { ethers } from 'ethers'
-import { ClobClient } from '@polymarket/clob-client'
+import { ClobClient, Side, OrderType } from '@polymarket/clob-client'
 import { RelayClient, RelayerTxType } from '@polymarket/builder-relayer-client'
 import { BuilderConfig } from '@polymarket/builder-signing-sdk'
 
@@ -97,7 +97,7 @@ interface TradeResult {
 // HELPER: Convert Privy wallet to ethers Signer
 // ============================================
 
-async function getEthersSigner(privyWallet: any): Promise<ethers.Signer> {
+async function getEthersSigner(privyWallet: any): Promise<ethers.providers.JsonRpcSigner> {
   const provider = await privyWallet.getEthereumProvider()
   const ethersProvider = new ethers.providers.Web3Provider(provider)
   return ethersProvider.getSigner()
@@ -182,9 +182,9 @@ export function usePolymarketTrade({
       if (session?.userApiCreds && !clobClient && embeddedWallet) {
         // Validate credentials are complete
         const creds = session.userApiCreds
-        if (!creds.apiKey || !creds.secret || !creds.passphrase) {
+        if (!creds.key || !creds.secret || !creds.passphrase) {
           console.warn('⚠️ Saved session has incomplete credentials:', {
-            hasApiKey: !!creds.apiKey,
+            hasKey: !!creds.key,
             hasSecret: !!creds.secret,
             hasPassphrase: !!creds.passphrase,
           })
@@ -196,7 +196,7 @@ export function usePolymarketTrade({
         
         console.log('🔄 Recreating ClobClient from saved session...')
         console.log('   Safe address:', session.safeAddress)
-        console.log('   API Key:', creds.apiKey?.substring(0, 8) + '...')
+        console.log('   API Key:', creds.key?.substring(0, 8) + '...')
         
         try {
           const ethersSigner = await getEthersSigner(embeddedWallet)
@@ -378,16 +378,16 @@ export function usePolymarketTrade({
         derivedSafeAddress // Safe address as funder
       )
 
-      let userCreds: { apiKey: string; secret: string; passphrase: string }
+      let userCreds: { key: string; secret: string; passphrase: string }
       
       try {
         // Try to derive existing credentials first
         console.log('📋 Trying to derive existing credentials for Safe...')
-        const derivedCreds = await tempClobClient.deriveApiKey()
+        const derivedCreds = await tempClobClient.deriveApiKey() as any
         
-        if (derivedCreds?.apiKey && derivedCreds?.secret && derivedCreds?.passphrase) {
+        if ((derivedCreds?.apiKey || derivedCreds?.key) && derivedCreds?.secret && derivedCreds?.passphrase) {
           userCreds = {
-            apiKey: derivedCreds.apiKey,
+            key: derivedCreds.apiKey || derivedCreds.key,
             secret: derivedCreds.secret,
             passphrase: derivedCreds.passphrase,
           }
@@ -399,9 +399,9 @@ export function usePolymarketTrade({
         // Create new credentials
         console.log('📋 Creating new API credentials for Safe...')
         try {
-          const newCreds = await tempClobClient.createApiKey()
+          const newCreds = await tempClobClient.createApiKey() as any
           userCreds = {
-            apiKey: newCreds.apiKey,
+            key: newCreds.apiKey || newCreds.key,
             secret: newCreds.secret,
             passphrase: newCreds.passphrase,
           }
@@ -409,9 +409,9 @@ export function usePolymarketTrade({
         } catch (createError) {
           // Try createOrDeriveApiKey as fallback
           console.log('📋 Trying createOrDeriveApiKey for Safe...')
-          const creds = await tempClobClient.createOrDeriveApiKey()
+          const creds = await tempClobClient.createOrDeriveApiKey() as any
           userCreds = {
-            apiKey: creds.apiKey,
+            key: creds.apiKey || creds.key,
             secret: creds.secret,
             passphrase: creds.passphrase,
           }
@@ -557,7 +557,7 @@ export function usePolymarketTrade({
       console.log('   Side: BUY')
 
       // Get tick size from market or use default
-      const tickSize = market.minimum_tick_size || '0.01'
+      const tickSize = (market as any).minimum_tick_size || '0.01'
       const negRisk = market.negRisk || false
 
       // Create and post order using ClobClient
@@ -565,11 +565,11 @@ export function usePolymarketTrade({
         {
           tokenID: tokenId,
           price: price,
-          side: 'BUY',
+          side: Side.BUY,
           size: amountNum / price, // Calculate shares from USDC amount
         },
         { tickSize, negRisk },
-        'FOK' // Fill or Kill for market orders
+        OrderType.GTC // Good Till Cancel
       )
 
       console.log('✅ Order response:', orderResponse)
@@ -994,19 +994,19 @@ export function usePolymarketSetup() {
       fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step6-clobCreated',message:'ClobClient created with Safe config',data:{hasClobClient:!!tempClobClient,signatureType:2,safeAddress:derivedSafeAddress},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
       // #endregion
 
-      let userCreds: { apiKey: string; secret: string; passphrase: string }
+      let userCreds: { key: string; secret: string; passphrase: string }
       
       try {
         // #region agent log
         fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step6-deriving',message:'Calling deriveApiKey (will prompt signature)',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
         // #endregion
-        const derivedCreds = await tempClobClient.deriveApiKey()
+        const derivedCreds = await tempClobClient.deriveApiKey() as any
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step6-derived',message:'deriveApiKey returned',data:{hasApiKey:!!derivedCreds?.apiKey},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step6-derived',message:'deriveApiKey returned',data:{hasKey:!!(derivedCreds?.apiKey||derivedCreds?.key)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
         // #endregion
-        if (derivedCreds?.apiKey && derivedCreds?.secret && derivedCreds?.passphrase) {
+        if ((derivedCreds?.apiKey || derivedCreds?.key) && derivedCreds?.secret && derivedCreds?.passphrase) {
           userCreds = {
-            apiKey: derivedCreds.apiKey,
+            key: derivedCreds.apiKey || derivedCreds.key,
             secret: derivedCreds.secret,
             passphrase: derivedCreds.passphrase,
           }
@@ -1020,23 +1020,23 @@ export function usePolymarketSetup() {
         fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step6-deriveFailed',message:'deriveApiKey failed, trying createApiKey',data:{error:deriveError?.message||String(deriveError)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
         // #endregion
         try {
-          const newCreds = await tempClobClient.createApiKey()
+          const newCreds = await tempClobClient.createApiKey() as any
           userCreds = {
-            apiKey: newCreds.apiKey,
+            key: newCreds.apiKey || newCreds.key,
             secret: newCreds.secret,
             passphrase: newCreds.passphrase,
           }
           console.log('✅ Created new credentials')
           // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step6-created',message:'createApiKey succeeded',data:{hasApiKey:!!newCreds?.apiKey},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step6-created',message:'createApiKey succeeded',data:{hasKey:!!(newCreds?.apiKey||newCreds?.key)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
           // #endregion
         } catch (createError: any) {
           // #region agent log
           fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step6-createFailed',message:'createApiKey failed, trying createOrDeriveApiKey',data:{error:createError?.message||String(createError)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
           // #endregion
-          const creds = await tempClobClient.createOrDeriveApiKey()
+          const creds = await tempClobClient.createOrDeriveApiKey() as any
           userCreds = {
-            apiKey: creds.apiKey,
+            key: creds.apiKey || creds.key,
             secret: creds.secret,
             passphrase: creds.passphrase,
           }

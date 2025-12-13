@@ -263,7 +263,7 @@ export interface TradingSession {
   safeDeployed: boolean
   approvalsSet: boolean
   userApiCreds?: {
-    apiKey: string
+    key: string
     secret: string
     passphrase: string
   }

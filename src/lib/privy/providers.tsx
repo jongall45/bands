@@ -19,7 +19,8 @@
 import { ReactNode } from 'react'
 import { PrivyProvider as BasePrivyProvider } from '@privy-io/react-auth'
 import { SmartWalletsProvider } from '@privy-io/react-auth/smart-wallets'
-import { WagmiProvider, createConfig, http } from '@privy-io/wagmi'
+import { WagmiProvider, createConfig } from '@privy-io/wagmi'
+import { http } from 'viem'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { arbitrum, base, polygon } from 'viem/chains'
 
@@ -74,18 +75,20 @@ const privyConfig = {
   // Appearance
   appearance: {
     theme: 'dark' as const,
-    accentColor: '#22c55e', // Green
+    accentColor: '#22c55e' as `#${string}`, // Green
     logo: '/icons/logo.svg',
     showWalletLoginFirst: false,
   },
 
   // Login methods
-  loginMethods: ['email', 'google', 'apple'] as const,
+  loginMethods: ['email', 'google', 'apple'] as ('email' | 'google' | 'apple')[],
 
   // Embedded wallet configuration
   embeddedWallets: {
-    // Auto-create embedded wallet for ALL users on login
-    createOnLogin: 'all-users' as const,
+    ethereum: {
+      // Auto-create embedded wallet for ALL users on login
+      createOnLogin: 'all-users' as const,
+    },
 
     // Hide wallet UIs by default (key for no-prompt UX)
     // Individual methods can override with uiOptions
@@ -98,13 +101,13 @@ const privyConfig = {
 
   // Chain configuration
   defaultChain: DEFAULT_CHAIN,
-  supportedChains: SUPPORTED_CHAINS,
+  supportedChains: [...SUPPORTED_CHAINS],
 
   // Disable external wallets (we only use embedded)
   // This simplifies UX - users always use embedded wallet
   externalWallets: {
     coinbaseWallet: {
-      connectionOptions: 'smartWalletOnly' as const,
+      // Use smart wallet configuration
     },
   },
 
