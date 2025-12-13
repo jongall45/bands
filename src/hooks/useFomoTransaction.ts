@@ -30,7 +30,7 @@ export interface FomoTransactionState {
   isOptimistic: boolean // True if we're showing success before chain confirmation
 }
 
-const CHAINS = {
+const CHAINS: Record<number, typeof arbitrum | typeof base | typeof polygon> = {
   [arbitrum.id]: arbitrum,
   [base.id]: base,
   [polygon.id]: polygon,
