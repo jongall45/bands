@@ -98,7 +98,7 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
   })
 
   // Build balances map
-  const chainBalances = useMemo(() => ({
+  const chainBalances = useMemo<Record<number, string>>(() => ({
     [arbitrum.id]: arbBalance ? formatUnits(arbBalance.value, 6) : '0',
     [base.id]: baseBalance ? formatUnits(baseBalance.value, 6) : '0',
     [polygon.id]: polygonBalance ? formatUnits(polygonBalance.value, 6) : '0',
