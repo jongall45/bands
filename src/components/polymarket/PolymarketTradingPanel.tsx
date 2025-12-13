@@ -63,14 +63,18 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
   // Get full balance info including USDC.e
   const { nativeUsdcBalance, bridgedUsdcBalance, hasBridgedUsdc, refetch: refetchBalance } = usePolygonUsdcBalance()
 
+  // Use the native USDC balance (prefer the fresh hook value over the trade hook)
+  const displayBalance = parseFloat(nativeUsdcBalance) > 0 ? nativeUsdcBalance : usdcBalance
+  const balanceNum = parseFloat(displayBalance) || 0
+
   // Calculate estimate
   const amountNum = parseFloat(amount) || 0
   const estimate = amountNum > 0 ? estimateTrade(amount, selectedOutcome) : null
   const currentPrice = selectedOutcome === 'YES' ? yesPrice : noPrice
   
-  // Check if user needs to bridge
-  const needsBridge = parseFloat(nativeUsdcBalance) < 1
-  const hasInsufficientBalance = amountNum > 0 && !hasEnoughUsdc(amount)
+  // Check if user needs to bridge (only if balance is very low, not just < $1)
+  const needsBridge = balanceNum < 0.01
+  const hasInsufficientBalance = amountNum > 0 && amountNum > balanceNum
 
   // Reset on modal open
   useEffect(() => {
@@ -143,13 +147,15 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
       <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 mb-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-purple-500/20 rounded-full flex items-center justify-center">
-              <span className="text-xs">💳</span>
-            </div>
+            <img 
+              src="https://cryptologos.cc/logos/usd-coin-usdc-logo.png" 
+              alt="USDC" 
+              className="w-6 h-6 rounded-full"
+            />
             <span className="text-white/60 text-sm">Polygon USDC</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-white font-medium">${parseFloat(nativeUsdcBalance).toFixed(2)}</span>
+            <span className="text-white font-medium">${balanceNum.toFixed(2)}</span>
             <button
               onClick={() => setShowBridgeModal(true)}
               className="p-1.5 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg transition-colors"
@@ -236,11 +242,11 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
         <div className="flex items-center justify-between mb-2">
           <span className="text-white/40 text-sm">Amount</span>
           <button
-            onClick={() => setAmount(nativeUsdcBalance)}
+            onClick={() => setAmount(displayBalance)}
             className="text-[#7B9EFF] text-xs hover:underline"
             disabled={isLoading}
           >
-            Max: ${parseFloat(nativeUsdcBalance).toFixed(2)}
+            Max: ${balanceNum.toFixed(2)}
           </button>
         </div>
 

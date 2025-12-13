@@ -2,38 +2,38 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { X, ArrowDown, Loader2, Check, AlertCircle, ChevronDown, ExternalLink, AlertTriangle } from 'lucide-react'
+import { X, ArrowDown, Loader2, Check, AlertCircle, ChevronDown, ExternalLink } from 'lucide-react'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
-import { useBalance, useAccount } from 'wagmi'
-import { parseUnits, encodeFunctionData } from 'viem'
+import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
+import { useBalance } from 'wagmi'
+import { parseUnits, encodeFunctionData, formatUnits } from 'viem'
 import { base, arbitrum, polygon } from 'viem/chains'
 
-// Chain configurations
+// Chain configurations with logos
 const CHAINS = {
   base: {
     id: 8453,
     name: 'Base',
-    icon: 'B',
-    color: 'bg-blue-500',
+    logo: 'https://raw.githubusercontent.com/base-org/brand-kit/001c0e9b40a67799ebe0418671ac4e02a0c683ce/logo/symbol/Base_Symbol_Blue.svg',
     usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as `0x${string}`,
   },
   arbitrum: {
     id: 42161,
     name: 'Arbitrum',
-    icon: 'A',
-    color: 'bg-blue-600',
+    logo: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png',
     usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as `0x${string}`,
   },
   polygon: {
     id: 137,
     name: 'Polygon',
-    icon: 'P',
-    color: 'bg-purple-500',
+    logo: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png',
     usdc: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' as `0x${string}`, // Native USDC
   },
 } as const
 
 type ChainKey = keyof typeof CHAINS
+
+const RELAY_API = 'https://api.relay.link'
 
 // ERC20 transfer ABI
 const ERC20_TRANSFER_ABI = [
@@ -57,17 +57,7 @@ interface Props {
   subtitle?: string
 }
 
-type BridgeStatus = 
-  | 'idle' 
-  | 'quoting' 
-  | 'ready' 
-  | 'confirming'
-  | 'switching'
-  | 'depositing' 
-  | 'bridging' 
-  | 'complete' 
-  | 'error'
-  | 'wrong_chain'
+type BridgeStatus = 'idle' | 'quoting' | 'ready' | 'confirming' | 'depositing' | 'bridging' | 'complete' | 'error'
 
 interface DepositQuote {
   depositAddress: string
@@ -78,10 +68,10 @@ interface DepositQuote {
 }
 
 export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, title, subtitle }: Props) {
-  const { logout } = usePrivy()
-  const { address } = useAccount()
   const { wallets } = useWallets()
+  const { client: smartWalletClient } = useSmartWallets()
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
+  const smartWalletAddress = smartWalletClient?.account?.address
 
   const [sourceChain, setSourceChain] = useState<ChainKey>('base')
   const [showSourceDropdown, setShowSourceDropdown] = useState(false)
@@ -90,12 +80,10 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
   const [error, setError] = useState<string | null>(null)
   const [quote, setQuote] = useState<DepositQuote | null>(null)
   const [txHash, setTxHash] = useState<string | null>(null)
-  const [currentChainId, setCurrentChainId] = useState<number | null>(null)
   const [mounted, setMounted] = useState(false)
   
   const inputRef = useRef<HTMLInputElement>(null)
   const quoteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hasInitializedRef = useRef(false)
 
   const sourceConfig = CHAINS[sourceChain]
@@ -106,21 +94,21 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
     chain => chain !== destinationChain
   )
 
-  // Balances for all chains
+  // Balances for all chains - use smart wallet address
   const { data: baseBalance } = useBalance({
-    address,
+    address: smartWalletAddress,
     token: CHAINS.base.usdc,
     chainId: base.id,
   })
 
   const { data: arbBalance } = useBalance({
-    address,
+    address: smartWalletAddress,
     token: CHAINS.arbitrum.usdc,
     chainId: arbitrum.id,
   })
 
   const { data: polygonBalance } = useBalance({
-    address,
+    address: smartWalletAddress,
     token: CHAINS.polygon.usdc,
     chainId: polygon.id,
   })
@@ -137,22 +125,6 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
   useEffect(() => {
     setMounted(true)
   }, [])
-
-  // Check current chain
-  useEffect(() => {
-    const checkChain = async () => {
-      if (!embeddedWallet) return
-      try {
-        const provider = await embeddedWallet.getEthereumProvider()
-        const chainIdHex = await provider.request({ method: 'eth_chainId' })
-        const chainId = parseInt(chainIdHex as string, 16)
-        setCurrentChainId(chainId)
-      } catch (e) {
-        console.error('Failed to get chain:', e)
-      }
-    }
-    checkChain()
-  }, [embeddedWallet])
 
   // Initialize on open
   useEffect(() => {
@@ -184,13 +156,78 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
     }
   }, [isOpen, availableSourceChains, balances])
 
-  // Cleanup polling
+  // Cleanup
   useEffect(() => {
     return () => {
-      if (pollingRef.current) clearTimeout(pollingRef.current)
       if (quoteTimeoutRef.current) clearTimeout(quoteTimeoutRef.current)
     }
   }, [])
+
+  // Fetch quote using Relay API (same pattern as Ostium bridge)
+  const fetchQuote = useCallback(async (amount: string) => {
+    if (!smartWalletAddress) return
+
+    setStatus('quoting')
+    setError(null)
+
+    try {
+      const amountWei = parseUnits(amount, 6).toString()
+      
+      const requestBody = {
+        user: smartWalletAddress,
+        recipient: smartWalletAddress,
+        originChainId: sourceConfig.id,
+        destinationChainId: destConfig.id,
+        originCurrency: sourceConfig.usdc,
+        destinationCurrency: destConfig.usdc,
+        amount: amountWei,
+        tradeType: 'EXACT_INPUT',
+        useDepositAddress: true,
+        refundTo: smartWalletAddress,
+        usePermit: false,
+        useExternalLiquidity: false,
+        referrer: 'bands.cash',
+      }
+
+      console.log('📤 Fetching bridge quote:', requestBody)
+
+      const response = await fetch(`${RELAY_API}/quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to get quote' }))
+        throw new Error(errorData.message || 'Failed to get quote')
+      }
+
+      const data = await response.json()
+      console.log('📦 Quote response:', data)
+
+      const step = data.steps?.[0]
+      if (!step?.depositAddress) {
+        throw new Error('No deposit address available for this route')
+      }
+
+      const amountOut = data.details?.currencyOut?.amount || amountWei
+      const gasFee = parseFloat(data.fees?.gas?.amountUsd || '0')
+      const relayerFee = parseFloat(data.fees?.relayer?.amountUsd || '0')
+
+      setQuote({
+        depositAddress: step.depositAddress,
+        requestId: step.requestId || data.requestId,
+        amountOut: formatUnits(BigInt(amountOut), 6),
+        fees: { total: (gasFee + relayerFee).toFixed(4) },
+        expiresAt: Date.now() + 30000,
+      })
+      setStatus('ready')
+    } catch (err: any) {
+      console.error('Quote error:', err)
+      setError(err.message || 'Failed to get quote')
+      setStatus('error')
+    }
+  }, [smartWalletAddress, sourceConfig, destConfig])
 
   // Debounced quote fetch
   useEffect(() => {
@@ -208,116 +245,13 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
     return () => {
       if (quoteTimeoutRef.current) clearTimeout(quoteTimeoutRef.current)
     }
-  }, [inputValue, sourceChain])
+  }, [inputValue, sourceChain, fetchQuote])
 
-  const fetchQuote = async (amount: string) => {
-    const walletAddress = embeddedWallet?.address || address
-    if (!walletAddress) return
-
-    setStatus('quoting')
-    setError(null)
-
-    try {
-      // Use Relay API to get deposit quote
-      const response = await fetch('/api/relay/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'quote',
-          originChainId: sourceConfig.id,
-          destinationChainId: destConfig.id,
-          originCurrency: sourceConfig.usdc,
-          destinationCurrency: destConfig.usdc,
-          amount: parseUnits(amount, 6).toString(),
-          recipient: walletAddress,
-        }),
-      })
-
-      if (!response.ok) throw new Error('Failed to get quote')
-      const data = await response.json()
-
-      if (data.steps?.[0]?.items?.[0]?.data?.to) {
-        setQuote({
-          depositAddress: data.steps[0].items[0].data.to,
-          requestId: data.requestId || `relay-${Date.now()}`,
-          amountOut: data.details?.currencyOut?.amountFormatted || amount,
-          fees: { total: (parseFloat(amount) - parseFloat(data.details?.currencyOut?.amountFormatted || amount)).toFixed(4) },
-          expiresAt: Date.now() + 30000,
-        })
-        setStatus('ready')
-      } else {
-        throw new Error('Invalid quote response')
-      }
-    } catch (err: any) {
-      console.error('Quote error:', err)
-      setError(err.message || 'Failed to get quote')
-      setStatus('error')
-    }
-  }
-
-  const switchToSourceChain = useCallback(async (): Promise<boolean> => {
-    if (!embeddedWallet) return false
-    
-    setStatus('switching')
-    
-    try {
-      await embeddedWallet.switchChain(sourceConfig.id)
-      await new Promise(r => setTimeout(r, 1000))
-      
-      const provider = await embeddedWallet.getEthereumProvider()
-      const chainIdHex = await provider.request({ method: 'eth_chainId' })
-      const chainId = parseInt(chainIdHex as string, 16)
-      
-      setCurrentChainId(chainId)
-      
-      if (chainId === sourceConfig.id) {
-        setStatus('ready')
-        setError(null)
-        return true
-      } else {
-        setStatus('wrong_chain')
-        setError(`Unable to switch to ${sourceConfig.name}. Please log out and log back in.`)
-        return false
-      }
-    } catch (e) {
-      console.error('Chain switch error:', e)
-      setStatus('wrong_chain')
-      setError('Network switch failed. Please log out and log back in.')
-      return false
-    }
-  }, [embeddedWallet, sourceConfig])
-
+  // Execute bridge using smart wallet
   const executeBridge = async () => {
-    if (!embeddedWallet || !quote?.depositAddress) {
+    if (!smartWalletClient || !quote?.depositAddress) {
       setError('No quote or wallet available')
       return
-    }
-
-    // Check if on correct source chain
-    const provider = await embeddedWallet.getEthereumProvider()
-    let chainIdHex = await provider.request({ method: 'eth_chainId' })
-    let chainId = parseInt(chainIdHex as string, 16)
-
-    if (chainId !== sourceConfig.id) {
-      setStatus('switching')
-      try {
-        await embeddedWallet.switchChain(sourceConfig.id)
-        await new Promise(r => setTimeout(r, 1000))
-        
-        chainIdHex = await provider.request({ method: 'eth_chainId' })
-        chainId = parseInt(chainIdHex as string, 16)
-        setCurrentChainId(chainId)
-        
-        if (chainId !== sourceConfig.id) {
-          setError(`Please switch to ${sourceConfig.name} network`)
-          setStatus('wrong_chain')
-          return
-        }
-      } catch {
-        setError('Failed to switch network')
-        setStatus('wrong_chain')
-        return
-      }
     }
 
     setStatus('confirming')
@@ -326,33 +260,38 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
     try {
       const amountWei = parseUnits(inputValue, 6)
 
+      // Encode ERC20 transfer to deposit address
       const data = encodeFunctionData({
         abi: ERC20_TRANSFER_ABI,
         functionName: 'transfer',
         args: [quote.depositAddress as `0x${string}`, amountWei],
       })
 
+      console.log('📤 Sending USDC to deposit address:', quote.depositAddress)
+
       setStatus('depositing')
 
-      const hash = await provider.request({
-        method: 'eth_sendTransaction',
-        params: [{
-          from: embeddedWallet.address,
-          to: sourceConfig.usdc,
-          data: data,
-          value: '0x0',
-        }],
+      // Get chain-specific smart wallet client and send
+      const { getClientForChain } = useSmartWallets as any
+      const chainClient = await smartWalletClient
+
+      const hash = await chainClient.sendTransaction({
+        to: sourceConfig.usdc,
+        data: data,
+        value: BigInt(0),
+        chain: { id: sourceConfig.id } as any,
       })
 
-      setTxHash(hash as string)
+      console.log('✅ Transaction sent:', hash)
+      setTxHash(hash)
       setStatus('bridging')
 
-      // Poll for completion (simplified - in production use requestId)
-      setTimeout(() => setStatus('complete'), 30000)
+      // Wait for completion (simplified)
+      setTimeout(() => setStatus('complete'), 20000)
     } catch (err: any) {
       console.error('Bridge error:', err)
       let errorMessage = err.message || 'Bridge failed'
-      if (errorMessage.toLowerCase().includes('rejected')) {
+      if (errorMessage.toLowerCase().includes('rejected') || errorMessage.toLowerCase().includes('denied')) {
         errorMessage = 'Transaction cancelled'
       }
       setError(errorMessage)
@@ -372,8 +311,7 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
   const amountNum = parseFloat(inputValue) || 0
   const balanceNum = parseFloat(sourceBalance) || 0
   const canBridge = status === 'ready' && amountNum > 0 && amountNum <= balanceNum && !!quote
-  const isLoading = ['quoting', 'confirming', 'switching', 'depositing', 'bridging'].includes(status)
-  const isOnWrongChain = currentChainId !== null && currentChainId !== sourceConfig.id
+  const isLoading = ['quoting', 'confirming', 'depositing', 'bridging'].includes(status)
 
   if (!isOpen || !mounted) return null
 
@@ -394,12 +332,11 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
       <div 
         className="absolute inset-0 bg-black/80 backdrop-blur-sm"
         onClick={onClose}
-        style={{ pointerEvents: 'auto' }}
       />
 
       <div 
         className="relative w-full max-w-[400px] bg-[#0a0a0a] border border-white/10 rounded-3xl p-6 max-h-[90vh] overflow-y-auto"
-        style={{ zIndex: 100000, pointerEvents: 'auto' }}
+        style={{ zIndex: 100000 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -413,7 +350,6 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
             </p>
           </div>
           <button
-            type="button"
             onClick={onClose}
             disabled={isLoading}
             className="p-2 hover:bg-white/10 rounded-full disabled:opacity-50"
@@ -455,52 +391,23 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
           </div>
         ) : (
           <>
-            {/* Wrong Chain Warning */}
-            {isOnWrongChain && status !== 'switching' && (
-              <div className="mb-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-2xl">
-                <div className="flex items-center gap-2 mb-3">
-                  <AlertTriangle className="w-5 h-5 text-yellow-400" />
-                  <span className="text-yellow-400 font-medium">Wrong Network</span>
-                </div>
-                <p className="text-yellow-400/70 text-sm mb-4">
-                  Switch to <strong>{sourceConfig.name}</strong> to bridge USDC.
-                </p>
-                <button
-                  onClick={switchToSourceChain}
-                  className="w-full py-2.5 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold text-sm rounded-xl transition-colors"
-                >
-                  Switch to {sourceConfig.name}
-                </button>
-              </div>
-            )}
-
-            {/* Switching Status */}
-            {status === 'switching' && (
-              <div className="flex items-center gap-2 mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-                <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
-                <span className="text-blue-400 text-sm">Switching to {sourceConfig.name}...</span>
-              </div>
-            )}
-
             {/* FROM section with chain dropdown */}
             <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 mb-3">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-3">
                 <span className="text-white/50 text-sm">From</span>
                 <div className="relative">
                   <button
                     onClick={() => setShowSourceDropdown(!showSourceDropdown)}
                     disabled={isLoading}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.05] hover:bg-white/[0.08] rounded-lg transition-colors disabled:opacity-50"
+                    className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.05] hover:bg-white/[0.08] rounded-xl transition-colors disabled:opacity-50"
                   >
-                    <div className={`w-5 h-5 ${sourceConfig.color} rounded-full flex items-center justify-center`}>
-                      <span className="text-white text-[10px] font-bold">{sourceConfig.icon}</span>
-                    </div>
-                    <span className="text-white/70 text-sm">{sourceConfig.name}</span>
+                    <img src={sourceConfig.logo} alt={sourceConfig.name} className="w-5 h-5 rounded-full" />
+                    <span className="text-white text-sm font-medium">{sourceConfig.name}</span>
                     <ChevronDown className="w-4 h-4 text-white/40" />
                   </button>
 
                   {showSourceDropdown && (
-                    <div className="absolute right-0 top-full mt-1 bg-[#1a1a1a] border border-white/10 rounded-xl overflow-hidden z-10 min-w-[160px]">
+                    <div className="absolute right-0 top-full mt-1 bg-[#1a1a1a] border border-white/10 rounded-xl overflow-hidden z-10 min-w-[180px]">
                       {availableSourceChains.map(chain => {
                         const config = CHAINS[chain]
                         const bal = balances[chain]
@@ -517,11 +424,9 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
                               chain === sourceChain ? 'bg-white/[0.05]' : ''
                             }`}
                           >
-                            <div className={`w-6 h-6 ${config.color} rounded-full flex items-center justify-center`}>
-                              <span className="text-white text-xs font-bold">{config.icon}</span>
-                            </div>
+                            <img src={config.logo} alt={config.name} className="w-6 h-6 rounded-full" />
                             <div className="flex-1 text-left">
-                              <div className="text-white text-sm">{config.name}</div>
+                              <div className="text-white text-sm font-medium">{config.name}</div>
                               <div className="text-white/40 text-xs">{parseFloat(bal).toFixed(2)} USDC</div>
                             </div>
                           </button>
@@ -540,22 +445,25 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
                   placeholder="0.00"
                   value={inputValue}
                   onChange={handleInputChange}
-                  disabled={isLoading || isOnWrongChain}
-                  className="flex-1 bg-transparent text-white text-2xl font-medium outline-none placeholder:text-white/20 disabled:opacity-50"
+                  disabled={isLoading}
+                  className="flex-1 bg-transparent text-white text-3xl font-semibold outline-none placeholder:text-white/20 disabled:opacity-50"
                 />
-                <div className="bg-[#ef4444] rounded-xl px-3 py-2 flex items-center gap-1">
-                  <span className="text-white font-bold text-sm">$</span>
-                  <span className="text-white font-semibold text-sm">USDC</span>
+                <div className="flex items-center gap-2 bg-white/[0.05] rounded-xl px-3 py-2">
+                  <img 
+                    src="https://cryptologos.cc/logos/usd-coin-usdc-logo.png" 
+                    alt="USDC" 
+                    className="w-6 h-6 rounded-full"
+                  />
+                  <span className="text-white font-semibold">USDC</span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between mt-2">
+              <div className="flex items-center justify-between mt-3">
                 <span className="text-white/30 text-sm">≈ ${amountNum.toFixed(2)}</span>
                 <button
-                  type="button"
                   onClick={handleMax}
-                  disabled={isLoading || isOnWrongChain}
-                  className="text-[#ef4444] text-xs font-medium hover:underline disabled:opacity-50"
+                  disabled={isLoading}
+                  className="text-[#3B5EE8] text-xs font-medium hover:underline disabled:opacity-50"
                 >
                   Balance: {parseFloat(sourceBalance).toFixed(2)} USDC
                 </button>
@@ -565,44 +473,46 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
             {/* Arrow */}
             <div className="flex justify-center -my-1 relative z-10">
               <div className="w-10 h-10 bg-[#1a1a1a] rounded-full flex items-center justify-center border border-white/10">
-                <ArrowDown className="w-5 h-5 text-[#ef4444]" />
+                <ArrowDown className="w-5 h-5 text-[#3B5EE8]" />
               </div>
             </div>
 
             {/* TO section */}
             <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 mb-4 mt-3">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-3">
                 <span className="text-white/50 text-sm">To</span>
-                <div className="flex items-center gap-2">
-                  <div className={`w-5 h-5 ${destConfig.color} rounded-full flex items-center justify-center`}>
-                    <span className="text-white text-[10px] font-bold">{destConfig.icon}</span>
-                  </div>
-                  <span className="text-white/70 text-sm">{destConfig.name}</span>
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.05] rounded-xl">
+                  <img src={destConfig.logo} alt={destConfig.name} className="w-5 h-5 rounded-full" />
+                  <span className="text-white text-sm font-medium">{destConfig.name}</span>
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
-                <span className="text-white text-2xl font-medium">
+                <span className="text-white text-3xl font-semibold">
                   {status === 'quoting' ? '...' : 
-                   quote ? (amountNum - parseFloat(quote.fees.total)).toFixed(2) : 
+                   quote ? parseFloat(quote.amountOut).toFixed(2) : 
                    amountNum > 0 ? amountNum.toFixed(2) : '0.00'}
                 </span>
-                <div className="bg-[#ef4444] rounded-xl px-3 py-2 flex items-center gap-1">
-                  <span className="text-white font-bold text-sm">$</span>
-                  <span className="text-white font-semibold text-sm">USDC</span>
+                <div className="flex items-center gap-2 bg-white/[0.05] rounded-xl px-3 py-2">
+                  <img 
+                    src="https://cryptologos.cc/logos/usd-coin-usdc-logo.png" 
+                    alt="USDC" 
+                    className="w-6 h-6 rounded-full"
+                  />
+                  <span className="text-white font-semibold">USDC</span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between mt-2">
+              <div className="flex items-center justify-between mt-3">
                 <span className="text-white/30 text-sm">
-                  ≈ ${quote ? (amountNum - parseFloat(quote.fees.total)).toFixed(2) : '0.00'}
+                  ≈ ${quote ? parseFloat(quote.amountOut).toFixed(2) : '0.00'}
                 </span>
                 <span className="text-white/30 text-xs">Current: {parseFloat(destBalance).toFixed(2)} USDC</span>
               </div>
             </div>
 
             {/* Quote info */}
-            {quote && !isOnWrongChain && (
+            {quote && (
               <div className="bg-white/[0.02] rounded-xl p-3 mb-4 text-xs">
                 <div className="flex justify-between mb-1">
                   <span className="text-white/50">Fee</span>
@@ -623,17 +533,12 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
               </div>
             )}
 
-            {status === 'confirming' && (
-              <div className="flex items-center gap-2 mb-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
-                <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />
-                <span className="text-yellow-400 text-sm">Confirm in your wallet...</span>
-              </div>
-            )}
-
-            {status === 'depositing' && (
+            {(status === 'confirming' || status === 'depositing') && (
               <div className="flex items-center gap-2 mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
                 <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
-                <span className="text-blue-400 text-sm">Sending to bridge...</span>
+                <span className="text-blue-400 text-sm">
+                  {status === 'confirming' ? 'Confirm in wallet...' : 'Sending to bridge...'}
+                </span>
               </div>
             )}
 
@@ -665,32 +570,29 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
             )}
 
             {/* Bridge button */}
-            {!isOnWrongChain && (
-              <button
-                type="button"
-                onClick={executeBridge}
-                disabled={!canBridge || isLoading}
-                className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-[#ef4444]/30 disabled:cursor-not-allowed text-white font-semibold rounded-2xl flex items-center justify-center gap-2"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    {status === 'quoting' ? 'Getting quote...' : 
-                     status === 'confirming' ? 'Confirm in wallet...' :
-                     status === 'depositing' ? 'Sending...' :
-                     status === 'bridging' ? 'Bridging...' : 'Processing...'}
-                  </>
-                ) : amountNum <= 0 ? (
-                  'Enter amount'
-                ) : amountNum > balanceNum ? (
-                  'Insufficient balance'
-                ) : !quote ? (
-                  'Fetching quote...'
-                ) : (
-                  `Bridge $${amountNum.toFixed(2)} USDC`
-                )}
-              </button>
-            )}
+            <button
+              onClick={executeBridge}
+              disabled={!canBridge || isLoading}
+              className="w-full py-4 bg-[#3B5EE8] hover:bg-[#2D4BC0] disabled:bg-[#3B5EE8]/30 disabled:cursor-not-allowed text-white font-semibold rounded-2xl flex items-center justify-center gap-2 transition-colors"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  {status === 'quoting' ? 'Getting quote...' : 
+                   status === 'confirming' ? 'Confirm in wallet...' :
+                   status === 'depositing' ? 'Sending...' :
+                   status === 'bridging' ? 'Bridging...' : 'Processing...'}
+                </>
+              ) : amountNum <= 0 ? (
+                'Enter amount'
+              ) : amountNum > balanceNum ? (
+                'Insufficient balance'
+              ) : !quote ? (
+                'Fetching quote...'
+              ) : (
+                `Bridge $${amountNum.toFixed(2)} USDC`
+              )}
+            </button>
 
             {/* Footer */}
             <p className="text-center text-white/20 text-xs mt-4">
