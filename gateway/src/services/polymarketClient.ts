@@ -187,11 +187,8 @@ async function makeRequest<T>(
       }
       
       // Log outbound request
-      logger.debug(`[Polymarket] ${method} ${url}`, {
-        host: new URL(url).host,
-        path,
-        hasBody: !!bodyString,
-      })
+      const urlObj = new URL(url)
+      logger.debug(`[Polymarket] ${method} ${url} host=${urlObj.host} path=${path} hasBody=${!!bodyString}`)
       
       const response = await fetch(url, {
         method,
@@ -209,10 +206,7 @@ async function makeRequest<T>(
       if (!response.ok) {
         // Log error response body snippet (first 200 chars)
         const errorSnippet = responseText.substring(0, 200)
-        logger.warn(`[Polymarket] Error response: ${errorSnippet}`, {
-          status: response.status,
-          path,
-        })
+        logger.warn(`[Polymarket] Error response: ${errorSnippet} status=${response.status} path=${path}`)
       }
       
       if (!response.ok) {
