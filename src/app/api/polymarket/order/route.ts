@@ -48,6 +48,12 @@ function createAuthHeaders(
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    // Add browser-like headers to avoid Cloudflare blocks
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Origin': 'https://polymarket.com',
+    'Referer': 'https://polymarket.com/',
   }
   
   // Add USER credentials (required for CLOB)

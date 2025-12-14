@@ -245,8 +245,12 @@ export function usePolymarketTrade({
             },
           })
           
+          // Use our CLOB proxy to avoid CORS and Cloudflare blocks
+          const clobProxyUrl = `${baseUrl}/api/polymarket/clob`
+          console.log('   Using CLOB proxy:', clobProxyUrl)
+          
           const client = new ClobClient(
-            CLOB_API,
+            clobProxyUrl,
             POLYGON_CHAIN_ID,
             ethersSigner,
             creds,
@@ -406,8 +410,10 @@ export function usePolymarketTrade({
 
       // Create temporary ClobClient for credential derivation
       // IMPORTANT: Must include signatureType=2 and Safe address for Gnosis Safe flow
+      // Use proxy URL to avoid CORS and Cloudflare blocks
+      const clobProxyUrl = `${baseUrl}/api/polymarket/clob`
       const tempClobClient = new ClobClient(
-        CLOB_API,
+        clobProxyUrl,
         POLYGON_CHAIN_ID,
         ethersSigner,
         undefined, // No creds yet
@@ -495,8 +501,9 @@ export function usePolymarketTrade({
 
       // Step 8: Initialize authenticated ClobClient
       console.log('🔧 Initializing authenticated CLOB client...')
+      // Use proxy URL to avoid CORS and Cloudflare blocks
       const authenticatedClobClient = new ClobClient(
-        CLOB_API,
+        clobProxyUrl,
         POLYGON_CHAIN_ID,
         ethersSigner,
         userCreds,
@@ -600,41 +607,20 @@ export function usePolymarketTrade({
       // Calculate shares from USDC amount
       const size = amountNum / price
 
-      // Step 1: Create and sign order LOCALLY (no network call)
-      console.log('📝 Creating order locally...')
-      const signedOrder = await clobClient.createOrder(
+      // Create and post order using ClobClient (which now uses our proxy)
+      console.log('📤 Creating and posting order via ClobClient...')
+      const orderResponse = await clobClient.createAndPostOrder(
         {
           tokenID: tokenId,
           price: price,
           side: Side.BUY,
           size: size,
         },
-        { tickSize, negRisk }
+        { tickSize, negRisk },
+        OrderType.GTC
       )
       
-      console.log('✅ Order signed locally:', signedOrder)
-
-      // Step 2: Submit via server-side proxy to avoid CORS
-      console.log('📤 Submitting order via server proxy...')
-      const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
-      
-      const proxyResponse = await fetch(`${baseUrl}/api/polymarket/order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          order: signedOrder,
-          owner: session?.safeAddress,
-          orderType: 'GTC',
-          userCreds: session?.userApiCreds,
-        }),
-      })
-      
-      const orderResponse = await proxyResponse.json()
-      console.log('✅ Server proxy response:', orderResponse)
-
-      if (!proxyResponse.ok) {
-        throw new Error(orderResponse?.error || 'Order submission failed')
-      }
+      console.log('✅ Order response:', orderResponse)
 
       if (orderResponse?.orderID || orderResponse?.success !== false) {
         setState({ 
@@ -989,8 +975,10 @@ export function usePolymarketSetup() {
       console.log('🔐 Getting user API credentials for Safe:', derivedSafeAddress)
 
       // IMPORTANT: Must include signatureType=2 and Safe address for Gnosis Safe flow
+      // Use proxy URL to avoid CORS and Cloudflare blocks
+      const clobProxyUrl2 = `${baseUrl}/api/polymarket/clob`
       const tempClobClient = new ClobClient(
-        CLOB_API,
+        clobProxyUrl2,
         POLYGON_CHAIN_ID,
         ethersSigner,
         undefined, // No creds yet
@@ -999,7 +987,7 @@ export function usePolymarketSetup() {
       )
 
       let userCreds: { key: string; secret: string; passphrase: string }
-      
+
       try {
         const derivedCreds = await tempClobClient.deriveApiKey() as any
         if ((derivedCreds?.apiKey || derivedCreds?.key) && derivedCreds?.secret && derivedCreds?.passphrase) {
