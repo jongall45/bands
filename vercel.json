@@ -1,4 +1,10 @@
 {
+  "regions": ["fra1"],
+  "functions": {
+    "src/app/api/polymarket/**/*.ts": {
+      "maxDuration": 30
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",
