@@ -205,10 +205,6 @@ export function usePolymarketTrade({
       if (existingSession) {
         setSession(existingSession)
         console.log('📋 Loaded existing Polymarket session:', existingSession.safeAddress)
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:loadSession',message:'Loaded trading session',data:{currentEoaAddress:eoaAddress,sessionEoaAddress:existingSession.eoaAddress,sessionSafeAddress:existingSession.safeAddress,hasApiCreds:!!existingSession.userApiCreds,apiKeyPrefix:existingSession.userApiCreds?.key?.substring(0,8),eoaMatchesSession:eoaAddress.toLowerCase()===existingSession.eoaAddress?.toLowerCase()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H2'})}).catch(()=>{});
-        // #endregion
       }
     }
   }, [eoaAddress])
@@ -241,13 +237,8 @@ export function usePolymarketTrade({
         
         try {
           const ethersSigner = await getEthersSigner(embeddedWallet)
-          const signerAddress = await ethersSigner.getAddress()
           const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
-          
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:recreateClobClient',message:'Recreating ClobClient',data:{signerAddress,sessionEoaAddress:session.eoaAddress,sessionSafeAddress:session.safeAddress,currentEoaAddress:embeddedWallet.address,apiKeyPrefix:creds.key?.substring(0,8),signerMatchesSession:signerAddress.toLowerCase()===session.eoaAddress?.toLowerCase()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
-          // #endregion
-          
+
           const builderConfig = new BuilderConfig({
             remoteBuilderConfig: {
               url: `${baseUrl}/api/polymarket/sign`,
@@ -569,10 +560,6 @@ export function usePolymarketTrade({
   const executeTrade = useCallback(async (amount: string, outcome: 'YES' | 'NO') => {
     console.log('🎲 executeTrade called:', { amount, outcome })
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:executeTrade:entry',message:'executeTrade called',data:{amount,outcome,hasSession:!!session,hasClobClient:!!clobClient,eoaAddress,safeAddress:session?.safeAddress},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H2'})}).catch(()=>{});
-    // #endregion
-
     // Check if session is initialized
     if (!session || !clobClient) {
       console.log('📋 No session, initializing...')
@@ -622,10 +609,6 @@ export function usePolymarketTrade({
       // Calculate shares from USDC amount
       const size = amountNum / price
 
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:executeTrade:beforeOrder',message:'About to create order',data:{tokenId,price,size,tickSize,negRisk,sessionEoaAddress:session?.eoaAddress,sessionSafeAddress:session?.safeAddress,currentEoaAddress:eoaAddress,apiKeyPrefix:session?.userApiCreds?.key?.substring(0,8)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H4'})}).catch(()=>{});
-      // #endregion
-
       // Step 1: Create and sign order locally (no network request, avoids CORS)
       console.log('📤 Creating signed order locally...')
       const signedOrder = await clobClient.createOrder({
@@ -667,10 +650,6 @@ export function usePolymarketTrade({
       
       console.log('✅ Order response:', orderResponse)
 
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:executeTrade:afterOrder',message:'Order response received',data:{orderResponse:JSON.stringify(orderResponse),hasOrderID:!!orderResponse?.orderID,hasError:!!orderResponse?.error,success:orderResponse?.success},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3-H4'})}).catch(()=>{});
-      // #endregion
-
       // Check for errors first - the response might have an error field
       if (orderResponse?.error) {
         throw new Error(orderResponse.error)
@@ -703,10 +682,6 @@ export function usePolymarketTrade({
       }
     } catch (err: any) {
       console.error('Trade execution failed:', err)
-
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:executeTrade:catch',message:'Trade execution error',data:{errorMessage:err?.message,errorName:err?.name,errorStack:err?.stack?.substring(0,500),errorResponse:err?.response?.data},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H5'})}).catch(()=>{});
-      // #endregion
 
       let errorMsg = err.message || 'Trade failed'
       if (errorMsg.includes('rejected') || errorMsg.includes('denied')) {
