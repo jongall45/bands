@@ -292,11 +292,9 @@ export async function makeRequest<T>(
       logPolymarketCall(path, method, durationMs, response.ok, { status: response.status })
       
       if (!response.ok) {
-        // Log error response body (full for debugging)
-        logger.warn(`[Polymarket] Error response: ${responseText} status=${response.status} path=${path}`)
-        
         // #region agent log - DEBUG: Full error response from Polymarket
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'polymarketClient.ts:makeRequest',message:'Polymarket API error',data:{status:response.status,statusText:response.statusText,responseText:responseText.substring(0,500),path:path,method:method},timestamp:Date.now(),sessionId:'debug-session',runId:'order-debug',hypothesisId:'E'})}).catch(()=>{});
+        logger.warn(`[Polymarket] FULL ERROR RESPONSE status=${response.status} path=${path}`)
+        logger.warn(`[Polymarket] FULL ERROR BODY: ${responseText}`)
         // #endregion
         
         // Check for Cloudflare block
@@ -430,25 +428,11 @@ export async function submitOrder(
 ): Promise<unknown> {
   logger.info(`[Order] Submitting order: owner=${owner.slice(0, 10)}... orderType=${orderType} clobApi=${config.clobApi}`)
   
-  // #region agent log - DEBUG: Log incoming signedOrder for hypothesis A (payload mismatch)
+  // #region agent log - DEBUG: Log incoming signedOrder as full JSON
   const signedOrderObj = signedOrder as Record<string, unknown>
-  logger.info(`[Order] DEBUG incoming signedOrder:`)
-  logger.info(`  maker: ${signedOrderObj.maker}`)
-  logger.info(`  signer: ${signedOrderObj.signer}`)
-  logger.info(`  tokenId: ${String(signedOrderObj.tokenId).slice(0, 30)}...`)
-  logger.info(`  side: ${signedOrderObj.side} (type: ${typeof signedOrderObj.side})`)
-  logger.info(`  signatureType: ${signedOrderObj.signatureType}`)
-  logger.info(`  makerAmount: ${signedOrderObj.makerAmount}`)
-  logger.info(`  takerAmount: ${signedOrderObj.takerAmount}`)
-  logger.info(`  expiration: ${signedOrderObj.expiration}`)
-  logger.info(`  nonce: ${signedOrderObj.nonce}`)
-  logger.info(`  salt: ${signedOrderObj.salt}`)
-  logger.info(`  feeRateBps: ${signedOrderObj.feeRateBps}`)
-  logger.info(`  signature length: ${String(signedOrderObj.signature || '').length}`)
-  // Note: funderAddress is NOT in the signed order - it's a ClobClient parameter
-  // The clob-client uses funderAddress to determine maker when signatureType != 0
-  logger.info(`  funderAddress: NOT_IN_SIGNED_ORDER (only used by ClobClient for proxy wallets)`)
-  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'polymarketClient.ts:submitOrder',message:'DEBUG incoming signedOrder',data:{maker:signedOrderObj.maker,signer:signedOrderObj.signer,tokenId:String(signedOrderObj.tokenId).slice(0,30),side:signedOrderObj.side,sideType:typeof signedOrderObj.side,signatureType:signedOrderObj.signatureType,makerAmount:signedOrderObj.makerAmount,takerAmount:signedOrderObj.takerAmount,owner:owner},timestamp:Date.now(),sessionId:'debug-session',runId:'order-debug',hypothesisId:'A'})}).catch(()=>{});
+  // Safe stringify that handles BigInt
+  const safeStringify = (v: unknown) => JSON.stringify(v, (_k, val) => (typeof val === "bigint" ? val.toString() : val), 2)
+  logger.info(`[Order] DEBUG incoming signedOrder JSON: ${safeStringify(signedOrderObj)}`)
   // #endregion
   
   // Validate userCreds before proceeding
@@ -481,10 +465,9 @@ export async function submitOrder(
     // Log and validate the final payload
     logAndValidatePayload(canonicalPayload, 'OrderSubmit')
     
-    // #region agent log - DEBUG: Log canonical payload for hypothesis B (transformation error)
-    logger.info(`[Order] DEBUG canonical payload being sent to Polymarket:`)
-    logger.info(`  payload: ${JSON.stringify(canonicalPayload)}`)
-    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'polymarketClient.ts:submitOrder',message:'DEBUG canonical payload',data:{payload:canonicalPayload},timestamp:Date.now(),sessionId:'debug-session',runId:'order-debug',hypothesisId:'B'})}).catch(()=>{});
+    // #region agent log - DEBUG: Log canonical payload as full JSON
+    const safeStringify2 = (v: unknown) => JSON.stringify(v, (_k, val) => (typeof val === "bigint" ? val.toString() : val), 2)
+    logger.info(`[Order] DEBUG canonical payload JSON: ${safeStringify2(canonicalPayload)}`)
     // #endregion
     
   } catch (buildError) {
@@ -506,7 +489,8 @@ export async function submitOrder(
     logger.info(`[Order] Order submitted successfully using derived user creds`)
     
     // #region agent log - DEBUG: Log success response
-    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'polymarketClient.ts:submitOrder',message:'Order SUCCESS',data:{result:result},timestamp:Date.now(),sessionId:'debug-session',runId:'order-debug',hypothesisId:'C'})}).catch(()=>{});
+    const safeStringify3 = (v: unknown) => JSON.stringify(v, (_k, val) => (typeof val === "bigint" ? val.toString() : val), 2)
+    logger.info(`[Order] SUCCESS RESPONSE: ${safeStringify3(result)}`)
     // #endregion
     
     return result
@@ -521,8 +505,8 @@ export async function submitOrder(
     const hadCreds = !!userCreds && !!userCreds.apiKey
     logger.error(`[Order] Order submission failed: status=${statusCode || 'unknown'} error=${errorMsg} hadCreds=${hadCreds} keyLen=${userCreds?.apiKey?.length || 0}`)
     
-    // #region agent log - DEBUG: Log error response for hypothesis D (API rejection reason)
-    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'polymarketClient.ts:submitOrder',message:'Order FAILED',data:{error:errorMsg,statusCode:statusCode,hadCreds:hadCreds},timestamp:Date.now(),sessionId:'debug-session',runId:'order-debug',hypothesisId:'D'})}).catch(()=>{});
+    // #region agent log - DEBUG: Log error details
+    logger.error(`[Order] FAILED: error=${errorMsg} statusCode=${statusCode} hadCreds=${hadCreds}`)
     // #endregion
     
     // Re-throw with status code preserved
