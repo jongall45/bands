@@ -43,9 +43,9 @@ function logTest(result: TestResult) {
   results.push(result)
 }
 
-async function runTest<T>(
+async function runTest(
   name: string,
-  testFn: () => Promise<{ passed: boolean; message: string; data?: T }>
+  testFn: () => Promise<{ passed: boolean; message: string; data?: unknown }>
 ): Promise<void> {
   const start = Date.now()
   try {
