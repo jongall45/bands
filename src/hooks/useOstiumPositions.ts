@@ -63,7 +63,6 @@ export function addOptimisticPosition(position: Omit<OstiumPosition, 'index' | '
   pendingPositions.push({ position: optimistic, txHash, addedAt: Date.now() })
   
   // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useOstiumPositions.ts:addOptimisticPosition',message:'Added optimistic position',data:{symbol:position.symbol,pendingCount:pendingPositions.length,hasQueryClient:!!globalQueryClient},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'OPT'})}).catch(()=>{});
   // #endregion
   
   console.log('⚡ Added optimistic position:', position.symbol, '- pending count:', pendingPositions.length, '- hasQueryClient:', !!globalQueryClient)
@@ -137,7 +136,6 @@ export function useOstiumPositions() {
   
   // #region agent log
   if (pending.length > 0) {
-    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useOstiumPositions.ts:merge',message:'Merging positions',data:{realCount:realPositions.length,pendingCount:pending.length,pendingSymbols:pending.map(p=>p.symbol)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'MERGE'})}).catch(()=>{});
   }
   // #endregion
   

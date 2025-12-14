@@ -238,7 +238,6 @@ export function OstiumTradeButton({
     
     // #region agent log
     const tradeStartTime = Date.now()
-    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OstiumTradeButton.tsx:trade-start',message:'Trade execution started',data:{pairIndex,isLong,collateralUSDC,leverage},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'TIMING'})}).catch(()=>{});
     // #endregion
 
     try {
@@ -260,7 +259,6 @@ export function OstiumTradeButton({
       }
       
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OstiumTradeButton.tsx:price-validation',message:'Using cached price (fast path)',data:{durationMs:0,freshPrice,cached:true},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
       
       console.log('⚡ Using cached price:', freshPrice)
@@ -271,7 +269,6 @@ export function OstiumTradeButton({
       // #endregion
       const chainId = await client.getChainId()
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OstiumTradeButton.tsx:chain-check',message:'Chain ID check complete',data:{durationMs:Date.now()-chainCheckStart,chainId,needsSwitch:chainId!==42161},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
       if (chainId !== arbitrum.id) {
         console.log('🔄 Switching to Arbitrum...')
         await client.switchChain({ id: arbitrum.id })
@@ -389,20 +386,17 @@ export function OstiumTradeButton({
 
       // #region agent log
       const sendTxStart = Date.now()
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OstiumTradeButton.tsx:send-tx-start',message:'Sending transaction to bundler',data:{callsCount:calls.length,hasApproval:calls.length>1},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
       // #endregion
 
       const hash = await client.sendTransaction({ calls })
 
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OstiumTradeButton.tsx:send-tx-complete',message:'Transaction submitted to bundler',data:{durationMs:Date.now()-sendTxStart,hash},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
       // #endregion
 
       console.log('✅ Transaction submitted:', hash)
       console.log('🔗 Arbiscan:', `https://arbiscan.io/tx/${hash}`)
 
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OstiumTradeButton.tsx:optimistic-success',message:'Showing success immediately (optimistic UI)',data:{totalDurationMs:Date.now()-tradeStartTime,hash},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FIX'})}).catch(()=>{});
       // #endregion
 
       // ========== OPTIMISTIC UI ==========

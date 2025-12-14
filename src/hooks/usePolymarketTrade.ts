@@ -155,8 +155,45 @@ export function usePolymarketTrade({
     transport: http(),
   }), [])
 
-  // Parse market data
+  // Parse market data (from Gamma API)
   const parsedMarket = useMemo(() => parseMarket(market), [market])
+  
+  // Fetch live CLOB prices (more accurate than Gamma's outcomePrices)
+  const [livePrices, setLivePrices] = useState<{ yesPrice: number; noPrice: number } | null>(null)
+  
+  useEffect(() => {
+    const fetchLivePrices = async () => {
+      if (!parsedMarket.yesTokenId || !parsedMarket.noTokenId) return
+      
+      try {
+        const [yesBook, noBook] = await Promise.all([
+          fetch(`https://clob.polymarket.com/book?token_id=${parsedMarket.yesTokenId}`).then(r => r.json()),
+          fetch(`https://clob.polymarket.com/book?token_id=${parsedMarket.noTokenId}`).then(r => r.json()),
+        ])
+        
+        const yesBid = yesBook.bids?.[0]?.price ? parseFloat(yesBook.bids[0].price) : 0
+        const yesAsk = yesBook.asks?.[0]?.price ? parseFloat(yesBook.asks[0].price) : 1
+        const yesMid = (yesBid + yesAsk) / 2
+        
+        const noBid = noBook.bids?.[0]?.price ? parseFloat(noBook.bids[0].price) : 0
+        const noAsk = noBook.asks?.[0]?.price ? parseFloat(noBook.asks[0].price) : 1
+        const noMid = (noBid + noAsk) / 2
+        
+        setLivePrices({ yesPrice: yesMid, noPrice: noMid })
+      } catch (e) {
+        console.warn('Failed to fetch live CLOB prices:', e)
+        // Fall back to Gamma prices
+      }
+    }
+    
+    fetchLivePrices()
+    const interval = setInterval(fetchLivePrices, 5000) // Refresh every 5s
+    return () => clearInterval(interval)
+  }, [parsedMarket.yesTokenId, parsedMarket.noTokenId])
+  
+  // Use live prices if available, otherwise fall back to Gamma prices
+  const yesPrice = livePrices?.yesPrice ?? parsedMarket.yesPrice
+  const noPrice = livePrices?.noPrice ?? parsedMarket.noPrice
 
   // ============================================
   // LOAD SESSION ON MOUNT
@@ -503,9 +540,9 @@ export function usePolymarketTrade({
   // ============================================
   
   const getTradeEstimate = useCallback((amount: string, outcome: 'YES' | 'NO'): TradeEstimate => {
-    const price = outcome === 'YES' ? parsedMarket.yesPrice : parsedMarket.noPrice
+    const price = outcome === 'YES' ? yesPrice : noPrice
     return estimateTrade(amount, price, 'BUY')
-  }, [parsedMarket])
+  }, [yesPrice, noPrice])
 
   // ============================================
   // TRADE EXECUTION
@@ -548,7 +585,7 @@ export function usePolymarketTrade({
 
     try {
       const tokenId = outcome === 'YES' ? parsedMarket.yesTokenId : parsedMarket.noTokenId
-      const price = outcome === 'YES' ? parsedMarket.yesPrice : parsedMarket.noPrice
+      const price = outcome === 'YES' ? yesPrice : noPrice
       
       console.log('📤 Creating order via CLOB client:')
       console.log('   Token ID:', tokenId)
@@ -613,6 +650,8 @@ export function usePolymarketTrade({
     initializeSession,
     usdcBalance,
     parsedMarket,
+    yesPrice,
+    noPrice,
     market,
     fetchBalancesAndAllowances,
     onSuccess,
@@ -656,8 +695,8 @@ export function usePolymarketTrade({
     
     // Market data
     parsedMarket,
-    yesPrice: parsedMarket.yesPrice,
-    noPrice: parsedMarket.noPrice,
+    yesPrice,
+    noPrice,
     
     // Actions
     estimateTrade: getTradeEstimate,
@@ -838,39 +877,21 @@ export function usePolymarketSetup() {
     setSetupState({ status: 'initializing', message: 'Setting up Polymarket...' })
 
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:setup-start',message:'Starting Polymarket setup',data:{eoaAddress,hasEmbeddedWallet:!!embeddedWallet},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       
       // Step 1: Get ethers signer from Privy embedded wallet
       console.log('🔐 Getting signer from Privy embedded wallet...')
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step1-before',message:'Getting ethers signer',data:{walletType:embeddedWallet?.walletClientType},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       const ethersSigner = await getEthersSigner(embeddedWallet)
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step1-after',message:'Got ethers signer',data:{hasSigner:!!ethersSigner},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
 
       // Step 2: Initialize BuilderConfig with remote signing
       const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step2-before',message:'Creating BuilderConfig',data:{baseUrl,fullUrl:`${baseUrl}/api/polymarket/sign`},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       const builderConfig = new BuilderConfig({
         remoteBuilderConfig: {
           url: `${baseUrl}/api/polymarket/sign`,
         },
       })
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step2-after',message:'BuilderConfig created',data:{hasConfig:!!builderConfig},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
 
       // Step 3: Initialize RelayClient
       setSetupState({ status: 'initializing', message: 'Connecting to Polymarket...' })
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step3-before',message:'Creating RelayClient',data:{relayerApi:BUILDER_RELAYER_API,chainId:POLYGON_CHAIN_ID},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
       const relay = new RelayClient(
         BUILDER_RELAYER_API,
         POLYGON_CHAIN_ID,
@@ -878,51 +899,30 @@ export function usePolymarketSetup() {
         builderConfig,
         RelayerTxType.SAFE
       )
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step3-after',message:'RelayClient created',data:{hasRelay:!!relay},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
 
       // Step 4: Derive Safe address
       let derivedSafeAddress: string = eoaAddress
       let isDeployed = false
 
       try {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step4-import',message:'Importing deriveSafe',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
         const { deriveSafe } = await import('@polymarket/builder-relayer-client/dist/builder/derive')
         const { getContractConfig } = await import('@polymarket/builder-relayer-client/dist/config')
         
         const config = getContractConfig(POLYGON_CHAIN_ID)
         derivedSafeAddress = deriveSafe(eoaAddress, config.SafeContracts.SafeFactory)
         console.log('📍 Derived Safe address:', derivedSafeAddress)
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step4-derived',message:'Safe address derived',data:{derivedSafeAddress},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
 
         // Check if deployed
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step4-checkDeploy',message:'Checking if Safe deployed',data:{derivedSafeAddress},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
         isDeployed = await relay.getDeployed(derivedSafeAddress)
         console.log('📍 Safe deployed:', isDeployed)
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step4-deployed',message:'Safe deployment status',data:{isDeployed},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
       } catch (deriveError: any) {
         console.warn('Could not derive Safe address, using EOA:', deriveError)
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step4-error',message:'Safe derivation error',data:{error:deriveError?.message||String(deriveError)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
       }
 
       // Step 5: Deploy Safe if needed
       if (!isDeployed) {
         setSetupState({ status: 'initializing', message: 'Creating your trading wallet...' })
         console.log('🚀 Deploying Safe wallet...')
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step5-deploy',message:'Deploying Safe',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
         
         try {
           // Add timeout to deploy call (30 seconds)
@@ -931,34 +931,19 @@ export function usePolymarketSetup() {
             setTimeout(() => reject(new Error('Deploy timeout after 30s')), 30000)
           )
           
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step5-deploy-calling',message:'Calling relay.deploy()',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-          // #endregion
           
           const deployResponse = await Promise.race([deployPromise, timeoutPromise]) as any
           
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step5-deploy-response',message:'relay.deploy() returned',data:{hasResponse:!!deployResponse,responseType:typeof deployResponse},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-          // #endregion
           
           const deployResult = await deployResponse.wait()
           
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step5-deploy-waited',message:'deployResponse.wait() returned',data:{hasResult:!!deployResult,proxyAddress:deployResult?.proxyAddress},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-          // #endregion
           
           if (deployResult?.proxyAddress) {
             derivedSafeAddress = deployResult.proxyAddress
             console.log('✅ Safe deployed at:', derivedSafeAddress)
           }
           isDeployed = true
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step5-success',message:'Safe deployed',data:{derivedSafeAddress},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-          // #endregion
         } catch (deployError: any) {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step5-error',message:'Safe deploy error',data:{error:deployError?.message||String(deployError)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-          // #endregion
           if (deployError?.message?.includes('409') || deployError?.response?.status === 409) {
             console.log('ℹ️ Safe already exists')
             isDeployed = true
@@ -977,9 +962,6 @@ export function usePolymarketSetup() {
       // Step 6: Get User API Credentials
       setSetupState({ status: 'initializing', message: 'Sign to connect...' })
       console.log('🔐 Getting user API credentials for Safe:', derivedSafeAddress)
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step6-start',message:'Creating ClobClient for credentials',data:{clobApi:CLOB_API,chainId:POLYGON_CHAIN_ID,safeAddress:derivedSafeAddress},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
 
       // IMPORTANT: Must include signatureType=2 and Safe address for Gnosis Safe flow
       const tempClobClient = new ClobClient(
@@ -990,20 +972,11 @@ export function usePolymarketSetup() {
         CLOB_SIGNATURE_TYPES.POLY_GNOSIS_SAFE, // signatureType = 2 (EOA signs for Safe)
         derivedSafeAddress // Safe address as funder
       )
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step6-clobCreated',message:'ClobClient created with Safe config',data:{hasClobClient:!!tempClobClient,signatureType:2,safeAddress:derivedSafeAddress},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
 
       let userCreds: { key: string; secret: string; passphrase: string }
       
       try {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step6-deriving',message:'Calling deriveApiKey (will prompt signature)',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
         const derivedCreds = await tempClobClient.deriveApiKey() as any
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step6-derived',message:'deriveApiKey returned',data:{hasKey:!!(derivedCreds?.apiKey||derivedCreds?.key)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
         if ((derivedCreds?.apiKey || derivedCreds?.key) && derivedCreds?.secret && derivedCreds?.passphrase) {
           userCreds = {
             key: derivedCreds.apiKey || derivedCreds.key,
@@ -1016,9 +989,6 @@ export function usePolymarketSetup() {
         }
       } catch (deriveError: any) {
         console.log('📋 Creating new API credentials...')
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step6-deriveFailed',message:'deriveApiKey failed, trying createApiKey',data:{error:deriveError?.message||String(deriveError)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
         try {
           const newCreds = await tempClobClient.createApiKey() as any
           userCreds = {
@@ -1027,13 +997,7 @@ export function usePolymarketSetup() {
             passphrase: newCreds.passphrase,
           }
           console.log('✅ Created new credentials')
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step6-created',message:'createApiKey succeeded',data:{hasKey:!!(newCreds?.apiKey||newCreds?.key)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-          // #endregion
         } catch (createError: any) {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step6-createFailed',message:'createApiKey failed, trying createOrDeriveApiKey',data:{error:createError?.message||String(createError)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-          // #endregion
           const creds = await tempClobClient.createOrDeriveApiKey() as any
           userCreds = {
             key: creds.apiKey || creds.key,
@@ -1043,9 +1007,6 @@ export function usePolymarketSetup() {
           console.log('✅ Got credentials via createOrDeriveApiKey')
         }
       }
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:step7-saving',message:'Saving session',data:{hasUserCreds:!!userCreds},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
 
       // Step 7: Save session
       const newSession: TradingSession = {
@@ -1061,15 +1022,9 @@ export function usePolymarketSetup() {
       setSetupState({ status: 'ready' })
 
       console.log('✅ Polymarket setup complete')
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:setup-complete',message:'Setup complete!',data:{safeAddress:derivedSafeAddress,isDeployed},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
       return true
     } catch (error: any) {
       console.error('Failed to initialize Polymarket:', error)
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:setup-error',message:'Setup failed with error',data:{error:error?.message||String(error),stack:error?.stack?.substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'all'})}).catch(()=>{});
-      // #endregion
       setSetupState({ status: 'error', error: error.message || 'Setup failed' })
       return false
     }
@@ -1080,25 +1035,16 @@ export function usePolymarketSetup() {
   
   // Auto-initialize when user is authenticated but no session exists
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketSetup:autoInit-effect',message:'Auto-init effect running',data:{authenticated,eoaAddress,setupStatus:setupState.status,initStarted:initStartedRef.current},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'autoInit'})}).catch(()=>{});
-    // #endregion
     
     // Skip if already started or not ready
     if (initStartedRef.current) return
     if (!authenticated || !eoaAddress) return
     if (setupState.status !== 'idle') return
     
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketSetup:autoInit-conditions-met',message:'Conditions met, checking session',data:{eoaAddress},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'autoInit'})}).catch(()=>{});
-    // #endregion
     
     // Check if session already exists
     const existingSession = loadTradingSession(eoaAddress)
     if (existingSession) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketSetup:autoInit-found-session',message:'Found existing session',data:{safeAddress:existingSession.safeAddress},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'autoInit'})}).catch(()=>{});
-      // #endregion
       setSession(existingSession)
       setSetupState({ status: 'ready' })
       return
@@ -1107,16 +1053,10 @@ export function usePolymarketSetup() {
     // Mark as started to prevent re-runs
     initStartedRef.current = true
     
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketSetup:autoInit-starting',message:'No session found, starting initialization',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'autoInit'})}).catch(()=>{});
-    // #endregion
     
     // Start initialization immediately (no timeout that could be cancelled)
     setSetupState({ status: 'initializing', message: 'Setting up Polymarket...' })
     initializeSession().then(success => {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketSetup:autoInit-complete',message:'initializeSession completed',data:{success},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'autoInit'})}).catch(()=>{});
-      // #endregion
       if (!success) {
         // Reset ref so user can retry
         initStartedRef.current = false

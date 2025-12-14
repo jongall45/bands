@@ -86,6 +86,8 @@ export async function searchMarkets(query: string): Promise<PolymarketMarket[]> 
 }
 
 // Parse market data into usable format
+// IMPORTANT: Outcome order in Polymarket is NOT guaranteed to be [Yes, No]
+// We must find the YES/NO indices dynamically based on the outcomes array
 export function parseMarket(market: PolymarketMarket): ParsedMarket {
   let prices: string[] = ['0.5', '0.5']
   let outcomes: string[] = ['Yes', 'No']
@@ -99,12 +101,25 @@ export function parseMarket(market: PolymarketMarket): ParsedMarket {
     // Use defaults
   }
 
+  // Find YES and NO indices dynamically
+  // Polymarket uses various outcome labels: "Yes"/"No", "True"/"False", or custom outcomes
+  const yesIndex = outcomes.findIndex(o => 
+    o.toLowerCase() === 'yes' || o.toLowerCase() === 'true'
+  )
+  const noIndex = outcomes.findIndex(o => 
+    o.toLowerCase() === 'no' || o.toLowerCase() === 'false'
+  )
+  
+  // If we can't find Yes/No, assume first outcome is the "positive" one
+  const positiveIndex = yesIndex >= 0 ? yesIndex : 0
+  const negativeIndex = noIndex >= 0 ? noIndex : (positiveIndex === 0 ? 1 : 0)
+
   return {
     ...market,
-    yesPrice: parseFloat(prices[0]) || 0.5,
-    noPrice: parseFloat(prices[1]) || 0.5,
-    yesTokenId: tokenIds[0] || '',
-    noTokenId: tokenIds[1] || '',
+    yesPrice: parseFloat(prices[positiveIndex]) || 0.5,
+    noPrice: parseFloat(prices[negativeIndex]) || 0.5,
+    yesTokenId: tokenIds[positiveIndex] || '',
+    noTokenId: tokenIds[negativeIndex] || '',
     outcomeLabels: outcomes,
   }
 }
