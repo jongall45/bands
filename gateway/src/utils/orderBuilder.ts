@@ -9,10 +9,10 @@
  * Based on @polymarket/clob-client analysis:
  * - side: number (0 = BUY, 1 = SELL) - NOT converted to string
  * - All amount fields: string (already stringified before signing)
- * - signatureType: number
- *   - 0 = Browser Wallet (Metamask, etc.)
- *   - 1 = Magic/Privy embedded wallets (USE THIS!)
- *   - 2 = Gnosis Safe
+ * - signatureType: number (per @polymarket/order-utils SignatureType enum)
+ *   - 0 = EOA - Simple EOA signing (Privy embedded EOA)
+ *   - 1 = POLY_PROXY - Magic/email login proxy wallets
+ *   - 2 = POLY_GNOSIS_SAFE - Safe/AA wallets
  */
 
 import { logger } from './logger.js'
@@ -314,7 +314,7 @@ export function hashOrder(order: Record<string, unknown>): string {
  * 
  * CRITICAL: 
  * - side is a NUMBER (0 = BUY, 1 = SELL), not a string!
- * - signatureType = 1 for Privy/Magic embedded wallets
+ * - signatureType = 0 for Privy embedded EOA (true EOA)
  */
 export const EXAMPLE_VALID_ORDER: PolymarketOrderPayload = {
   order: {
@@ -329,7 +329,7 @@ export const EXAMPLE_VALID_ORDER: PolymarketOrderPayload = {
     expiration: "1766000000",
     nonce: "0",
     feeRateBps: "50",
-    signatureType: 1,  // 1 = Privy/Magic embedded wallets
+    signatureType: 0,  // 0 = EOA (Privy embedded EOA)
     signature: "0x1234...signature..."
   },
   owner: "0x1234567890123456789012345678901234567890",

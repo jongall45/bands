@@ -85,14 +85,14 @@ function validateOwnership(order: SignedOrder, owner: string): boolean {
  * Uses Privy embedded wallet with:
  * - order.maker = EOA address
  * - order.signer = EOA address  
- * - order.signatureType = 1 (Magic/Privy embedded wallets)
+ * - order.signatureType = 0 (EOA - Privy embedded EOA is a true EOA)
  * - Credentials derived for EOA
  * - Accepts optional l1Auth in body for just-in-time credential derivation
  * 
- * Per Polymarket docs:
- * - signatureType 0 = Browser Wallet (Metamask, etc.)
- * - signatureType 1 = Magic/Privy embedded wallets (USE THIS!)
- * - signatureType 2 = Gnosis Safe
+ * Per @polymarket/order-utils SignatureType enum:
+ * - signatureType 0 = EOA - Simple EOA signing (Privy embedded EOA)
+ * - signatureType 1 = POLY_PROXY - Magic/email proxy wallets
+ * - signatureType 2 = POLY_GNOSIS_SAFE - Safe/AA wallets
  */
 router.post('/', orderLimiter, async (req: Request, res: Response) => {
   const { order, owner, orderType = 'GTC', l1Auth } = req.body
@@ -140,9 +140,9 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
     }
     
     // Log signature type for debugging
-    // signatureType: 0=Browser, 1=Magic/Privy, 2=Safe
-    // For Privy embedded wallets, expect signatureType=1
-    logger.info(`[Order] signatureType=${signatureType} (expected 1 for Privy embedded wallets)`)
+    // signatureType: 0=EOA, 1=POLY_PROXY, 2=POLY_GNOSIS_SAFE
+    // For Privy embedded EOA (true EOA), expect signatureType=0
+    logger.info(`[Order] signatureType=${signatureType} (expected 0 for Privy embedded EOA)`)
     
     // 4. Validate nonce (replay protection)
     const nonceStr = order.salt || order.nonce || ''
