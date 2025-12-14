@@ -282,8 +282,13 @@ export function usePolymarketTrade({
   // ============================================
   
   const fetchBalancesAndAllowances = useCallback(async () => {
-    const addressToCheck = safeAddress
-    if (!addressToCheck) return
+    // IMPORTANT: Only check balance for the Safe address, not the EOA
+    // The Safe holds the funds for Polymarket trading
+    const addressToCheck = session?.safeAddress
+    if (!addressToCheck) {
+      console.log('📊 Skipping balance fetch - no Safe address yet')
+      return
+    }
 
     try {
       // Fetch USDC balance from Safe address
@@ -293,7 +298,9 @@ export function usePolymarketTrade({
         functionName: 'balanceOf',
         args: [addressToCheck as `0x${string}`],
       }) as bigint
-      setUsdcBalance(formatUnits(balance, 6))
+      
+      const balanceFormatted = formatUnits(balance, 6)
+      setUsdcBalance(balanceFormatted)
 
       // Check all approvals
       const approvalStatus = await checkAllApprovals(
@@ -302,20 +309,21 @@ export function usePolymarketTrade({
       )
       setHasAllApprovals(approvalStatus.allApproved)
 
-      console.log('📊 Polymarket balances for', addressToCheck)
-      console.log('   USDC:', formatUnits(balance, 6))
+      console.log('📊 Polymarket balances for Safe:', addressToCheck)
+      console.log('   USDC:', balanceFormatted)
       console.log('   All Approvals:', approvalStatus.allApproved)
     } catch (err) {
       console.error('Failed to fetch Polygon balances:', err)
     }
-  }, [safeAddress, publicClient])
+  }, [session?.safeAddress, publicClient])
 
-  // Fetch on mount and when wallet changes
+  // Fetch on mount and when Safe address changes
+  // IMPORTANT: Only fetch when we have the actual Safe address from session
   useEffect(() => {
-    if (safeAddress) {
+    if (session?.safeAddress) {
       fetchBalancesAndAllowances()
     }
-  }, [safeAddress, fetchBalancesAndAllowances])
+  }, [session?.safeAddress, fetchBalancesAndAllowances])
 
   // ============================================
   // INITIALIZE TRADING SESSION
@@ -775,10 +783,13 @@ export function usePolygonUsdcBalance() {
   const eoaAddress = embeddedWallet?.address
   
   // Try to load session to get Safe address
+  // IMPORTANT: Only use the Safe address, not EOA fallback
+  // The Safe holds the funds for Polymarket trading
   const safeAddress = useMemo(() => {
     if (!eoaAddress) return null
     const session = loadTradingSession(eoaAddress)
-    return session?.safeAddress || eoaAddress
+    // Return Safe address only, not EOA fallback
+    return session?.safeAddress || null
   }, [eoaAddress])
 
   const publicClient = useMemo(() => createPublicClient({
