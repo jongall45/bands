@@ -29,7 +29,9 @@ router.get('/auth-challenge', authChallengeLimiter, async (req: Request, res: Re
   }
   
   const timestamp = Date.now().toString()
-  const nonce = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+  // Nonce must be a valid uint256 (numeric only) for EIP-712 signature
+  // Use timestamp * 1M + random number to ensure uniqueness
+  const nonce = (BigInt(Date.now()) * BigInt(1000000) + BigInt(Math.floor(Math.random() * 1000000))).toString()
   
   // Store nonce for replay protection
   const nonceValidation = validateNonce(wallet.toLowerCase(), nonce)
