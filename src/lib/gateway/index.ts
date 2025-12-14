@@ -12,6 +12,3 @@
  */
 
 export * from './client.js'
-
-// Re-export for convenience
-export { default as GatewayClient } from './client.js'
