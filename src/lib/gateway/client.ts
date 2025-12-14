@@ -30,21 +30,15 @@ async function gatewayFetch<T>(
   fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:21',message:'gatewayFetch entry',data:{path,method:options?.method||'GET'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
   // #endregion
   const gatewayUrl = GATEWAY_URL
+  // Use requireGatewayUrl() which ensures https:// protocol
+  const gatewayUrlWithProtocol = requireGatewayUrl()
   // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:25',message:'Gateway URL check',data:{hasUrl:!!gatewayUrl,urlPrefix:gatewayUrl?.substring(0,30)||'missing',fullUrl:gatewayUrl||'NOT_SET'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:32',message:'Gateway URL with protocol',data:{hasUrl:!!gatewayUrlWithProtocol,urlPrefix:gatewayUrlWithProtocol?.substring(0,30)||'missing',fullUrl:gatewayUrlWithProtocol||'NOT_SET'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
   // #endregion
   
-  if (!gatewayUrl) {
-    const error = 'NEXT_PUBLIC_GATEWAY_URL is not set. Please configure it in Vercel environment variables.'
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:29',message:'Gateway URL missing',data:{error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    throw new Error(error)
-  }
-  
-  const url = `${gatewayUrl}${path}`
+  const url = `${gatewayUrlWithProtocol}${path}`
   // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:27',message:'Full gateway URL',data:{fullUrl:url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:36',message:'Full gateway URL constructed',data:{fullUrl:url,hasProtocol:url.startsWith('https://')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
   // #endregion
   
   const response = await fetch(url, {
