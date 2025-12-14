@@ -178,8 +178,15 @@ export async function createAndSignOrder(
   // Fee rate: use taker fee (0.5% = 50 bps) as default
   const feeRateBps = FEE_RATES.TAKER.toString()
   
-  // Signature type: EOA (0) - we're using embedded EOA directly, no Safe
-  const signatureType = CLOB_SIGNATURE_TYPES.EOA
+  // Signature type for Privy embedded wallets
+  // Per Polymarket docs:
+  // 0 = Browser Wallet (Metamask, Coinbase Wallet, etc.)
+  // 1 = Magic/Email Login (USE THIS for Privy embedded wallets!)
+  // 2 = Gnosis Safe
+  // 
+  // Privy embedded wallets are similar to Magic wallets - they're custodied
+  // embedded wallets, so we use signatureType = 1
+  const signatureType = 1 // POLY_PROXY / Magic / Privy
 
   // Create order payload
   const orderValue = {

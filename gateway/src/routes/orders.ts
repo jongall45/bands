@@ -82,12 +82,17 @@ function validateOwnership(order: SignedOrder, owner: string): boolean {
  * POST /api/order
  * Submit a signed order
  * 
- * REFACTORED: Uses EOA only (no Safe wallet)
+ * Uses Privy embedded wallet with:
  * - order.maker = EOA address
  * - order.signer = EOA address  
- * - order.signatureType = 0 (EOA)
+ * - order.signatureType = 1 (Magic/Privy embedded wallets)
  * - Credentials derived for EOA
  * - Accepts optional l1Auth in body for just-in-time credential derivation
+ * 
+ * Per Polymarket docs:
+ * - signatureType 0 = Browser Wallet (Metamask, etc.)
+ * - signatureType 1 = Magic/Privy embedded wallets (USE THIS!)
+ * - signatureType 2 = Gnosis Safe
  */
 router.post('/', orderLimiter, async (req: Request, res: Response) => {
   const { order, owner, orderType = 'GTC', l1Auth } = req.body
@@ -135,7 +140,9 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
     }
     
     // Log signature type for debugging
-    logger.info(`[Order] signatureType=${signatureType} (expected 0 for EOA)`)
+    // signatureType: 0=Browser, 1=Magic/Privy, 2=Safe
+    // For Privy embedded wallets, expect signatureType=1
+    logger.info(`[Order] signatureType=${signatureType} (expected 1 for Privy embedded wallets)`)
     
     // 4. Validate nonce (replay protection)
     const nonceStr = order.salt || order.nonce || ''

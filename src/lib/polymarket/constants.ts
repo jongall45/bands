@@ -38,16 +38,18 @@ export const BUILDER_RELAYER_API = 'https://relayer-v2.polymarket.com/' as const
 /**
  * Signature Types for CLOB authentication
  * 
- * For EOA-only architecture, we ONLY use type 0 (EOA).
+ * Per Polymarket docs (README of @polymarket/clob-client):
+ * 0 = Browser Wallet (Metamask, Coinbase Wallet, etc.)
+ * 1 = Magic/Email Login - USE THIS for Privy embedded wallets!
+ * 2 = Gnosis Safe
  * 
- * 0 = EOA (standard wallet) - USE THIS
- * 1 = Poly Proxy (Magic wallet) - Legacy, not used
- * 2 = Poly Gnosis Safe (EOA signs for Safe) - Not used in EOA-only mode
+ * Privy embedded wallets are similar to Magic wallets (custodied embedded),
+ * so we use signatureType = 1.
  */
 export const CLOB_SIGNATURE_TYPES = {
-  EOA: 0,                // <-- USE THIS for EOA-only trading
-  POLY_PROXY: 1,         // Legacy Magic wallet
-  POLY_GNOSIS_SAFE: 2,   // Safe wallet (not used in EOA-only mode)
+  BROWSER_WALLET: 0,     // For browser extension wallets (Metamask, etc.)
+  POLY_PROXY: 1,         // For Magic/Privy embedded wallets - USE THIS!
+  POLY_GNOSIS_SAFE: 2,   // For Gnosis Safe wallets
 } as const
 
 // Order Types
