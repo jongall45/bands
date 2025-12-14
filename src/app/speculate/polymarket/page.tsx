@@ -44,19 +44,20 @@ export default function PolymarketPage() {
   const smartWalletAddress = smartWalletClient?.account?.address
   
   // Auto-setup Polymarket connection when user visits this page
+  // EOA-only architecture: tradingWallet = Privy embedded EOA
   const { 
     isReady: isPolymarketReady, 
-    isInitializing, 
+    isChecking: isInitializing,
+    needsAuth,
     status: setupStatus,
     message: setupMessage,
     error: setupError,
-    safeAddress,
-    eoaAddress,
-    initializeSession,
+    tradingWallet,
+    enableTrading,
   } = usePolymarketSetup()
   
-  // Use Safe address for balance queries (falls back to EOA if not set up)
-  const walletAddress = (safeAddress || eoaAddress) as `0x${string}` | undefined
+  // Trading wallet is the EOA (no more Safe wallet)
+  const walletAddress = tradingWallet as `0x${string}` | undefined
 
   const [activeTab, setActiveTab] = useState('trending')
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -94,12 +95,12 @@ export default function PolymarketPage() {
   })
   const smartWalletUsdcBalance = smartWalletBalance ? formatUnits(smartWalletBalance.value, 6) : '0'
 
-  // Fetch Polygon USDC balance (from Safe address)
+  // Fetch Polygon USDC balance (from trading wallet EOA)
   const { data: polygonUsdcBalance, refetch: refetchBalance } = useBalance({
-    address: safeAddress as `0x${string}`,
+    address: tradingWallet as `0x${string}`,
     token: POLYGON_USDC as `0x${string}`,
     chainId: polygon.id,
-    query: { enabled: !!safeAddress },
+    query: { enabled: !!tradingWallet },
   })
 
   // Fetch Polygon native token (POL/MATIC) balance for gas
@@ -231,11 +232,13 @@ export default function PolymarketPage() {
 
       <div className="max-w-[430px] mx-auto">
         {/* Setup Banner */}
-        {(isInitializing || setupError) && (
+        {(isInitializing || needsAuth || setupError) && (
           <div className={`mx-4 mt-2 p-4 rounded-2xl border ${
             setupError 
               ? 'bg-red-500/10 border-red-500/20' 
-              : 'bg-[#3B5EE8]/10 border-[#3B5EE8]/20'
+              : needsAuth
+                ? 'bg-purple-500/10 border-purple-500/20'
+                : 'bg-[#3B5EE8]/10 border-[#3B5EE8]/20'
           }`}>
             <div className="flex items-center gap-3">
               {isInitializing ? (
@@ -243,12 +246,25 @@ export default function PolymarketPage() {
                   <Loader2 className="w-5 h-5 text-[#7B9EFF] animate-spin flex-shrink-0" />
                   <div>
                     <p className="text-[#7B9EFF] text-sm font-medium">
-                      {setupMessage || 'Setting up Polymarket...'}
+                      {setupMessage || 'Checking trading status...'}
                     </p>
                     <p className="text-[#7B9EFF]/70 text-xs mt-0.5">
-                      Sign when prompted
+                      Please wait...
                     </p>
                   </div>
+                </>
+              ) : needsAuth ? (
+                <>
+                  <div className="flex-1">
+                    <p className="text-purple-400 text-sm font-medium">Enable Trading</p>
+                    <p className="text-purple-400/70 text-xs mt-0.5">Sign to connect your wallet</p>
+                  </div>
+                  <button
+                    onClick={enableTrading}
+                    className="px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 text-xs font-medium rounded-lg transition-colors"
+                  >
+                    Enable
+                  </button>
                 </>
               ) : setupError ? (
                 <>
@@ -257,7 +273,7 @@ export default function PolymarketPage() {
                     <p className="text-red-400/70 text-xs mt-0.5">{setupError}</p>
                   </div>
                   <button
-                    onClick={initializeSession}
+                    onClick={enableTrading}
                     className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs font-medium rounded-lg transition-colors"
                   >
                     Retry
