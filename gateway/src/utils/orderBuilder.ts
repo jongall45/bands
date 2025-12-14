@@ -49,6 +49,7 @@ export interface PolymarketOrderPayload {
   // Order metadata (wrapper)
   owner: string
   orderType: 'GTC' | 'FOK' | 'GTD'
+  deferExec?: boolean  // Whether to defer execution (optional, default false)
 }
 
 /**
@@ -190,10 +191,12 @@ export function buildCanonicalOrder(
   }
   
   // Build final payload with wrapper
+  // deferExec: false means execute immediately (not deferred)
   const payload: PolymarketOrderPayload = {
     order: order,
     owner: owner,
     orderType: orderType,
+    deferExec: false,  // Execute immediately
   }
   
   return payload
@@ -320,6 +323,7 @@ export function hashOrder(order: Record<string, unknown>): string {
  * IMPORTANT: 
  * - side is a STRING ("BUY" or "SELL") for REST API
  * - signatureType = 0 for Privy embedded EOA (true EOA)
+ * - deferExec = false for immediate execution
  */
 export const EXAMPLE_VALID_ORDER: PolymarketOrderPayload = {
   order: {
@@ -338,7 +342,8 @@ export const EXAMPLE_VALID_ORDER: PolymarketOrderPayload = {
     signature: "0x1234...signature..."
   },
   owner: "0x1234567890123456789012345678901234567890",
-  orderType: "GTC"
+  orderType: "GTC",
+  deferExec: false  // Execute immediately
 }
 
 /**
