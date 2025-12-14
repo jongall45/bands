@@ -26,19 +26,12 @@ async function gatewayFetch<T>(
   path: string,
   options?: RequestInit
 ): Promise<T> {
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:29',message:'gatewayFetch entry',data:{path,method:options?.method||'GET'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
   // Use requireGatewayUrl() which ensures https:// protocol
   const gatewayUrlWithProtocol = requireGatewayUrl()
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:32',message:'Gateway URL with protocol',data:{hasUrl:!!gatewayUrlWithProtocol,urlPrefix:gatewayUrlWithProtocol?.substring(0,30)||'missing',fullUrl:gatewayUrlWithProtocol||'NOT_SET'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
-  
   const url = `${gatewayUrlWithProtocol}${path}`
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:36',message:'Full gateway URL constructed',data:{fullUrl:url,hasProtocol:url.startsWith('https://')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
+  
+  // Log request (client-side)
+  console.log(`[Gateway] ${options?.method || 'GET'} ${url}`)
   
   const response = await fetch(url, {
     ...options,
@@ -48,23 +41,18 @@ async function gatewayFetch<T>(
     },
     credentials: 'include',
   })
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:38',message:'Gateway response received',data:{status:response.status,statusText:response.statusText,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
   
-  const data = await response.json()
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:41',message:'Gateway response parsed',data:{hasData:!!data,keys:Object.keys(data||{}),hasError:!!(data as any)?.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
+  const data = await response.json() as T
   
+  // Log response (client-side)
   if (!response.ok) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:45',message:'Gateway error response',data:{status:response.status,error:(data as any)?.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
-    throw new Error((data as GatewayError).error || `HTTP ${response.status}`)
+    console.error(`[Gateway] Error ${response.status}:`, (data as GatewayError).error || 'Unknown error')
+    const error = (data as GatewayError).error || `HTTP ${response.status}`
+    throw new Error(error)
   }
   
-  return data as T
+  console.log(`[Gateway] Success ${response.status}:`, path)
+  return data
 }
 
 // ============================================

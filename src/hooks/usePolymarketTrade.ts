@@ -22,8 +22,8 @@ import { createPublicClient, http, formatUnits, parseUnits, type WalletClient } 
 import { polygon } from 'viem/chains'
 import { useQuery } from '@tanstack/react-query'
 import { ethers } from 'ethers'
-import { ClobClient, Side, OrderType } from '@polymarket/clob-client'
 import { getMarketStats as getGatewayMarketStats, submitOrder as submitGatewayOrder, getPositions as getGatewayPositions } from '@/lib/gateway/client'
+import { createAndSignOrder } from '@/lib/polymarket/manualOrderSigning'
 
 import {
   POLYGON_USDC,
@@ -171,7 +171,6 @@ export function usePolymarketTrade({
   const [usdcBalance, setUsdcBalance] = useState('0')
   const [hasAllApprovals, setHasAllApprovals] = useState(false)
   const [session, setSession] = useState<TradingSession | null>(null)
-  const [clobClient, setClobClient] = useState<ClobClient | null>(null)
 
   // Get the Privy embedded wallet (EOA)
   const embeddedWallet = useMemo(() => {
@@ -211,9 +210,6 @@ export function usePolymarketTrade({
           getGatewayMarketStats(marketId, parsedMarket.yesTokenId),
           getGatewayMarketStats(marketId, parsedMarket.noTokenId),
         ])
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:213',message:'Price fetch response',data:{hasYesBook:!!yesBook,hasNoBook:!!noBook,yesBids:yesBook?.bids?.length||0,noBids:noBook?.bids?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
         
         const yesBid = yesBook?.bids?.[0]?.price ? parseFloat(yesBook.bids[0].price) : 0
         const yesAsk = yesBook?.asks?.[0]?.price ? parseFloat(yesBook.asks[0].price) : 1
@@ -254,34 +250,9 @@ export function usePolymarketTrade({
   }, [eoaAddress])
 
   // ============================================
-  // RECREATE CLOB CLIENT FROM SAVED SESSION
+  // NOTE: ClobClient removed - we use manual order signing instead
+  // All network calls go through the gateway
   // ============================================
-  
-  useEffect(() => {
-    const ensureSigningClient = async () => {
-      // We only use ClobClient locally for order signing (no network calls).
-      if (clobClient || !embeddedWallet) return
-      if (!safeAddress) return
-
-      try {
-        const ethersSigner = await getEthersSigner(embeddedWallet)
-        const client = new ClobClient(
-          // Intentionally NOT Polymarket host; we never do network calls from the browser.
-          'http://localhost',
-          POLYGON_CHAIN_ID,
-          ethersSigner,
-          undefined,
-          CLOB_SIGNATURE_TYPES.POLY_GNOSIS_SAFE,
-          safeAddress
-        )
-        setClobClient(client)
-      } catch (err) {
-        console.error('Failed to create local order signer:', err)
-      }
-    }
-
-    ensureSigningClient()
-  }, [clobClient, embeddedWallet, safeAddress])
 
   // Track if we've attempted auto-initialization
   const [hasAttemptedInit, setHasAttemptedInit] = useState(false)
@@ -400,7 +371,7 @@ export function usePolymarketTrade({
     console.log('🎲 executeTrade called:', { amount, outcome })
 
     // Check if session is initialized
-    if (!session || !clobClient) {
+    if (!session) {
       console.log('📋 No session, initializing...')
       const initialized = await initializeSession()
       if (!initialized) {
@@ -410,9 +381,9 @@ export function usePolymarketTrade({
       }
     }
 
-    if (!clobClient) {
-      setState({ status: 'error', error: 'CLOB client not initialized' })
-      onError?.('CLOB client not ready')
+    if (!embeddedWallet || !eoaAddress) {
+      setState({ status: 'error', error: 'Wallet not available' })
+      onError?.('Wallet not connected')
       return
     }
 
@@ -448,77 +419,56 @@ export function usePolymarketTrade({
       // Calculate shares from USDC amount
       const size = amountNum / price
 
-      // Step 1: Create and sign order locally (no network request, avoids CORS)
+      // Step 1: Create and sign order locally (no network requests)
       console.log('📤 Creating signed order locally...')
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:451',message:'About to call createOrder',data:{tokenId,price,size,tickSize,negRisk,hasClobClient:!!clobClient},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
-      let signedOrder
-      try {
-        signedOrder = await clobClient.createOrder({
-          tokenID: tokenId,
-          price: price,
-          side: Side.BUY,
-          size: size,
-        }, { tickSize, negRisk })
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:460',message:'createOrder succeeded',data:{hasOrder:!!signedOrder,orderKeys:signedOrder?Object.keys(signedOrder):[]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-        // #endregion
-        console.log('✅ Order signed locally:', signedOrder)
-      } catch (createOrderErr: any) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:464',message:'createOrder failed',data:{errorType:createOrderErr?.constructor?.name,errorMessage:createOrderErr?.message||String(createOrderErr),hasStatus:createOrderErr?.status!==undefined,status:createOrderErr?.status,hasError:createOrderErr?.error!==undefined,error:createOrderErr?.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-        // #endregion
-        // ClobClient.createOrder() may try to fetch tick-size from server, causing network errors
-        // If it's a network error, provide a helpful message
-        const errMsg = createOrderErr?.message || String(createOrderErr || 'Unknown error')
-        if (errMsg.includes('Network Error') || errMsg.includes('ERR_CONNECTION_REFUSED') || errMsg.includes('localhost') || createOrderErr?.status === 0) {
-          throw new Error('Failed to create order: ClobClient attempted to fetch data from server. This should not happen - please report this issue.')
-        }
-        // Re-throw other errors as-is
-        throw createOrderErr
-      }
+      const signer = await getEthersSigner(embeddedWallet)
+      
+      const signedOrder = await createAndSignOrder(
+        {
+          tokenId,
+          price,
+          side: 'BUY',
+          size,
+          maker: session?.safeAddress || eoaAddress,
+          signer: eoaAddress,
+          tickSize,
+        },
+        signer
+      )
+      
+      console.log('✅ Order signed locally:', signedOrder)
       
       // Step 2: Post the signed order via the gateway ONLY (no browser → Polymarket traffic)
       console.log('📤 Posting order via gateway...')
-
-      if (!embeddedWallet || !eoaAddress) {
-        throw new Error('Wallet not available')
-      }
-
-      const signer = await getEthersSigner(embeddedWallet)
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:466',message:'Signing L1 auth',data:{eoaAddress,hasSigner:!!signer},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
+      // Sign L1 auth for gateway to derive L2 API credentials
       const l1Auth = await signClobAuth(signer, eoaAddress)
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:470',message:'L1 auth signed',data:{address:l1Auth.address,hasSignature:!!l1Auth.signature,sigPrefix:l1Auth.signature?.substring(0,10)||'none',timestamp:l1Auth.timestamp},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
-
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:473',message:'Submitting order to gateway',data:{owner:session?.safeAddress||eoaAddress,orderType:'GTC',hasOrder:!!signedOrder,orderTokenId:(signedOrder as any)?.tokenId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
+      
+      console.log('📤 Submitting order to gateway...', {
+        gatewayUrl: process.env.NEXT_PUBLIC_GATEWAY_URL,
+        owner: session?.safeAddress || eoaAddress,
+        tokenId: signedOrder.tokenId,
+      })
+      
       const orderResponse = await submitGatewayOrder({
-        order: signedOrder as any,
+        order: signedOrder,
         owner: session?.safeAddress || eoaAddress,
         orderType: 'GTC',
         l1Auth,
       })
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:480',message:'Gateway order response',data:{success:orderResponse?.success,hasOrderId:!!orderResponse?.orderId,orderId:orderResponse?.orderId,hasError:!!orderResponse?.error,error:orderResponse?.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
-
-      console.log('📦 Gateway response:', orderResponse)
       
-      console.log('✅ Order response:', orderResponse)
+      console.log('📦 Gateway response:', orderResponse)
 
-      // Check for errors first - the response might have an error field
-      if (orderResponse?.error) {
+      // Check for errors first
+      if (!orderResponse) {
+        throw new Error('No response from gateway')
+      }
+      
+      if (orderResponse.error) {
         throw new Error(orderResponse.error)
       }
 
       // Check for successful order
-      const returnedOrderId = orderResponse?.orderId
+      const returnedOrderId = orderResponse.orderId
       if (returnedOrderId) {
         setState({ 
           status: 'success', 
@@ -527,7 +477,7 @@ export function usePolymarketTrade({
         })
         onSuccess?.(returnedOrderId)
         setTimeout(fetchBalancesAndAllowances, 2000)
-      } else if (orderResponse?.success === true) {
+      } else if (orderResponse.success === true) {
         setState({ 
           status: 'success', 
           message: 'Trade successful!',
@@ -536,29 +486,19 @@ export function usePolymarketTrade({
         setTimeout(fetchBalancesAndAllowances, 2000)
       } else {
         // No orderID and not explicitly successful - treat as error
-        throw new Error(orderResponse?.error || 'Order submission failed - please try again')
+        throw new Error(orderResponse.error || 'Order submission failed - please try again')
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Trade execution failed:', err)
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:521',message:'Trade execution catch block',data:{errorType:err?.constructor?.name,hasMessage:err?.message!==undefined,errorMessage:err?.message||String(err||'undefined'),errorString:String(err),hasToString:typeof err?.toString==='function'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-      // #endregion
 
-      let errorMsg = 'Trade failed'
-      if (err && typeof err === 'object') {
-        if (err.message) {
-          errorMsg = String(err.message)
-        } else if (typeof err.toString === 'function') {
-          try {
-            errorMsg = err.toString()
-          } catch {
-            errorMsg = 'Unknown error occurred'
-          }
-        } else {
-          errorMsg = JSON.stringify(err)
-        }
+      // Safely extract error message
+      let errorMsg = 'Order submission failed'
+      if (err instanceof Error) {
+        errorMsg = err.message || 'Order submission failed'
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        errorMsg = String(err.message) || 'Order submission failed'
       } else if (err) {
-        errorMsg = String(err)
+        errorMsg = String(err) || 'Order submission failed'
       }
       
       if (errorMsg.includes('rejected') || errorMsg.includes('denied')) {
@@ -581,11 +521,12 @@ export function usePolymarketTrade({
     }
   }, [
     session,
-    clobClient,
     initializeSession,
     usdcBalance,
     parsedMarket,
     yesPrice,
+    embeddedWallet,
+    eoaAddress,
     noPrice,
     market,
     fetchBalancesAndAllowances,

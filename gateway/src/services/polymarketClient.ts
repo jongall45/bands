@@ -186,6 +186,13 @@ async function makeRequest<T>(
         logger.debug(`Retrying request: attempt=${attempt} path=${path}`)
       }
       
+      // Log outbound request
+      logger.debug(`[Polymarket] ${method} ${url}`, {
+        host: new URL(url).host,
+        path,
+        hasBody: !!bodyString,
+      })
+      
       const response = await fetch(url, {
         method,
         headers,
@@ -196,7 +203,17 @@ async function makeRequest<T>(
       const durationMs = Date.now() - start
       const responseText = await response.text()
       
+      // Log response
       logPolymarketCall(path, method, durationMs, response.ok, { status: response.status })
+      
+      if (!response.ok) {
+        // Log error response body snippet (first 200 chars)
+        const errorSnippet = responseText.substring(0, 200)
+        logger.warn(`[Polymarket] Error response: ${errorSnippet}`, {
+          status: response.status,
+          path,
+        })
+      }
       
       if (!response.ok) {
         // Check for Cloudflare block
