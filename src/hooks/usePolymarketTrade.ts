@@ -597,19 +597,44 @@ export function usePolymarketTrade({
       const tickSize = (market as any).minimum_tick_size || '0.01'
       const negRisk = market.negRisk || false
 
-      // Create and post order using ClobClient
-      const orderResponse = await clobClient.createAndPostOrder(
+      // Calculate shares from USDC amount
+      const size = amountNum / price
+
+      // Step 1: Create and sign order LOCALLY (no network call)
+      console.log('📝 Creating order locally...')
+      const signedOrder = await clobClient.createOrder(
         {
           tokenID: tokenId,
           price: price,
           side: Side.BUY,
-          size: amountNum / price, // Calculate shares from USDC amount
+          size: size,
         },
-        { tickSize, negRisk },
-        OrderType.GTC // Good Till Cancel
+        { tickSize, negRisk }
       )
+      
+      console.log('✅ Order signed locally:', signedOrder)
 
-      console.log('✅ Order response:', orderResponse)
+      // Step 2: Submit via server-side proxy to avoid CORS
+      console.log('📤 Submitting order via server proxy...')
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+      
+      const proxyResponse = await fetch(`${baseUrl}/api/polymarket/order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order: signedOrder,
+          owner: session?.safeAddress,
+          orderType: 'GTC',
+          userCreds: session?.userApiCreds,
+        }),
+      })
+      
+      const orderResponse = await proxyResponse.json()
+      console.log('✅ Server proxy response:', orderResponse)
+
+      if (!proxyResponse.ok) {
+        throw new Error(orderResponse?.error || 'Order submission failed')
+      }
 
       if (orderResponse?.orderID || orderResponse?.success !== false) {
         setState({ 
@@ -620,7 +645,7 @@ export function usePolymarketTrade({
         onSuccess?.(orderResponse?.orderID || 'order-submitted')
         setTimeout(fetchBalancesAndAllowances, 2000)
       } else {
-        throw new Error(orderResponse?.errorMsg || 'Order failed')
+        throw new Error(orderResponse?.errorMsg || orderResponse?.error || 'Order failed')
       }
     } catch (err: any) {
       console.error('Trade execution failed:', err)

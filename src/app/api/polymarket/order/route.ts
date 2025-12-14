@@ -86,9 +86,8 @@ function createAuthHeaders(
 /**
  * POST /api/polymarket/order
  * 
- * Submit a signed order to the CLOB.
- * This endpoint is a fallback for manual order submission.
- * The primary flow now uses ClobClient.createAndPostOrder() directly.
+ * Submit a signed order to the CLOB via server-side proxy.
+ * This avoids CORS issues since Polymarket doesn't allow browser requests.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -105,6 +104,7 @@ export async function POST(request: NextRequest) {
       owner, 
       orderType,
       hasUserCreds: !!userCreds,
+      orderKeys: order ? Object.keys(order) : [],
     })
 
     if (!order || !owner) {
@@ -122,23 +122,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Prepare order payload for CLOB
+    // The order from ClobClient.createOrder() is already in the correct format
+    // It contains: salt, maker, signer, taker, tokenId, makerAmount, takerAmount, 
+    // expiration, nonce, feeRateBps, side, signatureType, signature
     const orderPayload = {
-      order: {
-        salt: order.salt,
-        maker: owner,
-        signer: owner,
-        taker: '0x0000000000000000000000000000000000000000',
-        tokenId: order.tokenId,
-        makerAmount: order.makerAmount,
-        takerAmount: order.takerAmount,
-        expiration: order.expiration,
-        nonce: order.nonce || '0',
-        feeRateBps: order.feeRateBps || '0',
-        side: order.side === 'BUY' ? 0 : 1,
-        signatureType: order.signatureType ?? 2, // Default to POLY_GNOSIS_SAFE
-        signature: order.signature || '',
-      },
+      order: order,
       owner,
       orderType,
     }
@@ -151,6 +139,7 @@ export async function POST(request: NextRequest) {
       url: `${CLOB_API}${requestPath}`,
       hasUserCreds: !!headers['POLY_API_KEY'],
       hasBuilderCreds: !!headers['POLY_BUILDER_API_KEY'],
+      orderPayload: JSON.stringify(orderPayload).substring(0, 200) + '...',
     })
 
     const response = await fetch(`${CLOB_API}${requestPath}`, {
@@ -173,7 +162,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: errorMessage }, { status: response.status })
     }
 
-    const responseData = JSON.parse(responseText)
+    let responseData
+    try {
+      responseData = JSON.parse(responseText)
+    } catch {
+      responseData = { success: true, raw: responseText }
+    }
     return NextResponse.json(responseData)
   } catch (error) {
     console.error('Order submission error:', error)
