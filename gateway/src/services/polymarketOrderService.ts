@@ -133,7 +133,7 @@ export async function createAndPostOrder(
       OrderType.GTC
     )
     
-    logger.info(`[OrderService] Order result:`, result)
+    logger.info(`[OrderService] Order result: ${JSON.stringify(result)}`)
     
     // Parse result
     if (result && typeof result === 'object') {
