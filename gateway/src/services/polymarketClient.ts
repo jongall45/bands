@@ -4,7 +4,7 @@ import { logger, logPolymarketCall } from '../utils/logger.js'
 import { getOrFetch } from './cache.js'
 import { buildHmacSignature } from '@polymarket/builder-signing-sdk'
 import type { UserCreds } from './userCredsStore.js'
-import { buildCanonicalOrder, logAndValidatePayload, type SignedOrderInput } from '../utils/orderBuilder.js'
+import { buildCanonicalOrder, logAndValidatePayload } from '../utils/orderBuilder.js'
 
 /**
  * Polymarket Client Service
@@ -414,10 +414,10 @@ export async function getOrders(
  * Submit a signed order to Polymarket CLOB
  * Uses DERIVED user credentials (not builder credentials)
  * 
- * CRITICAL: This function transforms the signed order into Polymarket's expected format.
- * The EIP-712 signing format differs from the API submission format:
- * - side: EIP-712 uses uint256 (0/1), API uses string ("BUY"/"SELL")
- * - All amounts must be strings in the API payload
+ * CRITICAL: The signed order is passed through WITHOUT mutation.
+ * - side: stays as number (0 = BUY, 1 = SELL) - same as EIP-712
+ * - All amounts must be strings (already stringified before signing)
+ * - The order wrapper adds owner and orderType
  */
 export async function submitOrder(
   signedOrder: unknown,
@@ -440,8 +440,8 @@ export async function submitOrder(
   
   logger.info(`[Order] Using DERIVED user creds (NOT builder creds): keyLen=${userCreds.apiKey.length} secretLen=${userCreds.secret.length} passLen=${userCreds.passphrase.length} keyPrefix=${userCreds.apiKey.substring(0, 8)}...`)
   
-  // Build canonical order payload with proper type conversions
-  // This transforms side from number (0/1) to string ("BUY"/"SELL")
+  // Build canonical order payload - NO type conversions
+  // side stays as number (0/1) to match the signed EIP-712 struct
   const validOrderType = (orderType === 'GTC' || orderType === 'FOK' || orderType === 'GTD') 
     ? orderType 
     : 'GTC'
@@ -449,7 +449,7 @@ export async function submitOrder(
   let canonicalPayload
   try {
     canonicalPayload = buildCanonicalOrder(
-      signedOrder as SignedOrderInput,
+      signedOrder as Record<string, unknown>,
       owner,
       validOrderType
     )
