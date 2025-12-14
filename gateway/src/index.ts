@@ -3,7 +3,7 @@ import helmet from 'helmet'
 import cors from 'cors'
 import compression from 'compression'
 
-import { config, validateConfig } from '../config/index.js'
+import { config, validateConfig } from './config/index.js'
 import { logger, logRequest } from './utils/logger.js'
 import { globalLimiter } from './middleware/rateLimiter.js'
 
@@ -68,8 +68,8 @@ app.use((req, res) => {
 })
 
 // Error handler
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  logger.error({ error: err.message, stack: err.stack }, 'Unhandled error')
+app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  logger.error(`Unhandled error: ${err.message}`)
   res.status(500).json({ error: 'Internal server error' })
 })
 
@@ -103,12 +103,12 @@ process.on('SIGINT', () => {
 
 // Handle uncaught errors
 process.on('uncaughtException', (error) => {
-  logger.error({ error: error.message, stack: error.stack }, 'Uncaught exception')
+  logger.error(`Uncaught exception: ${error.message}`)
   process.exit(1)
 })
 
 process.on('unhandledRejection', (reason) => {
-  logger.error({ reason }, 'Unhandled rejection')
+  logger.error(`Unhandled rejection: ${String(reason)}`)
 })
 
 export default app

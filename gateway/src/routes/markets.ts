@@ -17,7 +17,8 @@ router.get('/', queryLimiter, async (req: Request, res: Response) => {
     const markets = await getMarkets({ active, limit })
     res.json({ markets })
   } catch (error) {
-    logger.error({ error }, 'Failed to get markets')
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+    logger.error(`Failed to get markets: ${errorMsg}`)
     res.status(500).json({ error: 'Failed to fetch markets' })
   }
 })
@@ -34,7 +35,8 @@ router.get('/:id', queryLimiter, async (req: Request, res: Response) => {
     }
     res.json({ market })
   } catch (error) {
-    logger.error({ error, marketId: req.params.id }, 'Failed to get market')
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+    logger.error(`Failed to get market ${req.params.id}: ${errorMsg}`)
     res.status(500).json({ error: 'Failed to fetch market' })
   }
 })
@@ -53,7 +55,8 @@ router.get('/:id/stats', queryLimiter, async (req: Request, res: Response) => {
     const stats = await getMarketStats(tokenId)
     res.json({ stats })
   } catch (error) {
-    logger.error({ error, marketId: req.params.id }, 'Failed to get market stats')
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+    logger.error(`Failed to get market stats ${req.params.id}: ${errorMsg}`)
     res.status(500).json({ error: 'Failed to fetch market stats' })
   }
 })

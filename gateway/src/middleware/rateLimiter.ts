@@ -1,6 +1,6 @@
 import rateLimit from 'express-rate-limit'
 import { Request, Response } from 'express'
-import { config } from '../../config/index.js'
+import { config } from '../config/index.js'
 import { logger } from '../utils/logger.js'
 
 /**
@@ -16,7 +16,7 @@ export const globalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
-    logger.warn({ ip: req.ip }, 'Global rate limit exceeded')
+    logger.warn(`Global rate limit exceeded: ${req.ip}`)
     res.status(429).json({ error: 'Too many requests, please try again later' })
   },
 })
@@ -33,7 +33,7 @@ export const orderLimiter = rateLimit({
   legacyHeaders: false,
   handler: (req, res) => {
     const wallet = req.body?.owner || 'unknown'
-    logger.warn({ wallet }, 'Order rate limit exceeded')
+    logger.warn(`Order rate limit exceeded: ${wallet}`)
     res.status(429).json({ error: 'Order rate limit exceeded. Max 30 orders per minute.' })
   },
 })
@@ -48,7 +48,7 @@ export const queryLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
-    logger.warn({ ip: req.ip }, 'Query rate limit exceeded')
+    logger.warn(`Query rate limit exceeded: ${req.ip}`)
     res.status(429).json({ error: 'Query rate limit exceeded. Please slow down.' })
   },
 })

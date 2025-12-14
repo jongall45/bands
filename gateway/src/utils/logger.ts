@@ -1,21 +1,21 @@
 import winston from 'winston'
-import { config } from '../../config/index.js'
+import { config } from '../config/index.js'
 
-const { combine, timestamp, json, printf, colorize } = winston.format
+const { combine, timestamp, printf, colorize } = winston.format
 
 // Custom format for development
-const devFormat = printf(({ level, message, timestamp, ...meta }) => {
-  const msg = typeof message === 'object' ? JSON.stringify(message) : message
-  const metaStr = Object.keys(meta).length > 1 ? ` ${JSON.stringify(meta)}` : ''
-  return `${timestamp} [${level}] ${msg}${metaStr}`
+const devFormat = printf(({ level, message, timestamp }) => {
+  return `${timestamp} [${level}] ${message}`
 })
 
 // Create logger instance
-export const logger = winston.createLogger({
+const winstonLogger = winston.createLogger({
   level: config.logLevel,
   format: combine(
     timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
-    config.nodeEnv === 'production' ? json() : combine(colorize(), devFormat)
+    config.nodeEnv === 'production' 
+      ? winston.format.json() 
+      : combine(colorize(), devFormat)
   ),
   defaultMeta: { service: 'polymarket-gateway' },
   transports: [
@@ -23,10 +23,19 @@ export const logger = winston.createLogger({
   ],
 })
 
+// Simple logger wrapper that accepts string messages
+export const logger = {
+  info: (message: string) => winstonLogger.info(message),
+  warn: (message: string) => winstonLogger.warn(message),
+  error: (message: string) => winstonLogger.error(message),
+  debug: (message: string) => winstonLogger.debug(message),
+  log: (level: string, message: string) => winstonLogger.log(level, message),
+}
+
 // Request logging helper
-export function logRequest(method: string, path: string, status: number, durationMs: number, meta?: Record<string, any>) {
+export function logRequest(method: string, path: string, status: number, durationMs: number) {
   const level = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info'
-  logger.log(level, `${method} ${path} ${status} ${durationMs}ms`, { ...meta, status, durationMs })
+  logger.log(level, `${method} ${path} ${status} ${durationMs}ms`)
 }
 
 // Order lifecycle logging
@@ -34,9 +43,10 @@ export function logOrderEvent(
   event: 'signed' | 'validated' | 'submitted' | 'accepted' | 'rejected',
   orderId: string,
   wallet: string,
-  meta?: Record<string, any>
+  meta?: Record<string, unknown>
 ) {
-  logger.info(`Order ${event}`, { event, orderId, wallet, ...meta })
+  const metaStr = meta ? ` ${JSON.stringify(meta)}` : ''
+  logger.info(`Order ${event}: ${orderId} wallet=${wallet}${metaStr}`)
 }
 
 // Polymarket API call logging
@@ -45,15 +55,9 @@ export function logPolymarketCall(
   method: string,
   durationMs: number,
   success: boolean,
-  meta?: Record<string, any>
+  meta?: Record<string, unknown>
 ) {
   const level = success ? 'debug' : 'warn'
-  logger.log(level, `Polymarket API: ${method} ${endpoint}`, { 
-    polymarketCall: true, 
-    endpoint, 
-    method, 
-    durationMs, 
-    success,
-    ...meta 
-  })
+  const metaStr = meta ? ` ${JSON.stringify(meta)}` : ''
+  logger.log(level, `Polymarket API: ${method} ${endpoint} ${durationMs}ms success=${success}${metaStr}`)
 }

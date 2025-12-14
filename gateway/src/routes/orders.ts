@@ -8,31 +8,44 @@ import { logger, logOrderEvent } from '../utils/logger.js'
 
 const router = Router()
 
+interface SignedOrder {
+  salt?: string
+  nonce?: string
+  maker?: string
+  signer?: string
+  taker?: string
+  tokenId?: string
+  makerAmount?: string
+  takerAmount?: string
+  side?: number | string
+  signature?: string
+}
+
 /**
  * Validate signed order structure
  */
-function validateOrderSchema(order: any): { valid: boolean; error?: string } {
+function validateOrderSchema(order: SignedOrder): { valid: boolean; error?: string } {
   const required = ['salt', 'maker', 'signer', 'taker', 'tokenId', 'makerAmount', 'takerAmount', 'side', 'signature']
   
   for (const field of required) {
-    if (order[field] === undefined) {
+    if (order[field as keyof SignedOrder] === undefined) {
       return { valid: false, error: `Missing required field: ${field}` }
     }
   }
   
   // Validate addresses
-  if (!ethers.utils.isAddress(order.maker)) {
+  if (!ethers.utils.isAddress(order.maker!)) {
     return { valid: false, error: 'Invalid maker address' }
   }
-  if (!ethers.utils.isAddress(order.signer)) {
+  if (!ethers.utils.isAddress(order.signer!)) {
     return { valid: false, error: 'Invalid signer address' }
   }
   
   // Validate amounts
-  if (isNaN(parseFloat(order.makerAmount)) || parseFloat(order.makerAmount) <= 0) {
+  if (isNaN(parseFloat(order.makerAmount!)) || parseFloat(order.makerAmount!) <= 0) {
     return { valid: false, error: 'Invalid makerAmount' }
   }
-  if (isNaN(parseFloat(order.takerAmount)) || parseFloat(order.takerAmount) <= 0) {
+  if (isNaN(parseFloat(order.takerAmount!)) || parseFloat(order.takerAmount!) <= 0) {
     return { valid: false, error: 'Invalid takerAmount' }
   }
   
@@ -47,7 +60,7 @@ function validateOrderSchema(order: any): { valid: boolean; error?: string } {
 /**
  * Validate that owner matches order maker/signer
  */
-function validateOwnership(order: any, owner: string): boolean {
+function validateOwnership(order: SignedOrder, owner: string): boolean {
   const ownerLower = owner.toLowerCase()
   return (
     order.maker?.toLowerCase() === ownerLower ||
@@ -82,13 +95,13 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
     // 2. Validate order schema
     const schemaValidation = validateOrderSchema(order)
     if (!schemaValidation.valid) {
-      logger.warn({ orderId, error: schemaValidation.error }, 'Order schema validation failed')
+      logger.warn(`Order schema validation failed: ${orderId} error=${schemaValidation.error}`)
       return res.status(400).json({ error: schemaValidation.error })
     }
     
     // 3. Validate ownership (maker/signer matches owner)
     if (!validateOwnership(order, owner)) {
-      logger.warn({ orderId, owner, maker: order.maker }, 'Ownership validation failed')
+      logger.warn(`Ownership validation failed: ${orderId} owner=${owner} maker=${order.maker}`)
       return res.status(403).json({ error: 'Order signer does not match owner' })
     }
     
@@ -102,7 +115,7 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
     logOrderEvent('validated', orderId, owner)
     
     // 5. Submit to Polymarket
-    const result = await submitOrder(order, owner, orderType, userCreds)
+    const result = await submitOrder(order, owner, orderType, userCreds) as Record<string, unknown>
     
     // 6. Mark nonce as used (only after successful submission)
     markNonceUsed(owner, nonceStr)
@@ -112,18 +125,19 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
     invalidate('positions', `positions:${owner}`)
     
     // 8. Return result
-    if (result.orderID || result.orderId) {
-      logOrderEvent('accepted', result.orderID || result.orderId, owner)
+    const resultOrderId = result.orderID || result.orderId
+    if (resultOrderId) {
+      logOrderEvent('accepted', String(resultOrderId), owner)
       return res.json({
         success: true,
-        orderId: result.orderID || result.orderId,
+        orderId: resultOrderId,
         ...result,
       })
     }
     
     // Check for error in response
     if (result.error || result.message) {
-      logOrderEvent('rejected', orderId, owner, { reason: result.error || result.message })
+      logOrderEvent('rejected', orderId, owner, { reason: String(result.error || result.message) })
       return res.status(400).json({
         success: false,
         error: result.error || result.message,
@@ -137,7 +151,7 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to submit order'
     logOrderEvent('rejected', orderId, owner, { reason: errorMessage })
-    logger.error({ orderId, owner, error: errorMessage }, 'Order submission failed')
+    logger.error(`Order submission failed: ${orderId} owner=${owner} error=${errorMessage}`)
     
     res.status(500).json({ error: errorMessage })
   }
@@ -165,7 +179,8 @@ router.get('/', queryLimiter, async (req: Request, res: Response) => {
     )
     res.json({ orders })
   } catch (error) {
-    logger.error({ error, address }, 'Failed to get orders')
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+    logger.error(`Failed to get orders for ${address}: ${errorMsg}`)
     res.status(500).json({ error: 'Failed to fetch orders' })
   }
 })
@@ -190,10 +205,11 @@ router.delete('/:id', orderLimiter, async (req: Request, res: Response) => {
       invalidate('orders', `orders:${address}`)
     }
     
-    logger.info({ orderId: id }, 'Order cancelled')
-    res.json({ success: true, ...result })
+    logger.info(`Order cancelled: ${id}`)
+    res.json({ success: true, ...(result as object) })
   } catch (error) {
-    logger.error({ error, orderId: id }, 'Failed to cancel order')
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+    logger.error(`Failed to cancel order ${id}: ${errorMsg}`)
     res.status(500).json({ error: 'Failed to cancel order' })
   }
 })

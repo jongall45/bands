@@ -20,7 +20,8 @@ router.get('/', queryLimiter, async (req: Request, res: Response) => {
     const positions = await getPositions(address)
     res.json({ positions })
   } catch (error) {
-    logger.error({ error, address }, 'Failed to get positions')
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+    logger.error(`Failed to get positions for ${address}: ${errorMsg}`)
     res.status(500).json({ error: 'Failed to fetch positions' })
   }
 })

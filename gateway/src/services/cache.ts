@@ -1,5 +1,5 @@
 import NodeCache from 'node-cache'
-import { config } from '../../config/index.js'
+import { config } from '../config/index.js'
 import { logger } from '../utils/logger.js'
 
 /**
@@ -21,7 +21,7 @@ const caches = {
 type CacheType = keyof typeof caches
 
 // Request deduplication: prevent concurrent requests for the same resource
-const pendingRequests = new Map<string, Promise<any>>()
+const pendingRequests = new Map<string, Promise<unknown>>()
 
 /**
  * Get from cache with automatic fetch on miss
@@ -40,7 +40,7 @@ export async function getOrFetch<T>(
   if (!options?.force) {
     const cached = cache.get<T>(key)
     if (cached !== undefined) {
-      logger.debug({ key: fullKey, hit: true }, 'Cache hit')
+      logger.debug(`Cache hit: ${fullKey}`)
       return cached
     }
   }
@@ -48,14 +48,14 @@ export async function getOrFetch<T>(
   // Deduplicate concurrent requests
   const pending = pendingRequests.get(fullKey)
   if (pending) {
-    logger.debug({ key: fullKey }, 'Deduplicating concurrent request')
+    logger.debug(`Deduplicating concurrent request: ${fullKey}`)
     return pending as Promise<T>
   }
   
   // Fetch and cache
   const fetchPromise = (async () => {
     try {
-      logger.debug({ key: fullKey }, 'Cache miss, fetching')
+      logger.debug(`Cache miss, fetching: ${fullKey}`)
       const data = await fetcher()
       cache.set(key, data)
       return data
@@ -75,10 +75,10 @@ export function invalidate(cacheType: CacheType, key?: string): void {
   const cache = caches[cacheType]
   if (key) {
     cache.del(key)
-    logger.debug({ cacheType, key }, 'Cache entry invalidated')
+    logger.debug(`Cache entry invalidated: ${cacheType}:${key}`)
   } else {
     cache.flushAll()
-    logger.debug({ cacheType }, 'Cache flushed')
+    logger.debug(`Cache flushed: ${cacheType}`)
   }
 }
 
@@ -86,7 +86,7 @@ export function invalidate(cacheType: CacheType, key?: string): void {
  * Get cache statistics for monitoring
  */
 export function getStats(): Record<CacheType, { hits: number; misses: number; keys: number }> {
-  const stats: Record<string, any> = {}
+  const stats: Record<string, { hits: number; misses: number; keys: number }> = {}
   for (const [name, cache] of Object.entries(caches)) {
     const s = cache.getStats()
     stats[name] = {

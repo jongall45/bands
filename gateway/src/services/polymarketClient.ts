@@ -1,5 +1,5 @@
 import crypto from 'crypto'
-import { config } from '../../config/index.js'
+import { config } from '../config/index.js'
 import { logger, logPolymarketCall } from '../utils/logger.js'
 import { getOrFetch } from './cache.js'
 import { buildHmacSignature } from '@polymarket/builder-signing-sdk'
@@ -74,7 +74,7 @@ async function makeRequest<T>(
   method: string,
   path: string,
   options?: {
-    body?: any
+    body?: unknown
     userCreds?: { apiKey: string; secret: string; passphrase: string }
     userAddress?: string
   }
@@ -115,7 +115,7 @@ async function makeRequest<T>(
     try {
       if (attempt > 0) {
         await new Promise(r => setTimeout(r, config.request.retryDelay * attempt))
-        logger.debug({ attempt, path }, 'Retrying request')
+        logger.debug(`Retrying request: attempt=${attempt} path=${path}`)
       }
       
       const response = await fetch(url, {
@@ -154,7 +154,7 @@ async function makeRequest<T>(
       }
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error))
-      logger.warn({ attempt, path, error: lastError.message }, 'Request failed')
+      logger.warn(`Request failed: attempt=${attempt} path=${path} error=${lastError.message}`)
       
       // Don't retry on auth errors
       if (lastError.message.includes('401') || lastError.message.includes('403')) {
@@ -173,7 +173,7 @@ async function makeRequest<T>(
 /**
  * Get all markets with caching
  */
-export async function getMarkets(params?: { active?: boolean; limit?: number }): Promise<any[]> {
+export async function getMarkets(params?: { active?: boolean; limit?: number }): Promise<unknown[]> {
   const cacheKey = `markets:${JSON.stringify(params || {})}`
   
   return getOrFetch('markets', cacheKey, async () => {
@@ -182,34 +182,34 @@ export async function getMarkets(params?: { active?: boolean; limit?: number }):
     if (params?.limit) query.set('limit', String(params.limit))
     
     const path = `/markets?${query.toString()}`
-    return makeRequest<any[]>(config.gammaApi, 'GET', path)
+    return makeRequest<unknown[]>(config.gammaApi, 'GET', path)
   })
 }
 
 /**
  * Get single market by ID with caching
  */
-export async function getMarket(conditionId: string): Promise<any> {
+export async function getMarket(conditionId: string): Promise<unknown> {
   return getOrFetch('markets', `market:${conditionId}`, async () => {
-    return makeRequest<any>(config.gammaApi, 'GET', `/markets/${conditionId}`)
+    return makeRequest<unknown>(config.gammaApi, 'GET', `/markets/${conditionId}`)
   })
 }
 
 /**
  * Get market stats (prices, volume) with shorter cache
  */
-export async function getMarketStats(tokenId: string): Promise<any> {
+export async function getMarketStats(tokenId: string): Promise<unknown> {
   return getOrFetch('stats', `stats:${tokenId}`, async () => {
-    return makeRequest<any>(config.clobApi, 'GET', `/book?token_id=${tokenId}`)
+    return makeRequest<unknown>(config.clobApi, 'GET', `/book?token_id=${tokenId}`)
   })
 }
 
 /**
  * Get user positions (requires wallet address)
  */
-export async function getPositions(walletAddress: string): Promise<any[]> {
+export async function getPositions(walletAddress: string): Promise<unknown[]> {
   return getOrFetch('positions', `positions:${walletAddress}`, async () => {
-    return makeRequest<any[]>(
+    return makeRequest<unknown[]>(
       config.gammaApi, 
       'GET', 
       `/positions?user=${walletAddress}`
@@ -223,9 +223,9 @@ export async function getPositions(walletAddress: string): Promise<any[]> {
 export async function getOrders(
   walletAddress: string,
   userCreds: { apiKey: string; secret: string; passphrase: string }
-): Promise<any[]> {
+): Promise<unknown[]> {
   return getOrFetch('orders', `orders:${walletAddress}`, async () => {
-    return makeRequest<any[]>(
+    return makeRequest<unknown[]>(
       config.clobApi,
       'GET',
       '/orders',
@@ -239,12 +239,12 @@ export async function getOrders(
  * This is NOT cached - always submits to Polymarket
  */
 export async function submitOrder(
-  signedOrder: any,
+  signedOrder: unknown,
   owner: string,
   orderType: string,
   userCreds: { apiKey: string; secret: string; passphrase: string }
-): Promise<any> {
-  logger.info({ owner, orderType }, 'Submitting order to Polymarket')
+): Promise<unknown> {
+  logger.info(`Submitting order to Polymarket: owner=${owner} orderType=${orderType}`)
   
   const payload = {
     order: signedOrder,
@@ -252,7 +252,7 @@ export async function submitOrder(
     orderType,
   }
   
-  return makeRequest<any>(
+  return makeRequest<unknown>(
     config.clobApi,
     'POST',
     '/order',
@@ -266,10 +266,10 @@ export async function submitOrder(
 export async function cancelOrder(
   orderId: string,
   userCreds: { apiKey: string; secret: string; passphrase: string }
-): Promise<any> {
-  logger.info({ orderId }, 'Cancelling order')
+): Promise<unknown> {
+  logger.info(`Cancelling order: ${orderId}`)
   
-  return makeRequest<any>(
+  return makeRequest<unknown>(
     config.clobApi,
     'DELETE',
     `/order/${orderId}`,

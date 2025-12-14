@@ -52,7 +52,7 @@ export function markNonceUsed(wallet: string, nonce: string): void {
   usedNonces.set(key, filtered)
   
   if (before !== filtered.length) {
-    logger.debug({ wallet: key, cleaned: before - filtered.length }, 'Cleaned expired nonces')
+    logger.debug(`Cleaned ${before - filtered.length} expired nonces for ${key}`)
   }
 }
 
@@ -67,7 +67,7 @@ export function validateNonce(wallet: string, nonce: string): { valid: boolean; 
   
   // Check for replay
   if (isNonceUsed(wallet, nonce)) {
-    logger.warn({ wallet, nonce }, 'Nonce replay attempt detected')
+    logger.warn(`Nonce replay attempt detected: wallet=${wallet} nonce=${nonce}`)
     return { valid: false, error: 'Nonce already used (replay protection)' }
   }
   
