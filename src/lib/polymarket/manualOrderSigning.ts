@@ -284,7 +284,8 @@ export function getOrderDebugInfo(params: ManualOrderParams): OrderSigningDebug 
   const nonce = '0'
   const taker = '0x0000000000000000000000000000000000000000'
   const feeRateBps = FEE_RATES.TAKER.toString()
-  const signatureType = CLOB_SIGNATURE_TYPES.EOA
+  // Use POLY_PROXY (1) for Privy embedded wallets
+  const signatureType = CLOB_SIGNATURE_TYPES.POLY_PROXY
   
   return {
     domain: ORDER_DOMAIN,
