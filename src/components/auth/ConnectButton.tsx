@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { Loader2, LogOut, Mail, User } from 'lucide-react'
 
@@ -10,7 +9,6 @@ interface ConnectButtonProps {
 }
 
 export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
-  const router = useRouter()
   const { 
     isReady, 
     isAuthenticated, 
@@ -23,23 +21,16 @@ export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
   
   const [isLoggingIn, setIsLoggingIn] = useState(false)
 
-  // Debug logging
+  // Debug logging (only in dev)
   useEffect(() => {
-    console.log('[ConnectButton] State:', { 
-      isReady,
-      isAuthenticated, 
-      address, 
-      displayEmail,
-    })
-  }, [isReady, isAuthenticated, address, displayEmail])
-
-  // Redirect to dashboard after successful connection
-  useEffect(() => {
-    if (isAuthenticated && address) {
-      console.log('[ConnectButton] Connected! Redirecting to dashboard...', address)
-      router.push('/dashboard')
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[ConnectButton] State:', { 
+        isReady,
+        isAuthenticated, 
+        address: address?.slice(0, 10),
+      })
     }
-  }, [isAuthenticated, address, router])
+  }, [isReady, isAuthenticated, address])
 
   // Handle login
   const handleLogin = async () => {
