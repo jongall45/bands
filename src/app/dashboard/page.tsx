@@ -280,23 +280,23 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <main className="dashboard-main">
-        
-        {/* Top Action - Add Money Button */}
-        <div className="flex justify-end mb-3">
-          <Link 
-            href="/fund"
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#ef4444] hover:bg-[#dc2626] text-white font-semibold rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-red-500/25"
-          >
-            <Plus className="w-4 h-4" strokeWidth={2.5} />
-            <span className="text-sm">Add Money</span>
-          </Link>
-        </div>
 
         {/* Balance Card */}
         <div className="card">
+          
+          {/* Add Money Button - Top Right */}
+          <div className="flex justify-end mb-2">
+            <Link 
+              href="/fund"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#ef4444] hover:bg-[#dc2626] text-white text-xs font-semibold rounded-lg transition-all active:scale-[0.98]"
+            >
+              <Plus className="w-3 h-3" strokeWidth={2.5} />
+              <span>Add Money</span>
+            </Link>
+          </div>
 
           {/* Balance Display */}
-          <div className="text-center py-6">
+          <div className="text-center pb-6">
             <p className="text-gray-400 text-sm mb-1">Total Balance</p>
             {portfolioLoading || balanceLoading ? (
               <div className="h-12 w-40 mx-auto bg-gray-700/30 rounded-xl animate-pulse" />
