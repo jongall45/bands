@@ -626,18 +626,44 @@ export function usePolymarketTrade({
       fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:executeTrade:beforeOrder',message:'About to create order',data:{tokenId,price,size,tickSize,negRisk,sessionEoaAddress:session?.eoaAddress,sessionSafeAddress:session?.safeAddress,currentEoaAddress:eoaAddress,apiKeyPrefix:session?.apiCredentials?.key?.substring(0,8)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H4'})}).catch(()=>{});
       // #endregion
 
-      // Create and post order using ClobClient (which now uses our proxy)
-      console.log('📤 Creating and posting order via ClobClient...')
-      const orderResponse = await clobClient.createAndPostOrder(
-        {
-          tokenID: tokenId,
-          price: price,
-          side: Side.BUY,
-          size: size,
+      // Step 1: Create and sign order locally (no network request, avoids CORS)
+      console.log('📤 Creating signed order locally...')
+      const signedOrder = await clobClient.createOrder({
+        tokenID: tokenId,
+        price: price,
+        side: Side.BUY,
+        size: size,
+      }, { tickSize, negRisk })
+      
+      console.log('✅ Order signed locally:', signedOrder)
+      
+      // Step 2: Post the signed order through our server proxy (avoids browser CORS)
+      // The proxy will handle L2 HMAC authentication
+      console.log('📤 Posting order via server proxy...')
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+      
+      // Convert API creds to the format expected by the server
+      const userCreds = session?.userApiCreds ? {
+        apiKey: session.userApiCreds.key,
+        secret: session.userApiCreds.secret,
+        passphrase: session.userApiCreds.passphrase,
+      } : undefined
+      
+      const proxyResponse = await fetch(`${baseUrl}/api/polymarket/order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        { tickSize, negRisk },
-        OrderType.GTC
-      )
+        body: JSON.stringify({
+          order: signedOrder,
+          owner: session?.safeAddress,
+          orderType: 'GTC',
+          userCreds,
+        }),
+      })
+      
+      const orderResponse = await proxyResponse.json()
+      console.log('📦 Server proxy response:', orderResponse)
       
       console.log('✅ Order response:', orderResponse)
 
