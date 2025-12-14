@@ -19,6 +19,9 @@ router.get('/derived-status', async (req: Request, res: Response) => {
   }
   
   const normalizedAddress = wallet.toLowerCase()
+  
+  logger.info(`[Auth] Derived status check: wallet=${wallet.slice(0, 10)}... normalized=${normalizedAddress.slice(0, 10)}...`)
+  
   const creds = getUserCreds(normalizedAddress)
   
   const response: {
@@ -28,6 +31,7 @@ router.get('/derived-status', async (req: Request, res: Response) => {
     derivedKeyLen?: number
     derivedSecretLen?: number
     derivedPassLen?: number
+    cacheStats?: { entries: number }
   } = {
     wallet,
     normalizedAddress,
@@ -40,7 +44,11 @@ router.get('/derived-status', async (req: Request, res: Response) => {
     response.derivedPassLen = creds.passphrase?.length || 0
   }
   
-  logger.info(`[Auth] Derived status check: wallet=${wallet.slice(0, 10)}... hasUserCreds=${response.hasUserCreds} keyLen=${response.derivedKeyLen || 0}`)
+  // Add cache stats for debugging
+  const { getCredsStats } = await import('../services/userCredsStore.js')
+  response.cacheStats = getCredsStats()
+  
+  logger.info(`[Auth] Derived status result: wallet=${wallet.slice(0, 10)}... hasUserCreds=${response.hasUserCreds} keyLen=${response.derivedKeyLen || 0} cacheEntries=${response.cacheStats.entries}`)
   
   res.json(response)
 })

@@ -59,7 +59,16 @@ export async function getOrDeriveClobCreds(
     logger.info(`[Creds] derive.success wallet=${userAddress.slice(0, 10)}... derivedKeyLen=${creds.apiKey.length} derivedSecretLen=${creds.secret.length} derivedPassLen=${creds.passphrase.length}`)
     
     // Store for future use
+    logger.info(`[Creds] About to store creds: normalizedAddress=${normalizedAddress.slice(0, 10)}... keyLen=${creds.apiKey.length}`)
     setUserCreds(normalizedAddress, creds)
+    
+    // Verify retrieval immediately after storage
+    const verifyCreds = getUserCreds(normalizedAddress)
+    if (verifyCreds && verifyCreds.apiKey === creds.apiKey) {
+      logger.info(`[Creds] Storage and retrieval verified: wallet=${userAddress.slice(0, 10)}... keyLen=${verifyCreds.apiKey.length}`)
+    } else {
+      logger.error(`[Creds] CRITICAL: Storage verification failed! wallet=${userAddress.slice(0, 10)}... retrieved=${!!verifyCreds} keyMatch=${verifyCreds?.apiKey === creds.apiKey}`)
+    }
     
     logger.info(`[Creds] Successfully derived and cached creds for ${userAddress.slice(0, 10)}... keyLen=${creds.apiKey.length}`)
     return creds
