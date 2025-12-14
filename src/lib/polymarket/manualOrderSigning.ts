@@ -7,6 +7,7 @@
 
 import { ethers } from 'ethers'
 import Decimal from 'decimal.js'
+import { CLOB_SIGNATURE_TYPES, FEE_RATES } from './constants'
 
 // EIP-712 domain for Polymarket orders
 const ORDER_DOMAIN = {
@@ -29,6 +30,8 @@ const ORDER_TYPES = {
     { name: 'side', type: 'uint256' },
     { name: 'expiration', type: 'uint256' },
     { name: 'nonce', type: 'uint256' },
+    { name: 'feeRateBps', type: 'uint256' },
+    { name: 'signatureType', type: 'uint8' },
   ],
 } as const
 
@@ -53,6 +56,8 @@ export interface SignedOrder {
   side: number
   expiration: string
   nonce: string
+  feeRateBps: string
+  signatureType: number
   signature: string
 }
 
@@ -121,6 +126,12 @@ export async function createAndSignOrder(
   
   // Taker: zero address (anyone can fill)
   const taker = '0x0000000000000000000000000000000000000000'
+  
+  // Fee rate: use taker fee (0.5% = 50 bps) as default
+  const feeRateBps = FEE_RATES.TAKER.toString()
+  
+  // Signature type: POLY_GNOSIS_SAFE (2) since we're using Safe wallets
+  const signatureType = CLOB_SIGNATURE_TYPES.POLY_GNOSIS_SAFE
 
   // Create order payload
   const orderValue = {
@@ -134,6 +145,8 @@ export async function createAndSignOrder(
     side: sideNum,
     expiration: expiration.toString(),
     nonce,
+    feeRateBps,
+    signatureType,
   }
 
   // Sign using EIP-712

@@ -59,7 +59,7 @@ export function createClientConfig(
 ): ClientConfig {
   const baseUrl = typeof window !== 'undefined' 
     ? window.location.origin 
-    : (typeof window !== 'undefined' ? window.location.origin : '')
+    : ''
   
   return {
     chainId: POLYGON_CHAIN_ID,
