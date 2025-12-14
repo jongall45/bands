@@ -304,7 +304,7 @@ export async function placeOrder(
           side: params.side === 'BUY' ? Side.BUY : Side.SELL,
           size: sizeDecimal.toNumber(),
         },
-        { tickSize, negRisk: false },
+        { tickSize: tickSize as any, negRisk: false },
         OrderType.GTC
       )
       
@@ -330,12 +330,13 @@ export async function placeOrder(
       
       if (orderResponse?.errorMsg) {
         lastError = orderResponse.errorMsg
+        const errorStr = lastError || ''
         
         // Check if error is retryable
         if (
-          lastError.includes('nonce') ||
-          lastError.includes('timeout') ||
-          lastError.includes('rate')
+          errorStr.includes('nonce') ||
+          errorStr.includes('timeout') ||
+          errorStr.includes('rate')
         ) {
           log({
             requestId,
@@ -399,7 +400,9 @@ export async function cancelOrder(
   })
   
   try {
-    await clobClient.cancelOrder(orderId)
+    // ClobClient.cancelOrder expects OrderPayload but we only have orderId
+    // Use cancelOrders with array instead which accepts order IDs
+    await clobClient.cancelOrders([orderId])
     
     log({
       requestId,

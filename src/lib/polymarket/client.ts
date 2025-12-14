@@ -85,10 +85,12 @@ export function createClobClient(
     },
   })
   
+  // Cast signer to any to satisfy ClobClient's strict type requirement
+  // The ClobClient expects JsonRpcSigner | Wallet but ethers.Signer works at runtime
   return new ClobClient(
     config.clobApiUrl,
     config.chainId,
-    signer,
+    signer as any,
     credentials,
     config.signatureType,
     config.safeAddress,
@@ -111,10 +113,11 @@ export function createRelayClient(
     },
   })
   
+  // Cast signer to any for same reason as ClobClient
   return new RelayClient(
     config.relayerApiUrl,
     config.chainId,
-    signer,
+    signer as any,
     builderConfig,
     RelayerTxType.SAFE
   )
