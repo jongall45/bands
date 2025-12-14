@@ -84,17 +84,26 @@ router.post('/', rateLimiter_js_1.orderLimiter, async (req, res) => {
         if (orderSigner.toLowerCase() !== String(l1Auth.address).toLowerCase()) {
             return res.status(403).json({ error: 'l1Auth.address must match order.signer' });
         }
-        // 4. Validate nonce (replay protection)
+        // CRITICAL: For Polymarket Safe architecture:
+        // - maker = Safe wallet (owns the order and funds) - THIS is what needs credentials
+        // - signer = EOA (just signs the order) - does NOT need credentials
+        // We must derive credentials for the Safe wallet (maker), not the EOA (signer)
+        const orderMaker = String(order.maker || '');
+        if (!orderMaker) {
+            return res.status(400).json({ error: 'order.maker is required' });
+        }
+        // 4. Validate nonce (replay protection) - use maker address for nonce tracking
         const nonceStr = order.salt || order.nonce || '';
-        const nonceValidation = (0, nonceManager_js_1.validateNonce)(owner, nonceStr);
+        const nonceValidation = (0, nonceManager_js_1.validateNonce)(orderMaker, nonceStr);
         if (!nonceValidation.valid) {
             return res.status(400).json({ error: nonceValidation.error });
         }
-        (0, logger_js_1.logOrderEvent)('validated', orderId, owner);
+        (0, logger_js_1.logOrderEvent)('validated', orderId, orderMaker);
         // 5. Get or derive user-scoped L2 API credentials (NOT builder credentials)
         // Builder credentials are only used for attribution during derive/create
-        const userAddress = orderSigner;
-        logger_js_1.logger.info(`[Order] Getting/deriving user creds for wallet: ${userAddress.slice(0, 10)}... owner=${owner.slice(0, 10)}... orderSigner=${orderSigner.slice(0, 10)}...`);
+        // CRITICAL: Use order.maker (Safe wallet) for credential derivation, NOT order.signer (EOA)
+        const userAddress = orderMaker;
+        logger_js_1.logger.info(`[Order] Getting/deriving user creds for Safe wallet (maker): ${userAddress.slice(0, 10)}... owner=${owner.slice(0, 10)}... maker=${orderMaker.slice(0, 10)}... signer=${orderSigner.slice(0, 10)}...`);
         let creds;
         try {
             creds = await (0, clobCreds_js_1.getOrDeriveClobCreds)(userAddress, {
@@ -133,16 +142,17 @@ router.post('/', rateLimiter_js_1.orderLimiter, async (req, res) => {
             });
         }
         // 6. Submit to Polymarket
-        const result = await (0, polymarketClient_js_1.submitOrder)(order, owner, orderType, creds);
-        // 7. Mark nonce as used (only after successful submission)
-        (0, nonceManager_js_1.markNonceUsed)(owner, nonceStr);
-        // 8. Invalidate caches for this user
-        (0, cache_js_1.invalidate)('orders', `orders:${owner}`);
-        (0, cache_js_1.invalidate)('positions', `positions:${owner}`);
+        // Use maker (Safe wallet) as owner for submission
+        const result = await (0, polymarketClient_js_1.submitOrder)(order, orderMaker, orderType, creds);
+        // 7. Mark nonce as used (only after successful submission) - use maker address
+        (0, nonceManager_js_1.markNonceUsed)(orderMaker, nonceStr);
+        // 8. Invalidate caches for this user (use maker address)
+        (0, cache_js_1.invalidate)('orders', `orders:${orderMaker}`);
+        (0, cache_js_1.invalidate)('positions', `positions:${orderMaker}`);
         // 9. Return result
         const resultOrderId = result.orderID || result.orderId;
         if (resultOrderId) {
-            (0, logger_js_1.logOrderEvent)('accepted', String(resultOrderId), owner);
+            (0, logger_js_1.logOrderEvent)('accepted', String(resultOrderId), orderMaker);
             return res.json({
                 success: true,
                 orderId: resultOrderId,
@@ -151,25 +161,26 @@ router.post('/', rateLimiter_js_1.orderLimiter, async (req, res) => {
         }
         // Check for error in response
         if (result.error || result.message) {
-            (0, logger_js_1.logOrderEvent)('rejected', orderId, owner, { reason: String(result.error || result.message) });
+            (0, logger_js_1.logOrderEvent)('rejected', orderId, orderMaker, { reason: String(result.error || result.message) });
             return res.status(400).json({
                 success: false,
                 error: result.error || result.message,
             });
         }
         // Assume success if no explicit error
-        (0, logger_js_1.logOrderEvent)('submitted', orderId, owner);
+        (0, logger_js_1.logOrderEvent)('submitted', orderId, orderMaker);
         return res.json({ success: true, ...result });
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Failed to submit order';
-        (0, logger_js_1.logOrderEvent)('rejected', orderId, owner, { reason: errorMessage });
+        const orderMaker = order?.maker || owner; // Use maker if available, fallback to owner
+        (0, logger_js_1.logOrderEvent)('rejected', orderId, orderMaker, { reason: errorMessage });
         // Check if it's an auth error (401/403)
         const statusCode = (error && typeof error === 'object' && 'statusCode' in error)
             ? error.statusCode
             : undefined;
         if (statusCode === 401 || statusCode === 403) {
-            logger_js_1.logger.error(`Order submission auth error: ${orderId} owner=${owner} status=${statusCode} error=${errorMessage}`);
+            logger_js_1.logger.error(`Order submission auth error: ${orderId} maker=${orderMaker} status=${statusCode} error=${errorMessage}`);
             // Sanitize error message (remove any potential secrets)
             const sanitizedError = errorMessage.replace(/api[_-]?key[=:]\s*[\w-]+/gi, 'api_key=***');
             return res.status(statusCode).json({
@@ -177,7 +188,7 @@ router.post('/', rateLimiter_js_1.orderLimiter, async (req, res) => {
                 error: sanitizedError
             });
         }
-        logger_js_1.logger.error(`Order submission failed: ${orderId} owner=${owner} error=${errorMessage}`);
+        logger_js_1.logger.error(`Order submission failed: ${orderId} maker=${orderMaker} error=${errorMessage}`);
         res.status(500).json({ error: errorMessage });
     }
 });

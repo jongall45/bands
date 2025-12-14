@@ -113,19 +113,29 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'l1Auth.address must match order.signer' })
     }
     
-    // 4. Validate nonce (replay protection)
+    // CRITICAL: For Polymarket Safe architecture:
+    // - maker = Safe wallet (owns the order and funds) - THIS is what needs credentials
+    // - signer = EOA (just signs the order) - does NOT need credentials
+    // We must derive credentials for the Safe wallet (maker), not the EOA (signer)
+    const orderMaker = String(order.maker || '')
+    if (!orderMaker) {
+      return res.status(400).json({ error: 'order.maker is required' })
+    }
+    
+    // 4. Validate nonce (replay protection) - use maker address for nonce tracking
     const nonceStr = order.salt || order.nonce || ''
-    const nonceValidation = validateNonce(owner, nonceStr)
+    const nonceValidation = validateNonce(orderMaker, nonceStr)
     if (!nonceValidation.valid) {
       return res.status(400).json({ error: nonceValidation.error })
     }
     
-    logOrderEvent('validated', orderId, owner)
+    logOrderEvent('validated', orderId, orderMaker)
     
     // 5. Get or derive user-scoped L2 API credentials (NOT builder credentials)
     // Builder credentials are only used for attribution during derive/create
-    const userAddress = orderSigner
-    logger.info(`[Order] Getting/deriving user creds for wallet: ${userAddress.slice(0, 10)}... owner=${owner.slice(0, 10)}... orderSigner=${orderSigner.slice(0, 10)}...`)
+    // CRITICAL: Use order.maker (Safe wallet) for credential derivation, NOT order.signer (EOA)
+    const userAddress = orderMaker
+    logger.info(`[Order] Getting/deriving user creds for Safe wallet (maker): ${userAddress.slice(0, 10)}... owner=${owner.slice(0, 10)}... maker=${orderMaker.slice(0, 10)}... signer=${orderSigner.slice(0, 10)}...`)
     
     let creds: UserCreds | undefined
     try {
@@ -168,19 +178,20 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
     }
 
     // 6. Submit to Polymarket
-    const result = await submitOrder(order, owner, orderType, creds) as Record<string, unknown>
+    // Use maker (Safe wallet) as owner for submission
+    const result = await submitOrder(order, orderMaker, orderType, creds) as Record<string, unknown>
     
-    // 7. Mark nonce as used (only after successful submission)
-    markNonceUsed(owner, nonceStr)
+    // 7. Mark nonce as used (only after successful submission) - use maker address
+    markNonceUsed(orderMaker, nonceStr)
     
-    // 8. Invalidate caches for this user
-    invalidate('orders', `orders:${owner}`)
-    invalidate('positions', `positions:${owner}`)
+    // 8. Invalidate caches for this user (use maker address)
+    invalidate('orders', `orders:${orderMaker}`)
+    invalidate('positions', `positions:${orderMaker}`)
     
     // 9. Return result
     const resultOrderId = result.orderID || result.orderId
     if (resultOrderId) {
-      logOrderEvent('accepted', String(resultOrderId), owner)
+      logOrderEvent('accepted', String(resultOrderId), orderMaker)
       return res.json({
         success: true,
         orderId: resultOrderId,
@@ -190,7 +201,7 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
     
     // Check for error in response
     if (result.error || result.message) {
-      logOrderEvent('rejected', orderId, owner, { reason: String(result.error || result.message) })
+      logOrderEvent('rejected', orderId, orderMaker, { reason: String(result.error || result.message) })
       return res.status(400).json({
         success: false,
         error: result.error || result.message,
@@ -198,12 +209,13 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
     }
     
     // Assume success if no explicit error
-    logOrderEvent('submitted', orderId, owner)
+    logOrderEvent('submitted', orderId, orderMaker)
     return res.json({ success: true, ...result })
     
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to submit order'
-    logOrderEvent('rejected', orderId, owner, { reason: errorMessage })
+    const orderMaker = order?.maker || owner // Use maker if available, fallback to owner
+    logOrderEvent('rejected', orderId, orderMaker, { reason: errorMessage })
     
     // Check if it's an auth error (401/403)
     const statusCode = (error && typeof error === 'object' && 'statusCode' in error) 
@@ -211,7 +223,7 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
       : undefined
     
     if (statusCode === 401 || statusCode === 403) {
-      logger.error(`Order submission auth error: ${orderId} owner=${owner} status=${statusCode} error=${errorMessage}`)
+      logger.error(`Order submission auth error: ${orderId} maker=${orderMaker} status=${statusCode} error=${errorMessage}`)
       // Sanitize error message (remove any potential secrets)
       const sanitizedError = errorMessage.replace(/api[_-]?key[=:]\s*[\w-]+/gi, 'api_key=***')
       return res.status(statusCode).json({ 
@@ -220,7 +232,7 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
       })
     }
     
-    logger.error(`Order submission failed: ${orderId} owner=${owner} error=${errorMessage}`)
+    logger.error(`Order submission failed: ${orderId} maker=${orderMaker} error=${errorMessage}`)
     res.status(500).json({ error: errorMessage })
   }
 })
