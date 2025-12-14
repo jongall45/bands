@@ -11,6 +11,10 @@ function requireGatewayUrl(): string {
   if (!GATEWAY_URL) {
     throw new Error('NEXT_PUBLIC_GATEWAY_URL is not set. Polymarket gateway is required.')
   }
+  // Ensure URL has protocol (https://)
+  if (!GATEWAY_URL.startsWith('http://') && !GATEWAY_URL.startsWith('https://')) {
+    return `https://${GATEWAY_URL}`
+  }
   return GATEWAY_URL
 }
 
@@ -27,9 +31,18 @@ async function gatewayFetch<T>(
   // #endregion
   const gatewayUrl = GATEWAY_URL
   // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:25',message:'Gateway URL check',data:{hasUrl:!!gatewayUrl,urlPrefix:gatewayUrl?.substring(0,20)||'missing'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:25',message:'Gateway URL check',data:{hasUrl:!!gatewayUrl,urlPrefix:gatewayUrl?.substring(0,30)||'missing',fullUrl:gatewayUrl||'NOT_SET'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
   // #endregion
-  const url = `${requireGatewayUrl()}${path}`
+  
+  if (!gatewayUrl) {
+    const error = 'NEXT_PUBLIC_GATEWAY_URL is not set. Please configure it in Vercel environment variables.'
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:29',message:'Gateway URL missing',data:{error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    throw new Error(error)
+  }
+  
+  const url = `${gatewayUrl}${path}`
   // #region agent log
   fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:27',message:'Full gateway URL',data:{fullUrl:url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
   // #endregion
@@ -107,6 +120,9 @@ export async function getMarketStats(marketId: string, tokenId: string): Promise
   const data = await gatewayFetch<{ stats: MarketStats }>(
     `/api/markets/${marketId}/stats?tokenId=${tokenId}`
   )
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:110',message:'getMarketStats response',data:{hasStats:!!data?.stats,hasBids:!!data?.stats?.bids,bidsCount:data?.stats?.bids?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
   return data.stats
 }
 

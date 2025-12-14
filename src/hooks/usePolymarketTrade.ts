@@ -211,13 +211,16 @@ export function usePolymarketTrade({
           getGatewayMarketStats(marketId, parsedMarket.yesTokenId),
           getGatewayMarketStats(marketId, parsedMarket.noTokenId),
         ])
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:213',message:'Price fetch response',data:{hasYesBook:!!yesBook,hasNoBook:!!noBook,yesBids:yesBook?.bids?.length||0,noBids:noBook?.bids?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
         
-        const yesBid = (yesBook as any).bids?.[0]?.price ? parseFloat((yesBook as any).bids[0].price) : 0
-        const yesAsk = (yesBook as any).asks?.[0]?.price ? parseFloat((yesBook as any).asks[0].price) : 1
+        const yesBid = yesBook?.bids?.[0]?.price ? parseFloat(yesBook.bids[0].price) : 0
+        const yesAsk = yesBook?.asks?.[0]?.price ? parseFloat(yesBook.asks[0].price) : 1
         const yesMid = (yesBid + yesAsk) / 2
         
-        const noBid = (noBook as any).bids?.[0]?.price ? parseFloat((noBook as any).bids[0].price) : 0
-        const noAsk = (noBook as any).asks?.[0]?.price ? parseFloat((noBook as any).asks[0].price) : 1
+        const noBid = noBook?.bids?.[0]?.price ? parseFloat(noBook.bids[0].price) : 0
+        const noAsk = noBook?.asks?.[0]?.price ? parseFloat(noBook.asks[0].price) : 1
         const noMid = (noBid + noAsk) / 2
         
         setLivePrices({ yesPrice: yesMid, noPrice: noMid })
