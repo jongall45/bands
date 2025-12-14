@@ -623,7 +623,7 @@ export function usePolymarketTrade({
       const size = amountNum / price
 
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:executeTrade:beforeOrder',message:'About to create order',data:{tokenId,price,size,tickSize,negRisk,sessionEoaAddress:session?.eoaAddress,sessionSafeAddress:session?.safeAddress,currentEoaAddress:eoaAddress,apiKeyPrefix:session?.apiCredentials?.key?.substring(0,8)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H4'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:executeTrade:beforeOrder',message:'About to create order',data:{tokenId,price,size,tickSize,negRisk,sessionEoaAddress:session?.eoaAddress,sessionSafeAddress:session?.safeAddress,currentEoaAddress:eoaAddress,apiKeyPrefix:session?.userApiCreds?.key?.substring(0,8)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H4'})}).catch(()=>{});
       // #endregion
 
       // Step 1: Create and sign order locally (no network request, avoids CORS)
