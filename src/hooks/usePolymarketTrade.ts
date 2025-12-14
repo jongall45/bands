@@ -245,12 +245,9 @@ export function usePolymarketTrade({
             },
           })
           
-          // Use our CLOB proxy to avoid CORS and Cloudflare blocks
-          const clobProxyUrl = `${baseUrl}/api/polymarket/clob`
-          console.log('   Using CLOB proxy:', clobProxyUrl)
-          
+          // Use direct CLOB API - it has CORS headers for authenticated requests
           const client = new ClobClient(
-            clobProxyUrl,
+            CLOB_API,
             POLYGON_CHAIN_ID,
             ethersSigner,
             creds,
@@ -418,10 +415,8 @@ export function usePolymarketTrade({
 
       // Create temporary ClobClient for credential derivation
       // IMPORTANT: Must include signatureType=2 and Safe address for Gnosis Safe flow
-      // Use proxy URL to avoid CORS and Cloudflare blocks
-      const clobProxyUrl = `${baseUrl}/api/polymarket/clob`
       const tempClobClient = new ClobClient(
-        clobProxyUrl,
+        CLOB_API,
         POLYGON_CHAIN_ID,
         ethersSigner,
         undefined, // No creds yet
@@ -509,9 +504,8 @@ export function usePolymarketTrade({
 
       // Step 8: Initialize authenticated ClobClient
       console.log('🔧 Initializing authenticated CLOB client...')
-      // Use proxy URL to avoid CORS and Cloudflare blocks
       const authenticatedClobClient = new ClobClient(
-        clobProxyUrl,
+        CLOB_API,
         POLYGON_CHAIN_ID,
         ethersSigner,
         userCreds,
@@ -1005,10 +999,8 @@ export function usePolymarketSetup() {
       console.log('🔐 Getting user API credentials for Safe:', derivedSafeAddress)
 
       // IMPORTANT: Must include signatureType=2 and Safe address for Gnosis Safe flow
-      // Use proxy URL to avoid CORS and Cloudflare blocks
-      const clobProxyUrl2 = `${baseUrl}/api/polymarket/clob`
       const tempClobClient = new ClobClient(
-        clobProxyUrl2,
+        CLOB_API,
         POLYGON_CHAIN_ID,
         ethersSigner,
         undefined, // No creds yet
