@@ -94,7 +94,7 @@ router.post('/', rateLimiter_js_1.orderLimiter, async (req, res) => {
         // 5. Get or derive user-scoped L2 API credentials (NOT builder credentials)
         // Builder credentials are only used for attribution during derive/create
         const userAddress = orderSigner;
-        logger_js_1.logger.info(`[Order] Getting/deriving user creds for wallet: ${userAddress.slice(0, 10)}...`);
+        logger_js_1.logger.info(`[Order] Getting/deriving user creds for wallet: ${userAddress.slice(0, 10)}... owner=${owner.slice(0, 10)}... orderSigner=${orderSigner.slice(0, 10)}...`);
         let creds;
         try {
             creds = await (0, clobCreds_js_1.getOrDeriveClobCreds)(userAddress, {
@@ -103,12 +103,34 @@ router.post('/', rateLimiter_js_1.orderLimiter, async (req, res) => {
                 timestamp: String(l1Auth.timestamp),
                 nonce: l1Auth.nonce !== undefined ? String(l1Auth.nonce) : undefined,
             });
-            logger_js_1.logger.info(`[Order] Using DERIVED user creds (not builder creds) for order submission: keyLen=${creds.apiKey.length}`);
+            // Validate creds before proceeding
+            if (!creds || !creds.apiKey || !creds.secret || !creds.passphrase) {
+                logger_js_1.logger.error(`[Order] CRITICAL: Derived creds are invalid! creds=${!!creds} apiKey=${!!creds?.apiKey} secret=${!!creds?.secret} passphrase=${!!creds?.passphrase}`);
+                return res.status(500).json({
+                    success: false,
+                    error: 'NO_DERIVED_CREDS',
+                    details: 'Derived credentials are invalid or incomplete'
+                });
+            }
+            logger_js_1.logger.info(`[Order] Using DERIVED user creds (not builder creds) for order submission: keyLen=${creds.apiKey.length} secretLen=${creds.secret.length} passLen=${creds.passphrase.length}`);
         }
         catch (deriveError) {
             const errorMsg = deriveError instanceof Error ? deriveError.message : String(deriveError);
             logger_js_1.logger.error(`[Order] Failed to get/derive user L2 API key: ${errorMsg}`);
-            throw new Error(`Failed to authenticate with Polymarket: ${errorMsg}`);
+            return res.status(500).json({
+                success: false,
+                error: 'NO_DERIVED_CREDS',
+                details: errorMsg
+            });
+        }
+        // Final validation before submission
+        if (!creds) {
+            logger_js_1.logger.error(`[Order] CRITICAL: creds is null/undefined after derivation!`);
+            return res.status(500).json({
+                success: false,
+                error: 'NO_DERIVED_CREDS',
+                details: 'Credentials are missing after derivation'
+            });
         }
         // 6. Submit to Polymarket
         const result = await (0, polymarketClient_js_1.submitOrder)(order, owner, orderType, creds);

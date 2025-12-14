@@ -169,12 +169,21 @@ async function makeRequest(baseUrl, method, path, options) {
     // Add user auth headers if provided
     // When user creds are present, we ONLY use user creds (not builder creds)
     if (options?.userCreds) {
+        // Validate userCreds structure
+        if (!options.userCreds.apiKey || !options.userCreds.secret || !options.userCreds.passphrase) {
+            logger_js_1.logger.error(`[Auth] CRITICAL: userCreds provided but incomplete! apiKey=${!!options.userCreds.apiKey} secret=${!!options.userCreds.secret} passphrase=${!!options.userCreds.passphrase}`);
+            throw new Error('NO_DERIVED_CREDS: User credentials are incomplete');
+        }
         const timestamp = Math.floor(Date.now() / 1000).toString();
         const signature = createUserSignature(options.userCreds.secret, timestamp, method, path, bodyString);
         headers['POLY_API_KEY'] = options.userCreds.apiKey;
         headers['POLY_SIGNATURE'] = signature;
         headers['POLY_TIMESTAMP'] = timestamp;
         headers['POLY_PASSPHRASE'] = options.userCreds.passphrase;
+        logger_js_1.logger.debug(`[Auth] Added user auth headers: keyLen=${options.userCreds.apiKey.length} hasSignature=${!!signature} timestamp=${timestamp}`);
+    }
+    else {
+        logger_js_1.logger.warn(`[Auth] No userCreds provided in options! options=${JSON.stringify({ hasUserCreds: !!options?.userCreds, hasBody: !!options?.body, hasUserAddress: !!options?.userAddress })}`);
     }
     if (options?.userAddress) {
         headers['POLY_ADDRESS'] = options.userAddress;
@@ -187,19 +196,27 @@ async function makeRequest(baseUrl, method, path, options) {
                 await new Promise(r => setTimeout(r, index_js_1.config.request.retryDelay * attempt));
                 logger_js_1.logger.debug(`Retrying request: attempt=${attempt} path=${path}`);
             }
-            // Log outbound request
+            // Log outbound request with detailed credential info
             const urlObj = new URL(url);
             const hasUserCreds = !!options?.userCreds;
+            const hasUserCredsValid = hasUserCreds && !!options.userCreds?.apiKey && !!options.userCreds?.secret && !!options.userCreds?.passphrase;
             const hasBuilderCreds = !!index_js_1.config.builderApiKey && !!index_js_1.config.builderSecret && !!index_js_1.config.builderPassphrase;
             // Determine which credentials are being used
-            const credType = hasUserCreds ? 'DERIVED_USER_CREDS_ONLY' : (hasBuilderCreds ? 'BUILDER_CREDS_ONLY' : 'NO_CREDS');
-            const hasBoth = hasUserCreds && hasBuilderCreds && shouldUseBuilderAttribution;
-            logger_js_1.logger.info(`[Polymarket] ${method} ${urlObj.host}${path} credType=${credType} hasUserCreds=${hasUserCreds} hasBuilderCreds=${hasBuilderCreds && shouldUseBuilderAttribution} hasBoth=${hasBoth}`);
-            if (hasUserCreds && options.userCreds) {
+            const credType = hasUserCredsValid ? 'DERIVED_USER_CREDS_ONLY' : (hasBuilderCreds ? 'BUILDER_CREDS_ONLY' : 'NO_CREDS');
+            const hasBoth = hasUserCredsValid && hasBuilderCreds && shouldUseBuilderAttribution;
+            logger_js_1.logger.info(`[Polymarket] ${method} ${urlObj.host}${path} credType=${credType} hasUserCreds=${hasUserCreds} hasUserCredsValid=${hasUserCredsValid} hasBuilderCreds=${hasBuilderCreds && shouldUseBuilderAttribution} hasBoth=${hasBoth} shouldUseBuilderAttribution=${shouldUseBuilderAttribution}`);
+            // Debug: Log what's actually in options
+            if (hasUserCreds && !hasUserCredsValid) {
+                logger_js_1.logger.error(`[Auth] CRITICAL: userCreds object exists but is invalid! apiKey=${!!options.userCreds?.apiKey} secret=${!!options.userCreds?.secret} passphrase=${!!options.userCreds?.passphrase}`);
+            }
+            if (hasUserCredsValid && options.userCreds) {
                 logger_js_1.logger.info(`[Auth] Using DERIVED user creds ONLY (no builder headers): keyLen=${options.userCreds.apiKey.length} keyPrefix=${options.userCreds.apiKey.substring(0, 8)}...`);
             }
             else if (hasBuilderCreds && shouldUseBuilderAttribution) {
                 logger_js_1.logger.info(`[Auth] Using BUILDER creds only (for attribution/public endpoints): keyLen=${index_js_1.config.builderApiKey.length}`);
+            }
+            else {
+                logger_js_1.logger.warn(`[Auth] WARNING: No valid credentials! hasUserCreds=${hasUserCreds} hasUserCredsValid=${hasUserCredsValid} hasBuilderCreds=${hasBuilderCreds}`);
             }
             // Warn if we're sending both (shouldn't happen for orders)
             if (hasBoth) {
@@ -321,12 +338,23 @@ async function getOrders(walletAddress, userCreds) {
  */
 async function submitOrder(signedOrder, owner, orderType, userCreds) {
     logger_js_1.logger.info(`[Order] Submitting order: owner=${owner.slice(0, 10)}... orderType=${orderType} clobApi=${index_js_1.config.clobApi}`);
-    logger_js_1.logger.info(`[Order] Using DERIVED user creds (NOT builder creds): keyLen=${userCreds.apiKey.length} keyPrefix=${userCreds.apiKey.substring(0, 8)}...`);
+    // Validate userCreds before proceeding
+    if (!userCreds) {
+        logger_js_1.logger.error(`[Order] CRITICAL: userCreds is null/undefined! Cannot submit order.`);
+        throw new Error('NO_DERIVED_CREDS: User credentials are missing');
+    }
+    if (!userCreds.apiKey || !userCreds.secret || !userCreds.passphrase) {
+        logger_js_1.logger.error(`[Order] CRITICAL: userCreds missing required fields! apiKey=${!!userCreds.apiKey} secret=${!!userCreds.secret} passphrase=${!!userCreds.passphrase}`);
+        throw new Error('NO_DERIVED_CREDS: User credentials are incomplete');
+    }
+    logger_js_1.logger.info(`[Order] Using DERIVED user creds (NOT builder creds): keyLen=${userCreds.apiKey.length} secretLen=${userCreds.secret.length} passLen=${userCreds.passphrase.length} keyPrefix=${userCreds.apiKey.substring(0, 8)}...`);
     const payload = {
         order: signedOrder,
         owner,
         orderType,
     };
+    // Log BEFORE calling makeRequest to confirm creds are passed
+    logger_js_1.logger.info(`[Order] About to call makeRequest with userCreds: hasCreds=${!!userCreds} keyLen=${userCreds?.apiKey?.length || 0} owner=${owner}`);
     try {
         const result = await makeRequest(index_js_1.config.clobApi, 'POST', '/order', { body: payload, userCreds, userAddress: owner });
         logger_js_1.logger.info(`[Order] Order submitted successfully using derived user creds`);
@@ -338,7 +366,9 @@ async function submitOrder(signedOrder, owner, orderType, userCreds) {
         const statusCode = (error && typeof error === 'object' && 'statusCode' in error)
             ? error.statusCode
             : undefined;
-        logger_js_1.logger.error(`[Order] Order submission failed: status=${statusCode || 'unknown'} error=${errorMsg} usingDerivedCreds=true`);
+        // Check if creds were actually passed
+        const hadCreds = !!userCreds && !!userCreds.apiKey;
+        logger_js_1.logger.error(`[Order] Order submission failed: status=${statusCode || 'unknown'} error=${errorMsg} hadCreds=${hadCreds} keyLen=${userCreds?.apiKey?.length || 0}`);
         // Re-throw with status code preserved
         if (error && typeof error === 'object' && 'statusCode' in error) {
             throw error;

@@ -19,22 +19,49 @@ const logger_js_1 = require("../utils/logger.js");
 async function getOrDeriveClobCreds(userAddress, l1Auth) {
     // Normalize address to checksum-lowercase
     const normalizedAddress = userAddress.toLowerCase();
+    logger_js_1.logger.info(`[Creds] getOrDeriveClobCreds.start wallet=${userAddress.slice(0, 10)}... normalized=${normalizedAddress.slice(0, 10)}...`);
     // Check cache first
     let creds = (0, userCredsStore_js_1.getUserCreds)(normalizedAddress);
     if (creds) {
-        logger_js_1.logger.info(`[Creds] Using cached derived creds for ${userAddress.slice(0, 10)}... keyLen=${creds.apiKey.length}`);
-        return creds;
+        // Validate cached creds
+        if (!creds.apiKey || !creds.secret || !creds.passphrase) {
+            logger_js_1.logger.error(`[Creds] Cached creds are invalid! Clearing cache and re-deriving.`);
+            (0, userCredsStore_js_1.clearUserCreds)(normalizedAddress);
+            creds = undefined;
+        }
+        else {
+            logger_js_1.logger.info(`[Creds] Using cached derived creds for ${userAddress.slice(0, 10)}... keyLen=${creds.apiKey.length} secretLen=${creds.secret.length} passLen=${creds.passphrase.length}`);
+            return creds;
+        }
     }
     // Verify L1 auth address matches userAddress
     if (l1Auth.address.toLowerCase() !== normalizedAddress) {
+        logger_js_1.logger.error(`[Creds] Address mismatch! l1Auth.address=${l1Auth.address} userAddress=${userAddress}`);
         throw new Error(`L1 auth address (${l1Auth.address}) does not match user address (${userAddress})`);
     }
     // Derive new credentials
     logger_js_1.logger.info(`[Creds] Deriving new L2 API key for ${userAddress.slice(0, 10)}... (first time for this wallet)`);
-    creds = await (0, polymarketClient_js_1.deriveOrCreateApiKey)(l1Auth);
-    // Store for future use
-    (0, userCredsStore_js_1.setUserCreds)(normalizedAddress, creds);
-    logger_js_1.logger.info(`[Creds] Successfully derived and cached creds for ${userAddress.slice(0, 10)}... keyLen=${creds.apiKey.length}`);
-    return creds;
+    logger_js_1.logger.info(`[Creds] derive.start wallet=${userAddress.slice(0, 10)}... hasSignature=${!!l1Auth.signature} timestamp=${l1Auth.timestamp}`);
+    try {
+        creds = await (0, polymarketClient_js_1.deriveOrCreateApiKey)(l1Auth);
+        // Validate derived creds
+        if (!creds || !creds.apiKey || !creds.secret || !creds.passphrase) {
+            logger_js_1.logger.error(`[Creds] derive.fail wallet=${userAddress.slice(0, 10)}... reason=Invalid response from Polymarket`);
+            throw new Error('NO_DERIVED_CREDS: Derived credentials are invalid');
+        }
+        logger_js_1.logger.info(`[Creds] derive.success wallet=${userAddress.slice(0, 10)}... derivedKeyLen=${creds.apiKey.length} derivedSecretLen=${creds.secret.length} derivedPassLen=${creds.passphrase.length}`);
+        // Store for future use
+        (0, userCredsStore_js_1.setUserCreds)(normalizedAddress, creds);
+        logger_js_1.logger.info(`[Creds] Successfully derived and cached creds for ${userAddress.slice(0, 10)}... keyLen=${creds.apiKey.length}`);
+        return creds;
+    }
+    catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        const statusCode = (error && typeof error === 'object' && 'statusCode' in error)
+            ? error.statusCode
+            : undefined;
+        logger_js_1.logger.error(`[Creds] derive.fail wallet=${userAddress.slice(0, 10)}... status=${statusCode || 'unknown'} message=${errorMsg}`);
+        throw error;
+    }
 }
 //# sourceMappingURL=clobCreds.js.map

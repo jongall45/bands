@@ -208,6 +208,12 @@ export async function makeRequest<T>(
   // Add user auth headers if provided
   // When user creds are present, we ONLY use user creds (not builder creds)
   if (options?.userCreds) {
+    // Validate userCreds structure
+    if (!options.userCreds.apiKey || !options.userCreds.secret || !options.userCreds.passphrase) {
+      logger.error(`[Auth] CRITICAL: userCreds provided but incomplete! apiKey=${!!options.userCreds.apiKey} secret=${!!options.userCreds.secret} passphrase=${!!options.userCreds.passphrase}`)
+      throw new Error('NO_DERIVED_CREDS: User credentials are incomplete')
+    }
+    
     const timestamp = Math.floor(Date.now() / 1000).toString()
     const signature = createUserSignature(
       options.userCreds.secret,
@@ -220,6 +226,10 @@ export async function makeRequest<T>(
     headers['POLY_SIGNATURE'] = signature
     headers['POLY_TIMESTAMP'] = timestamp
     headers['POLY_PASSPHRASE'] = options.userCreds.passphrase
+    
+    logger.debug(`[Auth] Added user auth headers: keyLen=${options.userCreds.apiKey.length} hasSignature=${!!signature} timestamp=${timestamp}`)
+  } else {
+    logger.warn(`[Auth] No userCreds provided in options! options=${JSON.stringify({ hasUserCreds: !!options?.userCreds, hasBody: !!options?.body, hasUserAddress: !!options?.userAddress })}`)
   }
   
   if (options?.userAddress) {
@@ -237,20 +247,29 @@ export async function makeRequest<T>(
         logger.debug(`Retrying request: attempt=${attempt} path=${path}`)
       }
       
-      // Log outbound request
+      // Log outbound request with detailed credential info
       const urlObj = new URL(url)
       const hasUserCreds = !!options?.userCreds
+      const hasUserCredsValid = hasUserCreds && !!options.userCreds?.apiKey && !!options.userCreds?.secret && !!options.userCreds?.passphrase
       const hasBuilderCreds = !!config.builderApiKey && !!config.builderSecret && !!config.builderPassphrase
       
       // Determine which credentials are being used
-      const credType = hasUserCreds ? 'DERIVED_USER_CREDS_ONLY' : (hasBuilderCreds ? 'BUILDER_CREDS_ONLY' : 'NO_CREDS')
-      const hasBoth = hasUserCreds && hasBuilderCreds && shouldUseBuilderAttribution
-      logger.info(`[Polymarket] ${method} ${urlObj.host}${path} credType=${credType} hasUserCreds=${hasUserCreds} hasBuilderCreds=${hasBuilderCreds && shouldUseBuilderAttribution} hasBoth=${hasBoth}`)
+      const credType = hasUserCredsValid ? 'DERIVED_USER_CREDS_ONLY' : (hasBuilderCreds ? 'BUILDER_CREDS_ONLY' : 'NO_CREDS')
+      const hasBoth = hasUserCredsValid && hasBuilderCreds && shouldUseBuilderAttribution
       
-      if (hasUserCreds && options.userCreds) {
+      logger.info(`[Polymarket] ${method} ${urlObj.host}${path} credType=${credType} hasUserCreds=${hasUserCreds} hasUserCredsValid=${hasUserCredsValid} hasBuilderCreds=${hasBuilderCreds && shouldUseBuilderAttribution} hasBoth=${hasBoth} shouldUseBuilderAttribution=${shouldUseBuilderAttribution}`)
+      
+      // Debug: Log what's actually in options
+      if (hasUserCreds && !hasUserCredsValid) {
+        logger.error(`[Auth] CRITICAL: userCreds object exists but is invalid! apiKey=${!!options.userCreds?.apiKey} secret=${!!options.userCreds?.secret} passphrase=${!!options.userCreds?.passphrase}`)
+      }
+      
+      if (hasUserCredsValid && options.userCreds) {
         logger.info(`[Auth] Using DERIVED user creds ONLY (no builder headers): keyLen=${options.userCreds.apiKey.length} keyPrefix=${options.userCreds.apiKey.substring(0, 8)}...`)
       } else if (hasBuilderCreds && shouldUseBuilderAttribution) {
         logger.info(`[Auth] Using BUILDER creds only (for attribution/public endpoints): keyLen=${config.builderApiKey.length}`)
+      } else {
+        logger.warn(`[Auth] WARNING: No valid credentials! hasUserCreds=${hasUserCreds} hasUserCredsValid=${hasUserCredsValid} hasBuilderCreds=${hasBuilderCreds}`)
       }
       
       // Warn if we're sending both (shouldn't happen for orders)
@@ -405,13 +424,28 @@ export async function submitOrder(
   userCreds: UserCreds
 ): Promise<unknown> {
   logger.info(`[Order] Submitting order: owner=${owner.slice(0, 10)}... orderType=${orderType} clobApi=${config.clobApi}`)
-  logger.info(`[Order] Using DERIVED user creds (NOT builder creds): keyLen=${userCreds.apiKey.length} keyPrefix=${userCreds.apiKey.substring(0, 8)}...`)
+  
+  // Validate userCreds before proceeding
+  if (!userCreds) {
+    logger.error(`[Order] CRITICAL: userCreds is null/undefined! Cannot submit order.`)
+    throw new Error('NO_DERIVED_CREDS: User credentials are missing')
+  }
+  
+  if (!userCreds.apiKey || !userCreds.secret || !userCreds.passphrase) {
+    logger.error(`[Order] CRITICAL: userCreds missing required fields! apiKey=${!!userCreds.apiKey} secret=${!!userCreds.secret} passphrase=${!!userCreds.passphrase}`)
+    throw new Error('NO_DERIVED_CREDS: User credentials are incomplete')
+  }
+  
+  logger.info(`[Order] Using DERIVED user creds (NOT builder creds): keyLen=${userCreds.apiKey.length} secretLen=${userCreds.secret.length} passLen=${userCreds.passphrase.length} keyPrefix=${userCreds.apiKey.substring(0, 8)}...`)
   
   const payload = {
     order: signedOrder,
     owner,
     orderType,
   }
+  
+  // Log BEFORE calling makeRequest to confirm creds are passed
+  logger.info(`[Order] About to call makeRequest with userCreds: hasCreds=${!!userCreds} keyLen=${userCreds?.apiKey?.length || 0} owner=${owner}`)
   
   try {
     const result = await makeRequest<unknown>(
@@ -428,7 +462,10 @@ export async function submitOrder(
     const statusCode = (error && typeof error === 'object' && 'statusCode' in error) 
       ? (error.statusCode as number)
       : undefined
-    logger.error(`[Order] Order submission failed: status=${statusCode || 'unknown'} error=${errorMsg} usingDerivedCreds=true`)
+    
+    // Check if creds were actually passed
+    const hadCreds = !!userCreds && !!userCreds.apiKey
+    logger.error(`[Order] Order submission failed: status=${statusCode || 'unknown'} error=${errorMsg} hadCreds=${hadCreds} keyLen=${userCreds?.apiKey?.length || 0}`)
     
     // Re-throw with status code preserved
     if (error && typeof error === 'object' && 'statusCode' in error) {

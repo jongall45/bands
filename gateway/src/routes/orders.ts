@@ -125,9 +125,9 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
     // 5. Get or derive user-scoped L2 API credentials (NOT builder credentials)
     // Builder credentials are only used for attribution during derive/create
     const userAddress = orderSigner
-    logger.info(`[Order] Getting/deriving user creds for wallet: ${userAddress.slice(0, 10)}...`)
+    logger.info(`[Order] Getting/deriving user creds for wallet: ${userAddress.slice(0, 10)}... owner=${owner.slice(0, 10)}... orderSigner=${orderSigner.slice(0, 10)}...`)
     
-    let creds: UserCreds
+    let creds: UserCreds | undefined
     try {
       creds = await getOrDeriveClobCreds(userAddress, {
         address: userAddress,
@@ -135,11 +135,36 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
         timestamp: String(l1Auth.timestamp),
         nonce: l1Auth.nonce !== undefined ? String(l1Auth.nonce) : undefined,
       })
-      logger.info(`[Order] Using DERIVED user creds (not builder creds) for order submission: keyLen=${creds.apiKey.length}`)
+      
+      // Validate creds before proceeding
+      if (!creds || !creds.apiKey || !creds.secret || !creds.passphrase) {
+        logger.error(`[Order] CRITICAL: Derived creds are invalid! creds=${!!creds} apiKey=${!!creds?.apiKey} secret=${!!creds?.secret} passphrase=${!!creds?.passphrase}`)
+        return res.status(500).json({ 
+          success: false,
+          error: 'NO_DERIVED_CREDS',
+          details: 'Derived credentials are invalid or incomplete'
+        })
+      }
+      
+      logger.info(`[Order] Using DERIVED user creds (not builder creds) for order submission: keyLen=${creds.apiKey.length} secretLen=${creds.secret.length} passLen=${creds.passphrase.length}`)
     } catch (deriveError) {
       const errorMsg = deriveError instanceof Error ? deriveError.message : String(deriveError)
       logger.error(`[Order] Failed to get/derive user L2 API key: ${errorMsg}`)
-      throw new Error(`Failed to authenticate with Polymarket: ${errorMsg}`)
+      return res.status(500).json({ 
+        success: false,
+        error: 'NO_DERIVED_CREDS',
+        details: errorMsg
+      })
+    }
+    
+    // Final validation before submission
+    if (!creds) {
+      logger.error(`[Order] CRITICAL: creds is null/undefined after derivation!`)
+      return res.status(500).json({ 
+        success: false,
+        error: 'NO_DERIVED_CREDS',
+        details: 'Credentials are missing after derivation'
+      })
     }
 
     // 6. Submit to Polymarket

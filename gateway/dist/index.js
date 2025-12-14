@@ -15,6 +15,7 @@ const markets_js_1 = __importDefault(require("./routes/markets.js"));
 const orders_js_1 = __importDefault(require("./routes/orders.js"));
 const positions_js_1 = __importDefault(require("./routes/positions.js"));
 const polymarket_js_1 = __importDefault(require("./routes/polymarket.js"));
+const auth_js_1 = __importDefault(require("./routes/auth.js"));
 // Validate configuration on startup
 (0, index_js_1.validateConfig)();
 const app = (0, express_1.default)();
@@ -55,6 +56,7 @@ app.use('/api/order', orders_js_1.default);
 app.use('/api/orders', orders_js_1.default);
 app.use('/api/positions', positions_js_1.default);
 app.use('/api/polymarket', polymarket_js_1.default);
+app.use('/api/auth', auth_js_1.default);
 // 404 handler
 app.use((req, res) => {
     res.status(404).json({ error: 'Not found' });
