@@ -450,14 +450,34 @@ export function usePolymarketTrade({
 
       // Step 1: Create and sign order locally (no network request, avoids CORS)
       console.log('📤 Creating signed order locally...')
-      const signedOrder = await clobClient.createOrder({
-        tokenID: tokenId,
-        price: price,
-        side: Side.BUY,
-        size: size,
-      }, { tickSize, negRisk })
-      
-      console.log('✅ Order signed locally:', signedOrder)
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:451',message:'About to call createOrder',data:{tokenId,price,size,tickSize,negRisk,hasClobClient:!!clobClient},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
+      let signedOrder
+      try {
+        signedOrder = await clobClient.createOrder({
+          tokenID: tokenId,
+          price: price,
+          side: Side.BUY,
+          size: size,
+        }, { tickSize, negRisk })
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:460',message:'createOrder succeeded',data:{hasOrder:!!signedOrder,orderKeys:signedOrder?Object.keys(signedOrder):[]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
+        console.log('✅ Order signed locally:', signedOrder)
+      } catch (createOrderErr: any) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:464',message:'createOrder failed',data:{errorType:createOrderErr?.constructor?.name,errorMessage:createOrderErr?.message||String(createOrderErr),hasStatus:createOrderErr?.status!==undefined,status:createOrderErr?.status,hasError:createOrderErr?.error!==undefined,error:createOrderErr?.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
+        // ClobClient.createOrder() may try to fetch tick-size from server, causing network errors
+        // If it's a network error, provide a helpful message
+        const errMsg = createOrderErr?.message || String(createOrderErr || 'Unknown error')
+        if (errMsg.includes('Network Error') || errMsg.includes('ERR_CONNECTION_REFUSED') || errMsg.includes('localhost') || createOrderErr?.status === 0) {
+          throw new Error('Failed to create order: ClobClient attempted to fetch data from server. This should not happen - please report this issue.')
+        }
+        // Re-throw other errors as-is
+        throw createOrderErr
+      }
       
       // Step 2: Post the signed order via the gateway ONLY (no browser → Polymarket traffic)
       console.log('📤 Posting order via gateway...')
@@ -520,8 +540,27 @@ export function usePolymarketTrade({
       }
     } catch (err: any) {
       console.error('Trade execution failed:', err)
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:521',message:'Trade execution catch block',data:{errorType:err?.constructor?.name,hasMessage:err?.message!==undefined,errorMessage:err?.message||String(err||'undefined'),errorString:String(err),hasToString:typeof err?.toString==='function'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+      // #endregion
 
-      let errorMsg = err.message || 'Trade failed'
+      let errorMsg = 'Trade failed'
+      if (err && typeof err === 'object') {
+        if (err.message) {
+          errorMsg = String(err.message)
+        } else if (typeof err.toString === 'function') {
+          try {
+            errorMsg = err.toString()
+          } catch {
+            errorMsg = 'Unknown error occurred'
+          }
+        } else {
+          errorMsg = JSON.stringify(err)
+        }
+      } else if (err) {
+        errorMsg = String(err)
+      }
+      
       if (errorMsg.includes('rejected') || errorMsg.includes('denied')) {
         errorMsg = 'Transaction rejected'
       } else if (errorMsg.includes('insufficient')) {
