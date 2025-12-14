@@ -3,6 +3,12 @@
  * 
  * All Polymarket interactions go through this client.
  * The browser NEVER talks to Polymarket directly.
+ * 
+ * ARCHITECTURE: EOA-only mode
+ * - tradingWallet = Privy embedded EOA address
+ * - L1 auth signature from EOA for credential derivation
+ * - User-scoped L2 API credentials (derived server-side)
+ * - No Safe wallet involvement for trading
  */
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL
@@ -127,16 +133,18 @@ export interface SignedOrder {
   signature: string
 }
 
+export interface L1AuthPayload {
+  address: string
+  signature: string
+  timestamp: string
+  nonce?: string
+}
+
 export interface OrderSubmission {
   order: SignedOrder
-  owner: string
+  owner: string // tradingWallet (EOA address)
   orderType?: 'GTC' | 'FOK' | 'GTD'
-  l1Auth: {
-    address: string
-    signature: string
-    timestamp: string
-    nonce?: string
-  }
+  l1Auth: L1AuthPayload // L1 signature for just-in-time credential derivation
 }
 
 export interface OrderResult {
@@ -145,7 +153,24 @@ export interface OrderResult {
   error?: string
 }
 
+/**
+ * Submit a signed order to the gateway
+ * 
+ * The gateway will:
+ * 1. Validate the order (maker=signer=owner for EOA mode)
+ * 2. Look up cached user credentials OR derive them using l1Auth
+ * 3. Submit to Polymarket CLOB with user credentials
+ * 4. Return order ID on success
+ */
 export async function submitOrder(submission: OrderSubmission): Promise<OrderResult> {
+  console.log('[Gateway] Submitting order:', {
+    owner: submission.owner.slice(0, 10),
+    maker: submission.order.maker?.slice(0, 10),
+    signer: submission.order.signer?.slice(0, 10),
+    signatureType: submission.order.signatureType,
+    hasL1Auth: !!submission.l1Auth,
+  })
+  
   return gatewayFetch<OrderResult>('/api/order', {
     method: 'POST',
     body: JSON.stringify(submission),

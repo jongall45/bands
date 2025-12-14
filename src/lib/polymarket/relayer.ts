@@ -256,17 +256,25 @@ export function deriveSafeAddress(eoaAddress: string): `0x${string}` {
 
 /**
  * Session storage for Polymarket trading session
+ * 
+ * ARCHITECTURE: EOA-only mode
+ * - tradingWallet = Privy embedded EOA address
+ * - No Safe wallet involvement
+ * - hasUserCreds = whether credentials are derived on gateway
  */
 export interface TradingSession {
-  eoaAddress: string
-  safeAddress: string
-  safeDeployed: boolean
+  tradingWallet: string  // EOA address
+  hasUserCreds: boolean  // Whether gateway has derived credentials
   approvalsSet: boolean
-  // NOTE: userApiCreds removed - credentials stored server-side in gateway
   createdAt: number
+  // DEPRECATED: Remove these after migration
+  eoaAddress?: string
+  safeAddress?: string
+  safeDeployed?: boolean
 }
 
-const SESSION_STORAGE_KEY = 'polymarket_trading_session'
+const SESSION_STORAGE_KEY = 'polymarket_eoa_session'
+const LEGACY_SESSION_KEY = 'polymarket_trading_session'
 
 /**
  * Save trading session to localStorage
@@ -274,25 +282,47 @@ const SESSION_STORAGE_KEY = 'polymarket_trading_session'
 export function saveTradingSession(session: TradingSession): void {
   if (typeof window === 'undefined') return
   localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
+  // Clear legacy session if exists
+  localStorage.removeItem(LEGACY_SESSION_KEY)
 }
 
 /**
  * Load trading session from localStorage
  */
-export function loadTradingSession(eoaAddress: string): TradingSession | null {
+export function loadTradingSession(tradingWallet: string): TradingSession | null {
   if (typeof window === 'undefined') return null
   
   try {
-    const stored = localStorage.getItem(SESSION_STORAGE_KEY)
+    // Try new session key first
+    let stored = localStorage.getItem(SESSION_STORAGE_KEY)
+    
+    // Fall back to legacy session key
+    if (!stored) {
+      stored = localStorage.getItem(LEGACY_SESSION_KEY)
+    }
+    
     if (!stored) return null
     
     const session = JSON.parse(stored) as TradingSession
     
-    // Check if session is for the same EOA and not expired (24h)
+    // Normalize address to check - support both old and new field names
+    const sessionWallet = session.tradingWallet || session.eoaAddress || session.safeAddress
+    
+    // Check if session is for the same wallet and not expired (24h)
     if (
-      session.eoaAddress.toLowerCase() === eoaAddress.toLowerCase() &&
+      sessionWallet &&
+      sessionWallet.toLowerCase() === tradingWallet.toLowerCase() &&
       Date.now() - session.createdAt < 24 * 60 * 60 * 1000
     ) {
+      // Migrate to new format if needed
+      if (!session.tradingWallet) {
+        return {
+          tradingWallet,
+          hasUserCreds: session.hasUserCreds || false,
+          approvalsSet: session.approvalsSet || false,
+          createdAt: session.createdAt,
+        }
+      }
       return session
     }
     
@@ -308,4 +338,5 @@ export function loadTradingSession(eoaAddress: string): TradingSession | null {
 export function clearTradingSession(): void {
   if (typeof window === 'undefined') return
   localStorage.removeItem(SESSION_STORAGE_KEY)
+  localStorage.removeItem(LEGACY_SESSION_KEY)
 }

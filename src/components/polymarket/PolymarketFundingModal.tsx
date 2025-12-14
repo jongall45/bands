@@ -1,11 +1,20 @@
 'use client'
 
+/**
+ * Polymarket Funding Modal
+ * 
+ * ARCHITECTURE: EOA-only mode
+ * - tradingWallet = Privy embedded EOA address
+ * - Deposits go directly to the trading wallet (EOA) on Polygon
+ * - No Safe wallet involvement
+ * - Cross-chain bridging via Relay for non-Polygon chains
+ */
+
 import { useState, useEffect, useMemo } from 'react'
-import { X, ArrowDown, ArrowUp, Wallet, Loader2, CheckCircle, AlertCircle, ExternalLink, ChevronDown } from 'lucide-react'
+import { X, ArrowDown, ArrowUp, Wallet, Loader2, CheckCircle, AlertCircle, ExternalLink, ChevronDown, Copy, Check, Info } from 'lucide-react'
 import { formatUnits, parseUnits, encodeFunctionData } from 'viem'
 import { useBalance } from 'wagmi'
 import { polygon, arbitrum, base } from 'viem/chains'
-import { loadTradingSession } from '@/lib/polymarket/relayer'
 import { useWallets } from '@privy-io/react-auth'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 
@@ -56,18 +65,16 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
   const [txHash, setTxHash] = useState<string | null>(null)
   const [selectedChainId, setSelectedChainId] = useState<number>(arbitrum.id)
   const [showChainSelector, setShowChainSelector] = useState(false)
+  const [copiedAddress, setCopiedAddress] = useState(false)
 
-  // Get the Privy embedded wallet (EOA) to find the Safe address
+  // Get the Privy embedded wallet (EOA) - this IS the trading wallet
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
-  const eoaAddress = embeddedWallet?.address
+  const tradingWallet = embeddedWallet?.address // EOA address
   
-  // Get Smart Wallet address
+  // Get Smart Wallet address (for source funds)
   const smartWalletAddress = smartWalletClient?.account?.address
-  
-  // Get Safe address from session
-  const safeAddress = eoaAddress ? loadTradingSession(eoaAddress)?.safeAddress : null
 
-  // Fetch USDC balances from all chains
+  // Fetch USDC balances from all chains for Smart Wallet
   const { data: arbBalance } = useBalance({
     address: smartWalletAddress,
     token: USDC_ADDRESSES[arbitrum.id],
@@ -89,12 +96,12 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
     query: { enabled: !!smartWalletAddress },
   })
 
-  // Fetch Safe USDC balance (on Polygon)
-  const { data: safeBalance, refetch: refetchSafe } = useBalance({
-    address: safeAddress as `0x${string}`,
+  // Fetch Trading Wallet (EOA) USDC balance on Polygon
+  const { data: tradingWalletBalance, refetch: refetchTradingWallet } = useBalance({
+    address: tradingWallet as `0x${string}`,
     token: USDC_ADDRESSES[polygon.id],
     chainId: polygon.id,
-    query: { enabled: !!safeAddress },
+    query: { enabled: !!tradingWallet },
   })
 
   // Build balances map
@@ -104,7 +111,7 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
     [polygon.id]: polygonBalance ? formatUnits(polygonBalance.value, 6) : '0',
   }), [arbBalance, baseBalance, polygonBalance])
 
-  const safeUsdcBalance = safeBalance ? formatUnits(safeBalance.value, 6) : '0'
+  const tradingWalletUsdcBalance = tradingWalletBalance ? formatUnits(tradingWalletBalance.value, 6) : '0'
   const selectedChainBalance = chainBalances[selectedChainId] || '0'
 
   // Find best chain (one with highest balance)
@@ -139,16 +146,24 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
     }
   }, [isOpen])
 
+  const handleCopyAddress = () => {
+    if (tradingWallet) {
+      navigator.clipboard.writeText(tradingWallet)
+      setCopiedAddress(true)
+      setTimeout(() => setCopiedAddress(false), 2000)
+    }
+  }
+
   const handleMaxClick = () => {
     if (mode === 'deposit') {
       setAmount(selectedChainBalance)
     } else {
-      setAmount(safeUsdcBalance)
+      setAmount(tradingWalletUsdcBalance)
     }
   }
 
   const handleDeposit = async () => {
-    if (!smartWalletClient || !safeAddress || !amount || !smartWalletAddress) return
+    if (!smartWalletClient || !tradingWallet || !amount || !smartWalletAddress) return
 
     setStatus('pending')
     setError(null)
@@ -157,8 +172,8 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
       const amountInUnits = parseUnits(amount, 6)
       const selectedConfig = CHAIN_CONFIGS.find(c => c.id === selectedChainId)!
 
-      // Always use Relay to handle cross-chain complexity
-      // Even for same-chain, Relay handles it properly
+      // Use Relay to handle cross-chain bridging
+      // Deposits go directly to the trading wallet (EOA) on Polygon
       const quoteResponse = await fetch('https://api.relay.link/quote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -169,7 +184,7 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
           originCurrency: USDC_ADDRESSES[selectedChainId],
           destinationCurrency: USDC_ADDRESSES[polygon.id],
           amount: amountInUnits.toString(),
-          recipient: safeAddress, // Send directly to Safe!
+          recipient: tradingWallet, // Send to trading wallet (EOA)!
           tradeType: 'EXACT_INPUT',
         }),
       })
@@ -193,7 +208,7 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
         
         console.log('Executing on chain:', selectedChainId, 'to:', txData.to)
 
-        // Get the client for the source chain (this switches the wallet to the correct chain)
+        // Get the client for the source chain
         const chainClient = await getClientForChain({ id: selectedChainId })
         
         if (!chainClient) {
@@ -217,7 +232,7 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
       // Refetch balances after delay
       setTimeout(() => {
         refetchPolygon()
-        refetchSafe()
+        refetchTradingWallet()
         onSuccess?.()
       }, 5000)
     } catch (err: any) {
@@ -228,56 +243,42 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
   }
 
   const handleWithdraw = async () => {
-    if (!embeddedWallet || !safeAddress || !smartWalletAddress || !amount) return
+    // Withdraw from trading wallet (EOA) to smart wallet
+    // This requires the user to sign with their EOA
+    if (!embeddedWallet || !tradingWallet || !smartWalletAddress || !amount) return
 
     setStatus('pending')
     setError(null)
 
     try {
       const { ethers } = await import('ethers')
-      const { RelayClient, RelayerTxType } = await import('@polymarket/builder-relayer-client')
-      const { BuilderConfig } = await import('@polymarket/builder-signing-sdk')
       
       const provider = await embeddedWallet.getEthereumProvider()
       const ethersProvider = new ethers.providers.Web3Provider(provider)
       const signer = ethersProvider.getSigner()
 
-      const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
-      const builderConfig = new BuilderConfig({
-        remoteBuilderConfig: {
-          url: `${baseUrl}/api/polymarket/sign`,
-        },
-      })
-
-      const relay = new RelayClient(
-        'https://relayer-v2.polymarket.com/',
-        137,
-        signer,
-        builderConfig,
-        RelayerTxType.SAFE
-      )
-
       const amountInUnits = parseUnits(amount, 6)
 
-      const transferData = encodeFunctionData({
-        abi: ERC20_ABI,
-        functionName: 'transfer',
-        args: [smartWalletAddress as `0x${string}`, amountInUnits],
-      })
+      // Create ERC20 transfer transaction
+      const usdc = new ethers.Contract(
+        USDC_ADDRESSES[polygon.id],
+        ['function transfer(address to, uint256 amount) returns (bool)'],
+        signer
+      )
 
-      const response = await relay.execute([{
-        to: USDC_ADDRESSES[polygon.id],
-        data: transferData,
-        value: '0',
-      }])
+      // Switch to Polygon chain if needed
+      await embeddedWallet.switchChain(polygon.id)
 
-      const result = await response.wait()
-      setTxHash(result?.transactionHash || null)
+      // Execute transfer from EOA to smart wallet
+      const tx = await usdc.transfer(smartWalletAddress, amountInUnits)
+      await tx.wait()
+
+      setTxHash(tx.hash)
       setStatus('success')
       
       setTimeout(() => {
         refetchPolygon()
-        refetchSafe()
+        refetchTradingWallet()
         onSuccess?.()
       }, 2000)
     } catch (err: any) {
@@ -295,7 +296,7 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
     }
   }
 
-  const sourceBalance = mode === 'deposit' ? selectedChainBalance : safeUsdcBalance
+  const sourceBalance = mode === 'deposit' ? selectedChainBalance : tradingWalletUsdcBalance
   const hasEnoughBalance = parseFloat(amount || '0') <= parseFloat(sourceBalance)
   const isWalletReady = mode === 'deposit' ? !!getClientForChain : !!embeddedWallet
   const canSubmit = amount && parseFloat(amount) > 0 && hasEnoughBalance && status === 'idle' && isWalletReady
@@ -315,7 +316,7 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
         {/* Header */}
         <div className="sticky top-0 bg-[#0D0D0D] border-b border-white/[0.06] px-4 py-4 flex items-center justify-between">
           <h2 className="text-white font-semibold text-lg">
-            {mode === 'deposit' ? 'Deposit to Polymarket' : 'Withdraw from Polymarket'}
+            {mode === 'deposit' ? 'Fund Trading Wallet' : 'Withdraw from Trading Wallet'}
           </h2>
           <button onClick={onClose} className="p-2 hover:bg-white/[0.05] rounded-full transition-colors">
             <X className="w-5 h-5 text-white/60" />
@@ -341,6 +342,36 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
             >
               <ArrowUp className="w-4 h-4" /> Withdraw
             </button>
+          </div>
+
+          {/* Trading Wallet Info */}
+          <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-3">
+            <div className="flex items-start gap-2">
+              <Info className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-purple-400 text-xs font-medium mb-1">
+                  Your Polymarket Trading Wallet (EOA)
+                </p>
+                <div className="flex items-center gap-2">
+                  <span className="text-purple-400/70 text-xs font-mono">
+                    {tradingWallet?.slice(0, 10)}...{tradingWallet?.slice(-8)}
+                  </span>
+                  <button
+                    onClick={handleCopyAddress}
+                    className="text-purple-400 hover:text-purple-300"
+                  >
+                    {copiedAddress ? (
+                      <Check className="w-3 h-3" />
+                    ) : (
+                      <Copy className="w-3 h-3" />
+                    )}
+                  </button>
+                </div>
+                <p className="text-purple-400/50 text-[10px] mt-1">
+                  USDC in this wallet is used for Polymarket trading
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Chain Selector (Deposit only) */}
@@ -399,9 +430,9 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
               <p className="text-white/40 text-[10px] truncate">{smartWalletAddress?.slice(0, 8)}...{smartWalletAddress?.slice(-6)}</p>
             </div>
             <div className={`p-3 rounded-xl border ${mode === 'withdraw' ? 'bg-white/[0.03] border-orange-500/30' : 'bg-white/[0.02] border-white/[0.06]'}`}>
-              <p className="text-white/40 text-xs mb-1">Polymarket Safe</p>
-              <p className="text-white font-medium">${parseFloat(safeUsdcBalance).toFixed(2)}</p>
-              <p className="text-white/40 text-[10px] truncate">{safeAddress?.slice(0, 8)}...{safeAddress?.slice(-6)}</p>
+              <p className="text-white/40 text-xs mb-1">Trading Wallet (EOA)</p>
+              <p className="text-white font-medium">${parseFloat(tradingWalletUsdcBalance).toFixed(2)}</p>
+              <p className="text-white/40 text-[10px] truncate">{tradingWallet?.slice(0, 8)}...{tradingWallet?.slice(-6)}</p>
             </div>
           </div>
 
@@ -498,13 +529,13 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
           <div className="space-y-2">
             <p className="text-white/30 text-xs text-center">
               {mode === 'deposit' 
-                ? `Bridge & deposit USDC from ${selectedChainConfig?.name} to your Polymarket account.`
-                : 'Transfer USDC from your Polymarket account back to your Smart Wallet on Polygon.'
+                ? `Bridge & deposit USDC from ${selectedChainConfig?.name} to your Polymarket trading wallet.`
+                : 'Transfer USDC from your trading wallet back to your Smart Wallet on Polygon.'
               }
             </p>
             <div className="bg-white/[0.02] border border-white/[0.06] rounded-lg p-2">
               <p className="text-white/40 text-[10px] text-center">
-                🔒 Your Polymarket account is secured by your wallet. Gas fees for trades are sponsored.
+                💡 Your trading wallet (EOA) holds USDC for Polymarket orders. Enable trading first to place orders.
               </p>
             </div>
           </div>

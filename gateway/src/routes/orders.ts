@@ -4,7 +4,7 @@ import { submitOrder, getOrders, cancelOrder } from '../services/polymarketClien
 import { orderLimiter, queryLimiter } from '../middleware/rateLimiter.js'
 import { validateNonce, markNonceUsed } from '../services/nonceManager.js'
 import { invalidate } from '../services/cache.js'
-import { logger, logOrderEvent } from '../utils/logger.js'
+import { logger, logOrderEvent, logTradingEvent } from '../utils/logger.js'
 import { getOrDeriveClobCreds } from '../services/clobCreds.js'
 import { getUserCreds, type UserCreds } from '../services/userCredsStore.js'
 
@@ -20,7 +20,15 @@ interface SignedOrder {
   makerAmount?: string
   takerAmount?: string
   side?: number | string
+  signatureType?: number
   signature?: string
+}
+
+interface L1AuthPayload {
+  address: string
+  signature: string
+  timestamp: string
+  nonce?: string
 }
 
 /**
@@ -73,6 +81,13 @@ function validateOwnership(order: SignedOrder, owner: string): boolean {
 /**
  * POST /api/order
  * Submit a signed order
+ * 
+ * REFACTORED: Uses EOA only (no Safe wallet)
+ * - order.maker = EOA address
+ * - order.signer = EOA address  
+ * - order.signatureType = 0 (EOA)
+ * - Credentials derived for EOA
+ * - Accepts optional l1Auth in body for just-in-time credential derivation
  */
 router.post('/', orderLimiter, async (req: Request, res: Response) => {
   const { order, owner, orderType = 'GTC', l1Auth } = req.body
@@ -88,11 +103,8 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
     if (!owner) {
       return res.status(400).json({ error: 'owner is required' })
     }
-    if (!l1Auth?.signature || !l1Auth?.timestamp || !l1Auth?.address) {
-      return res.status(401).json({ error: 'l1Auth.address, l1Auth.signature and l1Auth.timestamp are required' })
-    }
     
-    logOrderEvent('signed', orderId, owner, { tokenId: order.tokenId })
+    logOrderEvent('signed', orderId, owner, { tokenId: order.tokenId, signatureType: order.signatureType })
     
     // 2. Validate order schema
     const schemaValidation = validateOrderSchema(order)
@@ -101,102 +113,114 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
       return res.status(400).json({ error: schemaValidation.error })
     }
     
-    // 3. Validate ownership (maker/signer matches owner)
-    if (!validateOwnership(order, owner)) {
-      logger.warn(`Ownership validation failed: ${orderId} owner=${owner} maker=${order.maker}`)
-      return res.status(403).json({ error: 'Order signer does not match owner' })
-    }
-
-    // 3b. Validate L1 auth address matches order signer
-    const orderSigner = String(order.signer || '')
-    if (orderSigner.toLowerCase() !== String(l1Auth.address).toLowerCase()) {
-      return res.status(403).json({ error: 'l1Auth.address must match order.signer' })
-    }
-    
-    // CRITICAL: For Polymarket Safe architecture:
-    // - maker = Safe wallet (owns the order and funds) - THIS is what needs credentials
-    // - signer = EOA (just signs the order) - does NOT need credentials
-    // We must derive credentials for the Safe wallet (maker), not the EOA (signer)
+    // 3. For EOA-only architecture: maker and signer should be the same (EOA)
     const orderMaker = String(order.maker || '')
-    if (!orderMaker) {
-      return res.status(400).json({ error: 'order.maker is required' })
+    const orderSigner = String(order.signer || '')
+    const signatureType = order.signatureType
+    
+    if (!orderMaker || !orderSigner) {
+      return res.status(400).json({ error: 'order.maker and order.signer are required' })
     }
     
-    // 4. Validate nonce (replay protection) - use maker address for nonce tracking
+    // Validate maker and signer are the same (EOA-only)
+    if (orderMaker.toLowerCase() !== orderSigner.toLowerCase()) {
+      logger.warn(`[Order] Maker and signer mismatch: maker=${orderMaker.slice(0, 10)}... signer=${orderSigner.slice(0, 10)}... (EOA-only mode requires them to match)`)
+      return res.status(400).json({ error: 'order.maker and order.signer must be the same (EOA-only mode)' })
+    }
+    
+    // Validate owner matches maker/signer
+    if (orderMaker.toLowerCase() !== owner.toLowerCase()) {
+      logger.warn(`Ownership validation failed: ${orderId} owner=${owner} maker=${orderMaker}`)
+      return res.status(403).json({ error: 'Order maker/signer does not match owner' })
+    }
+    
+    // Log signature type for debugging
+    logger.info(`[Order] signatureType=${signatureType} (expected 0 for EOA)`)
+    
+    // 4. Validate nonce (replay protection)
     const nonceStr = order.salt || order.nonce || ''
-    const nonceValidation = validateNonce(orderMaker, nonceStr)
+    const nonceValidation = validateNonce(owner.toLowerCase(), nonceStr)
     if (!nonceValidation.valid) {
       return res.status(400).json({ error: nonceValidation.error })
     }
     
-    logOrderEvent('validated', orderId, orderMaker)
+    logOrderEvent('validated', orderId, owner)
     
-    // 5. Get or derive user-scoped L2 API credentials (NOT builder credentials)
-    // Builder credentials are only used for attribution during derive/create
-    // CRITICAL: Use order.maker (Safe wallet) for credential derivation, NOT order.signer (EOA)
-    const userAddress = orderMaker
-    logger.info(`[Order] Getting/deriving user creds for Safe wallet (maker): ${userAddress.slice(0, 10)}... owner=${owner.slice(0, 10)}... maker=${orderMaker.slice(0, 10)}... signer=${orderSigner.slice(0, 10)}...`)
+    // 5. Get user-scoped L2 API credentials
+    const tradingWallet = owner.toLowerCase()
+    logger.info(`[Order] Getting user creds for trading wallet (EOA): ${tradingWallet.slice(0, 10)}...`)
     
-    // NOTE: L1 auth is signed by the EOA (orderSigner), but we need credentials for the Safe (orderMaker)
-    // Polymarket should allow deriving credentials for the Safe wallet using an EOA signature
-    // If this fails, we may need to change the frontend to sign L1 auth with the Safe wallet address
-    let creds: UserCreds | undefined
-    try {
-      // Use Safe wallet address for credential derivation, but EOA signature for L1 auth
-      // The L1 auth address (EOA) is validated above, but we derive credentials for the Safe
-      creds = await getOrDeriveClobCreds(userAddress, {
-        address: userAddress, // Safe wallet address (what we want credentials for)
-        signature: String(l1Auth.signature), // EOA signature (validated above)
-        timestamp: String(l1Auth.timestamp),
-        nonce: l1Auth.nonce !== undefined ? String(l1Auth.nonce) : undefined,
-      })
+    let creds = getUserCreds(tradingWallet)
+    
+    // If no cached creds, try to derive using l1Auth if provided
+    if (!creds && l1Auth) {
+      logger.info(`[Order] No cached creds, attempting just-in-time derivation with l1Auth...`)
       
-      // Validate creds before proceeding
-      if (!creds || !creds.apiKey || !creds.secret || !creds.passphrase) {
-        logger.error(`[Order] CRITICAL: Derived creds are invalid! creds=${!!creds} apiKey=${!!creds?.apiKey} secret=${!!creds?.secret} passphrase=${!!creds?.passphrase}`)
-        return res.status(500).json({ 
-          success: false,
-          error: 'NO_DERIVED_CREDS',
-          details: 'Derived credentials are invalid or incomplete'
-        })
+      if (!l1Auth.signature || !l1Auth.timestamp || !l1Auth.address) {
+        logger.warn(`[Order] l1Auth provided but incomplete: hasSignature=${!!l1Auth.signature} hasTimestamp=${!!l1Auth.timestamp} hasAddress=${!!l1Auth.address}`)
+      } else {
+        try {
+          creds = await getOrDeriveClobCreds(tradingWallet, l1Auth as L1AuthPayload)
+          logger.info(`[Order] Just-in-time cred derivation succeeded for ${tradingWallet.slice(0, 10)}...`)
+        } catch (deriveError) {
+          const errorMsg = deriveError instanceof Error ? deriveError.message : String(deriveError)
+          logger.error(`[Order] Just-in-time cred derivation failed: ${errorMsg}`)
+          // Continue - will fail below if no creds
+        }
       }
-      
-      logger.info(`[Order] Using DERIVED user creds (not builder creds) for order submission: keyLen=${creds.apiKey.length} secretLen=${creds.secret.length} passLen=${creds.passphrase.length}`)
-    } catch (deriveError) {
-      const errorMsg = deriveError instanceof Error ? deriveError.message : String(deriveError)
-      logger.error(`[Order] Failed to get/derive user L2 API key: ${errorMsg}`)
-      return res.status(500).json({ 
+    }
+    
+    if (!creds) {
+      logger.error(`[Order] CRITICAL: No user credentials found for wallet: ${tradingWallet.slice(0, 10)}... hasL1Auth=${!!l1Auth}`)
+      return res.status(401).json({ 
         success: false,
-        error: 'NO_DERIVED_CREDS',
-        details: errorMsg
+        error: 'USER_AUTH_REQUIRED',
+        message: 'User credentials not found. Please complete authentication via "Enable Trading" first.',
+        wallet: tradingWallet,
       })
     }
     
-    // Final validation before submission
-    if (!creds) {
-      logger.error(`[Order] CRITICAL: creds is null/undefined after derivation!`)
-      return res.status(500).json({ 
+    // Validate creds structure
+    if (!creds.apiKey || !creds.secret || !creds.passphrase) {
+      logger.error(`[Order] CRITICAL: Invalid credentials structure for wallet: ${tradingWallet.slice(0, 10)}...`)
+      return res.status(401).json({ 
         success: false,
-        error: 'NO_DERIVED_CREDS',
-        details: 'Credentials are missing after derivation'
+        error: 'USER_AUTH_REQUIRED',
+        message: 'User credentials are invalid. Please re-authenticate.',
+        wallet: tradingWallet,
       })
     }
+    
+    // Log structured trading event
+    logTradingEvent('order_submit', tradingWallet, {
+      hasUserCreds: true,
+      credTypeUsed: 'USER',
+      signatureType,
+      path: '/api/order',
+      message: `Submitting order (keyLen=${creds.apiKey.length})`,
+    })
 
     // 6. Submit to Polymarket
-    // Use maker (Safe wallet) as owner for submission
-    const result = await submitOrder(order, orderMaker, orderType, creds) as Record<string, unknown>
+    const result = await submitOrder(order, owner, orderType, creds) as Record<string, unknown>
     
-    // 7. Mark nonce as used (only after successful submission) - use maker address
-    markNonceUsed(orderMaker, nonceStr)
+    // 7. Mark nonce as used (only after successful submission)
+    markNonceUsed(tradingWallet, nonceStr)
     
-    // 8. Invalidate caches for this user (use maker address)
-    invalidate('orders', `orders:${orderMaker}`)
-    invalidate('positions', `positions:${orderMaker}`)
+    // 8. Invalidate caches for this user
+    invalidate('orders', `orders:${tradingWallet}`)
+    invalidate('positions', `positions:${tradingWallet}`)
     
     // 9. Return result
     const resultOrderId = result.orderID || result.orderId
     if (resultOrderId) {
-      logOrderEvent('accepted', String(resultOrderId), orderMaker)
+      logTradingEvent('order_result', tradingWallet, {
+        success: true,
+        hasUserCreds: true,
+        credTypeUsed: 'USER',
+        orderId: String(resultOrderId),
+        path: '/api/order',
+      })
+      logOrderEvent('accepted', String(resultOrderId), owner)
       return res.json({
         success: true,
         orderId: resultOrderId,
@@ -206,7 +230,14 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
     
     // Check for error in response
     if (result.error || result.message) {
-      logOrderEvent('rejected', orderId, orderMaker, { reason: String(result.error || result.message) })
+      logTradingEvent('order_result', tradingWallet, {
+        success: false,
+        hasUserCreds: true,
+        credTypeUsed: 'USER',
+        error: String(result.error || result.message),
+        path: '/api/order',
+      })
+      logOrderEvent('rejected', orderId, owner, { reason: String(result.error || result.message) })
       return res.status(400).json({
         success: false,
         error: result.error || result.message,
@@ -214,13 +245,19 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
     }
     
     // Assume success if no explicit error
-    logOrderEvent('submitted', orderId, orderMaker)
+    logOrderEvent('submitted', orderId, owner)
     return res.json({ success: true, ...result })
     
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to submit order'
-    const orderMaker = order?.maker || owner // Use maker if available, fallback to owner
-    logOrderEvent('rejected', orderId, orderMaker, { reason: errorMessage })
+    logOrderEvent('rejected', orderId, owner, { reason: errorMessage })
+    
+    // Log structured error
+    logTradingEvent('order_result', owner, {
+      success: false,
+      error: errorMessage,
+      path: '/api/order',
+    })
     
     // Check if it's an auth error (401/403)
     const statusCode = (error && typeof error === 'object' && 'statusCode' in error) 
@@ -228,7 +265,7 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
       : undefined
     
     if (statusCode === 401 || statusCode === 403) {
-      logger.error(`Order submission auth error: ${orderId} maker=${orderMaker} status=${statusCode} error=${errorMessage}`)
+      logger.error(`Order submission auth error: ${orderId} owner=${owner} status=${statusCode} error=${errorMessage}`)
       // Sanitize error message (remove any potential secrets)
       const sanitizedError = errorMessage.replace(/api[_-]?key[=:]\s*[\w-]+/gi, 'api_key=***')
       return res.status(statusCode).json({ 
@@ -237,7 +274,7 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
       })
     }
     
-    logger.error(`Order submission failed: ${orderId} maker=${orderMaker} error=${errorMessage}`)
+    logger.error(`Order submission failed: ${orderId} owner=${owner} error=${errorMessage}`)
     res.status(500).json({ error: errorMessage })
   }
 })

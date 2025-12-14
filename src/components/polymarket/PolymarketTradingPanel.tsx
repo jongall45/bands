@@ -16,6 +16,8 @@ import {
   ArrowRight,
   Zap,
   ArrowLeftRight,
+  ShieldCheck,
+  Copy,
 } from 'lucide-react'
 import { formatProbability, formatVolume, parseMarket } from '@/lib/polymarket/api'
 import type { PolymarketMarket } from '@/lib/polymarket/api'
@@ -34,27 +36,25 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
   const { authenticated, login } = usePrivy()
   const { wallets } = useWallets()
   
-  // Get the Privy embedded wallet (EOA that signs for the Safe)
+  // Get the Privy embedded wallet (EOA) - this IS the trading wallet
   const embeddedWallet = useMemo(() => {
     return wallets.find(w => w.walletClientType === 'privy')
   }, [wallets])
-  
-  const walletAddress = embeddedWallet?.address
   
   const [selectedOutcome, setSelectedOutcome] = useState<Outcome>('YES')
   const [tradeAction, setTradeAction] = useState<TradeAction>('BUY')
   const [amount, setAmount] = useState('')
   const [showBridgeModal, setShowBridgeModal] = useState(false)
+  const [copiedAddress, setCopiedAddress] = useState(false)
   
-  // Use the new trade hook with embedded wallet + Safe architecture
+  // Use the EOA-only trade hook
   const {
     isReady,
     isLoading,
     state,
     error,
-    eoaAddress,
-    safeAddress,
-    isSafeDeployed,
+    tradingWallet,
+    hasUserCreds,
     usdcBalance,
     hasEnoughUsdc,
     hasAllApprovals,
@@ -63,7 +63,7 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
     noPrice,
     estimateTrade,
     executeTrade,
-    initializeSession,
+    enableTrading,
     reset,
   } = usePolymarketTrade({
     market,
@@ -78,13 +78,13 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
 
   // Fetch user's position in this market
   const { data: positionData, refetch: refetchPosition } = useQuery({
-    queryKey: ['market-position', market.id, safeAddress],
+    queryKey: ['market-position', market.id, tradingWallet],
     queryFn: async () => {
-      if (!safeAddress) return null
+      if (!tradingWallet) return null
       const parsed = parseMarket(market)
       
       // Check position for both YES and NO tokens
-      const response = await fetch(`/api/polymarket/positions?address=${safeAddress}`)
+      const response = await fetch(`/api/polymarket/positions?address=${tradingWallet}`)
       if (!response.ok) return null
       
       const data = await response.json()
@@ -101,7 +101,7 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
         noValue: parseFloat(noPosition?.value || '0'),
       }
     },
-    enabled: !!safeAddress,
+    enabled: !!tradingWallet,
     staleTime: 10000,
   })
   
@@ -136,6 +136,18 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
     if (!amountNum || hasInsufficientBalance || isLoading) return
     executeTrade(amount, selectedOutcome)
   }, [amount, selectedOutcome, amountNum, hasInsufficientBalance, isLoading, executeTrade])
+
+  const handleEnableTrading = useCallback(async () => {
+    await enableTrading()
+  }, [enableTrading])
+
+  const handleCopyAddress = useCallback(() => {
+    if (tradingWallet) {
+      navigator.clipboard.writeText(tradingWallet)
+      setCopiedAddress(true)
+      setTimeout(() => setCopiedAddress(false), 2000)
+    }
+  }, [tradingWallet])
 
   // Not authenticated
   if (!authenticated) {
@@ -182,9 +194,9 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
           </h2>
           <div className="flex items-center gap-2 mt-2">
             <span className="text-white/40 text-xs">Volume: {formatVolume(market.volume)}</span>
-            {isSafeDeployed && (
+            {hasUserCreds && (
               <span className="text-green-400/60 text-xs flex items-center gap-1">
-                <Check className="w-3 h-3" /> Connected
+                <ShieldCheck className="w-3 h-3" /> Trading Enabled
               </span>
             )}
           </div>
@@ -196,6 +208,63 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
           <X className="w-5 h-5 text-white/60" />
         </button>
       </div>
+
+      {/* Trading Wallet Display */}
+      {tradingWallet && (
+        <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-white/40" />
+              <span className="text-white/60 text-xs">Trading Wallet (EOA)</span>
+            </div>
+            <button
+              onClick={handleCopyAddress}
+              className="flex items-center gap-1 text-white/60 hover:text-white text-xs transition-colors"
+            >
+              <span className="font-mono">{tradingWallet.slice(0, 6)}...{tradingWallet.slice(-4)}</span>
+              {copiedAddress ? (
+                <Check className="w-3 h-3 text-green-400" />
+              ) : (
+                <Copy className="w-3 h-3" />
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Enable Trading Button (if not yet enabled) */}
+      {!hasUserCreds && (
+        <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4 mb-4">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-purple-400 text-sm font-medium mb-1">
+                Enable Trading
+              </p>
+              <p className="text-purple-400/70 text-xs mb-3">
+                Sign a message to enable trading on Polymarket. This derives your API credentials for order submission.
+              </p>
+              <button
+                onClick={handleEnableTrading}
+                disabled={isLoading}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {state.message || 'Enabling...'}
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4" />
+                    Enable Trading
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Wallet Balance with Bridge Button */}
       <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 mb-4">
@@ -219,6 +288,9 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
             </button>
           </div>
         </div>
+        <p className="text-white/30 text-xs mt-2">
+          Funds in your trading wallet (EOA) on Polygon
+        </p>
       </div>
 
       {/* USDC.e Warning */}
@@ -249,7 +321,7 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
                 No Native USDC on Polygon
               </p>
               <p className="text-[#7B9EFF]/70 text-xs mb-3">
-                Bridge native USDC from Base or Arbitrum to Polygon to trade on Polymarket.
+                Bridge native USDC from Base or Arbitrum to your trading wallet on Polygon.
               </p>
               <button
                 onClick={() => setShowBridgeModal(true)}
@@ -482,20 +554,17 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
       )}
 
       {/* Success Display */}
-      {state.status === 'success' && state.txHash && (
+      {state.status === 'success' && (
         <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 mb-4">
           <div className="flex items-center gap-2 mb-2">
             <Check className="w-5 h-5 text-green-400" />
             <span className="text-green-400 font-medium">Trade Executed!</span>
           </div>
-          <a
-            href={`https://polygonscan.com/tx/${state.txHash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-green-400/70 text-xs hover:underline flex items-center gap-1"
-          >
-            View on Polygonscan <ExternalLink className="w-3 h-3" />
-          </a>
+          {state.orderId && (
+            <p className="text-green-400/70 text-xs">
+              Order ID: {state.orderId}
+            </p>
+          )}
         </div>
       )}
 
@@ -517,6 +586,24 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
           className="w-full py-4 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-2xl transition-colors"
         >
           New Trade
+        </button>
+      ) : !hasUserCreds ? (
+        <button
+          onClick={handleEnableTrading}
+          disabled={isLoading}
+          className="w-full py-4 bg-purple-500 hover:bg-purple-600 text-white font-semibold rounded-2xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              {state.message || 'Enabling...'}
+            </>
+          ) : (
+            <>
+              <ShieldCheck className="w-5 h-5" />
+              Enable Trading
+            </>
+          )}
         </button>
       ) : (
         <button
@@ -558,13 +645,30 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
         </button>
       )}
 
-      {/* Info Notice */}
-      <div className="flex items-start gap-2 mt-4">
-        <AlertCircle className="w-4 h-4 text-white/30 mt-0.5 flex-shrink-0" />
-        <p className="text-white/30 text-xs">
-          Each share pays $1 if the outcome occurs. Trades execute via smart wallet on Polygon.
-        </p>
-      </div>
+      {/* Where are my funds? Explainer */}
+      <details className="mt-4 group">
+        <summary className="flex items-center gap-2 cursor-pointer text-white/40 hover:text-white/60 text-xs">
+          <Info className="w-3.5 h-3.5" />
+          <span>Where are my funds?</span>
+        </summary>
+        <div className="mt-2 p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl text-white/40 text-xs space-y-2">
+          <p>
+            <strong className="text-white/60">Trading Wallet (EOA):</strong> Your Privy embedded wallet on Polygon. 
+            USDC here is used for Polymarket orders submitted via bands.cash.
+          </p>
+          <p>
+            <strong className="text-white/60">Smart Wallet:</strong> Your multi-chain account abstraction wallet. 
+            Funds here need to be deposited to your trading wallet before trading.
+          </p>
+          <p>
+            <strong className="text-white/60">This is NOT Polymarket Safe custody.</strong> You retain full control 
+            of your trading wallet at all times.
+          </p>
+          <p className="pt-1 border-t border-white/[0.06]">
+            Each share pays $1 if the outcome occurs. Trades settle on Polygon.
+          </p>
+        </div>
+      </details>
 
       {/* Bridge Modal */}
       <BridgeModal
@@ -576,7 +680,7 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
         }}
         destinationChain="polygon"
         title="Bridge to Polygon"
-        subtitle="Move USDC to trade on Polymarket"
+        subtitle="Move USDC to your trading wallet on Polygon"
       />
     </TradingPanelWrapper>
   )

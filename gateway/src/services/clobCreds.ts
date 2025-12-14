@@ -1,6 +1,6 @@
 import { getUserCreds, setUserCreds, clearUserCreds, type UserCreds } from './userCredsStore.js'
 import { deriveOrCreateApiKey, type L1AuthPayload } from './polymarketClient.js'
-import { logger } from '../utils/logger.js'
+import { logger, logCredDerivation, logTradingEvent } from '../utils/logger.js'
 
 /**
  * Get or derive CLOB credentials for a user wallet
@@ -54,7 +54,7 @@ export async function getOrDeriveClobCreds(
     
     // Validate derived creds
     if (!creds || !creds.apiKey || !creds.secret || !creds.passphrase) {
-      logger.error(`[Creds] derive.fail wallet=${userAddress.slice(0, 10)}... reason=Invalid response from Polymarket`)
+      logCredDerivation(userAddress, false, { error: 'Invalid response from Polymarket' })
       throw new Error('NO_DERIVED_CREDS: Derived credentials are invalid')
     }
     
@@ -72,14 +72,19 @@ export async function getOrDeriveClobCreds(
       logger.error(`[Creds] CRITICAL: Storage verification failed! wallet=${userAddress.slice(0, 10)}... retrieved=${!!verifyCreds} keyMatch=${verifyCreds?.apiKey === creds.apiKey}`)
     }
     
-    logger.info(`[Creds] Successfully derived and cached creds for ${userAddress.slice(0, 10)}... keyLen=${creds.apiKey.length}`)
+    // Log successful derivation
+    logCredDerivation(userAddress, true, { keyLen: creds.apiKey.length })
+    
     return creds
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
     const statusCode = (error && typeof error === 'object' && 'statusCode' in error) 
       ? (error.statusCode as number)
       : undefined
-    logger.error(`[Creds] derive.fail wallet=${userAddress.slice(0, 10)}... status=${statusCode || 'unknown'} message=${errorMsg}`)
+    
+    // Log failed derivation
+    logCredDerivation(userAddress, false, { statusCode, error: errorMsg })
+    
     throw error
   }
 }

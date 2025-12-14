@@ -1,3 +1,15 @@
+/**
+ * Polymarket Constants
+ * 
+ * ARCHITECTURE: EOA-only mode
+ * - tradingWallet = Privy embedded EOA address
+ * - signatureType = 0 (EOA)
+ * - maker = signer = tradingWallet
+ * - L1 auth signature from EOA for credential derivation
+ * - User-scoped L2 API credentials (derived server-side)
+ * - No Safe wallet involvement for trading
+ */
+
 // Polymarket Contract Addresses on Polygon
 export const POLYGON_CHAIN_ID = 137
 
@@ -20,17 +32,22 @@ export const CONDITIONAL_TOKENS = '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045' a
 export const CLOB_API = 'https://clob.polymarket.com' as const
 export const GAMMA_API = 'https://gamma-api.polymarket.com' as const
 
-// Builder Relayer endpoint (for gasless transactions)
+// Builder Relayer endpoint (for gasless transactions - NOT used in EOA-only mode)
 export const BUILDER_RELAYER_API = 'https://relayer-v2.polymarket.com/' as const
 
-// Signature Types for CLOB authentication
-// 0 = EOA (standard wallet)
-// 1 = Poly Proxy (Magic wallet)  
-// 2 = Poly Gnosis Safe (EOA signs for Safe)
+/**
+ * Signature Types for CLOB authentication
+ * 
+ * For EOA-only architecture, we ONLY use type 0 (EOA).
+ * 
+ * 0 = EOA (standard wallet) - USE THIS
+ * 1 = Poly Proxy (Magic wallet) - Legacy, not used
+ * 2 = Poly Gnosis Safe (EOA signs for Safe) - Not used in EOA-only mode
+ */
 export const CLOB_SIGNATURE_TYPES = {
-  EOA: 0,
-  POLY_PROXY: 1,
-  POLY_GNOSIS_SAFE: 2,
+  EOA: 0,                // <-- USE THIS for EOA-only trading
+  POLY_PROXY: 1,         // Legacy Magic wallet
+  POLY_GNOSIS_SAFE: 2,   // Safe wallet (not used in EOA-only mode)
 } as const
 
 // Order Types

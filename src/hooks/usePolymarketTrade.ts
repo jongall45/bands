@@ -1,23 +1,28 @@
 'use client'
 
 /**
- * Polymarket Trading Hook - Smart Wallet Architecture
+ * Polymarket Trading Hook - EOA-only Architecture
  * 
- * This implementation follows the official Polymarket Privy Safe Builder Example:
- * https://github.com/Polymarket/privy-safe-builder-example
+ * REFACTORED: Uses Privy embedded EOA directly for trading.
  * 
  * Architecture:
- * - User authenticates via Privy (email/social)
- * - Privy provisions an embedded EOA wallet (delegated signer)
- * - A Gnosis Safe is derived/deployed from the EOA (asset vault)
- * - The EOA signs orders for the Safe (signatureType=2)
- * - Builder attribution via server-side HMAC signing
+ * - tradingWallet = Privy embedded EOA address
+ * - L1 signature from EOA for credential derivation
+ * - User-scoped L2 API credentials (derived server-side)
+ * - Order signing with signatureType=0 (EOA)
+ * - No Safe wallet involvement for trading
  * 
- * This provides "smart wallet UX" while satisfying Polymarket's EOA signature requirements.
+ * Flow:
+ * 1. User clicks "Enable Trading" 
+ * 2. Frontend requests auth challenge from gateway
+ * 3. User signs with Privy EOA
+ * 4. Gateway derives and caches user credentials
+ * 5. User can now place orders
  */
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
+import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { createPublicClient, http, formatUnits, parseUnits, type WalletClient } from 'viem'
 import { polygon } from 'viem/chains'
 import { useQuery } from '@tanstack/react-query'
@@ -43,11 +48,15 @@ import { parseMarket } from '@/lib/polymarket/api'
 import {
   createAllApprovalTxs,
   checkAllApprovals,
-  saveTradingSession,
-  loadTradingSession,
-  clearTradingSession,
-  type TradingSession,
 } from '@/lib/polymarket/relayer'
+import {
+  assertIsEOA,
+  quickPreflight,
+  logPreflightDebug,
+} from '@/lib/polymarket/preflight'
+
+// Gateway URL
+const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL
 
 // ============================================
 // TYPES
@@ -66,10 +75,9 @@ interface TradeResult {
   state: TradeExecutionState
   error: string | null
   
-  // Wallet info
-  eoaAddress: string | null
-  safeAddress: string | null
-  isSafeDeployed: boolean
+  // Wallet info (EOA-only)
+  tradingWallet: string | null
+  hasUserCreds: boolean
   
   // Balances
   usdcBalance: string
@@ -86,9 +94,19 @@ interface TradeResult {
   // Actions
   estimateTrade: (amount: string, outcome: 'YES' | 'NO') => TradeEstimate
   executeTrade: (amount: string, outcome: 'YES' | 'NO') => Promise<void>
-  initializeSession: () => Promise<boolean>
+  enableTrading: () => Promise<boolean>
   reset: () => void
 }
+
+// Trading session stored in localStorage
+interface TradingSession {
+  tradingWallet: string
+  hasUserCreds: boolean
+  approvalsSet: boolean
+  createdAt: number
+}
+
+const SESSION_STORAGE_KEY = 'polymarket_eoa_session'
 
 // ============================================
 // HELPER: Convert Privy wallet to ethers Signer
@@ -140,18 +158,102 @@ async function signClobAuth(
 }
 
 // ============================================
-// HELPER: Get Viem WalletClient from Privy
+// HELPER: Session Management
 // ============================================
 
-async function getViemWalletClient(privyWallet: any): Promise<WalletClient> {
-  const provider = await privyWallet.getEthereumProvider()
-  const { createWalletClient, custom } = await import('viem')
+function saveTradingSession(session: TradingSession): void {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
+}
+
+function loadTradingSession(tradingWallet: string): TradingSession | null {
+  if (typeof window === 'undefined') return null
   
-  return createWalletClient({
-    account: privyWallet.address as `0x${string}`,
-    chain: polygon,
-    transport: custom(provider),
+  try {
+    const stored = localStorage.getItem(SESSION_STORAGE_KEY)
+    if (!stored) return null
+    
+    const session = JSON.parse(stored) as TradingSession
+    
+    // Check if session is for the same wallet and not expired (24h)
+    if (
+      session.tradingWallet.toLowerCase() === tradingWallet.toLowerCase() &&
+      Date.now() - session.createdAt < 24 * 60 * 60 * 1000
+    ) {
+      return session
+    }
+    
+    return null
+  } catch {
+    return null
+  }
+}
+
+function clearTradingSession(): void {
+  if (typeof window === 'undefined') return
+  localStorage.removeItem(SESSION_STORAGE_KEY)
+}
+
+// ============================================
+// HELPER: Gateway API calls
+// ============================================
+
+async function getAuthChallenge(wallet: string): Promise<{
+  typedData: any
+  timestamp: string
+  nonce: string
+  message: string
+}> {
+  const url = `${GATEWAY_URL}/api/polymarket/auth-challenge?wallet=${wallet}`
+  console.log('🔐 Requesting auth challenge:', url)
+  
+  const response = await fetch(url, { credentials: 'include' })
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.error || `Failed to get auth challenge: ${response.status}`)
+  }
+  
+  return response.json()
+}
+
+async function completeAuth(payload: {
+  wallet: string
+  signature: string
+  timestamp: string
+  nonce: string
+}): Promise<{ success: boolean; hasUserCreds: boolean; error?: string }> {
+  const url = `${GATEWAY_URL}/api/polymarket/auth/complete`
+  console.log('🔐 Completing auth:', url)
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    credentials: 'include',
   })
+  
+  const data = await response.json()
+  if (!response.ok) {
+    throw new Error(data.error || `Auth completion failed: ${response.status}`)
+  }
+  
+  return data
+}
+
+async function checkAuthStatus(wallet: string): Promise<{ hasUserCreds: boolean }> {
+  const url = `${GATEWAY_URL}/api/polymarket/auth/status?wallet=${wallet}`
+  
+  try {
+    const response = await fetch(url, { credentials: 'include' })
+    if (!response.ok) {
+      return { hasUserCreds: false }
+    }
+    
+    const data = await response.json()
+    return { hasUserCreds: data.hasUserCreds || false }
+  } catch {
+    return { hasUserCreds: false }
+  }
 }
 
 // ============================================
@@ -165,23 +267,57 @@ export function usePolymarketTrade({
 }: UsePolymarketTradeOptions): TradeResult {
   const { authenticated } = usePrivy()
   const { wallets } = useWallets()
+  const { client: smartWalletClient } = useSmartWallets()
   
   // State
   const [state, setState] = useState<TradeExecutionState>({ status: 'idle' })
   const [usdcBalance, setUsdcBalance] = useState('0')
   const [hasAllApprovals, setHasAllApprovals] = useState(false)
+  const [hasUserCreds, setHasUserCreds] = useState(false)
   const [session, setSession] = useState<TradingSession | null>(null)
+  const [credRefreshAttempted, setCredRefreshAttempted] = useState(false)
 
-  // Get the Privy embedded wallet (EOA)
+  // Get the Privy embedded wallet (EOA) - this is the trading wallet
+  // IMPORTANT: Must be walletClientType === 'privy', NOT the smart wallet
   const embeddedWallet = useMemo(() => {
-    return wallets.find(w => w.walletClientType === 'privy')
+    const found = wallets.find(w => w.walletClientType === 'privy')
+    
+    // Debug logging in development
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🔍 [EOA Check] Wallets:', wallets.map(w => ({
+        type: w.walletClientType,
+        address: w.address?.slice(0, 10),
+      })))
+      if (found) {
+        console.log('✅ [EOA Check] Using embedded EOA:', found.address?.slice(0, 10))
+      }
+    }
+    
+    return found
   }, [wallets])
 
-  const eoaAddress = embeddedWallet?.address || null
-
-  // For now, Safe address = EOA address until we deploy
-  // The RelayClient will derive the actual Safe address
-  const safeAddress = session?.safeAddress || eoaAddress
+  // tradingWallet = Privy embedded EOA address
+  const tradingWallet = embeddedWallet?.address || null
+  
+  // Smart wallet address (for comparison/validation)
+  const smartWalletAddress = smartWalletClient?.account?.address || null
+  
+  // EOA assertion - ensure we're not accidentally using the smart wallet
+  const eoaAssertion = useMemo(() => {
+    return assertIsEOA(tradingWallet, smartWalletAddress, embeddedWallet?.walletClientType)
+  }, [tradingWallet, smartWalletAddress, embeddedWallet?.walletClientType])
+  
+  // Debug log EOA vs Smart Wallet in development
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production' && tradingWallet) {
+      console.log('🔍 [Wallet Debug]', {
+        tradingWallet: tradingWallet?.slice(0, 10),
+        smartWallet: smartWalletAddress?.slice(0, 10),
+        isEOAValid: eoaAssertion.isValid,
+        error: eoaAssertion.error,
+      })
+    }
+  }, [tradingWallet, smartWalletAddress, eoaAssertion])
 
   // Public client for reading Polygon state
   const publicClient = useMemo(() => createPublicClient({
@@ -236,123 +372,159 @@ export function usePolymarketTrade({
   const noPrice = livePrices?.noPrice ?? parsedMarket.noPrice
 
   // ============================================
-  // LOAD SESSION ON MOUNT
+  // LOAD SESSION AND CHECK AUTH STATUS ON MOUNT
   // ============================================
   
   useEffect(() => {
-    if (eoaAddress) {
-      const existingSession = loadTradingSession(eoaAddress)
+    if (tradingWallet) {
+      // Load existing session
+      const existingSession = loadTradingSession(tradingWallet)
       if (existingSession) {
         setSession(existingSession)
-        console.log('📋 Loaded existing Polymarket session:', existingSession.safeAddress)
+        setHasUserCreds(existingSession.hasUserCreds)
+        console.log('📋 Loaded existing trading session:', {
+          wallet: tradingWallet.slice(0, 10),
+          hasUserCreds: existingSession.hasUserCreds,
+        })
       }
+      
+      // Check actual auth status from gateway
+      checkAuthStatus(tradingWallet).then(({ hasUserCreds: credsStatus }) => {
+        setHasUserCreds(credsStatus)
+        if (credsStatus) {
+          console.log('✅ User has valid credentials on gateway')
+          // Update session
+          const newSession: TradingSession = {
+            tradingWallet,
+            hasUserCreds: true,
+            approvalsSet: existingSession?.approvalsSet || false,
+            createdAt: existingSession?.createdAt || Date.now(),
+          }
+          saveTradingSession(newSession)
+          setSession(newSession)
+        }
+      })
     }
-  }, [eoaAddress])
-
-  // ============================================
-  // NOTE: ClobClient removed - we use manual order signing instead
-  // All network calls go through the gateway
-  // ============================================
-
-  // Track if we've attempted auto-initialization
-  const [hasAttemptedInit, setHasAttemptedInit] = useState(false)
+  }, [tradingWallet])
 
   // ============================================
   // FETCH BALANCES & ALLOWANCES
   // ============================================
   
   const fetchBalancesAndAllowances = useCallback(async () => {
-    // IMPORTANT: Only check balance for the Safe address, not the EOA
-    // The Safe holds the funds for Polymarket trading
-    const addressToCheck = session?.safeAddress
-    if (!addressToCheck) {
-      console.log('📊 Skipping balance fetch - no Safe address yet')
+    // Check balance for the trading wallet (EOA)
+    if (!tradingWallet) {
+      console.log('📊 Skipping balance fetch - no trading wallet')
       return
     }
 
     try {
-      // Fetch USDC balance from Safe address
+      // Fetch USDC balance from trading wallet (EOA)
       const balance = await publicClient.readContract({
         address: POLYGON_USDC,
         abi: USDC_ABI,
         functionName: 'balanceOf',
-        args: [addressToCheck as `0x${string}`],
+        args: [tradingWallet as `0x${string}`],
       }) as bigint
       
       const balanceFormatted = formatUnits(balance, 6)
       setUsdcBalance(balanceFormatted)
 
-      // Check all approvals
+      // Check all approvals for the trading wallet
       const approvalStatus = await checkAllApprovals(
-        addressToCheck as `0x${string}`,
+        tradingWallet as `0x${string}`,
         publicClient
       )
       setHasAllApprovals(approvalStatus.allApproved)
 
-      console.log('📊 Polymarket balances for Safe:', addressToCheck)
+      console.log('📊 Polymarket balances for trading wallet (EOA):', tradingWallet.slice(0, 10))
       console.log('   USDC:', balanceFormatted)
       console.log('   All Approvals:', approvalStatus.allApproved)
     } catch (err) {
       console.error('Failed to fetch Polygon balances:', err)
     }
-  }, [session?.safeAddress, publicClient])
+  }, [tradingWallet, publicClient])
 
-  // Fetch on mount and when Safe address changes
-  // IMPORTANT: Only fetch when we have the actual Safe address from session
+  // Fetch on mount and when trading wallet changes
   useEffect(() => {
-    if (session?.safeAddress) {
+    if (tradingWallet) {
       fetchBalancesAndAllowances()
     }
-  }, [session?.safeAddress, fetchBalancesAndAllowances])
+  }, [tradingWallet, fetchBalancesAndAllowances])
 
   // ============================================
-  // INITIALIZE TRADING SESSION
+  // ENABLE TRADING (L1 AUTH + DERIVE CREDS)
   // ============================================
   
-  const initializeSession = useCallback(async (): Promise<boolean> => {
-    if (!embeddedWallet || !eoaAddress) {
+  const enableTrading = useCallback(async (): Promise<boolean> => {
+    if (!embeddedWallet || !tradingWallet) {
       console.error('No embedded wallet connected')
+      onError?.('Wallet not connected')
       return false
     }
 
-    setState({ status: 'preparing', message: 'Preparing trading session...' })
+    // Check if already has creds
+    if (hasUserCreds) {
+      console.log('✅ Already has user credentials')
+      return true
+    }
+
+    setState({ status: 'preparing', message: 'Enabling trading...' })
 
     try {
-      // IMPORTANT: per your constraints, the browser must never call Polymarket directly.
-      // So we do NOT:
-      // - call CLOB APIs
-      // - call Polymarket relayer
-      // - derive/create Polymarket API keys client-side
-
-      const existing = loadTradingSession(eoaAddress)
-      const derivedSafeAddress = existing?.safeAddress || eoaAddress
-
-      const approvalStatus = await checkAllApprovals(
-        derivedSafeAddress as `0x${string}`,
-        publicClient
+      console.log('🔐 Starting trading enablement for:', tradingWallet)
+      
+      // Step 1: Get auth challenge from gateway
+      const challenge = await getAuthChallenge(tradingWallet)
+      console.log('📋 Got auth challenge:', { nonce: challenge.nonce, timestamp: challenge.timestamp })
+      
+      // Step 2: Sign the challenge with Privy EOA
+      setState({ status: 'signing', message: 'Sign to enable trading...' })
+      const signer = await getEthersSigner(embeddedWallet)
+      
+      // Sign using EIP-712 typed data
+      const signature = await (signer as any)._signTypedData(
+        challenge.typedData.domain,
+        challenge.typedData.types,
+        challenge.typedData.message
       )
-
+      console.log('✅ Got signature:', signature.slice(0, 20) + '...')
+      
+      // Step 3: Complete auth with gateway (derives and caches creds)
+      setState({ status: 'preparing', message: 'Deriving credentials...' })
+      const result = await completeAuth({
+        wallet: tradingWallet,
+        signature,
+        timestamp: challenge.timestamp,
+        nonce: challenge.nonce,
+      })
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to derive credentials')
+      }
+      
+      console.log('✅ Trading enabled! hasUserCreds:', result.hasUserCreds)
+      
+      // Update state
+      setHasUserCreds(true)
       const newSession: TradingSession = {
-        eoaAddress,
-        safeAddress: derivedSafeAddress,
-        safeDeployed: Boolean(existing?.safeDeployed),
-        approvalsSet: approvalStatus.allApproved,
+        tradingWallet,
+        hasUserCreds: true,
+        approvalsSet: hasAllApprovals,
         createdAt: Date.now(),
       }
-
       saveTradingSession(newSession)
       setSession(newSession)
-
-      await fetchBalancesAndAllowances()
+      
       setState({ status: 'idle' })
       return true
     } catch (error: any) {
-      console.error('Failed to initialize trading session:', error)
-      setState({ status: 'error', error: error.message || 'Failed to prepare session' })
-      onError?.(error.message || 'Failed to prepare session')
+      console.error('Failed to enable trading:', error)
+      setState({ status: 'error', error: error.message || 'Failed to enable trading' })
+      onError?.(error.message || 'Failed to enable trading')
       return false
     }
-  }, [embeddedWallet, eoaAddress, publicClient, fetchBalancesAndAllowances, onError])
+  }, [embeddedWallet, tradingWallet, hasUserCreds, hasAllApprovals, onError])
 
   // ============================================
   // TRADE ESTIMATION
@@ -367,21 +539,34 @@ export function usePolymarketTrade({
   // TRADE EXECUTION
   // ============================================
   
-  const executeTrade = useCallback(async (amount: string, outcome: 'YES' | 'NO') => {
-    console.log('🎲 executeTrade called:', { amount, outcome })
+  const executeTrade = useCallback(async (amount: string, outcome: 'YES' | 'NO', isRetry: boolean = false) => {
+    console.log('🎲 executeTrade called:', { amount, outcome, tradingWallet: tradingWallet?.slice(0, 10), isRetry })
 
-    // Check if session is initialized
-    if (!session) {
-      console.log('📋 No session, initializing...')
-      const initialized = await initializeSession()
-      if (!initialized) {
-        setState({ status: 'error', error: 'Failed to connect to Polymarket' })
-        onError?.('Please initialize your Polymarket connection first')
-        return
-      }
+    // EOA assertion - prevent trading with wrong wallet type
+    if (!eoaAssertion.isValid) {
+      console.error('❌ EOA assertion failed:', eoaAssertion.error)
+      setState({ status: 'error', error: eoaAssertion.error || 'Invalid wallet type' })
+      onError?.(eoaAssertion.error || 'Invalid wallet type')
+      return
     }
 
-    if (!embeddedWallet || !eoaAddress) {
+    // Quick preflight check
+    const preflight = quickPreflight({
+      tradingWallet,
+      smartWalletAddress,
+      hasUserCreds,
+      usdcBalance,
+      amount: parseFloat(amount) || 0,
+    })
+    
+    if (!preflight.canTrade) {
+      console.log('❌ Preflight failed:', preflight.blocker)
+      setState({ status: 'error', error: preflight.blocker || 'Cannot trade' })
+      onError?.(preflight.blocker || 'Cannot trade')
+      return
+    }
+
+    if (!embeddedWallet || !tradingWallet) {
       setState({ status: 'error', error: 'Wallet not available' })
       onError?.('Wallet not connected')
       return
@@ -395,8 +580,8 @@ export function usePolymarketTrade({
     }
 
     if (amountNum > parseFloat(usdcBalance)) {
-      setState({ status: 'error', error: 'Insufficient USDC balance on Polygon' })
-      onError?.('Insufficient USDC balance on Polygon')
+      setState({ status: 'error', error: `Insufficient USDC balance. You have $${parseFloat(usdcBalance).toFixed(2)} in your trading wallet.` })
+      onError?.('Insufficient USDC balance in trading wallet')
       return
     }
 
@@ -406,7 +591,8 @@ export function usePolymarketTrade({
       const tokenId = outcome === 'YES' ? parsedMarket.yesTokenId : parsedMarket.noTokenId
       const price = outcome === 'YES' ? yesPrice : noPrice
 
-      console.log('📤 Creating order via CLOB client:')
+      console.log('📤 Creating order (EOA-only mode):')
+      console.log('   Trading Wallet (EOA):', tradingWallet)
       console.log('   Token ID:', tokenId)
       console.log('   Price:', price)
       console.log('   Amount:', amount)
@@ -414,13 +600,12 @@ export function usePolymarketTrade({
 
       // Get tick size from market or use default
       const tickSize = (market as any).minimum_tick_size || '0.01'
-      const negRisk = market.negRisk || false
 
       // Calculate shares from USDC amount
       const size = amountNum / price
 
-      // Step 1: Create and sign order locally (no network requests)
-      console.log('📤 Creating signed order locally...')
+      // Step 1: Create and sign order locally (EOA-only mode)
+      console.log('📤 Creating signed order locally with EOA...')
       const signer = await getEthersSigner(embeddedWallet)
       
       const signedOrder = await createAndSignOrder(
@@ -429,29 +614,28 @@ export function usePolymarketTrade({
           price,
           side: 'BUY',
           size,
-          maker: session?.safeAddress || eoaAddress,
-          signer: eoaAddress,
+          tradingWallet, // EOA address as both maker and signer
           tickSize,
         },
         signer
       )
       
-      console.log('✅ Order signed locally:', signedOrder)
-      
-      // Step 2: Post the signed order via the gateway ONLY (no browser → Polymarket traffic)
-      console.log('📤 Posting order via gateway...')
-      // Sign L1 auth for gateway to derive L2 API credentials
-      const l1Auth = await signClobAuth(signer, eoaAddress)
-      
-      console.log('📤 Submitting order to gateway...', {
-        gatewayUrl: process.env.NEXT_PUBLIC_GATEWAY_URL,
-        owner: session?.safeAddress || eoaAddress,
-        tokenId: signedOrder.tokenId,
+      console.log('✅ Order signed locally (EOA mode):', {
+        maker: signedOrder.maker.slice(0, 10),
+        signer: signedOrder.signer.slice(0, 10),
+        signatureType: signedOrder.signatureType,
       })
+      
+      // Step 2: Post the signed order via the gateway
+      console.log('📤 Submitting order to gateway...')
+      setState({ status: 'submitting', message: 'Submitting order...' })
+      
+      // Sign L1 auth for gateway (in case creds need refresh)
+      const l1Auth = await signClobAuth(signer, tradingWallet)
       
       const orderResponse = await submitGatewayOrder({
         order: signedOrder,
-        owner: session?.safeAddress || eoaAddress,
+        owner: tradingWallet, // EOA is the owner
         orderType: 'GTC',
         l1Auth,
       })
@@ -505,6 +689,30 @@ export function usePolymarketTrade({
         errorMsg = 'Transaction rejected'
       } else if (errorMsg.includes('insufficient')) {
         errorMsg = 'Insufficient balance'
+      } else if (errorMsg.includes('USER_AUTH_REQUIRED') || errorMsg.includes('401')) {
+        // One-shot credential refresh: if we had creds but got 401, try to re-derive once
+        if (hasUserCreds && !isRetry && !credRefreshAttempted) {
+          console.log('🔄 Got 401 with existing creds - attempting one-shot refresh...')
+          setCredRefreshAttempted(true)
+          setHasUserCreds(false)
+          clearTradingSession()
+          
+          // Try to re-enable trading
+          setState({ status: 'preparing', message: 'Re-authenticating...' })
+          const refreshSuccess = await enableTrading()
+          
+          if (refreshSuccess) {
+            console.log('✅ Credential refresh succeeded - retrying trade...')
+            // Retry the trade once
+            return executeTrade(amount, outcome, true)
+          } else {
+            console.log('❌ Credential refresh failed')
+            errorMsg = 'Session expired. Please try enabling trading again.'
+          }
+        } else {
+          errorMsg = 'Trading not enabled. Please click "Enable Trading" first.'
+          setHasUserCreds(false)
+        }
       }
       
       // Provide link to Polymarket as fallback
@@ -520,18 +728,21 @@ export function usePolymarketTrade({
       onError?.(errorMsg)
     }
   }, [
-    session,
-    initializeSession,
+    hasUserCreds,
     usdcBalance,
     parsedMarket,
     yesPrice,
     embeddedWallet,
-    eoaAddress,
+    tradingWallet,
+    smartWalletAddress,
+    eoaAssertion,
     noPrice,
     market,
     fetchBalancesAndAllowances,
     onSuccess,
     onError,
+    enableTrading,
+    credRefreshAttempted,
   ])
 
   // ============================================
@@ -552,15 +763,14 @@ export function usePolymarketTrade({
   
   return {
     // State
-    isReady: authenticated && !!embeddedWallet,
+    isReady: authenticated && !!embeddedWallet && hasUserCreds,
     isLoading: ['preparing', 'approving', 'signing', 'submitting', 'confirming'].includes(state.status),
     state,
     error: state.error || null,
     
-    // Wallet info
-    eoaAddress,
-    safeAddress: safeAddress || null,
-    isSafeDeployed: session?.safeDeployed || false,
+    // Wallet info (EOA-only)
+    tradingWallet,
+    hasUserCreds,
     
     // Balances
     usdcBalance,
@@ -577,7 +787,7 @@ export function usePolymarketTrade({
     // Actions
     estimateTrade: getTradeEstimate,
     executeTrade,
-    initializeSession,
+    enableTrading,
     reset,
   }
 }
@@ -593,28 +803,22 @@ export function usePolymarketPositions() {
     return wallets.find(w => w.walletClientType === 'privy')
   }, [wallets])
   
-  const eoaAddress = embeddedWallet?.address
-  
-  // Try to load session to get Safe address
-  const safeAddress = useMemo(() => {
-    if (!eoaAddress) return null
-    const session = loadTradingSession(eoaAddress)
-    return session?.safeAddress || eoaAddress
-  }, [eoaAddress])
+  // tradingWallet = Privy embedded EOA
+  const tradingWallet = embeddedWallet?.address
 
   const { data: positions, isLoading, refetch } = useQuery({
-    queryKey: ['polymarket-positions', safeAddress],
+    queryKey: ['polymarket-positions', tradingWallet],
     queryFn: async () => {
-      if (!safeAddress) return []
+      if (!tradingWallet) return []
       
       // Fetch positions via gateway (no browser → Polymarket calls)
       try {
-        return await getGatewayPositions(safeAddress)
+        return await getGatewayPositions(tradingWallet)
       } catch {
         return []
       }
     },
-    enabled: !!safeAddress,
+    enabled: !!tradingWallet,
     staleTime: 30000,
     refetchInterval: 60000,
   })
@@ -623,6 +827,7 @@ export function usePolymarketPositions() {
     positions: positions || [],
     isLoading,
     refetch,
+    tradingWallet,
   }
 }
 
@@ -637,17 +842,8 @@ export function usePolygonUsdcBalance() {
     return wallets.find(w => w.walletClientType === 'privy')
   }, [wallets])
   
-  const eoaAddress = embeddedWallet?.address
-  
-  // Try to load session to get Safe address
-  // IMPORTANT: Only use the Safe address, not EOA fallback
-  // The Safe holds the funds for Polymarket trading
-  const safeAddress = useMemo(() => {
-    if (!eoaAddress) return null
-    const session = loadTradingSession(eoaAddress)
-    // Return Safe address only, not EOA fallback
-    return session?.safeAddress || null
-  }, [eoaAddress])
+  // tradingWallet = Privy embedded EOA
+  const tradingWallet = embeddedWallet?.address
 
   const publicClient = useMemo(() => createPublicClient({
     chain: polygon,
@@ -655,9 +851,9 @@ export function usePolygonUsdcBalance() {
   }), [])
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['polygon-usdc', safeAddress],
+    queryKey: ['polygon-usdc', tradingWallet],
     queryFn: async () => {
-      if (!safeAddress) return { native: '0', bridged: '0' }
+      if (!tradingWallet) return { native: '0', bridged: '0' }
       
       try {
         // Fetch native USDC balance (what Polymarket uses)
@@ -665,7 +861,7 @@ export function usePolygonUsdcBalance() {
           address: POLYGON_USDC,
           abi: USDC_ABI,
           functionName: 'balanceOf',
-          args: [safeAddress as `0x${string}`],
+          args: [tradingWallet as `0x${string}`],
         }) as bigint
         
         // Also fetch USDC.e balance (legacy bridged version)
@@ -673,7 +869,7 @@ export function usePolygonUsdcBalance() {
           address: POLYGON_USDC_E_DEPRECATED,
           abi: USDC_ABI,
           functionName: 'balanceOf',
-          args: [safeAddress as `0x${string}`],
+          args: [tradingWallet as `0x${string}`],
         }) as bigint
         
         return {
@@ -684,7 +880,7 @@ export function usePolygonUsdcBalance() {
         return { native: '0', bridged: '0' }
       }
     },
-    enabled: !!safeAddress,
+    enabled: !!tradingWallet,
     staleTime: 10000,
     refetchInterval: 30000,
   })
@@ -696,17 +892,16 @@ export function usePolygonUsdcBalance() {
     hasBridgedUsdc: parseFloat(data?.bridged || '0') > 0,
     isLoading,
     refetch,
+    tradingWallet,
   }
 }
 
 // ============================================
 // POLYMARKET SETUP HOOK
 // ============================================
-// This hook handles auto-initialization when user first opens Polymarket page
-// It provides better UX by setting up the connection proactively
 
 interface PolymarketSetupState {
-  status: 'idle' | 'checking' | 'initializing' | 'ready' | 'error'
+  status: 'idle' | 'checking' | 'ready' | 'needs_auth' | 'error'
   message?: string
   error?: string
 }
@@ -716,118 +911,106 @@ export function usePolymarketSetup() {
   const { wallets } = useWallets()
   
   const [setupState, setSetupState] = useState<PolymarketSetupState>({ status: 'idle' })
-  const [session, setSession] = useState<TradingSession | null>(null)
+  const [hasUserCreds, setHasUserCreds] = useState(false)
   
   // Get the Privy embedded wallet (EOA)
   const embeddedWallet = useMemo(() => {
     return wallets.find(w => w.walletClientType === 'privy')
   }, [wallets])
   
-  const eoaAddress = embeddedWallet?.address || null
-  const safeAddress = session?.safeAddress || eoaAddress
+  const tradingWallet = embeddedWallet?.address || null
 
-  // Check for existing session on mount
+  // Check auth status on mount
   useEffect(() => {
-    if (eoaAddress) {
-      const existingSession = loadTradingSession(eoaAddress)
-      if (existingSession) {
-        setSession(existingSession)
+    if (!tradingWallet) return
+    
+    setSetupState({ status: 'checking', message: 'Checking trading status...' })
+    
+    checkAuthStatus(tradingWallet).then(({ hasUserCreds: credsStatus }) => {
+      setHasUserCreds(credsStatus)
+      if (credsStatus) {
         setSetupState({ status: 'ready' })
-        console.log('📋 Found existing Polymarket session')
+        console.log('✅ Trading already enabled for:', tradingWallet.slice(0, 10))
+      } else {
+        setSetupState({ status: 'needs_auth' })
+        console.log('⚠️ Trading not yet enabled for:', tradingWallet.slice(0, 10))
       }
-    }
-  }, [eoaAddress])
+    }).catch(error => {
+      setSetupState({ status: 'error', error: error.message })
+    })
+  }, [tradingWallet])
 
-  // Initialize session function
-  // NOTE: Per architecture constraints, browser never calls Polymarket directly.
-  // Credentials are derived server-side via gateway when orders are submitted.
-  const initializeSession = useCallback(async (): Promise<boolean> => {
-    if (!embeddedWallet || !eoaAddress) {
-      console.error('No embedded wallet connected')
+  // Enable trading function
+  const enableTrading = useCallback(async (): Promise<boolean> => {
+    if (!embeddedWallet || !tradingWallet) {
+      setSetupState({ status: 'error', error: 'Wallet not connected' })
       return false
     }
 
-    // Check if already initialized
-    const existingSession = loadTradingSession(eoaAddress)
-    if (existingSession) {
-      setSession(existingSession)
-      setSetupState({ status: 'ready' })
-      return true
-    }
-
-    setSetupState({ status: 'initializing', message: 'Preparing trading session...' })
+    setSetupState({ status: 'checking', message: 'Enabling trading...' })
 
     try {
-      // Simplified: Just create a session with EOA as Safe address
-      // Gateway will handle credential derivation on first order
-      const newSession: TradingSession = {
-        eoaAddress,
-        safeAddress: eoaAddress, // Use EOA until Safe is deployed
-        safeDeployed: false,
+      // Get auth challenge
+      const challenge = await getAuthChallenge(tradingWallet)
+      
+      // Sign with EOA
+      const provider = await embeddedWallet.getEthereumProvider()
+      const ethersProvider = new ethers.providers.Web3Provider(provider)
+      const signer = ethersProvider.getSigner()
+      
+      const signature = await (signer as any)._signTypedData(
+        challenge.typedData.domain,
+        challenge.typedData.types,
+        challenge.typedData.message
+      )
+      
+      // Complete auth
+      const result = await completeAuth({
+        wallet: tradingWallet,
+        signature,
+        timestamp: challenge.timestamp,
+        nonce: challenge.nonce,
+      })
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to enable trading')
+      }
+      
+      setHasUserCreds(true)
+      setSetupState({ status: 'ready' })
+      
+      // Save session
+      const session: TradingSession = {
+        tradingWallet,
+        hasUserCreds: true,
         approvalsSet: false,
         createdAt: Date.now(),
       }
-      saveTradingSession(newSession)
-      setSession(newSession)
-      setSetupState({ status: 'ready' })
-
-      console.log('✅ Polymarket session ready')
+      saveTradingSession(session)
+      
+      console.log('✅ Trading enabled!')
       return true
     } catch (error: any) {
-      console.error('Failed to initialize session:', error)
-      setSetupState({ status: 'error', error: error.message || 'Setup failed' })
+      console.error('Failed to enable trading:', error)
+      setSetupState({ status: 'error', error: error.message })
       return false
     }
-  }, [embeddedWallet, eoaAddress])
-
-  // Track if we've started initialization to prevent double-init
-  const initStartedRef = useRef(false)
-  
-  // Auto-initialize when user is authenticated but no session exists
-  useEffect(() => {
-    
-    // Skip if already started or not ready
-    if (initStartedRef.current) return
-    if (!authenticated || !eoaAddress) return
-    if (setupState.status !== 'idle') return
-    
-    
-    // Check if session already exists
-    const existingSession = loadTradingSession(eoaAddress)
-    if (existingSession) {
-      setSession(existingSession)
-      setSetupState({ status: 'ready' })
-      return
-    }
-    
-    // Mark as started to prevent re-runs
-    initStartedRef.current = true
-    
-    
-    // Start initialization immediately (no timeout that could be cancelled)
-    setSetupState({ status: 'initializing', message: 'Setting up Polymarket...' })
-    initializeSession().then(success => {
-      if (!success) {
-        // Reset ref so user can retry
-        initStartedRef.current = false
-      }
-    })
-  }, [authenticated, eoaAddress, setupState.status, initializeSession])
+  }, [embeddedWallet, tradingWallet])
 
   return {
     // Status
-    isReady: setupState.status === 'ready',
-    isInitializing: setupState.status === 'initializing' || setupState.status === 'checking',
+    isReady: setupState.status === 'ready' && hasUserCreds,
+    needsAuth: setupState.status === 'needs_auth',
+    isChecking: setupState.status === 'checking',
     status: setupState.status,
     message: setupState.message,
     error: setupState.error,
     
-    // Session data
-    session,
-    eoaAddress,
-    safeAddress,
+    // Data
+    hasUserCreds,
+    tradingWallet,
     
     // Actions
-    initializeSession,
+    enableTrading,
   }
 }

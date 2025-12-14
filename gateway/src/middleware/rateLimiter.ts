@@ -52,3 +52,30 @@ export const queryLimiter = rateLimit({
     res.status(429).json({ error: 'Query rate limit exceeded. Please slow down.' })
   },
 })
+
+// Rate limit for health/auth status endpoints (prevent enumeration)
+export const healthLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30, // 30 requests per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    logger.warn(`Health endpoint rate limit exceeded: ${req.ip}`)
+    res.status(429).json({ error: 'Rate limit exceeded' })
+  },
+})
+
+// Stricter rate limit for auth challenge (prevent brute force)
+export const authChallengeLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // 10 challenges per minute per wallet
+  keyGenerator: (req: Request) => {
+    return req.query.wallet as string || req.ip || 'unknown'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    logger.warn(`Auth challenge rate limit exceeded: ${req.query.wallet || req.ip}`)
+    res.status(429).json({ error: 'Too many auth attempts. Please wait.' })
+  },
+})
