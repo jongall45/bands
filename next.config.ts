@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  turbopack: {},
+  serverExternalPackages: ['pino', 'pino-pretty', 'thread-stream'],
   images: {
     // Allow external images from these domains for asset icons
     remotePatterns: [
@@ -33,6 +33,12 @@ const nextConfig: NextConfig = {
     ],
   },
   webpack: (config, { isServer }) => {
+    // Handle MetaMask SDK's react-native dependency (for both client and server)
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@react-native-async-storage/async-storage': false,
+    };
+    
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,

@@ -221,10 +221,3 @@ function verifyWebhookSignature(
     return false
   }
 }
-
-// Disable body parser to get raw body for signature verification
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-}

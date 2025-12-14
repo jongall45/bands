@@ -29,7 +29,7 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
   const [feeExpanded, setFeeExpanded] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
-  const typingTimeoutRef = useRef<NodeJS.Timeout>()
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Calculated values
   const amountNum = parseFloat(amount) || 0
@@ -390,43 +390,27 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
           {step === 'checkout' && orderId && clientSecret && CLIENT_API_KEY && (
             <div className="px-4 pb-4">
               {/* Glass container for checkout */}
-              <div className="bg-white/[0.02] backdrop-blur-sm border border-white/[0.06] rounded-2xl overflow-hidden">
+              <div className="bg-white/[0.02] backdrop-blur-sm border border-white/[0.06] rounded-2xl overflow-hidden mb-4">
                 <CrossmintProvider apiKey={CLIENT_API_KEY}>
                   <CrossmintEmbeddedCheckout
                     orderId={orderId}
                     clientSecret={clientSecret}
                     payment={{
+                      fiat: { enabled: true },
                       crypto: { enabled: false },
-                      fiat: { 
-                        enabled: true,
-                        allowedMethods: {
-                          card: true,
-                          applePay: true,
-                          googlePay: true,
-                        },
-                      },
                       defaultMethod: 'fiat',
-                    }}
-                    appearance={{
-                      colors: {
-                        backgroundPrimary: '#0c0c0c',
-                        backgroundSecondary: '#151515',
-                        textPrimary: '#ffffff',
-                        textSecondary: '#888888',
-                        accent: '#ef4444',
-                        danger: '#ef4444',
-                      },
-                    }}
-                    onEvent={(event) => {
-                      console.log('Crossmint event:', event)
-                      if (event.type === 'payment:process.succeeded' || 
-                          event.type === 'order:process.finished') {
-                        handleCheckoutSuccess()
-                      }
                     }}
                   />
                 </CrossmintProvider>
               </div>
+              
+              {/* Done button - for after completing payment in the widget */}
+              <button
+                onClick={handleCheckoutSuccess}
+                className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-2xl transition-all active:scale-[0.98]"
+              >
+                I&apos;ve completed payment
+              </button>
             </div>
           )}
 
