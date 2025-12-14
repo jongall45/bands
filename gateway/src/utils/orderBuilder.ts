@@ -1,13 +1,15 @@
 /**
  * Canonical Polymarket Order Builder
  * 
- * CRITICAL: DO NOT MUTATE ANY SIGNED ORDER FIELDS!
+ * IMPORTANT: The EIP-712 signature uses side as NUMBER (0=BUY, 1=SELL),
+ * but the REST API POST body expects side as STRING ("BUY" or "SELL").
  * 
- * The EIP-712 signed order must be submitted EXACTLY as signed.
- * Any mutation (type conversion, field changes) will break signature verification.
+ * This is NOT mutation - it's a presentation format conversion.
+ * The signature is computed over the numeric value, and Polymarket's
+ * backend knows that "BUY" = 0 and "SELL" = 1.
  * 
  * Based on @polymarket/clob-client analysis:
- * - side: number (0 = BUY, 1 = SELL) - NOT converted to string
+ * - side: STRING ("BUY" or "SELL") for REST API
  * - All amount fields: string (already stringified before signing)
  * - signatureType: number (per @polymarket/order-utils SignatureType enum)
  *   - 0 = EOA - Simple EOA signing (Privy embedded EOA)
@@ -24,11 +26,11 @@ import { logger } from './logger.js'
 /**
  * Canonical order payload for Polymarket CLOB API POST /order
  * 
- * IMPORTANT: side is a NUMBER (0/1), not a string!
- * This matches the EIP-712 signed struct exactly.
+ * IMPORTANT: side is a STRING ("BUY" or "SELL") for the REST API!
+ * The EIP-712 signature uses number (0=BUY, 1=SELL), but the API wants string.
  */
 export interface PolymarketOrderPayload {
-  // The signed order object - submitted EXACTLY as signed
+  // The order object for REST API
   order: {
     salt: string
     maker: string
@@ -37,7 +39,7 @@ export interface PolymarketOrderPayload {
     tokenId: string
     makerAmount: string
     takerAmount: string
-    side: number  // MUST be number: 0 = BUY, 1 = SELL (matches EIP-712)
+    side: 'BUY' | 'SELL'  // STRING for REST API (converted from number)
     expiration: string
     nonce: string
     feeRateBps: string
@@ -94,24 +96,28 @@ const ORDER_SCHEMA_FIELDS = [
 ] as const
 
 // ============================================
-// SIDE VALIDATION (NO CONVERSION!)
+// SIDE CONVERSION (NUMBER → STRING)
 // ============================================
 
 /**
- * Validate side is a valid number (0 or 1)
- * DO NOT CONVERT - just validate
+ * Convert side from number (EIP-712 format) to string (REST API format)
+ * 
+ * EIP-712 uses: 0 = BUY, 1 = SELL (numbers)
+ * REST API uses: "BUY", "SELL" (strings)
  */
-function validateSide(side: unknown): number {
+function convertSideToString(side: unknown): 'BUY' | 'SELL' {
+  // Handle number input (from EIP-712 signed order)
   if (typeof side === 'number') {
-    if (side === 0 || side === 1) return side
+    if (side === 0) return 'BUY'
+    if (side === 1) return 'SELL'
     throw new Error(`Invalid side number: ${side} (must be 0 or 1)`)
   }
   
-  // If string "0" or "1", convert to number (this is OK as it's the same value)
+  // Handle string input (already converted or string "0"/"1")
   if (typeof side === 'string') {
-    if (side === '0') return 0
-    if (side === '1') return 1
-    throw new Error(`Invalid side string: ${side} (must be "0" or "1")`)
+    if (side === '0' || side.toUpperCase() === 'BUY') return 'BUY'
+    if (side === '1' || side.toUpperCase() === 'SELL') return 'SELL'
+    throw new Error(`Invalid side string: ${side} (must be "BUY", "SELL", "0", or "1")`)
   }
   
   throw new Error(`Invalid side type: ${typeof side}`)
@@ -163,11 +169,10 @@ export function buildCanonicalOrder(
     throw new Error(`Invalid signature: must start with 0x`)
   }
   
-  // Validate side is a number (DO NOT CONVERT)
-  const side = validateSide(signedOrder.side)
+  // Convert side from number (EIP-712) to string (REST API)
+  const side = convertSideToString(signedOrder.side)
   
-  // Build order object - pass through fields WITHOUT mutation
-  // Only ensure correct types for the TypeScript interface
+  // Build order object for REST API
   const order = {
     salt: String(signedOrder.salt),
     maker: maker,
@@ -176,7 +181,7 @@ export function buildCanonicalOrder(
     tokenId: String(signedOrder.tokenId),
     makerAmount: String(signedOrder.makerAmount),
     takerAmount: String(signedOrder.takerAmount),
-    side: side,  // NUMBER, not string!
+    side: side,  // STRING: "BUY" or "SELL" for REST API
     expiration: String(signedOrder.expiration || '0'),
     nonce: String(signedOrder.nonce || '0'),
     feeRateBps: String(signedOrder.feeRateBps || '0'),
@@ -223,12 +228,12 @@ export function logAndValidatePayload(
   // Validate critical fields
   const errors: string[] = []
   
-  // side MUST be a number (0 or 1), NOT a string
-  if (typeof order.side !== 'number') {
-    errors.push(`side must be number, got ${typeof order.side}`)
+  // side MUST be a string ("BUY" or "SELL") for REST API
+  if (typeof order.side !== 'string') {
+    errors.push(`side must be string, got ${typeof order.side}`)
   }
-  if (order.side !== 0 && order.side !== 1) {
-    errors.push(`side must be 0 or 1, got ${order.side}`)
+  if (order.side !== 'BUY' && order.side !== 'SELL') {
+    errors.push(`side must be "BUY" or "SELL", got ${order.side}`)
   }
   if (typeof order.salt !== 'string') {
     errors.push(`salt must be string, got ${typeof order.salt}`)
@@ -312,8 +317,8 @@ export function hashOrder(order: Record<string, unknown>): string {
 /**
  * Example of a valid Polymarket order for reference
  * 
- * CRITICAL: 
- * - side is a NUMBER (0 = BUY, 1 = SELL), not a string!
+ * IMPORTANT: 
+ * - side is a STRING ("BUY" or "SELL") for REST API
  * - signatureType = 0 for Privy embedded EOA (true EOA)
  */
 export const EXAMPLE_VALID_ORDER: PolymarketOrderPayload = {
@@ -325,7 +330,7 @@ export const EXAMPLE_VALID_ORDER: PolymarketOrderPayload = {
     tokenId: "12345678901234567890",
     makerAmount: "10000000000000000000",  // 10 USDC in 18 decimals
     takerAmount: "20000000000000000000",  // 20 shares in 18 decimals
-    side: 0,  // NUMBER: 0 = BUY, 1 = SELL
+    side: "BUY",  // STRING: "BUY" or "SELL" for REST API
     expiration: "1766000000",
     nonce: "0",
     feeRateBps: "50",
@@ -337,16 +342,20 @@ export const EXAMPLE_VALID_ORDER: PolymarketOrderPayload = {
 }
 
 /**
- * Debug assertion: verify the order matches what was signed
- * Call this before submission to catch any mutations
+ * Debug assertion: verify the order matches what was signed (except side format)
+ * Call this before submission to catch any unintended mutations
+ * 
+ * NOTE: side is EXPECTED to change from number (0/1) to string ("BUY"/"SELL")
+ * This is a format conversion, not a mutation of the signed value.
  */
 export function assertOrderNotMutated(
   originalOrder: Record<string, unknown>,
   submissionOrder: Record<string, unknown>
 ): void {
-  const criticalFields = ['salt', 'maker', 'signer', 'tokenId', 'makerAmount', 'takerAmount', 'side', 'expiration', 'nonce', 'signature']
+  // These fields should match exactly (no conversion)
+  const exactFields = ['salt', 'maker', 'signer', 'tokenId', 'makerAmount', 'takerAmount', 'expiration', 'nonce', 'signature']
   
-  for (const field of criticalFields) {
+  for (const field of exactFields) {
     const original = originalOrder[field]
     const submission = submissionOrder[field]
     
@@ -354,14 +363,19 @@ export function assertOrderNotMutated(
     if (String(original) !== String(submission)) {
       throw new Error(`Order mutation detected! Field "${field}" changed from ${JSON.stringify(original)} to ${JSON.stringify(submission)}`)
     }
-    
-    // For side, also verify type is preserved as number
-    if (field === 'side') {
-      if (typeof original === 'number' && typeof submission !== 'number') {
-        throw new Error(`Order mutation detected! Field "side" type changed from number to ${typeof submission}`)
-      }
-    }
   }
   
-  logger.info('[OrderBuilder] Order integrity verified - no mutations detected ✓')
+  // side is expected to be converted from number to string
+  const originalSide = originalOrder.side
+  const submissionSide = submissionOrder.side
+  
+  // Validate the conversion is correct
+  if (originalSide === 0 && submissionSide !== 'BUY') {
+    throw new Error(`Invalid side conversion: expected "BUY" for 0, got ${submissionSide}`)
+  }
+  if (originalSide === 1 && submissionSide !== 'SELL') {
+    throw new Error(`Invalid side conversion: expected "SELL" for 1, got ${submissionSide}`)
+  }
+  
+  logger.info('[OrderBuilder] Order integrity verified ✓ (side converted to string as expected)')
 }
