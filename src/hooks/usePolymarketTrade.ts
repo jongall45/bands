@@ -630,16 +630,35 @@ export function usePolymarketTrade({
       
       console.log('✅ Order response:', orderResponse)
 
-      if (orderResponse?.orderID || orderResponse?.success !== false) {
+      // Check for errors first - the response might have an error field
+      if (orderResponse?.error) {
+        throw new Error(orderResponse.error)
+      }
+      
+      // Check for Cloudflare block
+      if (orderResponse?.data?.error?.includes('Cloudflare')) {
+        throw new Error('Polymarket API temporarily unavailable. Please try again later.')
+      }
+
+      // Check for successful order
+      if (orderResponse?.orderID) {
         setState({ 
           status: 'success', 
           message: 'Trade successful!',
-          orderId: orderResponse?.orderID,
+          orderId: orderResponse.orderID,
         })
-        onSuccess?.(orderResponse?.orderID || 'order-submitted')
+        onSuccess?.(orderResponse.orderID)
+        setTimeout(fetchBalancesAndAllowances, 2000)
+      } else if (orderResponse?.success === true) {
+        setState({ 
+          status: 'success', 
+          message: 'Trade successful!',
+        })
+        onSuccess?.('order-submitted')
         setTimeout(fetchBalancesAndAllowances, 2000)
       } else {
-        throw new Error(orderResponse?.errorMsg || orderResponse?.error || 'Order failed')
+        // No orderID and not explicitly successful - treat as error
+        throw new Error(orderResponse?.errorMsg || 'Order submission failed - please try again')
       }
     } catch (err: any) {
       console.error('Trade execution failed:', err)

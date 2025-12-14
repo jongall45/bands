@@ -29,9 +29,20 @@ function getProxiedHeaders(request: NextRequest): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    // Browser-like headers to avoid Cloudflare blocks
+    // Browser-like headers to help with Cloudflare
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Connection': 'keep-alive',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+    // Cloudflare sometimes checks these
+    'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': '"macOS"',
+    'Sec-Fetch-Dest': 'empty',
+    'Sec-Fetch-Mode': 'cors',
+    'Sec-Fetch-Site': 'cross-site',
   }
   
   // Forward Polymarket auth headers (case-insensitive lookup)
@@ -70,44 +81,63 @@ async function proxyRequest(
     }
   }
   
-  try {
-    const response = await fetch(url.toString(), {
-      method: request.method,
-      headers,
-      body,
-    })
-    
-    const responseText = await response.text()
-    
-    console.log(`[CLOB Proxy] Response: ${response.status} ${responseText.substring(0, 200)}`)
-    
-    // Check for Cloudflare block
-    if (responseText.includes('Cloudflare') && responseText.includes('blocked')) {
-      console.error('[CLOB Proxy] Cloudflare blocked the request')
-      return NextResponse.json(
-        { error: 'Request blocked by Cloudflare. Please try again later.' },
-        { status: 403 }
-      )
-    }
-    
-    // Try to parse as JSON
+  // Retry logic for Cloudflare blocks
+  const MAX_RETRIES = 2
+  let lastError: string = 'Unknown error'
+  
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const data = JSON.parse(responseText)
-      return NextResponse.json(data, { status: response.status })
-    } catch {
-      // Return as text if not JSON
-      return new NextResponse(responseText, {
-        status: response.status,
-        headers: { 'Content-Type': response.headers.get('Content-Type') || 'text/plain' },
+      if (attempt > 0) {
+        // Add delay between retries
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+        console.log(`[CLOB Proxy] Retry attempt ${attempt}/${MAX_RETRIES}`)
+      }
+      
+      const response = await fetch(url.toString(), {
+        method: request.method,
+        headers,
+        body,
       })
+      
+      const responseText = await response.text()
+      
+      console.log(`[CLOB Proxy] Response: ${response.status} ${responseText.substring(0, 200)}`)
+      
+      // Check for Cloudflare block
+      if (responseText.includes('Cloudflare') || responseText.includes('blocked') || responseText.includes('<!DOCTYPE html>')) {
+        console.error('[CLOB Proxy] Cloudflare blocked the request')
+        lastError = 'Polymarket API temporarily unavailable. Please try again.'
+        
+        // Retry on Cloudflare block
+        if (attempt < MAX_RETRIES) {
+          continue
+        }
+        
+        return NextResponse.json({ error: lastError }, { status: 403 })
+      }
+      
+      // Try to parse as JSON
+      try {
+        const data = JSON.parse(responseText)
+        return NextResponse.json(data, { status: response.status })
+      } catch {
+        // Return as text if not JSON
+        return new NextResponse(responseText, {
+          status: response.status,
+          headers: { 'Content-Type': response.headers.get('Content-Type') || 'text/plain' },
+        })
+      }
+    } catch (error) {
+      console.error('[CLOB Proxy] Error:', error)
+      lastError = error instanceof Error ? error.message : 'Proxy error'
+      
+      if (attempt < MAX_RETRIES) {
+        continue
+      }
     }
-  } catch (error) {
-    console.error('[CLOB Proxy] Error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Proxy error' },
-      { status: 500 }
-    )
   }
+  
+  return NextResponse.json({ error: lastError }, { status: 500 })
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
