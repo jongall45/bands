@@ -620,23 +620,31 @@ export function usePolymarketTrade({
       
       console.log('✅ Order signed locally:', signedOrder)
       
-      // Step 2: Post the signed order through our server proxy (avoids browser CORS)
-      // The proxy will handle L2 HMAC authentication
-      console.log('📤 Posting order via server proxy...')
-      const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+      // Step 2: Post the signed order through gateway (avoids browser CORS)
+      // The gateway handles L2 HMAC authentication with a stable IP
+      console.log('📤 Posting order via gateway...')
       
-      // Convert API creds to the format expected by the server
+      // Use dedicated gateway if configured, otherwise fall back to local API
+      const gatewayUrl = process.env.NEXT_PUBLIC_GATEWAY_URL
+      const orderEndpoint = gatewayUrl 
+        ? `${gatewayUrl}/api/order`
+        : `${typeof window !== 'undefined' ? window.location.origin : ''}/api/polymarket/order`
+      
+      console.log('   Gateway endpoint:', orderEndpoint)
+      
+      // Convert API creds to the format expected by the gateway
       const userCreds = session?.userApiCreds ? {
         apiKey: session.userApiCreds.key,
         secret: session.userApiCreds.secret,
         passphrase: session.userApiCreds.passphrase,
       } : undefined
       
-      const proxyResponse = await fetch(`${baseUrl}/api/polymarket/order`, {
+      const proxyResponse = await fetch(orderEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: gatewayUrl ? 'include' : 'same-origin',
         body: JSON.stringify({
           order: signedOrder,
           owner: session?.safeAddress,
@@ -646,7 +654,7 @@ export function usePolymarketTrade({
       })
       
       const orderResponse = await proxyResponse.json()
-      console.log('📦 Server proxy response:', orderResponse)
+      console.log('📦 Gateway response:', orderResponse)
       
       console.log('✅ Order response:', orderResponse)
 
