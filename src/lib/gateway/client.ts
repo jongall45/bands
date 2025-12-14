@@ -27,9 +27,8 @@ async function gatewayFetch<T>(
   options?: RequestInit
 ): Promise<T> {
   // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:21',message:'gatewayFetch entry',data:{path,method:options?.method||'GET'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:29',message:'gatewayFetch entry',data:{path,method:options?.method||'GET'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
   // #endregion
-  const gatewayUrl = GATEWAY_URL
   // Use requireGatewayUrl() which ensures https:// protocol
   const gatewayUrlWithProtocol = requireGatewayUrl()
   // #region agent log
