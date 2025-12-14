@@ -115,8 +115,9 @@ export async function createAndSignOrder(
   const makerAmountWei = makerAmount.mul(new Decimal(10).pow(18)).toFixed(0)
   const takerAmountWei = takerAmount.mul(new Decimal(10).pow(18)).toFixed(0)
 
-  // Generate salt (nonce) - use timestamp + random
-  const salt = Date.now().toString() + Math.random().toString(36).substring(2, 15)
+  // Generate salt (nonce) - must be numeric for uint256
+  // Use timestamp (ms) + random number to ensure uniqueness
+  const salt = (BigInt(Date.now()) * BigInt(1000000) + BigInt(Math.floor(Math.random() * 1000000))).toString()
   
   // Expiration: 1 year from now (in seconds)
   const expiration = Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60
