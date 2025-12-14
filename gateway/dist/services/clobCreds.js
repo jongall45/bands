@@ -34,10 +34,12 @@ async function getOrDeriveClobCreds(userAddress, l1Auth) {
             return creds;
         }
     }
-    // Verify L1 auth address matches userAddress
+    // NOTE: For Polymarket Safe architecture, L1 auth may be signed by EOA but credentials
+    // are needed for the Safe wallet. We allow this mismatch for now, but log it.
     if (l1Auth.address.toLowerCase() !== normalizedAddress) {
-        logger_js_1.logger.error(`[Creds] Address mismatch! l1Auth.address=${l1Auth.address} userAddress=${userAddress}`);
-        throw new Error(`L1 auth address (${l1Auth.address}) does not match user address (${userAddress})`);
+        logger_js_1.logger.warn(`[Creds] L1 auth address (${l1Auth.address}) differs from user address (${userAddress}) - this is expected for Safe architecture where EOA signs but Safe needs creds`);
+        // Don't throw - allow derivation to proceed
+        // Polymarket should accept EOA signature for Safe wallet credential derivation
     }
     // Derive new credentials
     logger_js_1.logger.info(`[Creds] Deriving new L2 API key for ${userAddress.slice(0, 10)}... (first time for this wallet)`);

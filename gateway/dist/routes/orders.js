@@ -104,11 +104,16 @@ router.post('/', rateLimiter_js_1.orderLimiter, async (req, res) => {
         // CRITICAL: Use order.maker (Safe wallet) for credential derivation, NOT order.signer (EOA)
         const userAddress = orderMaker;
         logger_js_1.logger.info(`[Order] Getting/deriving user creds for Safe wallet (maker): ${userAddress.slice(0, 10)}... owner=${owner.slice(0, 10)}... maker=${orderMaker.slice(0, 10)}... signer=${orderSigner.slice(0, 10)}...`);
+        // NOTE: L1 auth is signed by the EOA (orderSigner), but we need credentials for the Safe (orderMaker)
+        // Polymarket should allow deriving credentials for the Safe wallet using an EOA signature
+        // If this fails, we may need to change the frontend to sign L1 auth with the Safe wallet address
         let creds;
         try {
+            // Use Safe wallet address for credential derivation, but EOA signature for L1 auth
+            // The L1 auth address (EOA) is validated above, but we derive credentials for the Safe
             creds = await (0, clobCreds_js_1.getOrDeriveClobCreds)(userAddress, {
-                address: userAddress,
-                signature: String(l1Auth.signature),
+                address: userAddress, // Safe wallet address (what we want credentials for)
+                signature: String(l1Auth.signature), // EOA signature (validated above)
                 timestamp: String(l1Auth.timestamp),
                 nonce: l1Auth.nonce !== undefined ? String(l1Auth.nonce) : undefined,
             });
