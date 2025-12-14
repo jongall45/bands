@@ -206,7 +206,13 @@ router.get('/', rateLimiter_js_1.queryLimiter, async (req, res) => {
     }
     catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        const statusCode = (error && typeof error === 'object' && 'statusCode' in error)
+            ? error.statusCode
+            : undefined;
         logger_js_1.logger.error(`Failed to get orders for ${address}: ${errorMsg}`);
+        if (statusCode === 401 || statusCode === 403) {
+            return res.status(statusCode).json({ error: errorMsg });
+        }
         res.status(500).json({ error: 'Failed to fetch orders' });
     }
 });

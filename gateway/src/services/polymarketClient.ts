@@ -60,6 +60,7 @@ export async function deriveOrCreateApiKey(l1: L1AuthPayload): Promise<UserCreds
   if (l1.nonce !== undefined) headers['POLY_NONCE'] = l1.nonce
 
   // Add builder headers for attribution (required for derive/create endpoints)
+  // This is the ONLY place where we use builder headers with user auth
   const builderHeaders = getBuilderHeaders('GET', '/auth/derive-api-key', '')
   Object.assign(headers, builderHeaders)
 
@@ -94,8 +95,9 @@ export async function deriveOrCreateApiKey(l1: L1AuthPayload): Promise<UserCreds
   const createStart = Date.now()
   const createUrl = `${config.clobApi}/auth/api-key`
   const createBody = ''
+  // Update headers with POST builder sig (for attribution during create)
   const createBuilderHeaders = getBuilderHeaders('POST', '/auth/api-key', createBody)
-  Object.assign(headers, createBuilderHeaders) // Update headers with POST builder sig
+  Object.assign(headers, createBuilderHeaders)
   
   logger.debug(`[Auth] Attempting create: ${createUrl}`)
   
@@ -184,6 +186,7 @@ export async function makeRequest<T>(
     body?: unknown
     userCreds?: UserCreds
     userAddress?: string
+    useBuilderAttribution?: boolean // Only for derive/create endpoints
   }
 ): Promise<T> {
   const url = `${baseUrl}${path}`
@@ -191,10 +194,19 @@ export async function makeRequest<T>(
   
   const headers: Record<string, string> = {
     ...getBaseHeaders(),
-    ...getBuilderHeaders(method, path, bodyString),
+  }
+  
+  // Builder headers should ONLY be used for:
+  // 1. Attribution during derive/create API calls
+  // 2. Public endpoints that don't require user auth
+  // For authenticated user operations (orders), we should NOT send builder headers
+  const shouldUseBuilderAttribution = options?.useBuilderAttribution || (!options?.userCreds)
+  if (shouldUseBuilderAttribution) {
+    Object.assign(headers, getBuilderHeaders(method, path, bodyString))
   }
   
   // Add user auth headers if provided
+  // When user creds are present, we ONLY use user creds (not builder creds)
   if (options?.userCreds) {
     const timestamp = Math.floor(Date.now() / 1000).toString()
     const signature = createUserSignature(
@@ -231,13 +243,19 @@ export async function makeRequest<T>(
       const hasBuilderCreds = !!config.builderApiKey && !!config.builderSecret && !!config.builderPassphrase
       
       // Determine which credentials are being used
-      const credType = hasUserCreds ? 'DERIVED_USER_CREDS' : (hasBuilderCreds ? 'BUILDER_CREDS_ONLY' : 'NO_CREDS')
-      logger.info(`[Polymarket] ${method} ${urlObj.host}${path} credType=${credType} hasUserCreds=${hasUserCreds} hasBuilderCreds=${hasBuilderCreds}`)
+      const credType = hasUserCreds ? 'DERIVED_USER_CREDS_ONLY' : (hasBuilderCreds ? 'BUILDER_CREDS_ONLY' : 'NO_CREDS')
+      const hasBoth = hasUserCreds && hasBuilderCreds && shouldUseBuilderAttribution
+      logger.info(`[Polymarket] ${method} ${urlObj.host}${path} credType=${credType} hasUserCreds=${hasUserCreds} hasBuilderCreds=${hasBuilderCreds && shouldUseBuilderAttribution} hasBoth=${hasBoth}`)
       
       if (hasUserCreds && options.userCreds) {
-        logger.info(`[Auth] Using DERIVED user creds for request: keyLen=${options.userCreds.apiKey.length} keyPrefix=${options.userCreds.apiKey.substring(0, 8)}...`)
-      } else if (hasBuilderCreds) {
-        logger.info(`[Auth] Using BUILDER creds only (for attribution): keyLen=${config.builderApiKey.length}`)
+        logger.info(`[Auth] Using DERIVED user creds ONLY (no builder headers): keyLen=${options.userCreds.apiKey.length} keyPrefix=${options.userCreds.apiKey.substring(0, 8)}...`)
+      } else if (hasBuilderCreds && shouldUseBuilderAttribution) {
+        logger.info(`[Auth] Using BUILDER creds only (for attribution/public endpoints): keyLen=${config.builderApiKey.length}`)
+      }
+      
+      // Warn if we're sending both (shouldn't happen for orders)
+      if (hasBoth) {
+        logger.warn(`[Auth] WARNING: Sending both builder AND user creds - this may cause auth issues!`)
       }
       
       const response = await fetch(url, {

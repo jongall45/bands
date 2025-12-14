@@ -20,6 +20,7 @@ export declare function makeRequest<T>(baseUrl: string, method: string, path: st
     body?: unknown;
     userCreds?: UserCreds;
     userAddress?: string;
+    useBuilderAttribution?: boolean;
 }): Promise<T>;
 /**
  * Get all markets with caching
@@ -42,6 +43,7 @@ export declare function getMarketStats(tokenId: string): Promise<unknown>;
 export declare function getPositions(walletAddress: string): Promise<unknown[]>;
 /**
  * Get user orders (requires auth)
+ * Uses DERIVED user credentials (not builder credentials)
  */
 export declare function getOrders(walletAddress: string, userCreds: UserCreds): Promise<unknown[]>;
 /**

@@ -58,6 +58,7 @@ async function deriveOrCreateApiKey(l1) {
     if (l1.nonce !== undefined)
         headers['POLY_NONCE'] = l1.nonce;
     // Add builder headers for attribution (required for derive/create endpoints)
+    // This is the ONLY place where we use builder headers with user auth
     const builderHeaders = getBuilderHeaders('GET', '/auth/derive-api-key', '');
     Object.assign(headers, builderHeaders);
     logger_js_1.logger.info(`[Auth] Deriving L2 API key for wallet: ${l1.address.slice(0, 10)}... hasSignature=${!!l1.signature} timestamp=${l1.timestamp} hasBuilderAttribution=${!!builderHeaders['POLY_BUILDER_API_KEY']}`);
@@ -88,8 +89,9 @@ async function deriveOrCreateApiKey(l1) {
     const createStart = Date.now();
     const createUrl = `${index_js_1.config.clobApi}/auth/api-key`;
     const createBody = '';
+    // Update headers with POST builder sig (for attribution during create)
     const createBuilderHeaders = getBuilderHeaders('POST', '/auth/api-key', createBody);
-    Object.assign(headers, createBuilderHeaders); // Update headers with POST builder sig
+    Object.assign(headers, createBuilderHeaders);
     logger_js_1.logger.debug(`[Auth] Attempting create: ${createUrl}`);
     const createRes = await fetch(createUrl, {
         method: 'POST',
@@ -155,9 +157,17 @@ async function makeRequest(baseUrl, method, path, options) {
     const bodyString = options?.body ? JSON.stringify(options.body) : '';
     const headers = {
         ...getBaseHeaders(),
-        ...getBuilderHeaders(method, path, bodyString),
     };
+    // Builder headers should ONLY be used for:
+    // 1. Attribution during derive/create API calls
+    // 2. Public endpoints that don't require user auth
+    // For authenticated user operations (orders), we should NOT send builder headers
+    const shouldUseBuilderAttribution = options?.useBuilderAttribution || (!options?.userCreds);
+    if (shouldUseBuilderAttribution) {
+        Object.assign(headers, getBuilderHeaders(method, path, bodyString));
+    }
     // Add user auth headers if provided
+    // When user creds are present, we ONLY use user creds (not builder creds)
     if (options?.userCreds) {
         const timestamp = Math.floor(Date.now() / 1000).toString();
         const signature = createUserSignature(options.userCreds.secret, timestamp, method, path, bodyString);
@@ -182,13 +192,18 @@ async function makeRequest(baseUrl, method, path, options) {
             const hasUserCreds = !!options?.userCreds;
             const hasBuilderCreds = !!index_js_1.config.builderApiKey && !!index_js_1.config.builderSecret && !!index_js_1.config.builderPassphrase;
             // Determine which credentials are being used
-            const credType = hasUserCreds ? 'DERIVED_USER_CREDS' : (hasBuilderCreds ? 'BUILDER_CREDS_ONLY' : 'NO_CREDS');
-            logger_js_1.logger.info(`[Polymarket] ${method} ${urlObj.host}${path} credType=${credType} hasUserCreds=${hasUserCreds} hasBuilderCreds=${hasBuilderCreds}`);
+            const credType = hasUserCreds ? 'DERIVED_USER_CREDS_ONLY' : (hasBuilderCreds ? 'BUILDER_CREDS_ONLY' : 'NO_CREDS');
+            const hasBoth = hasUserCreds && hasBuilderCreds && shouldUseBuilderAttribution;
+            logger_js_1.logger.info(`[Polymarket] ${method} ${urlObj.host}${path} credType=${credType} hasUserCreds=${hasUserCreds} hasBuilderCreds=${hasBuilderCreds && shouldUseBuilderAttribution} hasBoth=${hasBoth}`);
             if (hasUserCreds && options.userCreds) {
-                logger_js_1.logger.info(`[Auth] Using DERIVED user creds for request: keyLen=${options.userCreds.apiKey.length} keyPrefix=${options.userCreds.apiKey.substring(0, 8)}...`);
+                logger_js_1.logger.info(`[Auth] Using DERIVED user creds ONLY (no builder headers): keyLen=${options.userCreds.apiKey.length} keyPrefix=${options.userCreds.apiKey.substring(0, 8)}...`);
             }
-            else if (hasBuilderCreds) {
-                logger_js_1.logger.info(`[Auth] Using BUILDER creds only (for attribution): keyLen=${index_js_1.config.builderApiKey.length}`);
+            else if (hasBuilderCreds && shouldUseBuilderAttribution) {
+                logger_js_1.logger.info(`[Auth] Using BUILDER creds only (for attribution/public endpoints): keyLen=${index_js_1.config.builderApiKey.length}`);
+            }
+            // Warn if we're sending both (shouldn't happen for orders)
+            if (hasBoth) {
+                logger_js_1.logger.warn(`[Auth] WARNING: Sending both builder AND user creds - this may cause auth issues!`);
             }
             const response = await fetch(url, {
                 method,
@@ -288,8 +303,10 @@ async function getPositions(walletAddress) {
 }
 /**
  * Get user orders (requires auth)
+ * Uses DERIVED user credentials (not builder credentials)
  */
 async function getOrders(walletAddress, userCreds) {
+    logger_js_1.logger.debug(`[Orders] Getting orders for ${walletAddress.slice(0, 10)}... using DERIVED user creds`);
     return (0, cache_js_1.getOrFetch)('orders', `orders:${walletAddress}`, async () => {
         return makeRequest(index_js_1.config.clobApi, 'GET', '/orders', { userCreds, userAddress: walletAddress });
     });
