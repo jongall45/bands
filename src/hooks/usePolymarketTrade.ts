@@ -481,14 +481,9 @@ export function usePolymarketTrade({
       if (orderResponse?.error) {
         throw new Error(orderResponse.error)
       }
-      
-      // Check for Cloudflare block
-      if (orderResponse?.data?.error?.includes('Cloudflare')) {
-        throw new Error('Polymarket API temporarily unavailable. Please try again later.')
-      }
 
       // Check for successful order
-      const returnedOrderId = (orderResponse as any)?.orderID || (orderResponse as any)?.orderId
+      const returnedOrderId = orderResponse?.orderId
       if (returnedOrderId) {
         setState({ 
           status: 'success', 
