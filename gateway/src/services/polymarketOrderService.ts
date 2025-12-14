@@ -12,7 +12,7 @@
  * For Privy embedded wallets, use signatureType=1 (similar to Magic wallets)
  */
 
-import { ClobClient, Side, OrderType } from '@polymarket/clob-client'
+import { ClobClient, Side, OrderType, TickSize } from '@polymarket/clob-client'
 import { Wallet } from '@ethersproject/wallet'
 import type { JsonRpcSigner } from '@ethersproject/providers'
 import { logger } from '../utils/logger.js'
@@ -27,7 +27,7 @@ export interface OrderParams {
   price: number
   side: 'BUY' | 'SELL'
   size: number
-  tickSize?: string
+  tickSize?: TickSize  // "0.1" | "0.01" | "0.001" | "0.0001"
   negRisk?: boolean
 }
 
@@ -82,7 +82,7 @@ export async function createAndPostOrder(
   funderAddress?: string,
   signatureType: number = POLYMARKET_SIGNATURE_TYPES.MAGIC_PRIVY
 ): Promise<OrderResult> {
-  const { tokenId, price, side, size, tickSize = '0.01', negRisk = false } = orderParams
+  const { tokenId, price, side, size, tickSize = '0.01' as TickSize, negRisk = false } = orderParams
   
   // Log order details (sanitized)
   logger.info(`[OrderService] Creating order:`)
