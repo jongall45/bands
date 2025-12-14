@@ -78,12 +78,10 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 // ============================================
 
 const server = app.listen(config.port, () => {
-  logger.info({ port: config.port, env: config.nodeEnv }, '🚀 Polymarket Gateway started')
-  logger.info({ 
-    clobApi: config.clobApi,
-    gammaApi: config.gammaApi,
-    frontendOrigin: config.frontendOrigin,
-  }, 'Configuration')
+  logger.info(`🚀 Polymarket Gateway started on port ${config.port} (${config.nodeEnv})`)
+  logger.info(`   CLOB API: ${config.clobApi}`)
+  logger.info(`   Gamma API: ${config.gammaApi}`)
+  logger.info(`   Frontend: ${config.frontendOrigin}`)
 })
 
 // Graceful shutdown

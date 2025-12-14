@@ -5,8 +5,9 @@ const { combine, timestamp, json, printf, colorize } = winston.format
 
 // Custom format for development
 const devFormat = printf(({ level, message, timestamp, ...meta }) => {
-  const metaStr = Object.keys(meta).length ? JSON.stringify(meta) : ''
-  return `${timestamp} [${level}] ${message} ${metaStr}`
+  const msg = typeof message === 'object' ? JSON.stringify(message) : message
+  const metaStr = Object.keys(meta).length > 1 ? ` ${JSON.stringify(meta)}` : ''
+  return `${timestamp} [${level}] ${msg}${metaStr}`
 })
 
 // Create logger instance
