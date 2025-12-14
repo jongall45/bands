@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express'
 import { ethers } from 'ethers'
-import { submitOrder, getOrders, cancelOrder, deriveOrCreateApiKey } from '../services/polymarketClient.js'
+import { submitOrder, getOrders, cancelOrder } from '../services/polymarketClient.js'
 import { orderLimiter, queryLimiter } from '../middleware/rateLimiter.js'
 import { validateNonce, markNonceUsed } from '../services/nonceManager.js'
 import { invalidate } from '../services/cache.js'
 import { logger, logOrderEvent } from '../utils/logger.js'
-import { getUserCreds, setUserCreds, type UserCreds } from '../services/userCredsStore.js'
+import { getOrDeriveClobCreds } from '../services/clobCreds.js'
+import { getUserCreds, type UserCreds } from '../services/userCredsStore.js'
 
 const router = Router()
 
@@ -121,27 +122,24 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
     
     logOrderEvent('validated', orderId, owner)
     
-    // 5. Ensure we have server-side L2 creds for this wallet (derive/create via L1 signature)
-    const credsKey = orderSigner
-    let creds: UserCreds | undefined = getUserCreds(credsKey)
-    if (!creds) {
-      logger.info(`[Order] Deriving L2 API key for wallet: ${credsKey.slice(0, 10)}...`)
-      try {
-        creds = await deriveOrCreateApiKey({
-          address: credsKey,
-          signature: String(l1Auth.signature),
-          timestamp: String(l1Auth.timestamp),
-          nonce: l1Auth.nonce !== undefined ? String(l1Auth.nonce) : undefined,
-        })
-        logger.info(`[Order] L2 API key derived: keyLen=${creds.apiKey.length} secretLen=${creds.secret.length} passLen=${creds.passphrase.length}`)
-        setUserCreds(credsKey, creds)
-      } catch (deriveError) {
-        const errorMsg = deriveError instanceof Error ? deriveError.message : String(deriveError)
-        logger.error(`[Order] Failed to derive L2 API key: ${errorMsg}`)
-        throw new Error(`Failed to authenticate with Polymarket: ${errorMsg}`)
-      }
-    } else {
-      logger.debug(`[Order] Using cached L2 creds for wallet: ${credsKey.slice(0, 10)}... keyLen=${creds.apiKey.length}`)
+    // 5. Get or derive user-scoped L2 API credentials (NOT builder credentials)
+    // Builder credentials are only used for attribution during derive/create
+    const userAddress = orderSigner
+    logger.info(`[Order] Getting/deriving user creds for wallet: ${userAddress.slice(0, 10)}...`)
+    
+    let creds: UserCreds
+    try {
+      creds = await getOrDeriveClobCreds(userAddress, {
+        address: userAddress,
+        signature: String(l1Auth.signature),
+        timestamp: String(l1Auth.timestamp),
+        nonce: l1Auth.nonce !== undefined ? String(l1Auth.nonce) : undefined,
+      })
+      logger.info(`[Order] Using DERIVED user creds (not builder creds) for order submission: keyLen=${creds.apiKey.length}`)
+    } catch (deriveError) {
+      const errorMsg = deriveError instanceof Error ? deriveError.message : String(deriveError)
+      logger.error(`[Order] Failed to get/derive user L2 API key: ${errorMsg}`)
+      throw new Error(`Failed to authenticate with Polymarket: ${errorMsg}`)
     }
 
     // 6. Submit to Polymarket
@@ -217,29 +215,47 @@ router.get('/', queryLimiter, async (req: Request, res: Response) => {
   }
   
   const addr = address as string
-  let creds: UserCreds | undefined = getUserCreds(addr)
-  if (!creds) {
-    if (!l1Sig || !l1Ts) {
+  
+  // Get or derive user credentials
+  if (!l1Sig || !l1Ts) {
+    // Check cache first
+    const cachedCreds = getUserCreds(addr)
+    if (cachedCreds) {
+      logger.info(`[Orders] Using cached derived creds for GET /orders: ${addr.slice(0, 10)}...`)
+      const orders = await getOrders(addr, cachedCreds)
+      return res.json({ orders })
+    } else {
       return res.status(401).json({ error: 'Missing auth. Provide X-Poly-L1-Signature and X-Poly-L1-Timestamp headers.' })
     }
-    creds = await deriveOrCreateApiKey({
+  }
+  
+  let creds: UserCreds
+  try {
+    creds = await getOrDeriveClobCreds(addr, {
       address: addr,
       signature: String(l1Sig),
       timestamp: String(l1Ts),
       nonce: l1Nonce ? String(l1Nonce) : undefined,
     })
-    setUserCreds(addr, creds)
+    logger.info(`[Orders] Using DERIVED user creds (not builder creds) for GET /orders: keyLen=${creds.apiKey.length}`)
+  } catch (deriveError) {
+    const errorMsg = deriveError instanceof Error ? deriveError.message : String(deriveError)
+    logger.error(`[Orders] Failed to get/derive user creds: ${errorMsg}`)
+    return res.status(401).json({ error: `Failed to authenticate: ${errorMsg}` })
   }
   
   try {
-    const orders = await getOrders(
-      addr,
-      creds
-    )
+    const orders = await getOrders(addr, creds)
     res.json({ orders })
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+    const statusCode = (error && typeof error === 'object' && 'statusCode' in error) 
+      ? (error.statusCode as number)
+      : undefined
     logger.error(`Failed to get orders for ${address}: ${errorMsg}`)
+    if (statusCode === 401 || statusCode === 403) {
+      return res.status(statusCode).json({ error: errorMsg })
+    }
     res.status(500).json({ error: 'Failed to fetch orders' })
   }
 })
@@ -256,18 +272,36 @@ router.delete('/:id', orderLimiter, async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'address is required' })
   }
 
-  let creds: UserCreds | undefined = getUserCreds(String(address))
-  if (!creds) {
-    if (!l1Auth?.signature || !l1Auth?.timestamp) {
+  // Get or derive user credentials
+  if (!l1Auth?.signature || !l1Auth?.timestamp) {
+    // Check cache first
+    const cachedCreds = getUserCreds(String(address))
+    if (cachedCreds) {
+      logger.info(`[Orders] Using cached derived creds for DELETE /order: ${String(address).slice(0, 10)}...`)
+      const result = await cancelOrder(id, cachedCreds)
+      if (address) {
+        invalidate('orders', `orders:${address}`)
+      }
+      logger.info(`Order cancelled: ${id}`)
+      return res.json({ success: true, ...(result as object) })
+    } else {
       return res.status(401).json({ error: 'Missing auth. Provide l1Auth.signature and l1Auth.timestamp.' })
     }
-    creds = await deriveOrCreateApiKey({
+  }
+  
+  let creds: UserCreds
+  try {
+    creds = await getOrDeriveClobCreds(String(address), {
       address: String(address),
       signature: String(l1Auth.signature),
       timestamp: String(l1Auth.timestamp),
       nonce: l1Auth.nonce !== undefined ? String(l1Auth.nonce) : undefined,
     })
-    setUserCreds(String(address), creds)
+    logger.info(`[Orders] Using DERIVED user creds (not builder creds) for DELETE /order: keyLen=${creds.apiKey.length}`)
+  } catch (deriveError) {
+    const errorMsg = deriveError instanceof Error ? deriveError.message : String(deriveError)
+    logger.error(`[Orders] Failed to get/derive user creds for cancel: ${errorMsg}`)
+    return res.status(401).json({ error: `Failed to authenticate: ${errorMsg}` })
   }
   
   try {
@@ -282,7 +316,13 @@ router.delete('/:id', orderLimiter, async (req: Request, res: Response) => {
     res.json({ success: true, ...(result as object) })
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+    const statusCode = (error && typeof error === 'object' && 'statusCode' in error) 
+      ? (error.statusCode as number)
+      : undefined
     logger.error(`Failed to cancel order ${id}: ${errorMsg}`)
+    if (statusCode === 401 || statusCode === 403) {
+      return res.status(statusCode).json({ error: errorMsg })
+    }
     res.status(500).json({ error: 'Failed to cancel order' })
   }
 })

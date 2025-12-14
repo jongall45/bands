@@ -7,6 +7,7 @@ const rateLimiter_js_1 = require("../middleware/rateLimiter.js");
 const nonceManager_js_1 = require("../services/nonceManager.js");
 const cache_js_1 = require("../services/cache.js");
 const logger_js_1 = require("../utils/logger.js");
+const clobCreds_js_1 = require("../services/clobCreds.js");
 const userCredsStore_js_1 = require("../services/userCredsStore.js");
 const router = (0, express_1.Router)();
 /**
@@ -90,29 +91,24 @@ router.post('/', rateLimiter_js_1.orderLimiter, async (req, res) => {
             return res.status(400).json({ error: nonceValidation.error });
         }
         (0, logger_js_1.logOrderEvent)('validated', orderId, owner);
-        // 5. Ensure we have server-side L2 creds for this wallet (derive/create via L1 signature)
-        const credsKey = orderSigner;
-        let creds = (0, userCredsStore_js_1.getUserCreds)(credsKey);
-        if (!creds) {
-            logger_js_1.logger.info(`[Order] Deriving L2 API key for wallet: ${credsKey.slice(0, 10)}...`);
-            try {
-                creds = await (0, polymarketClient_js_1.deriveOrCreateApiKey)({
-                    address: credsKey,
-                    signature: String(l1Auth.signature),
-                    timestamp: String(l1Auth.timestamp),
-                    nonce: l1Auth.nonce !== undefined ? String(l1Auth.nonce) : undefined,
-                });
-                logger_js_1.logger.info(`[Order] L2 API key derived: keyLen=${creds.apiKey.length} secretLen=${creds.secret.length} passLen=${creds.passphrase.length}`);
-                (0, userCredsStore_js_1.setUserCreds)(credsKey, creds);
-            }
-            catch (deriveError) {
-                const errorMsg = deriveError instanceof Error ? deriveError.message : String(deriveError);
-                logger_js_1.logger.error(`[Order] Failed to derive L2 API key: ${errorMsg}`);
-                throw new Error(`Failed to authenticate with Polymarket: ${errorMsg}`);
-            }
+        // 5. Get or derive user-scoped L2 API credentials (NOT builder credentials)
+        // Builder credentials are only used for attribution during derive/create
+        const userAddress = orderSigner;
+        logger_js_1.logger.info(`[Order] Getting/deriving user creds for wallet: ${userAddress.slice(0, 10)}...`);
+        let creds;
+        try {
+            creds = await (0, clobCreds_js_1.getOrDeriveClobCreds)(userAddress, {
+                address: userAddress,
+                signature: String(l1Auth.signature),
+                timestamp: String(l1Auth.timestamp),
+                nonce: l1Auth.nonce !== undefined ? String(l1Auth.nonce) : undefined,
+            });
+            logger_js_1.logger.info(`[Order] Using DERIVED user creds (not builder creds) for order submission: keyLen=${creds.apiKey.length}`);
         }
-        else {
-            logger_js_1.logger.debug(`[Order] Using cached L2 creds for wallet: ${credsKey.slice(0, 10)}... keyLen=${creds.apiKey.length}`);
+        catch (deriveError) {
+            const errorMsg = deriveError instanceof Error ? deriveError.message : String(deriveError);
+            logger_js_1.logger.error(`[Order] Failed to get/derive user L2 API key: ${errorMsg}`);
+            throw new Error(`Failed to authenticate with Polymarket: ${errorMsg}`);
         }
         // 6. Submit to Polymarket
         const result = await (0, polymarketClient_js_1.submitOrder)(order, owner, orderType, creds);
@@ -176,18 +172,33 @@ router.get('/', rateLimiter_js_1.queryLimiter, async (req, res) => {
         return res.status(400).json({ error: 'address is required' });
     }
     const addr = address;
-    let creds = (0, userCredsStore_js_1.getUserCreds)(addr);
-    if (!creds) {
-        if (!l1Sig || !l1Ts) {
+    // Get or derive user credentials
+    if (!l1Sig || !l1Ts) {
+        // Check cache first
+        const cachedCreds = (0, userCredsStore_js_1.getUserCreds)(addr);
+        if (cachedCreds) {
+            logger_js_1.logger.info(`[Orders] Using cached derived creds for GET /orders: ${addr.slice(0, 10)}...`);
+            const orders = await (0, polymarketClient_js_1.getOrders)(addr, cachedCreds);
+            return res.json({ orders });
+        }
+        else {
             return res.status(401).json({ error: 'Missing auth. Provide X-Poly-L1-Signature and X-Poly-L1-Timestamp headers.' });
         }
-        creds = await (0, polymarketClient_js_1.deriveOrCreateApiKey)({
+    }
+    let creds;
+    try {
+        creds = await (0, clobCreds_js_1.getOrDeriveClobCreds)(addr, {
             address: addr,
             signature: String(l1Sig),
             timestamp: String(l1Ts),
             nonce: l1Nonce ? String(l1Nonce) : undefined,
         });
-        (0, userCredsStore_js_1.setUserCreds)(addr, creds);
+        logger_js_1.logger.info(`[Orders] Using DERIVED user creds (not builder creds) for GET /orders: keyLen=${creds.apiKey.length}`);
+    }
+    catch (deriveError) {
+        const errorMsg = deriveError instanceof Error ? deriveError.message : String(deriveError);
+        logger_js_1.logger.error(`[Orders] Failed to get/derive user creds: ${errorMsg}`);
+        return res.status(401).json({ error: `Failed to authenticate: ${errorMsg}` });
     }
     try {
         const orders = await (0, polymarketClient_js_1.getOrders)(addr, creds);
@@ -209,18 +220,37 @@ router.delete('/:id', rateLimiter_js_1.orderLimiter, async (req, res) => {
     if (!address) {
         return res.status(400).json({ error: 'address is required' });
     }
-    let creds = (0, userCredsStore_js_1.getUserCreds)(String(address));
-    if (!creds) {
-        if (!l1Auth?.signature || !l1Auth?.timestamp) {
+    // Get or derive user credentials
+    if (!l1Auth?.signature || !l1Auth?.timestamp) {
+        // Check cache first
+        const cachedCreds = (0, userCredsStore_js_1.getUserCreds)(String(address));
+        if (cachedCreds) {
+            logger_js_1.logger.info(`[Orders] Using cached derived creds for DELETE /order: ${String(address).slice(0, 10)}...`);
+            const result = await (0, polymarketClient_js_1.cancelOrder)(id, cachedCreds);
+            if (address) {
+                (0, cache_js_1.invalidate)('orders', `orders:${address}`);
+            }
+            logger_js_1.logger.info(`Order cancelled: ${id}`);
+            return res.json({ success: true, ...result });
+        }
+        else {
             return res.status(401).json({ error: 'Missing auth. Provide l1Auth.signature and l1Auth.timestamp.' });
         }
-        creds = await (0, polymarketClient_js_1.deriveOrCreateApiKey)({
+    }
+    let creds;
+    try {
+        creds = await (0, clobCreds_js_1.getOrDeriveClobCreds)(String(address), {
             address: String(address),
             signature: String(l1Auth.signature),
             timestamp: String(l1Auth.timestamp),
             nonce: l1Auth.nonce !== undefined ? String(l1Auth.nonce) : undefined,
         });
-        (0, userCredsStore_js_1.setUserCreds)(String(address), creds);
+        logger_js_1.logger.info(`[Orders] Using DERIVED user creds (not builder creds) for DELETE /order: keyLen=${creds.apiKey.length}`);
+    }
+    catch (deriveError) {
+        const errorMsg = deriveError instanceof Error ? deriveError.message : String(deriveError);
+        logger_js_1.logger.error(`[Orders] Failed to get/derive user creds for cancel: ${errorMsg}`);
+        return res.status(401).json({ error: `Failed to authenticate: ${errorMsg}` });
     }
     try {
         const result = await (0, polymarketClient_js_1.cancelOrder)(id, creds);
@@ -233,7 +263,13 @@ router.delete('/:id', rateLimiter_js_1.orderLimiter, async (req, res) => {
     }
     catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        const statusCode = (error && typeof error === 'object' && 'statusCode' in error)
+            ? error.statusCode
+            : undefined;
         logger_js_1.logger.error(`Failed to cancel order ${id}: ${errorMsg}`);
+        if (statusCode === 401 || statusCode === 403) {
+            return res.status(statusCode).json({ error: errorMsg });
+        }
         res.status(500).json({ error: 'Failed to cancel order' });
     }
 });

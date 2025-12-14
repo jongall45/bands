@@ -21,13 +21,25 @@ const credsCache = new NodeCache({
   useClones: false,
 })
 
+/**
+ * Get user credentials by checksum-lowercase address
+ */
 export function getUserCreds(address: string): UserCreds | undefined {
-  return credsCache.get<UserCreds>(address.toLowerCase())
+  const key = address.toLowerCase()
+  const creds = credsCache.get<UserCreds>(key)
+  if (creds) {
+    logger.debug(`[Creds] Retrieved cached creds for ${address.slice(0, 10)}... keyLen=${creds.apiKey.length}`)
+  }
+  return creds
 }
 
+/**
+ * Store user credentials by checksum-lowercase address
+ */
 export function setUserCreds(address: string, creds: UserCreds): void {
-  credsCache.set(address.toLowerCase(), creds)
-  logger.debug(`Stored user creds: ${address.slice(0, 10)}...`)
+  const key = address.toLowerCase()
+  credsCache.set(key, creds)
+  logger.info(`[Creds] Stored user creds for ${address.slice(0, 10)}... keyLen=${creds.apiKey.length} (TTL: 12h)`)
 }
 
 export function clearUserCreds(address: string): void {

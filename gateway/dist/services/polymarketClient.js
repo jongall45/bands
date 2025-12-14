@@ -43,6 +43,10 @@ function getBaseHeaders() {
  * Browser supplies only the L1 signature payload; gateway stores the returned
  * apiKey/secret/passphrase server-side.
  */
+/**
+ * Derive or create L2 API credentials for a user wallet
+ * Uses L1 signature (from browser) + builder credentials (for attribution)
+ */
 async function deriveOrCreateApiKey(l1) {
     const headers = {
         ...getBaseHeaders(),
@@ -53,7 +57,10 @@ async function deriveOrCreateApiKey(l1) {
     };
     if (l1.nonce !== undefined)
         headers['POLY_NONCE'] = l1.nonce;
-    logger_js_1.logger.debug(`[Auth] Deriving L2 API key: address=${l1.address.slice(0, 10)}... hasSignature=${!!l1.signature} timestamp=${l1.timestamp} hasNonce=${!!l1.nonce}`);
+    // Add builder headers for attribution (required for derive/create endpoints)
+    const builderHeaders = getBuilderHeaders('GET', '/auth/derive-api-key', '');
+    Object.assign(headers, builderHeaders);
+    logger_js_1.logger.info(`[Auth] Deriving L2 API key for wallet: ${l1.address.slice(0, 10)}... hasSignature=${!!l1.signature} timestamp=${l1.timestamp} hasBuilderAttribution=${!!builderHeaders['POLY_BUILDER_API_KEY']}`);
     // First try derive
     const deriveStart = Date.now();
     const deriveUrl = `${index_js_1.config.clobApi}/auth/derive-api-key`;
@@ -68,7 +75,7 @@ async function deriveOrCreateApiKey(l1) {
     if (deriveRes.ok) {
         try {
             const data = JSON.parse(deriveText);
-            logger_js_1.logger.info(`[Auth] L2 API key derived successfully: keyLen=${data.apiKey.length} secretLen=${data.secret.length}`);
+            logger_js_1.logger.info(`[Auth] L2 API key derived successfully for ${l1.address.slice(0, 10)}... keyLen=${data.apiKey.length} secretLen=${data.secret.length}`);
             return data;
         }
         catch (parseError) {
@@ -76,10 +83,13 @@ async function deriveOrCreateApiKey(l1) {
             throw new Error('Invalid response from derive-api-key endpoint');
         }
     }
-    // If derive fails, try create
+    // If derive fails, try create (with builder headers for POST)
     logger_js_1.logger.warn(`[Auth] derive-api-key failed (${deriveRes.status}): ${deriveText.substring(0, 200)}; attempting api-key create`);
     const createStart = Date.now();
     const createUrl = `${index_js_1.config.clobApi}/auth/api-key`;
+    const createBody = '';
+    const createBuilderHeaders = getBuilderHeaders('POST', '/auth/api-key', createBody);
+    Object.assign(headers, createBuilderHeaders); // Update headers with POST builder sig
     logger_js_1.logger.debug(`[Auth] Attempting create: ${createUrl}`);
     const createRes = await fetch(createUrl, {
         method: 'POST',
@@ -97,12 +107,12 @@ async function deriveOrCreateApiKey(l1) {
         catch {
             err = createText || err;
         }
-        logger_js_1.logger.error(`[Auth] Failed to create L2 API key: ${err}`);
+        logger_js_1.logger.error(`[Auth] Failed to create L2 API key for ${l1.address.slice(0, 10)}...: ${err}`);
         throw new Error(err);
     }
     try {
         const data = JSON.parse(createText);
-        logger_js_1.logger.info(`[Auth] L2 API key created successfully: keyLen=${data.apiKey.length} secretLen=${data.secret.length}`);
+        logger_js_1.logger.info(`[Auth] L2 API key created successfully for ${l1.address.slice(0, 10)}... keyLen=${data.apiKey.length} secretLen=${data.secret.length}`);
         return data;
     }
     catch (parseError) {
@@ -121,7 +131,7 @@ function createUserSignature(secret, timestamp, method, path, body = '') {
     const sig = hmac.update(message).digest('base64');
     return sig.split('+').join('-').split('/').join('_');
 }
-// Add builder headers for attribution
+// Add builder headers for attribution (used for derive/create endpoints and order attribution)
 function getBuilderHeaders(method, path, body) {
     const hasKey = !!index_js_1.config.builderApiKey;
     const hasSecret = !!index_js_1.config.builderSecret;
@@ -132,7 +142,6 @@ function getBuilderHeaders(method, path, body) {
     }
     const timestamp = Date.now();
     const signature = (0, builder_signing_sdk_1.buildHmacSignature)(index_js_1.config.builderSecret, timestamp, method, path, body);
-    logger_js_1.logger.debug(`[Auth] Builder headers added: keyLen=${index_js_1.config.builderApiKey.length} secretLen=${index_js_1.config.builderSecret.length} passLen=${index_js_1.config.builderPassphrase.length}`);
     return {
         'POLY_BUILDER_API_KEY': index_js_1.config.builderApiKey,
         'POLY_BUILDER_SIGNATURE': signature,
@@ -172,9 +181,14 @@ async function makeRequest(baseUrl, method, path, options) {
             const urlObj = new URL(url);
             const hasUserCreds = !!options?.userCreds;
             const hasBuilderCreds = !!index_js_1.config.builderApiKey && !!index_js_1.config.builderSecret && !!index_js_1.config.builderPassphrase;
-            logger_js_1.logger.debug(`[Polymarket] ${method} ${url} host=${urlObj.host} path=${path} hasBody=${!!bodyString} hasUserCreds=${hasUserCreds} hasBuilderCreds=${hasBuilderCreds}`);
+            // Determine which credentials are being used
+            const credType = hasUserCreds ? 'DERIVED_USER_CREDS' : (hasBuilderCreds ? 'BUILDER_CREDS_ONLY' : 'NO_CREDS');
+            logger_js_1.logger.info(`[Polymarket] ${method} ${urlObj.host}${path} credType=${credType} hasUserCreds=${hasUserCreds} hasBuilderCreds=${hasBuilderCreds}`);
             if (hasUserCreds && options.userCreds) {
-                logger_js_1.logger.debug(`[Auth] User creds: keyLen=${options.userCreds.apiKey.length} secretLen=${options.userCreds.secret.length} passLen=${options.userCreds.passphrase.length}`);
+                logger_js_1.logger.info(`[Auth] Using DERIVED user creds for request: keyLen=${options.userCreds.apiKey.length} keyPrefix=${options.userCreds.apiKey.substring(0, 8)}...`);
+            }
+            else if (hasBuilderCreds) {
+                logger_js_1.logger.info(`[Auth] Using BUILDER creds only (for attribution): keyLen=${index_js_1.config.builderApiKey.length}`);
             }
             const response = await fetch(url, {
                 method,
@@ -284,18 +298,21 @@ async function getOrders(walletAddress, userCreds) {
  * Submit a signed order
  * This is NOT cached - always submits to Polymarket
  */
+/**
+ * Submit a signed order to Polymarket CLOB
+ * Uses DERIVED user credentials (not builder credentials)
+ */
 async function submitOrder(signedOrder, owner, orderType, userCreds) {
-    logger_js_1.logger.info(`[Order] Submitting order to Polymarket: owner=${owner} orderType=${orderType} clobApi=${index_js_1.config.clobApi}`);
-    logger_js_1.logger.info(`[Order] User creds: keyLen=${userCreds.apiKey.length} secretLen=${userCreds.secret.length} passLen=${userCreds.passphrase.length} keyPrefix=${userCreds.apiKey.substring(0, 8)}...`);
+    logger_js_1.logger.info(`[Order] Submitting order: owner=${owner.slice(0, 10)}... orderType=${orderType} clobApi=${index_js_1.config.clobApi}`);
+    logger_js_1.logger.info(`[Order] Using DERIVED user creds (NOT builder creds): keyLen=${userCreds.apiKey.length} keyPrefix=${userCreds.apiKey.substring(0, 8)}...`);
     const payload = {
         order: signedOrder,
         owner,
         orderType,
     };
-    logger_js_1.logger.debug(`[Order] Payload: owner=${owner} orderType=${orderType} hasOrder=${!!signedOrder}`);
     try {
         const result = await makeRequest(index_js_1.config.clobApi, 'POST', '/order', { body: payload, userCreds, userAddress: owner });
-        logger_js_1.logger.info(`[Order] Order submitted successfully`);
+        logger_js_1.logger.info(`[Order] Order submitted successfully using derived user creds`);
         return result;
     }
     catch (error) {
@@ -304,7 +321,7 @@ async function submitOrder(signedOrder, owner, orderType, userCreds) {
         const statusCode = (error && typeof error === 'object' && 'statusCode' in error)
             ? error.statusCode
             : undefined;
-        logger_js_1.logger.error(`[Order] Order submission failed: status=${statusCode || 'unknown'} error=${errorMsg}`);
+        logger_js_1.logger.error(`[Order] Order submission failed: status=${statusCode || 'unknown'} error=${errorMsg} usingDerivedCreds=true`);
         // Re-throw with status code preserved
         if (error && typeof error === 'object' && 'statusCode' in error) {
             throw error;
@@ -314,9 +331,23 @@ async function submitOrder(signedOrder, owner, orderType, userCreds) {
 }
 /**
  * Cancel an order
+ * Uses DERIVED user credentials (not builder credentials)
  */
 async function cancelOrder(orderId, userCreds) {
-    logger_js_1.logger.info(`Cancelling order: ${orderId}`);
-    return makeRequest(index_js_1.config.clobApi, 'DELETE', `/order/${orderId}`, { userCreds });
+    logger_js_1.logger.info(`[Order] Cancelling order: ${orderId} using DERIVED user creds (not builder creds)`);
+    try {
+        return await makeRequest(index_js_1.config.clobApi, 'DELETE', `/order/${orderId}`, { userCreds });
+    }
+    catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        const statusCode = (error && typeof error === 'object' && 'statusCode' in error)
+            ? error.statusCode
+            : undefined;
+        logger_js_1.logger.error(`[Order] Cancel failed: status=${statusCode || 'unknown'} error=${errorMsg}`);
+        if (error && typeof error === 'object' && 'statusCode' in error) {
+            throw error;
+        }
+        throw error;
+    }
 }
 //# sourceMappingURL=polymarketClient.js.map

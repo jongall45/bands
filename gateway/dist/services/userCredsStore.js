@@ -22,12 +22,24 @@ const credsCache = new node_cache_1.default({
     checkperiod: 60,
     useClones: false,
 });
+/**
+ * Get user credentials by checksum-lowercase address
+ */
 function getUserCreds(address) {
-    return credsCache.get(address.toLowerCase());
+    const key = address.toLowerCase();
+    const creds = credsCache.get(key);
+    if (creds) {
+        logger_js_1.logger.debug(`[Creds] Retrieved cached creds for ${address.slice(0, 10)}... keyLen=${creds.apiKey.length}`);
+    }
+    return creds;
 }
+/**
+ * Store user credentials by checksum-lowercase address
+ */
 function setUserCreds(address, creds) {
-    credsCache.set(address.toLowerCase(), creds);
-    logger_js_1.logger.debug(`Stored user creds: ${address.slice(0, 10)}...`);
+    const key = address.toLowerCase();
+    credsCache.set(key, creds);
+    logger_js_1.logger.info(`[Creds] Stored user creds for ${address.slice(0, 10)}... keyLen=${creds.apiKey.length} (TTL: 12h)`);
 }
 function clearUserCreds(address) {
     credsCache.del(address.toLowerCase());

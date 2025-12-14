@@ -11,6 +11,10 @@ export interface L1AuthPayload {
  * Browser supplies only the L1 signature payload; gateway stores the returned
  * apiKey/secret/passphrase server-side.
  */
+/**
+ * Derive or create L2 API credentials for a user wallet
+ * Uses L1 signature (from browser) + builder credentials (for attribution)
+ */
 export declare function deriveOrCreateApiKey(l1: L1AuthPayload): Promise<UserCreds>;
 export declare function makeRequest<T>(baseUrl: string, method: string, path: string, options?: {
     body?: unknown;
@@ -44,9 +48,14 @@ export declare function getOrders(walletAddress: string, userCreds: UserCreds): 
  * Submit a signed order
  * This is NOT cached - always submits to Polymarket
  */
+/**
+ * Submit a signed order to Polymarket CLOB
+ * Uses DERIVED user credentials (not builder credentials)
+ */
 export declare function submitOrder(signedOrder: unknown, owner: string, orderType: string, userCreds: UserCreds): Promise<unknown>;
 /**
  * Cancel an order
+ * Uses DERIVED user credentials (not builder credentials)
  */
 export declare function cancelOrder(orderId: string, userCreds: UserCreds): Promise<unknown>;
 //# sourceMappingURL=polymarketClient.d.ts.map
