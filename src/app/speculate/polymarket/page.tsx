@@ -22,6 +22,7 @@ import { BridgeModal } from '@/components/bridge/BridgeModal'
 import { PolymarketFundingModal } from '@/components/polymarket/PolymarketFundingModal'
 import { usePolymarketSetup } from '@/hooks/usePolymarketTrade'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
+import { checkGatewayHealth } from '@/lib/gateway/client'
 
 // Native USDC on Polygon (what Polymarket uses)
 const POLYGON_USDC = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'
@@ -65,6 +66,26 @@ export default function PolymarketPage() {
   const [showBridgeModal, setShowBridgeModal] = useState(false)
   const [showFundingModal, setShowFundingModal] = useState(false)
   const [hasSeenFundingPrompt, setHasSeenFundingPrompt] = useState(false)
+  const [gatewayHealth, setGatewayHealth] = useState<boolean | null>(null)
+
+  // Check gateway health on mount
+  useEffect(() => {
+    checkGatewayHealth().then(healthy => {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'polymarket/page.tsx:69',message:'Gateway health check result',data:{healthy},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      setGatewayHealth(healthy)
+      if (!healthy) {
+        console.error('⚠️ Gateway health check failed - Polymarket features may not work')
+      }
+    }).catch(err => {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'polymarket/page.tsx:75',message:'Gateway health check error',data:{error:err?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      setGatewayHealth(false)
+      console.error('Gateway health check error:', err)
+    })
+  }, [])
 
   // Fetch Smart Wallet USDC balance (on Polygon) - for showing available funds to deposit
   const { data: smartWalletBalance } = useBalance({

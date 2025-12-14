@@ -464,14 +464,26 @@ export function usePolymarketTrade({
       }
 
       const signer = await getEthersSigner(embeddedWallet)
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:466',message:'Signing L1 auth',data:{eoaAddress,hasSigner:!!signer},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       const l1Auth = await signClobAuth(signer, eoaAddress)
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:470',message:'L1 auth signed',data:{address:l1Auth.address,hasSignature:!!l1Auth.signature,sigPrefix:l1Auth.signature?.substring(0,10)||'none',timestamp:l1Auth.timestamp},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:473',message:'Submitting order to gateway',data:{owner:session?.safeAddress||eoaAddress,orderType:'GTC',hasOrder:!!signedOrder,orderTokenId:(signedOrder as any)?.tokenId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
       const orderResponse = await submitGatewayOrder({
         order: signedOrder as any,
         owner: session?.safeAddress || eoaAddress,
         orderType: 'GTC',
         l1Auth,
       })
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:480',message:'Gateway order response',data:{success:orderResponse?.success,hasOrderId:!!orderResponse?.orderId,orderId:orderResponse?.orderId,hasError:!!orderResponse?.error,error:orderResponse?.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
 
       console.log('📦 Gateway response:', orderResponse)
       
@@ -501,7 +513,7 @@ export function usePolymarketTrade({
         setTimeout(fetchBalancesAndAllowances, 2000)
       } else {
         // No orderID and not explicitly successful - treat as error
-        throw new Error(orderResponse?.errorMsg || 'Order submission failed - please try again')
+        throw new Error(orderResponse?.error || 'Order submission failed - please try again')
       }
     } catch (err: any) {
       console.error('Trade execution failed:', err)

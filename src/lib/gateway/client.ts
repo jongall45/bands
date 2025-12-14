@@ -22,7 +22,17 @@ async function gatewayFetch<T>(
   path: string,
   options?: RequestInit
 ): Promise<T> {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:21',message:'gatewayFetch entry',data:{path,method:options?.method||'GET'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
+  const gatewayUrl = GATEWAY_URL
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:25',message:'Gateway URL check',data:{hasUrl:!!gatewayUrl,urlPrefix:gatewayUrl?.substring(0,20)||'missing'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   const url = `${requireGatewayUrl()}${path}`
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:27',message:'Full gateway URL',data:{fullUrl:url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   
   const response = await fetch(url, {
     ...options,
@@ -32,10 +42,19 @@ async function gatewayFetch<T>(
     },
     credentials: 'include',
   })
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:38',message:'Gateway response received',data:{status:response.status,statusText:response.statusText,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
   
   const data = await response.json()
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:41',message:'Gateway response parsed',data:{hasData:!!data,keys:Object.keys(data||{}),hasError:!!(data as any)?.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
   
   if (!response.ok) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:45',message:'Gateway error response',data:{status:response.status,error:(data as any)?.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
     throw new Error((data as GatewayError).error || `HTTP ${response.status}`)
   }
   
@@ -202,10 +221,19 @@ export async function getPositions(address: string): Promise<Position[]> {
 // ============================================
 
 export async function checkGatewayHealth(): Promise<boolean> {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:197',message:'Health check start',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   try {
-    await gatewayFetch<{ status: string }>('/health')
+    const result = await gatewayFetch<{ status: string }>('/health')
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:201',message:'Health check success',data:{status:result?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     return true
-  } catch {
+  } catch (err: any) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:205',message:'Health check failed',data:{error:err?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     return false
   }
 }
