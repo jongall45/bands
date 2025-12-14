@@ -53,9 +53,12 @@ async function deriveOrCreateApiKey(l1) {
     };
     if (l1.nonce !== undefined)
         headers['POLY_NONCE'] = l1.nonce;
+    logger_js_1.logger.debug(`[Auth] Deriving L2 API key: address=${l1.address.slice(0, 10)}... hasSignature=${!!l1.signature} timestamp=${l1.timestamp} hasNonce=${!!l1.nonce}`);
     // First try derive
     const deriveStart = Date.now();
-    const deriveRes = await fetch(`${index_js_1.config.clobApi}/auth/derive-api-key`, {
+    const deriveUrl = `${index_js_1.config.clobApi}/auth/derive-api-key`;
+    logger_js_1.logger.debug(`[Auth] Attempting derive: ${deriveUrl}`);
+    const deriveRes = await fetch(deriveUrl, {
         method: 'GET',
         headers,
         signal: AbortSignal.timeout(index_js_1.config.request.timeout),
@@ -63,13 +66,22 @@ async function deriveOrCreateApiKey(l1) {
     const deriveText = await deriveRes.text();
     (0, logger_js_1.logPolymarketCall)('/auth/derive-api-key', 'GET', Date.now() - deriveStart, deriveRes.ok, { status: deriveRes.status });
     if (deriveRes.ok) {
-        const data = JSON.parse(deriveText);
-        return data;
+        try {
+            const data = JSON.parse(deriveText);
+            logger_js_1.logger.info(`[Auth] L2 API key derived successfully: keyLen=${data.apiKey.length} secretLen=${data.secret.length}`);
+            return data;
+        }
+        catch (parseError) {
+            logger_js_1.logger.error(`[Auth] Failed to parse derive response: ${deriveText.substring(0, 200)}`);
+            throw new Error('Invalid response from derive-api-key endpoint');
+        }
     }
     // If derive fails, try create
-    logger_js_1.logger.warn(`derive-api-key failed (${deriveRes.status}); attempting api-key create`);
+    logger_js_1.logger.warn(`[Auth] derive-api-key failed (${deriveRes.status}): ${deriveText.substring(0, 200)}; attempting api-key create`);
     const createStart = Date.now();
-    const createRes = await fetch(`${index_js_1.config.clobApi}/auth/api-key`, {
+    const createUrl = `${index_js_1.config.clobApi}/auth/api-key`;
+    logger_js_1.logger.debug(`[Auth] Attempting create: ${createUrl}`);
+    const createRes = await fetch(createUrl, {
         method: 'POST',
         headers,
         signal: AbortSignal.timeout(index_js_1.config.request.timeout),
@@ -85,9 +97,18 @@ async function deriveOrCreateApiKey(l1) {
         catch {
             err = createText || err;
         }
+        logger_js_1.logger.error(`[Auth] Failed to create L2 API key: ${err}`);
         throw new Error(err);
     }
-    return JSON.parse(createText);
+    try {
+        const data = JSON.parse(createText);
+        logger_js_1.logger.info(`[Auth] L2 API key created successfully: keyLen=${data.apiKey.length} secretLen=${data.secret.length}`);
+        return data;
+    }
+    catch (parseError) {
+        logger_js_1.logger.error(`[Auth] Failed to parse create response: ${createText.substring(0, 200)}`);
+        throw new Error('Invalid response from api-key endpoint');
+    }
 }
 // Create HMAC signature for user API auth
 function createUserSignature(secret, timestamp, method, path, body = '') {
@@ -264,17 +285,26 @@ async function getOrders(walletAddress, userCreds) {
  * This is NOT cached - always submits to Polymarket
  */
 async function submitOrder(signedOrder, owner, orderType, userCreds) {
-    logger_js_1.logger.info(`Submitting order to Polymarket: owner=${owner} orderType=${orderType} clobApi=${index_js_1.config.clobApi}`);
-    logger_js_1.logger.debug(`[Auth] User creds for order: keyLen=${userCreds.apiKey.length} secretLen=${userCreds.secret.length} passLen=${userCreds.passphrase.length}`);
+    logger_js_1.logger.info(`[Order] Submitting order to Polymarket: owner=${owner} orderType=${orderType} clobApi=${index_js_1.config.clobApi}`);
+    logger_js_1.logger.info(`[Order] User creds: keyLen=${userCreds.apiKey.length} secretLen=${userCreds.secret.length} passLen=${userCreds.passphrase.length} keyPrefix=${userCreds.apiKey.substring(0, 8)}...`);
     const payload = {
         order: signedOrder,
         owner,
         orderType,
     };
+    logger_js_1.logger.debug(`[Order] Payload: owner=${owner} orderType=${orderType} hasOrder=${!!signedOrder}`);
     try {
-        return await makeRequest(index_js_1.config.clobApi, 'POST', '/order', { body: payload, userCreds, userAddress: owner });
+        const result = await makeRequest(index_js_1.config.clobApi, 'POST', '/order', { body: payload, userCreds, userAddress: owner });
+        logger_js_1.logger.info(`[Order] Order submitted successfully`);
+        return result;
     }
     catch (error) {
+        // Log detailed error info
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        const statusCode = (error && typeof error === 'object' && 'statusCode' in error)
+            ? error.statusCode
+            : undefined;
+        logger_js_1.logger.error(`[Order] Order submission failed: status=${statusCode || 'unknown'} error=${errorMsg}`);
         // Re-throw with status code preserved
         if (error && typeof error === 'object' && 'statusCode' in error) {
             throw error;

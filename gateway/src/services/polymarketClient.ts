@@ -55,9 +55,14 @@ export async function deriveOrCreateApiKey(l1: L1AuthPayload): Promise<UserCreds
   }
   if (l1.nonce !== undefined) headers['POLY_NONCE'] = l1.nonce
 
+  logger.debug(`[Auth] Deriving L2 API key: address=${l1.address.slice(0, 10)}... hasSignature=${!!l1.signature} timestamp=${l1.timestamp} hasNonce=${!!l1.nonce}`)
+
   // First try derive
   const deriveStart = Date.now()
-  const deriveRes = await fetch(`${config.clobApi}/auth/derive-api-key`, {
+  const deriveUrl = `${config.clobApi}/auth/derive-api-key`
+  logger.debug(`[Auth] Attempting derive: ${deriveUrl}`)
+  
+  const deriveRes = await fetch(deriveUrl, {
     method: 'GET',
     headers,
     signal: AbortSignal.timeout(config.request.timeout),
@@ -66,14 +71,23 @@ export async function deriveOrCreateApiKey(l1: L1AuthPayload): Promise<UserCreds
   logPolymarketCall('/auth/derive-api-key', 'GET', Date.now() - deriveStart, deriveRes.ok, { status: deriveRes.status })
 
   if (deriveRes.ok) {
-    const data = JSON.parse(deriveText) as UserCreds
-    return data
+    try {
+      const data = JSON.parse(deriveText) as UserCreds
+      logger.info(`[Auth] L2 API key derived successfully: keyLen=${data.apiKey.length} secretLen=${data.secret.length}`)
+      return data
+    } catch (parseError) {
+      logger.error(`[Auth] Failed to parse derive response: ${deriveText.substring(0, 200)}`)
+      throw new Error('Invalid response from derive-api-key endpoint')
+    }
   }
 
   // If derive fails, try create
-  logger.warn(`derive-api-key failed (${deriveRes.status}); attempting api-key create`)
+  logger.warn(`[Auth] derive-api-key failed (${deriveRes.status}): ${deriveText.substring(0, 200)}; attempting api-key create`)
   const createStart = Date.now()
-  const createRes = await fetch(`${config.clobApi}/auth/api-key`, {
+  const createUrl = `${config.clobApi}/auth/api-key`
+  logger.debug(`[Auth] Attempting create: ${createUrl}`)
+  
+  const createRes = await fetch(createUrl, {
     method: 'POST',
     headers,
     signal: AbortSignal.timeout(config.request.timeout),
@@ -89,10 +103,18 @@ export async function deriveOrCreateApiKey(l1: L1AuthPayload): Promise<UserCreds
     } catch {
       err = createText || err
     }
+    logger.error(`[Auth] Failed to create L2 API key: ${err}`)
     throw new Error(err)
   }
 
-  return JSON.parse(createText) as UserCreds
+  try {
+    const data = JSON.parse(createText) as UserCreds
+    logger.info(`[Auth] L2 API key created successfully: keyLen=${data.apiKey.length} secretLen=${data.secret.length}`)
+    return data
+  } catch (parseError) {
+    logger.error(`[Auth] Failed to parse create response: ${createText.substring(0, 200)}`)
+    throw new Error('Invalid response from api-key endpoint')
+  }
 }
 
 // Create HMAC signature for user API auth
@@ -343,8 +365,8 @@ export async function submitOrder(
   orderType: string,
   userCreds: UserCreds
 ): Promise<unknown> {
-  logger.info(`Submitting order to Polymarket: owner=${owner} orderType=${orderType} clobApi=${config.clobApi}`)
-  logger.debug(`[Auth] User creds for order: keyLen=${userCreds.apiKey.length} secretLen=${userCreds.secret.length} passLen=${userCreds.passphrase.length}`)
+  logger.info(`[Order] Submitting order to Polymarket: owner=${owner} orderType=${orderType} clobApi=${config.clobApi}`)
+  logger.info(`[Order] User creds: keyLen=${userCreds.apiKey.length} secretLen=${userCreds.secret.length} passLen=${userCreds.passphrase.length} keyPrefix=${userCreds.apiKey.substring(0, 8)}...`)
   
   const payload = {
     order: signedOrder,
@@ -352,14 +374,25 @@ export async function submitOrder(
     orderType,
   }
   
+  logger.debug(`[Order] Payload: owner=${owner} orderType=${orderType} hasOrder=${!!signedOrder}`)
+  
   try {
-    return await makeRequest<unknown>(
+    const result = await makeRequest<unknown>(
       config.clobApi,
       'POST',
       '/order',
       { body: payload, userCreds, userAddress: owner }
     )
+    logger.info(`[Order] Order submitted successfully`)
+    return result
   } catch (error) {
+    // Log detailed error info
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    const statusCode = (error && typeof error === 'object' && 'statusCode' in error) 
+      ? (error.statusCode as number)
+      : undefined
+    logger.error(`[Order] Order submission failed: status=${statusCode || 'unknown'} error=${errorMsg}`)
+    
     // Re-throw with status code preserved
     if (error && typeof error === 'object' && 'statusCode' in error) {
       throw error

@@ -125,13 +125,23 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
     const credsKey = orderSigner
     let creds: UserCreds | undefined = getUserCreds(credsKey)
     if (!creds) {
-      creds = await deriveOrCreateApiKey({
-        address: credsKey,
-        signature: String(l1Auth.signature),
-        timestamp: String(l1Auth.timestamp),
-        nonce: l1Auth.nonce !== undefined ? String(l1Auth.nonce) : undefined,
-      })
-      setUserCreds(credsKey, creds)
+      logger.info(`[Order] Deriving L2 API key for wallet: ${credsKey.slice(0, 10)}...`)
+      try {
+        creds = await deriveOrCreateApiKey({
+          address: credsKey,
+          signature: String(l1Auth.signature),
+          timestamp: String(l1Auth.timestamp),
+          nonce: l1Auth.nonce !== undefined ? String(l1Auth.nonce) : undefined,
+        })
+        logger.info(`[Order] L2 API key derived: keyLen=${creds.apiKey.length} secretLen=${creds.secret.length} passLen=${creds.passphrase.length}`)
+        setUserCreds(credsKey, creds)
+      } catch (deriveError) {
+        const errorMsg = deriveError instanceof Error ? deriveError.message : String(deriveError)
+        logger.error(`[Order] Failed to derive L2 API key: ${errorMsg}`)
+        throw new Error(`Failed to authenticate with Polymarket: ${errorMsg}`)
+      }
+    } else {
+      logger.debug(`[Order] Using cached L2 creds for wallet: ${credsKey.slice(0, 10)}... keyLen=${creds.apiKey.length}`)
     }
 
     // 6. Submit to Polymarket

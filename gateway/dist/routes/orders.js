@@ -94,13 +94,25 @@ router.post('/', rateLimiter_js_1.orderLimiter, async (req, res) => {
         const credsKey = orderSigner;
         let creds = (0, userCredsStore_js_1.getUserCreds)(credsKey);
         if (!creds) {
-            creds = await (0, polymarketClient_js_1.deriveOrCreateApiKey)({
-                address: credsKey,
-                signature: String(l1Auth.signature),
-                timestamp: String(l1Auth.timestamp),
-                nonce: l1Auth.nonce !== undefined ? String(l1Auth.nonce) : undefined,
-            });
-            (0, userCredsStore_js_1.setUserCreds)(credsKey, creds);
+            logger_js_1.logger.info(`[Order] Deriving L2 API key for wallet: ${credsKey.slice(0, 10)}...`);
+            try {
+                creds = await (0, polymarketClient_js_1.deriveOrCreateApiKey)({
+                    address: credsKey,
+                    signature: String(l1Auth.signature),
+                    timestamp: String(l1Auth.timestamp),
+                    nonce: l1Auth.nonce !== undefined ? String(l1Auth.nonce) : undefined,
+                });
+                logger_js_1.logger.info(`[Order] L2 API key derived: keyLen=${creds.apiKey.length} secretLen=${creds.secret.length} passLen=${creds.passphrase.length}`);
+                (0, userCredsStore_js_1.setUserCreds)(credsKey, creds);
+            }
+            catch (deriveError) {
+                const errorMsg = deriveError instanceof Error ? deriveError.message : String(deriveError);
+                logger_js_1.logger.error(`[Order] Failed to derive L2 API key: ${errorMsg}`);
+                throw new Error(`Failed to authenticate with Polymarket: ${errorMsg}`);
+            }
+        }
+        else {
+            logger_js_1.logger.debug(`[Order] Using cached L2 creds for wallet: ${credsKey.slice(0, 10)}... keyLen=${creds.apiKey.length}`);
         }
         // 6. Submit to Polymarket
         const result = await (0, polymarketClient_js_1.submitOrder)(order, owner, orderType, creds);
