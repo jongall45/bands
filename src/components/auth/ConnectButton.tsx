@@ -24,11 +24,11 @@ export function ConnectButton({ variant = 'default' }: ConnectButtonProps) {
   // Debug logging (only in dev)
   useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
-      console.log('[ConnectButton] State:', { 
-        isReady,
-        isAuthenticated, 
+    console.log('[ConnectButton] State:', { 
+      isReady,
+      isAuthenticated, 
         address: address?.slice(0, 10),
-      })
+    })
     }
   }, [isReady, isAuthenticated, address])
 

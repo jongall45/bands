@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { getStats as getCacheStats } from '../services/cache.js'
 import { getNonceStats } from '../services/nonceManager.js'
+import { getCredsStats } from '../services/userCredsStore.js'
 
 const router = Router()
 
@@ -25,6 +26,7 @@ router.get('/', (req: Request, res: Response) => {
 router.get('/detailed', (req: Request, res: Response) => {
   const cacheStats = getCacheStats()
   const nonceStats = getNonceStats()
+  const credsStats = getCredsStats()
   
   res.json({
     status: 'ok',
@@ -37,6 +39,7 @@ router.get('/detailed', (req: Request, res: Response) => {
     },
     cache: cacheStats,
     nonces: nonceStats,
+    creds: credsStats,
   })
 })
 

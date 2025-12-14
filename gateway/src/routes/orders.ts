@@ -1,10 +1,11 @@
 import { Router, Request, Response } from 'express'
 import { ethers } from 'ethers'
-import { submitOrder, getOrders, cancelOrder } from '../services/polymarketClient.js'
+import { submitOrder, getOrders, cancelOrder, deriveOrCreateApiKey } from '../services/polymarketClient.js'
 import { orderLimiter, queryLimiter } from '../middleware/rateLimiter.js'
 import { validateNonce, markNonceUsed } from '../services/nonceManager.js'
 import { invalidate } from '../services/cache.js'
 import { logger, logOrderEvent } from '../utils/logger.js'
+import { getUserCreds, setUserCreds, type UserCreds } from '../services/userCredsStore.js'
 
 const router = Router()
 
@@ -73,7 +74,7 @@ function validateOwnership(order: SignedOrder, owner: string): boolean {
  * Submit a signed order
  */
 router.post('/', orderLimiter, async (req: Request, res: Response) => {
-  const { order, owner, orderType = 'GTC', userCreds } = req.body
+  const { order, owner, orderType = 'GTC', l1Auth } = req.body
   
   // Generate order ID for tracking
   const orderId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -86,8 +87,8 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
     if (!owner) {
       return res.status(400).json({ error: 'owner is required' })
     }
-    if (!userCreds || !userCreds.apiKey || !userCreds.secret || !userCreds.passphrase) {
-      return res.status(401).json({ error: 'User API credentials required' })
+    if (!l1Auth?.signature || !l1Auth?.timestamp || !l1Auth?.address) {
+      return res.status(401).json({ error: 'l1Auth.address, l1Auth.signature and l1Auth.timestamp are required' })
     }
     
     logOrderEvent('signed', orderId, owner, { tokenId: order.tokenId })
@@ -104,6 +105,12 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
       logger.warn(`Ownership validation failed: ${orderId} owner=${owner} maker=${order.maker}`)
       return res.status(403).json({ error: 'Order signer does not match owner' })
     }
+
+    // 3b. Validate L1 auth address matches order signer
+    const orderSigner = String(order.signer || '')
+    if (orderSigner.toLowerCase() !== String(l1Auth.address).toLowerCase()) {
+      return res.status(403).json({ error: 'l1Auth.address must match order.signer' })
+    }
     
     // 4. Validate nonce (replay protection)
     const nonceStr = order.salt || order.nonce || ''
@@ -114,17 +121,30 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
     
     logOrderEvent('validated', orderId, owner)
     
-    // 5. Submit to Polymarket
-    const result = await submitOrder(order, owner, orderType, userCreds) as Record<string, unknown>
+    // 5. Ensure we have server-side L2 creds for this wallet (derive/create via L1 signature)
+    const credsKey = orderSigner
+    let creds: UserCreds | undefined = getUserCreds(credsKey)
+    if (!creds) {
+      creds = await deriveOrCreateApiKey({
+        address: credsKey,
+        signature: String(l1Auth.signature),
+        timestamp: String(l1Auth.timestamp),
+        nonce: l1Auth.nonce !== undefined ? String(l1Auth.nonce) : undefined,
+      })
+      setUserCreds(credsKey, creds)
+    }
+
+    // 6. Submit to Polymarket
+    const result = await submitOrder(order, owner, orderType, creds) as Record<string, unknown>
     
-    // 6. Mark nonce as used (only after successful submission)
+    // 7. Mark nonce as used (only after successful submission)
     markNonceUsed(owner, nonceStr)
     
-    // 7. Invalidate caches for this user
+    // 8. Invalidate caches for this user
     invalidate('orders', `orders:${owner}`)
     invalidate('positions', `positions:${owner}`)
     
-    // 8. Return result
+    // 9. Return result
     const resultOrderId = result.orderID || result.orderId
     if (resultOrderId) {
       logOrderEvent('accepted', String(resultOrderId), owner)
@@ -162,20 +182,34 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
  * Get user's orders
  */
 router.get('/', queryLimiter, async (req: Request, res: Response) => {
-  const { address, apiKey, secret, passphrase } = req.query
+  const { address } = req.query
+  const l1Sig = req.header('x-poly-l1-signature') || req.header('X-Poly-L1-Signature')
+  const l1Ts = req.header('x-poly-l1-timestamp') || req.header('X-Poly-L1-Timestamp')
+  const l1Nonce = req.header('x-poly-l1-nonce') || req.header('X-Poly-L1-Nonce')
   
   if (!address) {
     return res.status(400).json({ error: 'address is required' })
   }
   
-  if (!apiKey || !secret || !passphrase) {
-    return res.status(401).json({ error: 'API credentials required (apiKey, secret, passphrase)' })
+  const addr = address as string
+  let creds: UserCreds | undefined = getUserCreds(addr)
+  if (!creds) {
+    if (!l1Sig || !l1Ts) {
+      return res.status(401).json({ error: 'Missing auth. Provide X-Poly-L1-Signature and X-Poly-L1-Timestamp headers.' })
+    }
+    creds = await deriveOrCreateApiKey({
+      address: addr,
+      signature: String(l1Sig),
+      timestamp: String(l1Ts),
+      nonce: l1Nonce ? String(l1Nonce) : undefined,
+    })
+    setUserCreds(addr, creds)
   }
   
   try {
     const orders = await getOrders(
-      address as string,
-      { apiKey: apiKey as string, secret: secret as string, passphrase: passphrase as string }
+      addr,
+      creds
     )
     res.json({ orders })
   } catch (error) {
@@ -191,14 +225,28 @@ router.get('/', queryLimiter, async (req: Request, res: Response) => {
  */
 router.delete('/:id', orderLimiter, async (req: Request, res: Response) => {
   const { id } = req.params
-  const { apiKey, secret, passphrase, address } = req.body
+  const { address, l1Auth } = req.body
   
-  if (!apiKey || !secret || !passphrase) {
-    return res.status(401).json({ error: 'API credentials required' })
+  if (!address) {
+    return res.status(400).json({ error: 'address is required' })
+  }
+
+  let creds: UserCreds | undefined = getUserCreds(String(address))
+  if (!creds) {
+    if (!l1Auth?.signature || !l1Auth?.timestamp) {
+      return res.status(401).json({ error: 'Missing auth. Provide l1Auth.signature and l1Auth.timestamp.' })
+    }
+    creds = await deriveOrCreateApiKey({
+      address: String(address),
+      signature: String(l1Auth.signature),
+      timestamp: String(l1Auth.timestamp),
+      nonce: l1Auth.nonce !== undefined ? String(l1Auth.nonce) : undefined,
+    })
+    setUserCreds(String(address), creds)
   }
   
   try {
-    const result = await cancelOrder(id, { apiKey, secret, passphrase })
+    const result = await cancelOrder(id, creds)
     
     // Invalidate order cache
     if (address) {

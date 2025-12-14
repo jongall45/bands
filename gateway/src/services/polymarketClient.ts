@@ -3,6 +3,7 @@ import { config } from '../config/index.js'
 import { logger, logPolymarketCall } from '../utils/logger.js'
 import { getOrFetch } from './cache.js'
 import { buildHmacSignature } from '@polymarket/builder-signing-sdk'
+import type { UserCreds } from './userCredsStore.js'
 
 /**
  * Polymarket Client Service
@@ -25,6 +26,73 @@ function getBaseHeaders(): Record<string, string> {
     'Accept-Language': 'en-US,en;q=0.9',
     'Connection': 'keep-alive',
   }
+}
+
+// ============================================
+// L1 AUTH (derive/create L2 API key)
+// ============================================
+
+export interface L1AuthPayload {
+  address: string
+  signature: string
+  timestamp: string
+  nonce?: string
+}
+
+/**
+ * Derive (or create) Polymarket L2 API credentials using L1 auth.
+ *
+ * Browser supplies only the L1 signature payload; gateway stores the returned
+ * apiKey/secret/passphrase server-side.
+ */
+export async function deriveOrCreateApiKey(l1: L1AuthPayload): Promise<UserCreds> {
+  const headers: Record<string, string> = {
+    ...getBaseHeaders(),
+    'Content-Type': 'application/json',
+    'POLY_ADDRESS': l1.address,
+    'POLY_SIGNATURE': l1.signature,
+    'POLY_TIMESTAMP': l1.timestamp,
+  }
+  if (l1.nonce !== undefined) headers['POLY_NONCE'] = l1.nonce
+
+  // First try derive
+  const deriveStart = Date.now()
+  const deriveRes = await fetch(`${config.clobApi}/auth/derive-api-key`, {
+    method: 'GET',
+    headers,
+    signal: AbortSignal.timeout(config.request.timeout),
+  })
+  const deriveText = await deriveRes.text()
+  logPolymarketCall('/auth/derive-api-key', 'GET', Date.now() - deriveStart, deriveRes.ok, { status: deriveRes.status })
+
+  if (deriveRes.ok) {
+    const data = JSON.parse(deriveText) as UserCreds
+    return data
+  }
+
+  // If derive fails, try create
+  logger.warn(`derive-api-key failed (${deriveRes.status}); attempting api-key create`)
+  const createStart = Date.now()
+  const createRes = await fetch(`${config.clobApi}/auth/api-key`, {
+    method: 'POST',
+    headers,
+    signal: AbortSignal.timeout(config.request.timeout),
+  })
+  const createText = await createRes.text()
+  logPolymarketCall('/auth/api-key', 'POST', Date.now() - createStart, createRes.ok, { status: createRes.status })
+
+  if (!createRes.ok) {
+    let err = `HTTP ${createRes.status}`
+    try {
+      const parsed = JSON.parse(createText)
+      err = parsed.message || parsed.error || err
+    } catch {
+      err = createText || err
+    }
+    throw new Error(err)
+  }
+
+  return JSON.parse(createText) as UserCreds
 }
 
 // Create HMAC signature for user API auth
@@ -75,7 +143,7 @@ async function makeRequest<T>(
   path: string,
   options?: {
     body?: unknown
-    userCreds?: { apiKey: string; secret: string; passphrase: string }
+    userCreds?: UserCreds
     userAddress?: string
   }
 ): Promise<T> {
@@ -222,7 +290,7 @@ export async function getPositions(walletAddress: string): Promise<unknown[]> {
  */
 export async function getOrders(
   walletAddress: string,
-  userCreds: { apiKey: string; secret: string; passphrase: string }
+  userCreds: UserCreds
 ): Promise<unknown[]> {
   return getOrFetch('orders', `orders:${walletAddress}`, async () => {
     return makeRequest<unknown[]>(
@@ -242,7 +310,7 @@ export async function submitOrder(
   signedOrder: unknown,
   owner: string,
   orderType: string,
-  userCreds: { apiKey: string; secret: string; passphrase: string }
+  userCreds: UserCreds
 ): Promise<unknown> {
   logger.info(`Submitting order to Polymarket: owner=${owner} orderType=${orderType}`)
   
@@ -265,7 +333,7 @@ export async function submitOrder(
  */
 export async function cancelOrder(
   orderId: string,
-  userCreds: { apiKey: string; secret: string; passphrase: string }
+  userCreds: UserCreds
 ): Promise<unknown> {
   logger.info(`Cancelling order: ${orderId}`)
   

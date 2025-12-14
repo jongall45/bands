@@ -99,7 +99,7 @@ export default function FundPage() {
                 <h1 className="text-white text-lg font-semibold">Deposit USDC</h1>
                 <p className="text-white/40 text-xs">On Base network</p>
               </div>
-            </div>
+          </div>
 
             {/* Option 1: Apple Pay */}
             <button
@@ -112,7 +112,7 @@ export default function FundPage() {
                   <span className="px-1.5 py-0.5 bg-[#5856D6] text-white text-[10px] font-semibold rounded">New</span>
                 </div>
                 <p className="text-white/40 text-sm">Buy USDC instantly with card</p>
-              </div>
+                </div>
               <div className="bg-white rounded-lg px-3 py-2">
                 <ApplePayMark className="h-5" />
               </div>
@@ -121,7 +121,7 @@ export default function FundPage() {
             {/* Option 2: Crypto / External Wallet */}
             <div className="p-4 bg-white/[0.03] border border-white/[0.06] rounded-xl">
               <div className="flex items-center justify-between mb-4">
-                <div>
+                    <div>
                   <span className="text-white font-medium">Crypto</span>
                   <p className="text-white/40 text-sm">Receive USDC from a wallet</p>
                 </div>
@@ -149,22 +149,22 @@ export default function FundPage() {
                   <p className="text-white/30 text-[10px] font-medium mb-0.5">USDC on Base only</p>
                   <p className="font-mono text-[11px] text-white/60 truncate">{address}</p>
                 </div>
-                <button
-                  onClick={copyAddress}
+              <button
+                onClick={copyAddress}
                   className="flex items-center gap-1 px-2.5 py-1.5 bg-white/[0.08] hover:bg-white/[0.12] rounded-lg transition-colors flex-shrink-0"
-                >
-                  {copied ? (
-                    <>
+              >
+                {copied ? (
+                  <>
                       <Check className="w-3 h-3 text-emerald-400" />
                       <span className="text-emerald-400 text-xs font-medium">Copied</span>
-                    </>
-                  ) : (
-                    <>
+                  </>
+                ) : (
+                  <>
                       <Copy className="w-3 h-3 text-white/50" />
                       <span className="text-white/50 text-xs font-medium">Copy</span>
-                    </>
-                  )}
-                </button>
+                  </>
+                )}
+              </button>
               </div>
             </div>
 

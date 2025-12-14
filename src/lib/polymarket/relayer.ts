@@ -262,11 +262,7 @@ export interface TradingSession {
   safeAddress: string
   safeDeployed: boolean
   approvalsSet: boolean
-  userApiCreds?: {
-    key: string
-    secret: string
-    passphrase: string
-  }
+  // NOTE: userApiCreds removed - credentials stored server-side in gateway
   createdAt: number
 }
 

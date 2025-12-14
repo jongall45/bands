@@ -280,10 +280,10 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <main className="dashboard-main">
-
+        
         {/* Balance Card */}
         <div className="card">
-          
+
           {/* Add Money Button - Top Right */}
           <div className="flex justify-end mb-2">
             <Link 

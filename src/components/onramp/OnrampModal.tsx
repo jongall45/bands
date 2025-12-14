@@ -192,16 +192,16 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
               <h2 className="text-white/90 font-semibold text-[17px]">
                 {step === 'success' ? '' : 'Add Money'}
               </h2>
-            </div>
-            {step !== 'success' && step !== 'processing' && (
-              <button 
-                onClick={onClose}
-                className="p-2 -mr-2 text-white/30 hover:text-white/50 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            )}
           </div>
+            {step !== 'success' && step !== 'processing' && (
+          <button 
+            onClick={onClose}
+                className="p-2 -mr-2 text-white/30 hover:text-white/50 transition-colors"
+          >
+                <X className="w-5 h-5" />
+          </button>
+            )}
+        </div>
 
           {/* Step: Amount Entry */}
           {step === 'amount' && (
@@ -233,9 +233,9 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
                 transition-opacity duration-200
                 ${isTyping ? 'opacity-40' : 'opacity-100'}
               `}>
-                {PRESET_AMOUNTS.map((preset) => (
-                  <button
-                    key={preset}
+            {PRESET_AMOUNTS.map((preset) => (
+              <button
+                key={preset}
                     onClick={() => handlePresetSelect(preset)}
                     className={`
                       py-3 rounded-xl text-sm font-semibold
@@ -245,11 +245,11 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
                         : 'bg-white/[0.06] text-white/70 hover:bg-white/[0.1] active:bg-white/[0.12]'
                       }
                     `}
-                  >
-                    ${preset}
-                  </button>
-                ))}
-              </div>
+              >
+                ${preset}
+              </button>
+            ))}
+          </div>
 
               {/* Error */}
               {error && (
@@ -307,8 +307,8 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
                         <span>Delivered instantly</span>
                       </div>
                     </div>
-                  </div>
-                </div>
+          </div>
+        </div>
               )}
             </div>
           )}
@@ -327,16 +327,16 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
                   <div className="flex justify-between text-sm">
                     <span className="text-white/50">Amount</span>
                     <span className="text-white">${amountNum.toFixed(2)}</span>
-                  </div>
+            </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-white/50">Fee</span>
                     <span className="text-white/70">-${fee.toFixed(2)}</span>
-                  </div>
+            </div>
                   <div className="flex justify-between text-sm font-medium pt-2 border-t border-white/[0.06]">
                     <span className="text-white/70">You&apos;ll receive</span>
                     <span className="text-white">~{receiveAmount.toFixed(2)} <span className="text-[#ef4444]">USDC</span></span>
-                  </div>
-                </div>
+          </div>
+        </div>
 
                 {/* Instant badge */}
                 <div className="flex items-center justify-center gap-1.5 mt-4 py-2 bg-emerald-500/10 rounded-lg">
@@ -383,8 +383,8 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
                 <div className="w-12 h-12 border-2 border-white/10 border-t-[#ef4444] rounded-full animate-spin mb-4" />
                 <p className="text-white/60 text-sm">Preparing checkout...</p>
               </div>
-            </div>
-          )}
+          </div>
+        )}
 
           {/* Step: Checkout (Crossmint Embedded) */}
           {step === 'checkout' && orderId && clientSecret && CLIENT_API_KEY && (
@@ -411,8 +411,8 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
               >
                 I&apos;ve completed payment
               </button>
-            </div>
-          )}
+          </div>
+        )}
 
           {/* Step: Success - Optimistic */}
           {step === 'success' && (

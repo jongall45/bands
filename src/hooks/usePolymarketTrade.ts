@@ -23,8 +23,7 @@ import { polygon } from 'viem/chains'
 import { useQuery } from '@tanstack/react-query'
 import { ethers } from 'ethers'
 import { ClobClient, Side, OrderType } from '@polymarket/clob-client'
-import { RelayClient, RelayerTxType } from '@polymarket/builder-relayer-client'
-import { BuilderConfig } from '@polymarket/builder-signing-sdk'
+import { getMarketStats as getGatewayMarketStats, submitOrder as submitGatewayOrder, getPositions as getGatewayPositions } from '@/lib/gateway/client'
 
 import {
   POLYGON_USDC,
@@ -35,9 +34,7 @@ import {
   USDC_ABI,
   ERC1155_ABI,
   POLYGON_CHAIN_ID,
-  BUILDER_RELAYER_API,
   CLOB_SIGNATURE_TYPES,
-  CLOB_API,
 } from '@/lib/polymarket/constants'
 import { estimateTrade } from '@/lib/polymarket/trading'
 import type { TradeExecutionState, TradeEstimate } from '@/lib/polymarket/types'
@@ -104,6 +101,45 @@ async function getEthersSigner(privyWallet: any): Promise<ethers.providers.JsonR
 }
 
 // ============================================
+// HELPER: Sign CLOB L1 Auth (EIP-712)
+// ============================================
+
+const CLOB_AUTH_DOMAIN = {
+  name: 'ClobAuthDomain',
+  version: '1',
+  chainId: 137, // Polygon mainnet
+} as const
+
+const CLOB_AUTH_TYPES = {
+  ClobAuth: [
+    { name: 'address', type: 'address' },
+    { name: 'timestamp', type: 'string' },
+    { name: 'nonce', type: 'uint256' },
+    { name: 'message', type: 'string' },
+  ],
+} as const
+
+const CLOB_AUTH_MESSAGE = 'This message attests that I control the given wallet'
+
+async function signClobAuth(
+  signer: ethers.providers.JsonRpcSigner,
+  address: string
+): Promise<{ address: string; signature: string; timestamp: string; nonce: string }> {
+  const timestamp = Date.now().toString()
+  const nonce = '0'
+  const value = {
+    address,
+    timestamp,
+    nonce,
+    message: CLOB_AUTH_MESSAGE,
+  }
+
+  // ethers v5 signer supports _signTypedData
+  const signature = await (signer as any)._signTypedData(CLOB_AUTH_DOMAIN, CLOB_AUTH_TYPES, value)
+  return { address, signature, timestamp, nonce }
+}
+
+// ============================================
 // HELPER: Get Viem WalletClient from Privy
 // ============================================
 
@@ -135,7 +171,6 @@ export function usePolymarketTrade({
   const [usdcBalance, setUsdcBalance] = useState('0')
   const [hasAllApprovals, setHasAllApprovals] = useState(false)
   const [session, setSession] = useState<TradingSession | null>(null)
-  const [relayClient, setRelayClient] = useState<RelayClient | null>(null)
   const [clobClient, setClobClient] = useState<ClobClient | null>(null)
 
   // Get the Privy embedded wallet (EOA)
@@ -166,17 +201,23 @@ export function usePolymarketTrade({
       if (!parsedMarket.yesTokenId || !parsedMarket.noTokenId) return
       
       try {
+        const marketId =
+          (market as any).conditionId ||
+          (market as any).id ||
+          (parsedMarket as any).conditionId ||
+          'unknown'
+
         const [yesBook, noBook] = await Promise.all([
-          fetch(`https://clob.polymarket.com/book?token_id=${parsedMarket.yesTokenId}`).then(r => r.json()),
-          fetch(`https://clob.polymarket.com/book?token_id=${parsedMarket.noTokenId}`).then(r => r.json()),
+          getGatewayMarketStats(marketId, parsedMarket.yesTokenId),
+          getGatewayMarketStats(marketId, parsedMarket.noTokenId),
         ])
         
-        const yesBid = yesBook.bids?.[0]?.price ? parseFloat(yesBook.bids[0].price) : 0
-        const yesAsk = yesBook.asks?.[0]?.price ? parseFloat(yesBook.asks[0].price) : 1
+        const yesBid = (yesBook as any).bids?.[0]?.price ? parseFloat((yesBook as any).bids[0].price) : 0
+        const yesAsk = (yesBook as any).asks?.[0]?.price ? parseFloat((yesBook as any).asks[0].price) : 1
         const yesMid = (yesBid + yesAsk) / 2
         
-        const noBid = noBook.bids?.[0]?.price ? parseFloat(noBook.bids[0].price) : 0
-        const noAsk = noBook.asks?.[0]?.price ? parseFloat(noBook.asks[0].price) : 1
+        const noBid = (noBook as any).bids?.[0]?.price ? parseFloat((noBook as any).bids[0].price) : 0
+        const noAsk = (noBook as any).asks?.[0]?.price ? parseFloat((noBook as any).asks[0].price) : 1
         const noMid = (noBid + noAsk) / 2
         
         setLivePrices({ yesPrice: yesMid, noPrice: noMid })
@@ -189,7 +230,7 @@ export function usePolymarketTrade({
     fetchLivePrices()
     const interval = setInterval(fetchLivePrices, 5000) // Refresh every 5s
     return () => clearInterval(interval)
-  }, [parsedMarket.yesTokenId, parsedMarket.noTokenId])
+  }, [market, parsedMarket.yesTokenId, parsedMarket.noTokenId])
   
   // Use live prices if available, otherwise fall back to Gamma prices
   const yesPrice = livePrices?.yesPrice ?? parsedMarket.yesPrice
@@ -214,62 +255,30 @@ export function usePolymarketTrade({
   // ============================================
   
   useEffect(() => {
-    const recreateClobClient = async () => {
-      // Only recreate if we have a session with credentials but no clobClient
-      if (session?.userApiCreds && !clobClient && embeddedWallet) {
-        // Validate credentials are complete
-        const creds = session.userApiCreds
-        if (!creds.key || !creds.secret || !creds.passphrase) {
-          console.warn('⚠️ Saved session has incomplete credentials:', {
-            hasKey: !!creds.key,
-            hasSecret: !!creds.secret,
-            hasPassphrase: !!creds.passphrase,
-          })
-          // Clear invalid session and require re-initialization
-          clearTradingSession()
-          setSession(null)
-          return
-        }
-        
-        console.log('🔄 Recreating ClobClient from saved session...')
-        console.log('   Safe address:', session.safeAddress)
-        console.log('   API Key:', creds.key?.substring(0, 8) + '...')
-        
-        try {
-          const ethersSigner = await getEthersSigner(embeddedWallet)
-          const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
+    const ensureSigningClient = async () => {
+      // We only use ClobClient locally for order signing (no network calls).
+      if (clobClient || !embeddedWallet) return
+      if (!safeAddress) return
 
-          const builderConfig = new BuilderConfig({
-            remoteBuilderConfig: {
-              url: `${baseUrl}/api/polymarket/sign`,
-            },
-          })
-          
-          // Use direct CLOB API - it has CORS headers for authenticated requests
-          const client = new ClobClient(
-            CLOB_API,
-            POLYGON_CHAIN_ID,
-            ethersSigner,
-            creds,
-            CLOB_SIGNATURE_TYPES.POLY_GNOSIS_SAFE,
-            session.safeAddress,
-            undefined,
-            false,
-            builderConfig
-          )
-          setClobClient(client)
-          console.log('✅ ClobClient recreated from saved session')
-        } catch (err) {
-          console.error('Failed to recreate ClobClient:', err)
-          // Clear session on failure to allow fresh initialization
-          clearTradingSession()
-          setSession(null)
-        }
+      try {
+        const ethersSigner = await getEthersSigner(embeddedWallet)
+        const client = new ClobClient(
+          // Intentionally NOT Polymarket host; we never do network calls from the browser.
+          'http://localhost',
+          POLYGON_CHAIN_ID,
+          ethersSigner,
+          undefined,
+          CLOB_SIGNATURE_TYPES.POLY_GNOSIS_SAFE,
+          safeAddress
+        )
+        setClobClient(client)
+      } catch (err) {
+        console.error('Failed to create local order signer:', err)
       }
     }
-    
-    recreateClobClient()
-  }, [session, clobClient, embeddedWallet])
+
+    ensureSigningClient()
+  }, [clobClient, embeddedWallet, safeAddress])
 
   // Track if we've attempted auto-initialization
   const [hasAttemptedInit, setHasAttemptedInit] = useState(false)
@@ -332,214 +341,41 @@ export function usePolymarketTrade({
       return false
     }
 
-    setState({ status: 'preparing', message: 'Initializing Polymarket connection...' })
+    setState({ status: 'preparing', message: 'Preparing trading session...' })
 
     try {
-      // Step 1: Get ethers signer from Privy embedded wallet
-      console.log('🔐 Getting signer from Privy embedded wallet...')
-      const ethersSigner = await getEthersSigner(embeddedWallet)
+      // IMPORTANT: per your constraints, the browser must never call Polymarket directly.
+      // So we do NOT:
+      // - call CLOB APIs
+      // - call Polymarket relayer
+      // - derive/create Polymarket API keys client-side
 
-      // Step 2: Initialize BuilderConfig with remote signing
-      // BuilderConfig requires absolute URL, so we construct it from window.location.origin
-      console.log('🔧 Initializing builder config...')
-      const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
-      const builderConfig = new BuilderConfig({
-        remoteBuilderConfig: {
-          url: `${baseUrl}/api/polymarket/sign`,
-        },
-      })
+      const existing = loadTradingSession(eoaAddress)
+      const derivedSafeAddress = existing?.safeAddress || eoaAddress
 
-      // Step 3: Initialize RelayClient
-      console.log('🔧 Initializing RelayClient...')
-      const relay = new RelayClient(
-        BUILDER_RELAYER_API,
-        POLYGON_CHAIN_ID,
-        ethersSigner,
-        builderConfig,
-        RelayerTxType.SAFE
-      )
-      setRelayClient(relay)
-
-      // Step 4: Check if Safe is deployed
-      console.log('🔍 Checking Safe deployment status...')
-      let derivedSafeAddress: string
-      let isDeployed = false
-
-      try {
-        // Try to derive the Safe address
-        const { deriveSafe } = await import('@polymarket/builder-relayer-client/dist/builder/derive')
-        const { getContractConfig } = await import('@polymarket/builder-relayer-client/dist/config')
-        
-        const config = getContractConfig(POLYGON_CHAIN_ID)
-        derivedSafeAddress = deriveSafe(eoaAddress, config.SafeContracts.SafeFactory)
-        console.log('📍 Derived Safe address:', derivedSafeAddress)
-
-        // Check if deployed
-        isDeployed = await relay.getDeployed(derivedSafeAddress)
-        console.log('📍 Safe deployed:', isDeployed)
-      } catch (deriveError) {
-        console.warn('Could not derive Safe address, using EOA:', deriveError)
-        derivedSafeAddress = eoaAddress
-      }
-
-      // Step 5: Deploy Safe if needed
-      if (!isDeployed) {
-        setState({ status: 'preparing', message: 'Deploying Safe wallet...' })
-        console.log('🚀 Deploying Safe wallet...')
-        
-        try {
-          const deployResponse = await relay.deploy()
-          const deployResult = await deployResponse.wait()
-          
-          if (deployResult?.proxyAddress) {
-            derivedSafeAddress = deployResult.proxyAddress
-            console.log('✅ Safe deployed at:', derivedSafeAddress)
-          }
-          isDeployed = true
-        } catch (deployError: any) {
-          // If deployment fails with 409, Safe already exists
-          if (deployError?.message?.includes('409') || deployError?.response?.status === 409) {
-            console.log('ℹ️ Safe already exists')
-            isDeployed = true
-          } else {
-            console.warn('Safe deployment failed (continuing anyway):', deployError)
-            // Continue with EOA address
-            derivedSafeAddress = eoaAddress
-          }
-        }
-      }
-
-      // Step 6: Get User API Credentials
-      setState({ status: 'signing', message: 'Sign to connect to Polymarket...' })
-      console.log('🔐 Getting user API credentials for Safe:', derivedSafeAddress)
-
-      // Create temporary ClobClient for credential derivation
-      // IMPORTANT: Must include signatureType=2 and Safe address for Gnosis Safe flow
-      const tempClobClient = new ClobClient(
-        CLOB_API,
-        POLYGON_CHAIN_ID,
-        ethersSigner,
-        undefined, // No creds yet
-        CLOB_SIGNATURE_TYPES.POLY_GNOSIS_SAFE, // signatureType = 2 (EOA signs for Safe)
-        derivedSafeAddress // Safe address as funder
-      )
-
-      let userCreds: { key: string; secret: string; passphrase: string }
-      
-      try {
-        // Try to derive existing credentials first
-        console.log('📋 Trying to derive existing credentials for Safe...')
-        const derivedCreds = await tempClobClient.deriveApiKey() as any
-        
-        if ((derivedCreds?.apiKey || derivedCreds?.key) && derivedCreds?.secret && derivedCreds?.passphrase) {
-          userCreds = {
-            key: derivedCreds.apiKey || derivedCreds.key,
-            secret: derivedCreds.secret,
-            passphrase: derivedCreds.passphrase,
-          }
-          console.log('✅ Derived existing credentials')
-        } else {
-          throw new Error('No credentials derived')
-        }
-      } catch (deriveError) {
-        // Create new credentials
-        console.log('📋 Creating new API credentials for Safe...')
-        try {
-          const newCreds = await tempClobClient.createApiKey() as any
-          userCreds = {
-            key: newCreds.apiKey || newCreds.key,
-            secret: newCreds.secret,
-            passphrase: newCreds.passphrase,
-          }
-          console.log('✅ Created new credentials')
-        } catch (createError) {
-          // Try createOrDeriveApiKey as fallback
-          console.log('📋 Trying createOrDeriveApiKey for Safe...')
-          const creds = await tempClobClient.createOrDeriveApiKey() as any
-          userCreds = {
-            key: creds.apiKey || creds.key,
-            secret: creds.secret,
-            passphrase: creds.passphrase,
-          }
-          console.log('✅ Got credentials via createOrDeriveApiKey')
-        }
-      }
-
-      // Step 7: Set token approvals if needed
-      console.log('🔍 Checking if approvals are needed...')
       const approvalStatus = await checkAllApprovals(
         derivedSafeAddress as `0x${string}`,
         publicClient
       )
-      console.log('📋 Approval status:', approvalStatus)
 
-      if (!approvalStatus.allApproved) {
-        setState({ status: 'approving', message: 'Setting token approvals...' })
-        console.log('🔐 Setting token approvals via Builder Relayer...')
-        
-        const approvalTxs = createAllApprovalTxs()
-        console.log('📝 Approval transactions:', approvalTxs.length, 'txs')
-        
-        try {
-          // Add timeout for approval execution (60 seconds)
-          const approvalPromise = (async () => {
-            const approvalResponse = await relay.execute(approvalTxs, 'Set token approvals for trading')
-            return await approvalResponse.wait()
-          })()
-          
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Approval timeout after 60s')), 60000)
-          )
-          
-          const approvalResult = await Promise.race([approvalPromise, timeoutPromise]) as any
-          console.log('✅ Approvals set:', approvalResult?.transactionHash)
-        } catch (approvalError: any) {
-          console.warn('Approval failed:', approvalError?.message || approvalError)
-          // Continue anyway - user might already have approvals or can approve during trade
-          console.log('⚠️ Continuing without approvals - will set during first trade if needed')
-        }
-      } else {
-        console.log('✅ All approvals already set')
-      }
-
-      // Step 8: Initialize authenticated ClobClient
-      console.log('🔧 Initializing authenticated CLOB client...')
-      const authenticatedClobClient = new ClobClient(
-        CLOB_API,
-        POLYGON_CHAIN_ID,
-        ethersSigner,
-        userCreds,
-        CLOB_SIGNATURE_TYPES.POLY_GNOSIS_SAFE, // signatureType = 2 (EOA → Safe)
-        derivedSafeAddress, // funder address
-        undefined,
-        false,
-        builderConfig
-      )
-      setClobClient(authenticatedClobClient)
-
-      // Step 9: Save session
       const newSession: TradingSession = {
         eoaAddress,
         safeAddress: derivedSafeAddress,
-        safeDeployed: isDeployed,
-        approvalsSet: true,
-        userApiCreds: userCreds,
+        safeDeployed: Boolean(existing?.safeDeployed),
+        approvalsSet: approvalStatus.allApproved,
         createdAt: Date.now(),
       }
+
       saveTradingSession(newSession)
       setSession(newSession)
 
-      console.log('✅ Polymarket trading session initialized')
-      setState({ status: 'idle' })
-      
-      // Refresh balances
       await fetchBalancesAndAllowances()
-      
+      setState({ status: 'idle' })
       return true
     } catch (error: any) {
       console.error('Failed to initialize trading session:', error)
-      setState({ status: 'error', error: error.message || 'Failed to connect to Polymarket' })
-      onError?.(error.message || 'Failed to connect')
+      setState({ status: 'error', error: error.message || 'Failed to prepare session' })
+      onError?.(error.message || 'Failed to prepare session')
       return false
     }
   }, [embeddedWallet, eoaAddress, publicClient, fetchBalancesAndAllowances, onError])
@@ -620,40 +456,23 @@ export function usePolymarketTrade({
       
       console.log('✅ Order signed locally:', signedOrder)
       
-      // Step 2: Post the signed order through gateway (avoids browser CORS)
-      // The gateway handles L2 HMAC authentication with a stable IP
+      // Step 2: Post the signed order via the gateway ONLY (no browser → Polymarket traffic)
       console.log('📤 Posting order via gateway...')
-      
-      // Use dedicated gateway if configured, otherwise fall back to local API
-      const gatewayUrl = process.env.NEXT_PUBLIC_GATEWAY_URL
-      const orderEndpoint = gatewayUrl 
-        ? `${gatewayUrl}/api/order`
-        : `${typeof window !== 'undefined' ? window.location.origin : ''}/api/polymarket/order`
-      
-      console.log('   Gateway endpoint:', orderEndpoint)
-      
-      // Convert API creds to the format expected by the gateway
-      const userCreds = session?.userApiCreds ? {
-        apiKey: session.userApiCreds.key,
-        secret: session.userApiCreds.secret,
-        passphrase: session.userApiCreds.passphrase,
-      } : undefined
-      
-      const proxyResponse = await fetch(orderEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: gatewayUrl ? 'include' : 'same-origin',
-        body: JSON.stringify({
-          order: signedOrder,
-          owner: session?.safeAddress,
-          orderType: 'GTC',
-          userCreds,
-        }),
+
+      if (!embeddedWallet || !eoaAddress) {
+        throw new Error('Wallet not available')
+      }
+
+      const signer = await getEthersSigner(embeddedWallet)
+      const l1Auth = await signClobAuth(signer, eoaAddress)
+
+      const orderResponse = await submitGatewayOrder({
+        order: signedOrder as any,
+        owner: session?.safeAddress || eoaAddress,
+        orderType: 'GTC',
+        l1Auth,
       })
-      
-      const orderResponse = await proxyResponse.json()
+
       console.log('📦 Gateway response:', orderResponse)
       
       console.log('✅ Order response:', orderResponse)
@@ -669,13 +488,14 @@ export function usePolymarketTrade({
       }
 
       // Check for successful order
-      if (orderResponse?.orderID) {
+      const returnedOrderId = (orderResponse as any)?.orderID || (orderResponse as any)?.orderId
+      if (returnedOrderId) {
         setState({ 
           status: 'success', 
           message: 'Trade successful!',
-          orderId: orderResponse.orderID,
+          orderId: returnedOrderId,
         })
-        onSuccess?.(orderResponse.orderID)
+        onSuccess?.(returnedOrderId)
         setTimeout(fetchBalancesAndAllowances, 2000)
       } else if (orderResponse?.success === true) {
         setState({ 
@@ -797,12 +617,12 @@ export function usePolymarketPositions() {
     queryFn: async () => {
       if (!safeAddress) return []
       
-      // Fetch positions from our API
-      const response = await fetch(`/api/polymarket/positions?address=${safeAddress}`)
-      if (!response.ok) return []
-      
-      const data = await response.json()
-      return data.positions || []
+      // Fetch positions via gateway (no browser → Polymarket calls)
+      try {
+        return await getGatewayPositions(safeAddress)
+      } catch {
+        return []
+      }
     },
     enabled: !!safeAddress,
     staleTime: 30000,
@@ -929,6 +749,8 @@ export function usePolymarketSetup() {
   }, [eoaAddress])
 
   // Initialize session function
+  // NOTE: Per architecture constraints, browser never calls Polymarket directly.
+  // Credentials are derived server-side via gateway when orders are submitted.
   const initializeSession = useCallback(async (): Promise<boolean> => {
     if (!embeddedWallet || !eoaAddress) {
       console.error('No embedded wallet connected')
@@ -943,157 +765,26 @@ export function usePolymarketSetup() {
       return true
     }
 
-    setSetupState({ status: 'initializing', message: 'Setting up Polymarket...' })
+    setSetupState({ status: 'initializing', message: 'Preparing trading session...' })
 
     try {
-      
-      // Step 1: Get ethers signer from Privy embedded wallet
-      console.log('🔐 Getting signer from Privy embedded wallet...')
-      const ethersSigner = await getEthersSigner(embeddedWallet)
-
-      // Step 2: Initialize BuilderConfig with remote signing
-      const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
-      const builderConfig = new BuilderConfig({
-        remoteBuilderConfig: {
-          url: `${baseUrl}/api/polymarket/sign`,
-        },
-      })
-
-      // Step 3: Initialize RelayClient
-      setSetupState({ status: 'initializing', message: 'Connecting to Polymarket...' })
-      const relay = new RelayClient(
-        BUILDER_RELAYER_API,
-        POLYGON_CHAIN_ID,
-        ethersSigner,
-        builderConfig,
-        RelayerTxType.SAFE
-      )
-
-      // Step 4: Derive Safe address
-      let derivedSafeAddress: string = eoaAddress
-      let isDeployed = false
-
-      try {
-        const { deriveSafe } = await import('@polymarket/builder-relayer-client/dist/builder/derive')
-        const { getContractConfig } = await import('@polymarket/builder-relayer-client/dist/config')
-        
-        const config = getContractConfig(POLYGON_CHAIN_ID)
-        derivedSafeAddress = deriveSafe(eoaAddress, config.SafeContracts.SafeFactory)
-        console.log('📍 Derived Safe address:', derivedSafeAddress)
-
-        // Check if deployed
-        isDeployed = await relay.getDeployed(derivedSafeAddress)
-        console.log('📍 Safe deployed:', isDeployed)
-      } catch (deriveError: any) {
-        console.warn('Could not derive Safe address, using EOA:', deriveError)
-      }
-
-      // Step 5: Deploy Safe if needed
-      if (!isDeployed) {
-        setSetupState({ status: 'initializing', message: 'Creating your trading wallet...' })
-        console.log('🚀 Deploying Safe wallet...')
-        
-        try {
-          // Add timeout to deploy call (30 seconds)
-          const deployPromise = relay.deploy()
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Deploy timeout after 30s')), 30000)
-          )
-          
-          
-          const deployResponse = await Promise.race([deployPromise, timeoutPromise]) as any
-          
-          
-          const deployResult = await deployResponse.wait()
-          
-          
-          if (deployResult?.proxyAddress) {
-            derivedSafeAddress = deployResult.proxyAddress
-            console.log('✅ Safe deployed at:', derivedSafeAddress)
-          }
-          isDeployed = true
-        } catch (deployError: any) {
-          if (deployError?.message?.includes('409') || deployError?.response?.status === 409) {
-            console.log('ℹ️ Safe already exists')
-            isDeployed = true
-          } else if (deployError?.message?.includes('timeout')) {
-            // Timeout - skip deployment and continue, the safe might already exist
-            console.warn('Safe deployment timed out, continuing anyway')
-            isDeployed = true // Assume it might exist, we'll check later
-          } else {
-            console.warn('Safe deployment failed (continuing anyway):', deployError)
-            // Continue anyway - we can still try to use the derived address
-            isDeployed = true
-          }
-        }
-      }
-
-      // Step 6: Get User API Credentials
-      setSetupState({ status: 'initializing', message: 'Sign to connect...' })
-      console.log('🔐 Getting user API credentials for Safe:', derivedSafeAddress)
-
-      // IMPORTANT: Must include signatureType=2 and Safe address for Gnosis Safe flow
-      const tempClobClient = new ClobClient(
-        CLOB_API,
-        POLYGON_CHAIN_ID,
-        ethersSigner,
-        undefined, // No creds yet
-        CLOB_SIGNATURE_TYPES.POLY_GNOSIS_SAFE, // signatureType = 2 (EOA signs for Safe)
-        derivedSafeAddress // Safe address as funder
-      )
-
-      let userCreds: { key: string; secret: string; passphrase: string }
-
-      try {
-        const derivedCreds = await tempClobClient.deriveApiKey() as any
-        if ((derivedCreds?.apiKey || derivedCreds?.key) && derivedCreds?.secret && derivedCreds?.passphrase) {
-          userCreds = {
-            key: derivedCreds.apiKey || derivedCreds.key,
-            secret: derivedCreds.secret,
-            passphrase: derivedCreds.passphrase,
-          }
-          console.log('✅ Derived existing credentials')
-        } else {
-          throw new Error('No credentials derived')
-        }
-      } catch (deriveError: any) {
-        console.log('📋 Creating new API credentials...')
-        try {
-          const newCreds = await tempClobClient.createApiKey() as any
-          userCreds = {
-            key: newCreds.apiKey || newCreds.key,
-            secret: newCreds.secret,
-            passphrase: newCreds.passphrase,
-          }
-          console.log('✅ Created new credentials')
-        } catch (createError: any) {
-          const creds = await tempClobClient.createOrDeriveApiKey() as any
-          userCreds = {
-            key: creds.apiKey || creds.key,
-            secret: creds.secret,
-            passphrase: creds.passphrase,
-          }
-          console.log('✅ Got credentials via createOrDeriveApiKey')
-        }
-      }
-
-      // Step 7: Save session
+      // Simplified: Just create a session with EOA as Safe address
+      // Gateway will handle credential derivation on first order
       const newSession: TradingSession = {
         eoaAddress,
-        safeAddress: derivedSafeAddress,
-        safeDeployed: isDeployed,
-        approvalsSet: false, // Will set approvals lazily when needed
-        userApiCreds: userCreds,
+        safeAddress: eoaAddress, // Use EOA until Safe is deployed
+        safeDeployed: false,
+        approvalsSet: false,
         createdAt: Date.now(),
       }
       saveTradingSession(newSession)
       setSession(newSession)
       setSetupState({ status: 'ready' })
 
-      console.log('✅ Polymarket setup complete')
+      console.log('✅ Polymarket session ready')
       return true
     } catch (error: any) {
-      console.error('Failed to initialize Polymarket:', error)
+      console.error('Failed to initialize session:', error)
       setSetupState({ status: 'error', error: error.message || 'Setup failed' })
       return false
     }
