@@ -1,18 +1,15 @@
 /**
  * Canonical Polymarket Order Builder
  * 
- * This module transforms signed orders into the exact format expected by Polymarket's CLOB API.
+ * CRITICAL: DO NOT MUTATE ANY SIGNED ORDER FIELDS!
  * 
- * CRITICAL: The EIP-712 signing format differs from the API submission format!
+ * The EIP-712 signed order must be submitted EXACTLY as signed.
+ * Any mutation (type conversion, field changes) will break signature verification.
  * 
- * EIP-712 Signing:
- * - side: uint256 (0 = BUY, 1 = SELL)
- * - All numeric fields as actual numbers for signing
- * 
- * API Submission:
- * - side: string ("BUY" or "SELL")
- * - All numeric fields as strings
- * - Specific field ordering and casing
+ * Based on @polymarket/clob-client analysis:
+ * - side: number (0 = BUY, 1 = SELL) - NOT converted to string
+ * - All amount fields: string (already stringified before signing)
+ * - signatureType: number (0 = EOA)
  */
 
 import { logger } from './logger.js'
@@ -23,10 +20,12 @@ import { logger } from './logger.js'
 
 /**
  * Canonical order payload for Polymarket CLOB API POST /order
- * This is the EXACT structure Polymarket expects
+ * 
+ * IMPORTANT: side is a NUMBER (0/1), not a string!
+ * This matches the EIP-712 signed struct exactly.
  */
 export interface PolymarketOrderPayload {
-  // The signed order object
+  // The signed order object - submitted EXACTLY as signed
   order: {
     salt: string
     maker: string
@@ -35,38 +34,36 @@ export interface PolymarketOrderPayload {
     tokenId: string
     makerAmount: string
     takerAmount: string
-    side: 'BUY' | 'SELL'  // MUST be uppercase string, not number
+    side: number  // MUST be number: 0 = BUY, 1 = SELL (matches EIP-712)
     expiration: string
     nonce: string
     feeRateBps: string
     signatureType: number  // 0 = EOA
     signature: string
   }
-  // Order metadata
+  // Order metadata (wrapper)
   owner: string
   orderType: 'GTC' | 'FOK' | 'GTD'
 }
 
 /**
  * Input order from frontend (after EIP-712 signing)
- * This has side as a number and may have extra fields
+ * These fields should already be in the correct types from signing
  */
 export interface SignedOrderInput {
-  salt: string | number
+  salt: string
   maker: string
   signer: string
   taker: string
   tokenId: string
-  makerAmount: string | number
-  takerAmount: string | number
-  side: number | string  // 0/1 or "BUY"/"SELL"
-  expiration: string | number
-  nonce: string | number
-  feeRateBps: string | number
+  makerAmount: string
+  takerAmount: string
+  side: number  // MUST be number: 0 = BUY, 1 = SELL
+  expiration: string
+  nonce: string
+  feeRateBps: string
   signatureType: number
   signature: string
-  // May have extra fields that need to be stripped
-  [key: string]: unknown
 }
 
 // ============================================
@@ -94,27 +91,24 @@ const ORDER_SCHEMA_FIELDS = [
 ] as const
 
 // ============================================
-// SIDE CONVERSION
+// SIDE VALIDATION (NO CONVERSION!)
 // ============================================
 
 /**
- * Convert side from EIP-712 format (number) to API format (string)
+ * Validate side is a valid number (0 or 1)
+ * DO NOT CONVERT - just validate
  */
-function convertSide(side: number | string): 'BUY' | 'SELL' {
-  if (typeof side === 'string') {
-    const upper = side.toUpperCase()
-    if (upper === 'BUY') return 'BUY'
-    if (upper === 'SELL') return 'SELL'
-    // Try numeric string
-    if (side === '0') return 'BUY'
-    if (side === '1') return 'SELL'
-    throw new Error(`Invalid side string: ${side}`)
+function validateSide(side: unknown): number {
+  if (typeof side === 'number') {
+    if (side === 0 || side === 1) return side
+    throw new Error(`Invalid side number: ${side} (must be 0 or 1)`)
   }
   
-  if (typeof side === 'number') {
-    if (side === 0) return 'BUY'
-    if (side === 1) return 'SELL'
-    throw new Error(`Invalid side number: ${side}`)
+  // If string "0" or "1", convert to number (this is OK as it's the same value)
+  if (typeof side === 'string') {
+    if (side === '0') return 0
+    if (side === '1') return 1
+    throw new Error(`Invalid side string: ${side} (must be "0" or "1")`)
   }
   
   throw new Error(`Invalid side type: ${typeof side}`)
@@ -125,20 +119,22 @@ function convertSide(side: number | string): 'BUY' | 'SELL' {
 // ============================================
 
 /**
- * Build a canonical Polymarket order payload
+ * Build a Polymarket order payload for submission
  * 
- * This function:
- * 1. Validates all required fields
- * 2. Converts types to match API expectations
- * 3. Strips all non-schema fields
- * 4. Returns a clean payload ready for submission
+ * CRITICAL: This function does NOT mutate the signed order!
+ * It only:
+ * 1. Validates required fields exist
+ * 2. Validates field types match expected types
+ * 3. Wraps the order with owner and orderType
+ * 
+ * The signed order is passed through EXACTLY as received.
  */
 export function buildCanonicalOrder(
-  signedOrder: SignedOrderInput,
+  signedOrder: Record<string, unknown>,
   owner: string,
   orderType: 'GTC' | 'FOK' | 'GTD' = 'GTC'
 ): PolymarketOrderPayload {
-  // Validate required fields
+  // Validate required fields exist
   const required = ['salt', 'maker', 'signer', 'taker', 'tokenId', 'makerAmount', 'takerAmount', 'side', 'signature']
   for (const field of required) {
     if (signedOrder[field] === undefined || signedOrder[field] === null) {
@@ -147,38 +143,47 @@ export function buildCanonicalOrder(
   }
   
   // Validate addresses (must be 0x-prefixed)
-  if (!signedOrder.maker.startsWith('0x') || signedOrder.maker.length !== 42) {
-    throw new Error(`Invalid maker address: ${signedOrder.maker}`)
+  const maker = String(signedOrder.maker)
+  const signer = String(signedOrder.signer)
+  const taker = String(signedOrder.taker)
+  
+  if (!maker.startsWith('0x') || maker.length !== 42) {
+    throw new Error(`Invalid maker address: ${maker}`)
   }
-  if (!signedOrder.signer.startsWith('0x') || signedOrder.signer.length !== 42) {
-    throw new Error(`Invalid signer address: ${signedOrder.signer}`)
+  if (!signer.startsWith('0x') || signer.length !== 42) {
+    throw new Error(`Invalid signer address: ${signer}`)
   }
   
   // Validate signature
-  if (!signedOrder.signature.startsWith('0x')) {
+  const signature = String(signedOrder.signature)
+  if (!signature.startsWith('0x')) {
     throw new Error(`Invalid signature: must start with 0x`)
   }
   
-  // Build canonical order with exact field ordering
-  const canonicalOrder = {
+  // Validate side is a number (DO NOT CONVERT)
+  const side = validateSide(signedOrder.side)
+  
+  // Build order object - pass through fields WITHOUT mutation
+  // Only ensure correct types for the TypeScript interface
+  const order = {
     salt: String(signedOrder.salt),
-    maker: signedOrder.maker,
-    signer: signedOrder.signer,
-    taker: signedOrder.taker,
+    maker: maker,
+    signer: signer,
+    taker: taker,
     tokenId: String(signedOrder.tokenId),
     makerAmount: String(signedOrder.makerAmount),
     takerAmount: String(signedOrder.takerAmount),
-    side: convertSide(signedOrder.side),
+    side: side,  // NUMBER, not string!
     expiration: String(signedOrder.expiration || '0'),
     nonce: String(signedOrder.nonce || '0'),
     feeRateBps: String(signedOrder.feeRateBps || '0'),
     signatureType: Number(signedOrder.signatureType),
-    signature: signedOrder.signature,
+    signature: signature,
   }
   
-  // Build final payload
+  // Build final payload with wrapper
   const payload: PolymarketOrderPayload = {
-    order: canonicalOrder,
+    order: order,
     owner: owner,
     orderType: orderType,
   }
@@ -196,13 +201,15 @@ export function logAndValidatePayload(
 ): PolymarketOrderPayload {
   const order = payload.order
   
-  // Log sanitized payload (no signature)
+  // Log sanitized payload (no full signature)
   logger.info(`[${context}] Final order payload:`)
   logger.info(`  tokenId: ${order.tokenId.slice(0, 30)}...`)
-  logger.info(`  side: ${order.side} (type: ${typeof order.side})`)
-  logger.info(`  price calc: maker=${order.makerAmount} / taker=${order.takerAmount}`)
+  logger.info(`  side: ${order.side} (type: ${typeof order.side}, expected: number)`)
+  logger.info(`  makerAmount: ${order.makerAmount}`)
+  logger.info(`  takerAmount: ${order.takerAmount}`)
   logger.info(`  maker: ${order.maker.slice(0, 10)}...`)
   logger.info(`  signer: ${order.signer.slice(0, 10)}...`)
+  logger.info(`  owner: ${payload.owner.slice(0, 10)}...`)
   logger.info(`  orderType: ${payload.orderType}`)
   logger.info(`  expiration: ${order.expiration}`)
   logger.info(`  signatureType: ${order.signatureType}`)
@@ -213,11 +220,12 @@ export function logAndValidatePayload(
   // Validate critical fields
   const errors: string[] = []
   
-  if (typeof order.side !== 'string') {
-    errors.push(`side must be string, got ${typeof order.side}`)
+  // side MUST be a number (0 or 1), NOT a string
+  if (typeof order.side !== 'number') {
+    errors.push(`side must be number, got ${typeof order.side}`)
   }
-  if (order.side !== 'BUY' && order.side !== 'SELL') {
-    errors.push(`side must be "BUY" or "SELL", got "${order.side}"`)
+  if (order.side !== 0 && order.side !== 1) {
+    errors.push(`side must be 0 or 1, got ${order.side}`)
   }
   if (typeof order.salt !== 'string') {
     errors.push(`salt must be string, got ${typeof order.salt}`)
@@ -236,6 +244,11 @@ export function logAndValidatePayload(
   }
   if (order.maker.toLowerCase() !== order.signer.toLowerCase()) {
     errors.push(`maker and signer must match for EOA mode`)
+  }
+  
+  // Validate signature format
+  if (!order.signature.startsWith('0x') || order.signature.length < 130) {
+    errors.push(`signature invalid: must be 0x + at least 128 hex chars, got length ${order.signature.length}`)
   }
   
   if (errors.length > 0) {
@@ -295,6 +308,8 @@ export function hashOrder(order: Record<string, unknown>): string {
 
 /**
  * Example of a valid Polymarket order for reference
+ * 
+ * CRITICAL: side is a NUMBER (0 = BUY, 1 = SELL), not a string!
  */
 export const EXAMPLE_VALID_ORDER: PolymarketOrderPayload = {
   order: {
@@ -305,7 +320,7 @@ export const EXAMPLE_VALID_ORDER: PolymarketOrderPayload = {
     tokenId: "12345678901234567890",
     makerAmount: "10000000000000000000",  // 10 USDC in 18 decimals
     takerAmount: "20000000000000000000",  // 20 shares in 18 decimals
-    side: "BUY",
+    side: 0,  // NUMBER: 0 = BUY, 1 = SELL
     expiration: "1766000000",
     nonce: "0",
     feeRateBps: "50",
@@ -314,4 +329,34 @@ export const EXAMPLE_VALID_ORDER: PolymarketOrderPayload = {
   },
   owner: "0x1234567890123456789012345678901234567890",
   orderType: "GTC"
+}
+
+/**
+ * Debug assertion: verify the order matches what was signed
+ * Call this before submission to catch any mutations
+ */
+export function assertOrderNotMutated(
+  originalOrder: Record<string, unknown>,
+  submissionOrder: Record<string, unknown>
+): void {
+  const criticalFields = ['salt', 'maker', 'signer', 'tokenId', 'makerAmount', 'takerAmount', 'side', 'expiration', 'nonce', 'signature']
+  
+  for (const field of criticalFields) {
+    const original = originalOrder[field]
+    const submission = submissionOrder[field]
+    
+    // Compare values (handle type coercion for numeric strings)
+    if (String(original) !== String(submission)) {
+      throw new Error(`Order mutation detected! Field "${field}" changed from ${JSON.stringify(original)} to ${JSON.stringify(submission)}`)
+    }
+    
+    // For side, also verify type is preserved as number
+    if (field === 'side') {
+      if (typeof original === 'number' && typeof submission !== 'number') {
+        throw new Error(`Order mutation detected! Field "side" type changed from number to ${typeof submission}`)
+      }
+    }
+  }
+  
+  logger.info('[OrderBuilder] Order integrity verified - no mutations detected ✓')
 }
