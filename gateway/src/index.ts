@@ -11,6 +11,7 @@ import healthRoutes from './routes/health.js'
 import marketsRoutes from './routes/markets.js'
 import ordersRoutes from './routes/orders.js'
 import positionsRoutes from './routes/positions.js'
+import polymarketRoutes from './routes/polymarket.js'
 
 // Validate configuration on startup
 validateConfig()
@@ -61,6 +62,7 @@ app.use('/api/markets', marketsRoutes)
 app.use('/api/order', ordersRoutes)
 app.use('/api/orders', ordersRoutes)
 app.use('/api/positions', positionsRoutes)
+app.use('/api/polymarket', polymarketRoutes)
 
 // 404 handler
 app.use((req, res) => {

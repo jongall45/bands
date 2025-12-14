@@ -115,7 +115,12 @@ function createUserSignature(
 
 // Add builder headers for attribution
 function getBuilderHeaders(method: string, path: string, body: string): Record<string, string> {
-  if (!config.builderApiKey || !config.builderSecret || !config.builderPassphrase) {
+  const hasKey = !!config.builderApiKey
+  const hasSecret = !!config.builderSecret
+  const hasPass = !!config.builderPassphrase
+  
+  if (!hasKey || !hasSecret || !hasPass) {
+    logger.debug(`[Auth] Builder headers skipped: hasKey=${hasKey} hasSecret=${hasSecret} hasPass=${hasPass}`)
     return {}
   }
   
@@ -128,6 +133,8 @@ function getBuilderHeaders(method: string, path: string, body: string): Record<s
     body
   )
   
+  logger.debug(`[Auth] Builder headers added: keyLen=${config.builderApiKey.length} secretLen=${config.builderSecret.length} passLen=${config.builderPassphrase.length}`)
+  
   return {
     'POLY_BUILDER_API_KEY': config.builderApiKey,
     'POLY_BUILDER_SIGNATURE': signature,
@@ -137,7 +144,7 @@ function getBuilderHeaders(method: string, path: string, body: string): Record<s
 }
 
 // Make a request to Polymarket with retry logic
-async function makeRequest<T>(
+export async function makeRequest<T>(
   baseUrl: string,
   method: string,
   path: string,
@@ -188,7 +195,13 @@ async function makeRequest<T>(
       
       // Log outbound request
       const urlObj = new URL(url)
-      logger.debug(`[Polymarket] ${method} ${url} host=${urlObj.host} path=${path} hasBody=${!!bodyString}`)
+      const hasUserCreds = !!options?.userCreds
+      const hasBuilderCreds = !!config.builderApiKey && !!config.builderSecret && !!config.builderPassphrase
+      logger.debug(`[Polymarket] ${method} ${url} host=${urlObj.host} path=${path} hasBody=${!!bodyString} hasUserCreds=${hasUserCreds} hasBuilderCreds=${hasBuilderCreds}`)
+      
+      if (hasUserCreds && options.userCreds) {
+        logger.debug(`[Auth] User creds: keyLen=${options.userCreds.apiKey.length} secretLen=${options.userCreds.secret.length} passLen=${options.userCreds.passphrase.length}`)
+      }
       
       const response = await fetch(url, {
         method,
@@ -207,14 +220,13 @@ async function makeRequest<T>(
         // Log error response body snippet (first 200 chars)
         const errorSnippet = responseText.substring(0, 200)
         logger.warn(`[Polymarket] Error response: ${errorSnippet} status=${response.status} path=${path}`)
-      }
-      
-      if (!response.ok) {
+        
         // Check for Cloudflare block
         if (responseText.includes('Cloudflare') || responseText.includes('blocked')) {
           throw new Error('Request blocked by Cloudflare protection')
         }
         
+        // Parse error message
         let errorMessage = `HTTP ${response.status}`
         try {
           const errorData = JSON.parse(responseText)
@@ -222,6 +234,14 @@ async function makeRequest<T>(
         } catch {
           errorMessage = responseText || errorMessage
         }
+        
+        // Preserve auth error status codes
+        if (response.status === 401 || response.status === 403) {
+          const authError = new Error(errorMessage) as Error & { statusCode?: number }
+          authError.statusCode = response.status
+          throw authError
+        }
+        
         throw new Error(errorMessage)
       }
       
@@ -323,7 +343,8 @@ export async function submitOrder(
   orderType: string,
   userCreds: UserCreds
 ): Promise<unknown> {
-  logger.info(`Submitting order to Polymarket: owner=${owner} orderType=${orderType}`)
+  logger.info(`Submitting order to Polymarket: owner=${owner} orderType=${orderType} clobApi=${config.clobApi}`)
+  logger.debug(`[Auth] User creds for order: keyLen=${userCreds.apiKey.length} secretLen=${userCreds.secret.length} passLen=${userCreds.passphrase.length}`)
   
   const payload = {
     order: signedOrder,
@@ -331,12 +352,20 @@ export async function submitOrder(
     orderType,
   }
   
-  return makeRequest<unknown>(
-    config.clobApi,
-    'POST',
-    '/order',
-    { body: payload, userCreds, userAddress: owner }
-  )
+  try {
+    return await makeRequest<unknown>(
+      config.clobApi,
+      'POST',
+      '/order',
+      { body: payload, userCreds, userAddress: owner }
+    )
+  } catch (error) {
+    // Re-throw with status code preserved
+    if (error && typeof error === 'object' && 'statusCode' in error) {
+      throw error
+    }
+    throw error
+  }
 }
 
 /**

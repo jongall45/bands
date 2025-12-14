@@ -171,8 +171,23 @@ router.post('/', orderLimiter, async (req: Request, res: Response) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to submit order'
     logOrderEvent('rejected', orderId, owner, { reason: errorMessage })
-    logger.error(`Order submission failed: ${orderId} owner=${owner} error=${errorMessage}`)
     
+    // Check if it's an auth error (401/403)
+    const statusCode = (error && typeof error === 'object' && 'statusCode' in error) 
+      ? (error.statusCode as number)
+      : undefined
+    
+    if (statusCode === 401 || statusCode === 403) {
+      logger.error(`Order submission auth error: ${orderId} owner=${owner} status=${statusCode} error=${errorMessage}`)
+      // Sanitize error message (remove any potential secrets)
+      const sanitizedError = errorMessage.replace(/api[_-]?key[=:]\s*[\w-]+/gi, 'api_key=***')
+      return res.status(statusCode).json({ 
+        success: false,
+        error: sanitizedError 
+      })
+    }
+    
+    logger.error(`Order submission failed: ${orderId} owner=${owner} error=${errorMessage}`)
     res.status(500).json({ error: errorMessage })
   }
 })

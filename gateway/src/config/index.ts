@@ -8,14 +8,14 @@ export const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   
   // Polymarket
-  clobApi: process.env.CLOB_API || 'https://clob.polymarket.com',
-  gammaApi: process.env.GAMMA_API || 'https://gamma-api.polymarket.com',
+  clobApi: (process.env.CLOB_API || 'https://clob.polymarket.com').trim(),
+  gammaApi: (process.env.GAMMA_API || 'https://gamma-api.polymarket.com').trim(),
   chainId: parseInt(process.env.CHAIN_ID || '137', 10),
   
   // Builder credentials (for attribution)
-  builderApiKey: process.env.POLYMARKET_BUILDER_API_KEY || '',
-  builderSecret: process.env.POLYMARKET_BUILDER_API_SECRET || '',
-  builderPassphrase: process.env.POLYMARKET_BUILDER_PASSPHRASE || '',
+  builderApiKey: (process.env.POLYMARKET_BUILDER_API_KEY || '').trim(),
+  builderSecret: (process.env.POLYMARKET_BUILDER_API_SECRET || '').trim(),
+  builderPassphrase: (process.env.POLYMARKET_BUILDER_PASSPHRASE || '').trim(),
   
   // Frontend origin (for CORS)
   frontendOrigin: process.env.FRONTEND_ORIGIN || 'https://www.bands.cash',
@@ -49,10 +49,19 @@ export const config = {
 
 // Validate required config
 export function validateConfig(): void {
-  const required = ['builderApiKey', 'builderSecret', 'builderPassphrase']
-  const missing = required.filter(key => !config[key as keyof typeof config])
+  // Log credential status (safe - no secrets)
+  const hasKey = !!config.builderApiKey
+  const hasSecret = !!config.builderSecret
+  const hasPass = !!config.builderPassphrase
+  const keyLen = config.builderApiKey.length
+  const secretLen = config.builderSecret.length
+  const passLen = config.builderPassphrase.length
   
-  if (missing.length > 0) {
-    console.warn(`⚠️ Missing config: ${missing.join(', ')} - Builder attribution disabled`)
+  console.log(`[Config] Builder credentials: hasKey=${hasKey} hasSecret=${hasSecret} hasPass=${hasPass} keyLen=${keyLen} secretLen=${secretLen} passLen=${passLen}`)
+  console.log(`[Config] CLOB API: ${config.clobApi}`)
+  console.log(`[Config] Gamma API: ${config.gammaApi}`)
+  
+  if (!hasKey || !hasSecret || !hasPass) {
+    console.warn(`⚠️ Missing builder credentials - Builder attribution will be disabled`)
   }
 }

@@ -12,6 +12,11 @@ export interface L1AuthPayload {
  * apiKey/secret/passphrase server-side.
  */
 export declare function deriveOrCreateApiKey(l1: L1AuthPayload): Promise<UserCreds>;
+export declare function makeRequest<T>(baseUrl: string, method: string, path: string, options?: {
+    body?: unknown;
+    userCreds?: UserCreds;
+    userAddress?: string;
+}): Promise<T>;
 /**
  * Get all markets with caching
  */

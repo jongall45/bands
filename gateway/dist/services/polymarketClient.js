@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deriveOrCreateApiKey = deriveOrCreateApiKey;
+exports.makeRequest = makeRequest;
 exports.getMarkets = getMarkets;
 exports.getMarket = getMarket;
 exports.getMarketStats = getMarketStats;
@@ -101,11 +102,16 @@ function createUserSignature(secret, timestamp, method, path, body = '') {
 }
 // Add builder headers for attribution
 function getBuilderHeaders(method, path, body) {
-    if (!index_js_1.config.builderApiKey || !index_js_1.config.builderSecret || !index_js_1.config.builderPassphrase) {
+    const hasKey = !!index_js_1.config.builderApiKey;
+    const hasSecret = !!index_js_1.config.builderSecret;
+    const hasPass = !!index_js_1.config.builderPassphrase;
+    if (!hasKey || !hasSecret || !hasPass) {
+        logger_js_1.logger.debug(`[Auth] Builder headers skipped: hasKey=${hasKey} hasSecret=${hasSecret} hasPass=${hasPass}`);
         return {};
     }
     const timestamp = Date.now();
     const signature = (0, builder_signing_sdk_1.buildHmacSignature)(index_js_1.config.builderSecret, timestamp, method, path, body);
+    logger_js_1.logger.debug(`[Auth] Builder headers added: keyLen=${index_js_1.config.builderApiKey.length} secretLen=${index_js_1.config.builderSecret.length} passLen=${index_js_1.config.builderPassphrase.length}`);
     return {
         'POLY_BUILDER_API_KEY': index_js_1.config.builderApiKey,
         'POLY_BUILDER_SIGNATURE': signature,
@@ -143,7 +149,12 @@ async function makeRequest(baseUrl, method, path, options) {
             }
             // Log outbound request
             const urlObj = new URL(url);
-            logger_js_1.logger.debug(`[Polymarket] ${method} ${url} host=${urlObj.host} path=${path} hasBody=${!!bodyString}`);
+            const hasUserCreds = !!options?.userCreds;
+            const hasBuilderCreds = !!index_js_1.config.builderApiKey && !!index_js_1.config.builderSecret && !!index_js_1.config.builderPassphrase;
+            logger_js_1.logger.debug(`[Polymarket] ${method} ${url} host=${urlObj.host} path=${path} hasBody=${!!bodyString} hasUserCreds=${hasUserCreds} hasBuilderCreds=${hasBuilderCreds}`);
+            if (hasUserCreds && options.userCreds) {
+                logger_js_1.logger.debug(`[Auth] User creds: keyLen=${options.userCreds.apiKey.length} secretLen=${options.userCreds.secret.length} passLen=${options.userCreds.passphrase.length}`);
+            }
             const response = await fetch(url, {
                 method,
                 headers,
@@ -158,12 +169,11 @@ async function makeRequest(baseUrl, method, path, options) {
                 // Log error response body snippet (first 200 chars)
                 const errorSnippet = responseText.substring(0, 200);
                 logger_js_1.logger.warn(`[Polymarket] Error response: ${errorSnippet} status=${response.status} path=${path}`);
-            }
-            if (!response.ok) {
                 // Check for Cloudflare block
                 if (responseText.includes('Cloudflare') || responseText.includes('blocked')) {
                     throw new Error('Request blocked by Cloudflare protection');
                 }
+                // Parse error message
                 let errorMessage = `HTTP ${response.status}`;
                 try {
                     const errorData = JSON.parse(responseText);
@@ -171,6 +181,12 @@ async function makeRequest(baseUrl, method, path, options) {
                 }
                 catch {
                     errorMessage = responseText || errorMessage;
+                }
+                // Preserve auth error status codes
+                if (response.status === 401 || response.status === 403) {
+                    const authError = new Error(errorMessage);
+                    authError.statusCode = response.status;
+                    throw authError;
                 }
                 throw new Error(errorMessage);
             }
@@ -248,13 +264,23 @@ async function getOrders(walletAddress, userCreds) {
  * This is NOT cached - always submits to Polymarket
  */
 async function submitOrder(signedOrder, owner, orderType, userCreds) {
-    logger_js_1.logger.info(`Submitting order to Polymarket: owner=${owner} orderType=${orderType}`);
+    logger_js_1.logger.info(`Submitting order to Polymarket: owner=${owner} orderType=${orderType} clobApi=${index_js_1.config.clobApi}`);
+    logger_js_1.logger.debug(`[Auth] User creds for order: keyLen=${userCreds.apiKey.length} secretLen=${userCreds.secret.length} passLen=${userCreds.passphrase.length}`);
     const payload = {
         order: signedOrder,
         owner,
         orderType,
     };
-    return makeRequest(index_js_1.config.clobApi, 'POST', '/order', { body: payload, userCreds, userAddress: owner });
+    try {
+        return await makeRequest(index_js_1.config.clobApi, 'POST', '/order', { body: payload, userCreds, userAddress: owner });
+    }
+    catch (error) {
+        // Re-throw with status code preserved
+        if (error && typeof error === 'object' && 'statusCode' in error) {
+            throw error;
+        }
+        throw error;
+    }
 }
 /**
  * Cancel an order
