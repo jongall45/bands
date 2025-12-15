@@ -100,6 +100,7 @@ interface TradeResult {
   // Actions
   estimateTrade: (amount: string, outcome: 'YES' | 'NO') => TradeEstimate
   executeTrade: (amount: string, outcome: 'YES' | 'NO') => Promise<void>
+  executeSell: (tokenId: string, shares: number, price: number, outcome: 'YES' | 'NO') => Promise<void>
   enableTrading: () => Promise<boolean>
   reset: () => void
 }

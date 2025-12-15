@@ -125,50 +125,110 @@ export default function PolymarketPage() {
   const events = selectedCategory ? categoryEvents : trendingEvents
   const isLoading = selectedCategory ? categoryLoading : trendingLoading
 
+  // Helper: Check if a market is a binary game (2 outcomes like Team A vs Team B)
+  const isBinaryGameMarket = (event: PolymarketEvent) => {
+    // Must have exactly one market with 2 outcomes
+    const market = event.markets?.[0]
+    if (!market) return false
+    
+    try {
+      const outcomes = market.outcomes ? JSON.parse(market.outcomes) : []
+      return outcomes.length === 2
+    } catch {
+      return false
+    }
+  }
+
+  // Helper: Check if title suggests a game (X vs Y pattern)
+  const isGameTitle = (title: string) => {
+    const lower = title?.toLowerCase() || ''
+    return (
+      lower.includes(' vs ') ||
+      lower.includes(' vs. ') ||
+      lower.includes(' beat ') ||
+      lower.includes(' win ') ||
+      lower.includes(' defeat ')
+    )
+  }
+
   // Group events by category for horizontal scrolling carousels
-  // NFL markets
+  // NFL markets - binary game markets only
   const nflEvents = useMemo(() => {
-    return events?.filter(e => 
-      e.title?.toLowerCase().includes('nfl') ||
-      e.slug?.toLowerCase().includes('nfl') ||
-      e.title?.toLowerCase().includes('super bowl') ||
-      e.title?.toLowerCase().includes('chiefs') ||
-      e.title?.toLowerCase().includes('eagles') ||
-      e.title?.toLowerCase().includes('cowboys') ||
-      e.title?.toLowerCase().includes('49ers')
-    ) || []
+    return events?.filter(e => {
+      const title = e.title?.toLowerCase() || ''
+      const slug = e.slug?.toLowerCase() || ''
+      
+      const isNfl = (
+        slug.includes('nfl') ||
+        title.includes('nfl') ||
+        title.includes('chiefs') ||
+        title.includes('eagles') ||
+        title.includes('cowboys') ||
+        title.includes('49ers') ||
+        title.includes('dolphins') ||
+        title.includes('steelers') ||
+        title.includes('ravens') ||
+        title.includes('bills') ||
+        title.includes('packers')
+      )
+      
+      // Only include binary game markets
+      return isNfl && (isBinaryGameMarket(e) || isGameTitle(e.title))
+    }) || []
   }, [events])
 
-  // NBA markets  
+  // NBA markets - binary game markets only
   const nbaEvents = useMemo(() => {
-    return events?.filter(e => 
-      e.title?.toLowerCase().includes('nba') ||
-      e.slug?.toLowerCase().includes('nba') ||
-      e.title?.toLowerCase().includes('lakers') ||
-      e.title?.toLowerCase().includes('celtics') ||
-      e.title?.toLowerCase().includes('warriors')
-    ) || []
+    return events?.filter(e => {
+      const title = e.title?.toLowerCase() || ''
+      const slug = e.slug?.toLowerCase() || ''
+      
+      const isNba = (
+        slug.includes('nba') ||
+        title.includes('nba') ||
+        title.includes('lakers') ||
+        title.includes('celtics') ||
+        title.includes('warriors') ||
+        title.includes('pistons') ||
+        title.includes('bulls') ||
+        title.includes('knicks') ||
+        title.includes('nets') ||
+        title.includes('heat')
+      )
+      
+      return isNba && (isBinaryGameMarket(e) || isGameTitle(e.title))
+    }) || []
   }, [events])
 
-  // All sports markets
+  // All sports markets (games only)
   const sportsEvents = useMemo(() => {
-    return events?.filter(e => 
-      e.slug?.toLowerCase().includes('sports') || 
-      e.slug?.toLowerCase().includes('nfl') ||
-      e.slug?.toLowerCase().includes('nba') ||
-      e.slug?.toLowerCase().includes('ufc') ||
-      e.slug?.toLowerCase().includes('soccer') ||
-      e.slug?.toLowerCase().includes('football') ||
-      e.title?.toLowerCase().includes('game') ||
-      e.title?.toLowerCase().includes('championship')
-    ) || []
+    return events?.filter(e => {
+      const title = e.title?.toLowerCase() || ''
+      const slug = e.slug?.toLowerCase() || ''
+      
+      const isSports = (
+        slug.includes('sports') || 
+        slug.includes('nfl') ||
+        slug.includes('nba') ||
+        slug.includes('nhl') ||
+        slug.includes('mlb') ||
+        slug.includes('ufc') ||
+        slug.includes('soccer') ||
+        slug.includes('ncaa') ||
+        title.includes(' game') ||
+        title.includes(' match')
+      )
+      
+      return isSports && (isBinaryGameMarket(e) || isGameTitle(e.title))
+    }) || []
   }, [events])
 
-  // Hot markets (non-sports for variety in the Trending section)
+  // Hot markets (non-sports, high volume)
   const hotMarkets = useMemo(() => {
     return events?.filter(e => 
       !sportsEvents.includes(e) && 
-      e.volume > 10000
+      e.volume > 10000 &&
+      isBinaryGameMarket(e)
     ).slice(0, 6) || []
   }, [events, sportsEvents])
 
