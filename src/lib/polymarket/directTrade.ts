@@ -3,12 +3,12 @@
  * 
  * CRITICAL ARCHITECTURE:
  * - ClobClient MUST use canonical host (https://clob.polymarket.com) for correct EIP-712 domain
- * - HTTP requests are intercepted and routed through Railway proxy
+ * - HTTP requests are intercepted via fetch override and routed through Railway proxy
  * - This preserves correct signature verification while avoiding CORS
  * 
  * How it works:
  * 1. ClobClient is created with canonical Polymarket URL
- * 2. XMLHttpRequest is intercepted to redirect requests to our proxy
+ * 2. Global fetch is overridden to redirect clob.polymarket.com to our proxy
  * 3. Signing uses correct EIP-712 domain (from canonical URL)
  * 4. HTTP goes through proxy (avoiding CORS/IP blocks)
  */
@@ -33,45 +33,75 @@ const CHAIN_ID = 137
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || ''
 
 /**
- * Install XHR interceptor to redirect Polymarket requests through proxy
+ * Install fetch interceptor to redirect Polymarket requests through proxy
  * 
- * CRITICAL: This must be called before any ClobClient operations.
- * It intercepts XMLHttpRequest.open() to redirect clob.polymarket.com to our proxy.
+ * CRITICAL: This overrides window.fetch to intercept all requests.
+ * Requests to clob.polymarket.com are transparently redirected to our proxy.
  * 
  * This allows ClobClient to:
  * - Use canonical host for EIP-712 signing (correct domain)
  * - Have HTTP requests transparently routed through proxy (no CORS)
  */
-let interceptorInstalled = false
+let fetchInterceptorInstalled = false
+let originalFetch: typeof fetch | null = null
 
 export function installProxyInterceptor(): void {
   if (typeof window === 'undefined') return // Server-side, skip
-  if (interceptorInstalled) return // Already installed
+  if (fetchInterceptorInstalled) return // Already installed
   
-  const originalXHROpen = XMLHttpRequest.prototype.open
+  // Store original fetch
+  originalFetch = window.fetch.bind(window)
   
-  XMLHttpRequest.prototype.open = function(
-    method: string,
-    url: string | URL,
-    async: boolean = true,
-    username?: string | null,
-    password?: string | null
-  ): void {
-    let finalUrl = typeof url === 'string' ? url : url.toString()
+  // Create proxy-aware fetch
+  const proxyFetch: typeof fetch = (input, init) => {
+    let url: string
     
-    // Redirect Polymarket CLOB requests to our proxy
-    if (finalUrl.startsWith(CANONICAL_CLOB_HOST)) {
-      const originalUrl = finalUrl
-      finalUrl = finalUrl.replace(CANONICAL_CLOB_HOST, PROXY_PATH)
-      console.log('[ProxyInterceptor] Redirecting:', originalUrl.slice(0, 50), '->', finalUrl.slice(0, 50))
+    // Handle different input types
+    if (typeof input === 'string') {
+      url = input
+    } else if (input instanceof URL) {
+      url = input.toString()
+    } else if (input instanceof Request) {
+      url = input.url
+    } else {
+      // Unknown type, pass through
+      return originalFetch!(input, init)
     }
     
-    // Call original with potentially modified URL
-    return originalXHROpen.call(this, method, finalUrl, async, username ?? undefined, password ?? undefined)
+    // Redirect Polymarket CLOB requests to our proxy
+    if (url.startsWith(CANONICAL_CLOB_HOST)) {
+      const proxiedUrl = url.replace(CANONICAL_CLOB_HOST, PROXY_PATH)
+      console.log('[ProxyFetch] Redirecting:', url.slice(0, 60), '->', proxiedUrl.slice(0, 60))
+      
+      // If input was a Request, we need to create a new Request with the new URL
+      if (input instanceof Request) {
+        const newRequest = new Request(proxiedUrl, {
+          method: input.method,
+          headers: input.headers,
+          body: init?.body ?? (input.method !== 'GET' && input.method !== 'HEAD' ? input.body : undefined),
+          mode: 'cors',
+          credentials: input.credentials,
+          cache: input.cache,
+          redirect: input.redirect,
+          referrer: input.referrer,
+          integrity: input.integrity,
+        })
+        return originalFetch!(newRequest)
+      }
+      
+      // String or URL input - just use the proxied URL
+      return originalFetch!(proxiedUrl, init)
+    }
+    
+    // Non-Polymarket requests pass through unchanged
+    return originalFetch!(input, init)
   }
   
-  interceptorInstalled = true
-  console.log('[ProxyInterceptor] Installed - Polymarket requests will route through proxy')
+  // Override global fetch
+  window.fetch = proxyFetch
+  
+  fetchInterceptorInstalled = true
+  console.log('[ProxyFetch] Installed - Polymarket requests will route through proxy')
 }
 
 /**
@@ -110,7 +140,7 @@ export interface DirectOrderResult {
  * 
  * IMPORTANT: Uses https://clob.polymarket.com as host (not proxy URL).
  * This ensures EIP-712 signatures are created with the correct domain.
- * HTTP requests are intercepted by installProxyInterceptor() and routed through proxy.
+ * HTTP requests are intercepted by global fetch override and routed through proxy.
  * 
  * @param signer - Ethers signer from Privy embedded wallet
  * @param credentials - API credentials (key, secret, passphrase)
@@ -121,7 +151,7 @@ export function createDirectClobClient(
   credentials: ApiCredentials,
   funderAddress?: string
 ): ClobClient {
-  // Ensure interceptor is installed before creating client
+  // Ensure fetch interceptor is installed before creating client
   installProxyInterceptor()
   
   console.log('[DirectTrade] Creating ClobClient with CANONICAL host:', {
@@ -130,12 +160,12 @@ export function createDirectClobClient(
     hasSigner: !!signer,
     hasCredentials: !!credentials.key && !!credentials.secret && !!credentials.passphrase,
     funderAddress: funderAddress?.slice(0, 10) || 'not set',
-    note: 'HTTP requests will be intercepted and routed through proxy',
+    note: 'HTTP requests intercepted via fetch override → routed through proxy',
   })
   
   // Create ClobClient with CANONICAL host
   // This ensures EIP-712 domain is correct for signature verification
-  // HTTP requests are transparently proxied via the XHR interceptor
+  // HTTP requests are transparently proxied via the fetch override
   return new ClobClient(
     CANONICAL_CLOB_HOST,  // MUST use canonical URL for correct signing domain
     CHAIN_ID,
