@@ -861,6 +861,16 @@ export function usePolymarketTrade({
       const gammaPrice = outcome === 'YES' ? parsedMarket.yesPrice : parsedMarket.noPrice
       const displayPrice = outcome === 'YES' ? yesPrice : noPrice
       
+      // CRITICAL: Check if we have any valid price at all
+      // gammaPrice = 0 means no price data from Gamma API
+      console.log('📊 Price check:', {
+        outcome,
+        bestAsk,
+        gammaPrice,
+        displayPrice,
+        hasPrices: (parsedMarket as any).hasPrices,
+      })
+      
       // Detect suspicious orderbook (both sides have similar high prices)
       const yesBestAskValue = livePrices?.yesBestAsk ?? null
       const noBestAskValue = livePrices?.noBestAsk ?? null
@@ -875,23 +885,31 @@ export function usePolymarketTrade({
       let priceSource: string
       
       if (orderbookSuspicious) {
-        // Orderbook data is wrong - use Gamma price
-        orderPrice = gammaPrice
-        priceSource = 'GAMMA (orderbook suspicious)'
-        console.warn('⚠️ Orderbook data suspicious, using Gamma price:', orderPrice)
+        // Orderbook data is wrong - check if Gamma price is valid
+        if (gammaPrice > 0 && gammaPrice < 1) {
+          orderPrice = gammaPrice
+          priceSource = 'GAMMA (orderbook suspicious)'
+          console.warn('⚠️ Orderbook data suspicious, using Gamma price:', orderPrice)
+        } else {
+          // Both orderbook and Gamma prices are invalid
+          setState({ status: 'error', error: 'No valid price available. Orderbook and API data are both unavailable.' })
+          onError?.('No valid price available')
+          return
+        }
       } else if (bestAsk !== null && bestAsk !== undefined && bestAsk > 0 && bestAsk < 1) {
         // Valid best ask from orderbook
         orderPrice = bestAsk
         priceSource = 'ORDERBOOK BEST ASK'
         console.log('✅ Using best ask from orderbook:', orderPrice)
       } else if (gammaPrice > 0 && gammaPrice < 1) {
-        // Fall back to Gamma price
+        // Fall back to Gamma price (MUST be valid: 0 < price < 1)
         orderPrice = gammaPrice
         priceSource = 'GAMMA (no orderbook)'
         console.warn('⚠️ No valid best ask, using Gamma price:', orderPrice)
       } else {
-        // No valid price available
-        setState({ status: 'error', error: 'No valid price available for this market.' })
+        // No valid price available - DO NOT fallback to 0.5!
+        console.error('❌ No valid price available:', { bestAsk, gammaPrice, displayPrice })
+        setState({ status: 'error', error: 'No valid price available. Cannot place order without market data.' })
         onError?.('No valid price available')
         return
       }

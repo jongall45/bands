@@ -144,24 +144,33 @@ function safeJsonParse<T>(json: string | undefined, fallback: T): T {
 export function normalizeMarket(raw: any): NormalizedMarket {
   // Parse JSON fields
   const outcomes: string[] = safeJsonParse(raw.outcomes, ['Yes', 'No'])
-  const prices: string[] = safeJsonParse(raw.outcomePrices, ['0.5', '0.5'])
+  // CRITICAL: Do NOT default to 0.5 - use '0' to indicate no price
+  const prices: string[] = safeJsonParse(raw.outcomePrices, ['0', '0'])
   const tokenIds: string[] = safeJsonParse(raw.clobTokenIds, ['', ''])
   
   // Find outcome indices
   const { yesIndex, noIndex } = findOutcomeIndices(outcomes)
   
+  // Parse prices, using '0' if not available (NOT 0.5!)
+  const yesPriceStr = prices[yesIndex] || '0'
+  const noPriceStr = prices[noIndex] || '0'
+  const yesPrice = parseFloat(yesPriceStr)
+  const noPrice = parseFloat(noPriceStr)
+  
   // Extract YES/NO data with proper mapping
   const yesData = {
     label: outcomes[yesIndex] || 'Yes',
     tokenId: tokenIds[yesIndex] || '',
-    price: new Decimal(prices[yesIndex] || '0.5'),
+    // Only use valid prices (0 < price < 1), otherwise use 0 to indicate no price
+    price: new Decimal(yesPrice > 0 && yesPrice < 1 ? yesPriceStr : '0'),
     index: yesIndex,
   }
   
   const noData = {
     label: outcomes[noIndex] || 'No',
     tokenId: tokenIds[noIndex] || '',
-    price: new Decimal(prices[noIndex] || '0.5'),
+    // Only use valid prices (0 < price < 1), otherwise use 0 to indicate no price
+    price: new Decimal(noPrice > 0 && noPrice < 1 ? noPriceStr : '0'),
     index: noIndex,
   }
   

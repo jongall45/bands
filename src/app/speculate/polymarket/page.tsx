@@ -489,13 +489,21 @@ export default function PolymarketPage() {
   )
 }
 
+// Helper to format price for display (handles 0 = no data)
+function formatPriceCents(price: number): string {
+  if (!price || price <= 0 || price >= 1) return '—'
+  return `${(price * 100).toFixed(0)}¢`
+}
+
 // Event Card Component - Horizontal scrolling card
 function EventCard({ event, onSelect }: { event: PolymarketEvent; onSelect: (e: PolymarketEvent) => void }) {
   const firstMarket = event.markets?.[0]
   const parsed = firstMarket ? parseMarket(firstMarket) : null
-  const yesPrice = parsed?.yesPrice || 0.5
-  const noPrice = parsed?.noPrice || 0.5
-  const skew = yesPrice // 0-1 value for liquidity bar
+  // Use 0 if no price (NOT 0.5!) - formatPriceCents will show "—"
+  const yesPrice = parsed?.yesPrice || 0
+  const noPrice = parsed?.noPrice || 0
+  // For skew bar, use 0.5 as neutral if no price data
+  const skew = yesPrice > 0 ? yesPrice : 0.5
 
   return (
     <button
@@ -538,12 +546,12 @@ function EventCard({ event, onSelect }: { event: PolymarketEvent; onSelect: (e: 
       <div className="flex gap-2">
         <div className="flex-1 py-3 rounded-2xl bg-[#3e3528] border border-[#5c4d35] flex items-center justify-center">
           <span className="text-[#e6b96e] text-sm font-semibold">
-            YES <span className="text-white font-bold">{(yesPrice * 100).toFixed(0)}¢</span>
+            YES <span className="text-white font-bold">{formatPriceCents(yesPrice)}</span>
           </span>
         </div>
         <div className="flex-1 py-3 rounded-2xl bg-[#1e2433] border border-[#2c364c] flex items-center justify-center">
           <span className="text-[#8aaeff] text-sm font-semibold">
-            NO <span className="text-white font-bold">{(noPrice * 100).toFixed(0)}¢</span>
+            NO <span className="text-white font-bold">{formatPriceCents(noPrice)}</span>
           </span>
         </div>
       </div>
@@ -555,8 +563,9 @@ function EventCard({ event, onSelect }: { event: PolymarketEvent; onSelect: (e: 
 function EventRow({ event, onSelect }: { event: PolymarketEvent; onSelect: (e: PolymarketEvent) => void }) {
   const firstMarket = event.markets?.[0]
   const parsed = firstMarket ? parseMarket(firstMarket) : null
-  const yesPrice = parsed?.yesPrice || 0.5
-  const noPrice = parsed?.noPrice || 0.5
+  // Use 0 if no price (NOT 0.5!) - formatPriceCents will show "—"
+  const yesPrice = parsed?.yesPrice || 0
+  const noPrice = parsed?.noPrice || 0
   const hasMultipleMarkets = (event.markets?.length || 0) > 1
 
   return (
@@ -587,13 +596,13 @@ function EventRow({ event, onSelect }: { event: PolymarketEvent; onSelect: (e: P
         <div className="flex flex-col items-end gap-1">
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-green-500/10">
             <span className="text-green-400 text-sm font-bold">
-              {(yesPrice * 100).toFixed(0)}¢
+              {formatPriceCents(yesPrice)}
             </span>
             <span className="text-green-400/60 text-[10px] font-medium">YES</span>
           </div>
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-500/10">
             <span className="text-red-400 text-sm font-bold">
-              {(noPrice * 100).toFixed(0)}¢
+              {formatPriceCents(noPrice)}
             </span>
             <span className="text-red-400/60 text-[10px] font-medium">NO</span>
           </div>
@@ -617,11 +626,11 @@ function MarketRow({ market, onSelect }: { market: PolymarketMarket; onSelect: (
         <span className="text-[#71717a] text-xs">{formatVolume(market.volume)} vol</span>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-green-500/10">
-            <span className="text-green-400 text-sm font-bold">{(parsed.yesPrice * 100).toFixed(0)}¢</span>
+            <span className="text-green-400 text-sm font-bold">{formatPriceCents(parsed.yesPrice)}</span>
             <span className="text-green-400/60 text-[10px]">Y</span>
           </div>
           <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-red-500/10">
-            <span className="text-red-400 text-sm font-bold">{(parsed.noPrice * 100).toFixed(0)}¢</span>
+            <span className="text-red-400 text-sm font-bold">{formatPriceCents(parsed.noPrice)}</span>
             <span className="text-red-400/60 text-[10px]">N</span>
           </div>
         </div>
@@ -644,10 +653,11 @@ function EventDetailPanel({
   
   const sortedMarkets = [...markets].sort((a, b) => {
     try {
-      const aPrices = a.outcomePrices ? JSON.parse(a.outcomePrices) : ['0.5']
-      const bPrices = b.outcomePrices ? JSON.parse(b.outcomePrices) : ['0.5']
-      const aPrice = parseFloat(aPrices[0]) || 0.5
-      const bPrice = parseFloat(bPrices[0]) || 0.5
+      // Use 0 for missing prices (sort to bottom), NOT 0.5
+      const aPrices = a.outcomePrices ? JSON.parse(a.outcomePrices) : ['0']
+      const bPrices = b.outcomePrices ? JSON.parse(b.outcomePrices) : ['0']
+      const aPrice = parseFloat(aPrices[0]) || 0
+      const bPrice = parseFloat(bPrices[0]) || 0
       return bPrice - aPrice
     } catch {
       return 0

@@ -26,31 +26,31 @@ import { logger } from './logger.js'
 /**
  * Canonical order payload for Polymarket CLOB API POST /order
  * 
- * IMPORTANT: 
- * - Field names must be snake_case for the REST API!
+ * Based on @polymarket/clob-client SignedOrder and NewOrder interfaces:
+ * - Field names are camelCase (matching the TypeScript interfaces)
  * - side is a STRING ("BUY" or "SELL")
- * - Amounts should be in proper decimal scale (USDC = 6 decimals on Polygon)
+ * - Amounts must match exactly what was signed (no scaling)
  */
 export interface PolymarketOrderPayload {
-  // The order object for REST API (snake_case field names!)
+  // The order object - matches SignedOrder interface (camelCase!)
   order: {
     salt: string
     maker: string
     signer: string
     taker: string
-    token_id: string           // snake_case!
-    maker_amount: string       // snake_case!
-    taker_amount: string       // snake_case!
-    side: 'BUY' | 'SELL'
+    tokenId: string            // camelCase (matches SignedOrder)
+    makerAmount: string        // camelCase (matches SignedOrder)
+    takerAmount: string        // camelCase (matches SignedOrder)
+    side: 'BUY' | 'SELL'       // String enum
     expiration: string
     nonce: string
-    fee_rate_bps: string       // snake_case!
-    signature_type: number     // snake_case!
+    feeRateBps: string         // camelCase (matches SignedOrder)
+    signatureType: number      // camelCase (matches SignedOrder)
     signature: string
   }
-  // Order metadata (wrapper) - also snake_case
+  // Order metadata - matches NewOrder interface (camelCase!)
   owner: string
-  order_type: 'GTC' | 'FOK' | 'GTD'  // snake_case!
+  orderType: 'GTC' | 'FOK' | 'GTD'  // camelCase (matches NewOrder)
 }
 
 /**
@@ -174,50 +174,35 @@ export function buildCanonicalOrder(
   // Convert side from number (EIP-712) to string (REST API)
   const side = convertSideToString(signedOrder.side)
   
-  // Get amounts - check if they need scaling from 1e18 to 1e6
-  // USDC on Polygon has 6 decimals, but EIP-712 might use 18
-  const makerAmountRaw = String(signedOrder.makerAmount)
-  const takerAmountRaw = String(signedOrder.takerAmount)
+  // IMPORTANT: Do NOT scale amounts - they must match what was signed exactly!
+  // The signature covers the exact amount values, so changing them breaks verification.
+  const makerAmount = String(signedOrder.makerAmount)
+  const takerAmount = String(signedOrder.takerAmount)
   
-  // Scale down from 1e18 to 1e6 if the amounts are clearly in 1e18 scale
-  // (i.e., if they have more than 6 trailing zeros or are > 1e12)
-  let makerAmount = makerAmountRaw
-  let takerAmount = takerAmountRaw
+  logger.info(`[OrderBuilder] Using amounts as signed (NO scaling): maker=${makerAmount}, taker=${takerAmount}`)
   
-  // If amounts look like 1e18 scale (very large numbers), scale down to 1e6
-  const makerBigInt = BigInt(makerAmountRaw)
-  const takerBigInt = BigInt(takerAmountRaw)
-  
-  // Check if amounts are in 1e18 scale (> 1e12 suggests 1e18 scale)
-  if (makerBigInt > BigInt(1e12) || takerBigInt > BigInt(1e12)) {
-    // Scale down by 1e12 (from 1e18 to 1e6)
-    makerAmount = (makerBigInt / BigInt(1e12)).toString()
-    takerAmount = (takerBigInt / BigInt(1e12)).toString()
-    logger.info(`[OrderBuilder] Scaled amounts from 1e18 to 1e6: maker=${makerAmountRaw} -> ${makerAmount}, taker=${takerAmountRaw} -> ${takerAmount}`)
-  }
-  
-  // Build order object for REST API with SNAKE_CASE field names!
+  // Build order object for REST API with CAMELCASE field names (matches SignedOrder interface)
   const order = {
     salt: String(signedOrder.salt),
     maker: maker,
     signer: signer,
     taker: taker,
-    token_id: String(signedOrder.tokenId),        // snake_case!
-    maker_amount: makerAmount,                     // snake_case! (possibly scaled)
-    taker_amount: takerAmount,                     // snake_case! (possibly scaled)
+    tokenId: String(signedOrder.tokenId),         // camelCase
+    makerAmount: makerAmount,                      // camelCase (NOT scaled)
+    takerAmount: takerAmount,                      // camelCase (NOT scaled)
     side: side,                                    // STRING: "BUY" or "SELL"
     expiration: String(signedOrder.expiration || '0'),
     nonce: String(signedOrder.nonce || '0'),
-    fee_rate_bps: String(signedOrder.feeRateBps || '0'),  // snake_case!
-    signature_type: Number(signedOrder.signatureType),     // snake_case!
+    feeRateBps: String(signedOrder.feeRateBps || '0'),    // camelCase
+    signatureType: Number(signedOrder.signatureType),     // camelCase
     signature: signature,
   }
 
-  // Build final payload with wrapper (also snake_case!)
+  // Build final payload with wrapper (camelCase, matches NewOrder interface)
   const payload: PolymarketOrderPayload = {
     order: order,
     owner: owner,
-    order_type: orderType,  // snake_case!
+    orderType: orderType,  // camelCase
   }
   
   return payload
@@ -233,21 +218,21 @@ export function logAndValidatePayload(
 ): PolymarketOrderPayload {
   const order = payload.order
   
-  // Log sanitized payload with snake_case field names
-  logger.info(`[${context}] Final order payload (snake_case):`)
-  logger.info(`  token_id: ${order.token_id.slice(0, 30)}...`)
+  // Log sanitized payload with camelCase field names
+  logger.info(`[${context}] Final order payload (camelCase):`)
+  logger.info(`  tokenId: ${order.tokenId.slice(0, 30)}...`)
   logger.info(`  side: ${order.side} (type: ${typeof order.side})`)
-  logger.info(`  maker_amount: ${order.maker_amount}`)
-  logger.info(`  taker_amount: ${order.taker_amount}`)
+  logger.info(`  makerAmount: ${order.makerAmount}`)
+  logger.info(`  takerAmount: ${order.takerAmount}`)
   logger.info(`  maker: ${order.maker.slice(0, 10)}...`)
   logger.info(`  signer: ${order.signer.slice(0, 10)}...`)
   logger.info(`  owner: ${payload.owner.slice(0, 10)}...`)
-  logger.info(`  order_type: ${payload.order_type}`)
+  logger.info(`  orderType: ${payload.orderType}`)
   logger.info(`  expiration: ${order.expiration}`)
-  logger.info(`  signature_type: ${order.signature_type}`)
+  logger.info(`  signatureType: ${order.signatureType}`)
   logger.info(`  signature length: ${order.signature.length}`)
   logger.info(`  nonce: ${order.nonce}`)
-  logger.info(`  fee_rate_bps: ${order.fee_rate_bps}`)
+  logger.info(`  feeRateBps: ${order.feeRateBps}`)
   logger.info(`  salt: ${order.salt.slice(0, 15)}...`)
   
   // Validate critical fields
@@ -263,17 +248,17 @@ export function logAndValidatePayload(
   if (typeof order.salt !== 'string') {
     errors.push(`salt must be string, got ${typeof order.salt}`)
   }
-  if (typeof order.maker_amount !== 'string') {
-    errors.push(`maker_amount must be string, got ${typeof order.maker_amount}`)
+  if (typeof order.makerAmount !== 'string') {
+    errors.push(`makerAmount must be string, got ${typeof order.makerAmount}`)
   }
-  if (typeof order.taker_amount !== 'string') {
-    errors.push(`taker_amount must be string, got ${typeof order.taker_amount}`)
+  if (typeof order.takerAmount !== 'string') {
+    errors.push(`takerAmount must be string, got ${typeof order.takerAmount}`)
   }
   if (typeof order.expiration !== 'string') {
     errors.push(`expiration must be string, got ${typeof order.expiration}`)
   }
-  if (order.signature_type !== 0 && order.signature_type !== 1 && order.signature_type !== 2) {
-    errors.push(`signature_type must be 0, 1, or 2, got ${order.signature_type}`)
+  if (order.signatureType !== 0 && order.signatureType !== 1 && order.signatureType !== 2) {
+    errors.push(`signatureType must be 0, 1, or 2, got ${order.signatureType}`)
   }
   if (order.maker.toLowerCase() !== order.signer.toLowerCase()) {
     errors.push(`maker and signer must match for EOA mode`)
@@ -343,10 +328,10 @@ export function hashOrder(order: Record<string, unknown>): string {
  * Example of a valid Polymarket order for reference
  * 
  * IMPORTANT: 
- * - Field names are snake_case for REST API
+ * - Field names are camelCase (matches clob-client interfaces)
  * - side is a STRING ("BUY" or "SELL")
- * - Amounts in 1e6 scale (USDC has 6 decimals on Polygon)
- * - signature_type = 0 for EOA
+ * - Amounts must match exactly what was signed (no scaling)
+ * - signatureType = 0 for EOA
  */
 export const EXAMPLE_VALID_ORDER: PolymarketOrderPayload = {
   order: {
@@ -354,18 +339,18 @@ export const EXAMPLE_VALID_ORDER: PolymarketOrderPayload = {
     maker: "0x1234567890123456789012345678901234567890",
     signer: "0x1234567890123456789012345678901234567890",
     taker: "0x0000000000000000000000000000000000000000",
-    token_id: "12345678901234567890",          // snake_case
-    maker_amount: "1000000",                    // 1 USDC in 6 decimals (1e6)
-    taker_amount: "2000000",                    // 2 shares in 6 decimals
+    tokenId: "12345678901234567890",            // camelCase
+    makerAmount: "1000000000000000000",         // Same as signed (1e18)
+    takerAmount: "2000000000000000000",         // Same as signed (1e18)
     side: "BUY",
     expiration: "1766000000",
     nonce: "0",
-    fee_rate_bps: "50",                         // snake_case
-    signature_type: 0,                          // snake_case
+    feeRateBps: "50",                           // camelCase
+    signatureType: 0,                           // camelCase
     signature: "0x1234...signature..."
   },
   owner: "0x1234567890123456789012345678901234567890",
-  order_type: "GTC"                             // snake_case
+  orderType: "GTC"                              // camelCase
 }
 
 /**

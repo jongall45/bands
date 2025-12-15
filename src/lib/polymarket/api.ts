@@ -53,11 +53,12 @@ export interface PolymarketMarket {
 }
 
 export interface ParsedMarket extends PolymarketMarket {
-  yesPrice: number
-  noPrice: number
+  yesPrice: number  // 0 means no price available (NOT 0.5!)
+  noPrice: number   // 0 means no price available (NOT 0.5!)
   yesTokenId: string
   noTokenId: string
   outcomeLabels: string[]
+  hasPrices: boolean  // true if we have valid price data from Gamma API
 }
 
 // Fetch via our API proxy (avoids CORS)
@@ -149,11 +150,18 @@ export function parseMarket(market: PolymarketMarket): ParsedMarket {
     console.warn('[parseMarket] No prices available for market:', market.question?.slice(0, 50))
   }
 
+  // CRITICAL: Only use valid prices from the API
+  // DO NOT fallback to 0.5 - this causes incorrect order pricing
+  const validYesPrice = yesPrice !== null && !isNaN(yesPrice) && yesPrice > 0 && yesPrice < 1 ? yesPrice : null
+  const validNoPrice = noPrice !== null && !isNaN(noPrice) && noPrice > 0 && noPrice < 1 ? noPrice : null
+
   return {
     ...market,
-    // Use the parsed price, or fallback to 0.5 only as last resort
-    yesPrice: yesPrice !== null && !isNaN(yesPrice) ? yesPrice : 0.5,
-    noPrice: noPrice !== null && !isNaN(noPrice) ? noPrice : 0.5,
+    // Return null if no valid price - trading should be disabled
+    yesPrice: validYesPrice ?? 0, // 0 indicates no price available (NOT 0.5!)
+    noPrice: validNoPrice ?? 0,   // 0 indicates no price available (NOT 0.5!)
+    // Flag to indicate if we have valid prices
+    hasPrices: validYesPrice !== null || validNoPrice !== null,
     yesTokenId: tokenIds[positiveIndex] || '',
     noTokenId: tokenIds[negativeIndex] || '',
     outcomeLabels: outcomes,
