@@ -980,6 +980,23 @@ export function usePolymarketTrade({
       fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:beforePlaceOrder',message:'About to call placeDirectOrder',data:{tokenId:tokenId.slice(0,30),orderPrice,size,tickSize},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
       // #endregion
       
+      // DEBUG: Test credentials before placing order
+      console.log('🔑 Testing credentials before order...')
+      try {
+        const testResponse = await fetch(`${process.env.NEXT_PUBLIC_GATEWAY_URL || 'https://bands-production-1ac7.up.railway.app'}/api/polymarket/auth/test`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ wallet: tradingWallet }),
+        })
+        const testResult = await testResponse.json()
+        console.log('🔑 Credentials test result:', testResult)
+        if (!testResult.valid) {
+          console.error('❌ Credentials are INVALID! Error:', testResult.error, testResult.message)
+        }
+      } catch (e) {
+        console.warn('⚠️ Could not test credentials:', e)
+      }
+      
       // Use ClobClient - it will POST to our gateway proxy
       // which forwards to https://clob.polymarket.com/order
       const result = await placeDirectOrder(clobClient, {
