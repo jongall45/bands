@@ -1118,14 +1118,16 @@ export function usePolymarketTrade({
       // #endregion
       
       // DEBUG: Check what Polymarket sees for our balance/allowance
+      // Import AssetType enum values: COLLATERAL = USDC, CONDITIONAL = tokens
       console.log('🔍 Checking Polymarket balance/allowance via SDK...')
       try {
-        const balanceResponse = await clobClient.getBalanceAllowance({ asset_type: 'USDC' })
+        // COLLATERAL = USDC collateral
+        const balanceResponse = await clobClient.getBalanceAllowance({ asset_type: 'COLLATERAL' as any })
         console.log('💰 Polymarket sees our USDC balance/allowance:', balanceResponse)
         
-        // Also check for the specific token
+        // Also check for the specific token (CONDITIONAL)
         const tokenBalanceResponse = await clobClient.getBalanceAllowance({ 
-          asset_type: 'CONDITIONAL',
+          asset_type: 'CONDITIONAL' as any,
           token_id: tokenId 
         })
         console.log('🎫 Polymarket sees our token balance/allowance:', tokenBalanceResponse)
@@ -1140,7 +1142,7 @@ export function usePolymarketTrade({
         console.log('✅ Balance/allowance update requested')
         
         // Check again after update
-        const updatedBalance = await clobClient.getBalanceAllowance({ asset_type: 'USDC' })
+        const updatedBalance = await clobClient.getBalanceAllowance({ asset_type: 'COLLATERAL' as any })
         console.log('💰 After update, Polymarket sees:', updatedBalance)
       } catch (e) {
         console.warn('⚠️ Could not update balance:', e)
