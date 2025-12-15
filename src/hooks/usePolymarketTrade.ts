@@ -943,25 +943,24 @@ export function usePolymarketTrade({
       // Get signer from Privy embedded wallet
       const signer = await getEthersSigner(embeddedWallet)
       
-      // Ensure we have credentials
-      let creds = apiCredentials
+      // CRITICAL: Always fetch FRESH credentials from gateway to avoid stale secret issue
+      // Gateway might have restarted and re-derived credentials with a new secret
+      // If we use cached credentials with old secret, HMAC will never match
+      console.log('🔐 Fetching FRESH credentials from gateway (avoiding stale cache)...')
+      let creds = await fetchCredentials(tradingWallet, signer)
+      
       if (!creds) {
-        console.log('🔐 No cached credentials, checking storage...')
-        creds = loadCredentials(tradingWallet)
+        // Fall back to cached only if gateway fetch fails
+        console.log('🔐 Gateway fetch failed, trying cached credentials...')
+        creds = apiCredentials || loadCredentials(tradingWallet)
         
         if (!creds) {
-          console.log('🔐 No stored credentials, fetching from gateway...')
-          creds = await fetchCredentials(tradingWallet, signer)
-          
-          if (!creds) {
-            throw new Error('No API credentials available. Please enable trading first.')
-          }
-          
-          setApiCredentials(creds)
-          saveCredentials(tradingWallet, creds)
-        } else {
-          setApiCredentials(creds)
+          throw new Error('No API credentials available. Please enable trading first.')
         }
+      } else {
+        // Update cache with fresh credentials
+        setApiCredentials(creds)
+        saveCredentials(tradingWallet, creds)
       }
 
       console.log('✅ Have credentials, creating ClobClient with proxy...')
@@ -1048,11 +1047,14 @@ export function usePolymarketTrade({
         errorMsg = String(err) || 'Order submission failed'
       }
       
+      // DEBUG: Log the extracted error message to debug auto-refresh
+      console.log('🔍 Error message for auto-refresh check:', errorMsg)
+      
       if (errorMsg.includes('rejected') || errorMsg.includes('denied')) {
         errorMsg = 'Transaction rejected'
       } else if (errorMsg.includes('insufficient')) {
         errorMsg = 'Insufficient balance'
-      } else if (errorMsg.includes('invalid signature')) {
+      } else if (errorMsg.toLowerCase().includes('invalid signature') || errorMsg.toLowerCase().includes('signature')) {
         // HMAC signature mismatch - credentials are stale (gateway restarted)
         console.log('🔄 Invalid signature detected - clearing stale credentials...')
         if (hasUserCreds && !isRetry && !credRefreshAttempted) {
