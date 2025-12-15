@@ -542,7 +542,7 @@ export async function syncPositionsForWallet(walletAddress: string): Promise<Pos
       shares,
       currentPrice,
       value,
-      costBasis,
+      costBasis: costBasis ?? undefined,
       pnl,
       pnlPercent,
       lastUpdated: Date.now(),
