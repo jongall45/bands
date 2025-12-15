@@ -125,15 +125,46 @@ async function forwardRequest(req: Request, res: Response): Promise<void> {
   const rawBody: Buffer | undefined = Buffer.isBuffer(req.body) ? req.body : undefined
   const hasBody = rawBody && rawBody.length > 0
   
+  // DEBUG: Log body type for debugging
+  logger.info(`[Proxy] req.body type: ${typeof req.body}, isBuffer: ${Buffer.isBuffer(req.body)}, length: ${req.body?.length || 0}`)
+  
   // Log request
   logger.info(`[Proxy] ${req.method} ${req.path} -> ${CLOB_UPSTREAM}${req.path}`)
   logger.info(`[Proxy] poly_* headers: ${polyHeadersFound.length > 0 ? polyHeadersFound.join(', ') : 'NONE'}`)
+  
+  // DEBUG: Log ALL poly headers with their values (except signature)
+  for (const h of polyHeadersFound) {
+    const val = forwardHeaders[h]
+    if (h === 'POLY_SIGNATURE' || h === 'POLY_PASSPHRASE') {
+      logger.info(`[Proxy] Header ${h}: [REDACTED len=${val?.length || 0}]`)
+    } else {
+      logger.info(`[Proxy] Header ${h}: ${val}`)
+    }
+  }
+  
+  // DEBUG: Check timestamp freshness
+  const polyTimestamp = forwardHeaders['POLY_TIMESTAMP']
+  if (polyTimestamp) {
+    const requestTs = parseInt(polyTimestamp, 10)
+    const nowTs = Math.floor(Date.now() / 1000)
+    const ageSec = nowTs - requestTs
+    logger.info(`[Proxy] Timestamp age: ${ageSec} seconds (request: ${requestTs}, now: ${nowTs})`)
+    if (Math.abs(ageSec) > 60) {
+      logger.warn(`[Proxy] WARNING: Timestamp is ${ageSec}s old - may be rejected!`)
+    }
+  }
   
   if (hasBody) {
     logger.info(`[Proxy] Raw body: ${rawBody.length} bytes (forwarding unchanged)`)
     
     // Log body details for debugging signature issues
     const bodyString = rawBody.toString('utf8')
+    
+    // DEBUG: Hash body to verify it matches client-side
+    const crypto = require('crypto')
+    const bodyHash = crypto.createHash('sha256').update(rawBody).digest('hex').slice(0, 16)
+    logger.info(`[Proxy] Body hash (first 16 chars): ${bodyHash}`)
+    logger.info(`[Proxy] Body first 100 chars: ${bodyString.slice(0, 100)}`)
     
     // Try to parse and log key fields (not secrets)
     try {
@@ -151,9 +182,8 @@ async function forwardRequest(req: Request, res: Response): Promise<void> {
       const preview = bodyString.slice(0, 100)
       logger.debug(`[Proxy] Body preview: ${preview}...`)
     }
-    
-    // Log first 200 chars of raw body to verify exact format
-    logger.debug(`[Proxy] Raw body start: ${bodyString.slice(0, 200)}`)
+  } else {
+    logger.warn(`[Proxy] NO BODY RECEIVED! req.body type: ${typeof req.body}`)
   }
   
   logger.debug(`[Proxy] Headers: ${logHeaders(forwardHeaders)}`)
