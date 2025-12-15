@@ -26,14 +26,16 @@ Decimal.set({ precision: 20, rounding: Decimal.ROUND_DOWN })
 // Canonical Polymarket CLOB URL - MUST use this for correct HMAC signing
 const CANONICAL_CLOB_HOST = 'https://clob.polymarket.com'
 
-// Our proxy endpoint (relative path for same-origin via Vercel rewrite)
-const PROXY_PATH = '/api/polymarket/proxy'
+// Our proxy endpoint - use DIRECT Railway URL to bypass Vercel rewrite (which drops body!)
+// The gateway has CORS configured to accept requests from bands.cash
+const RAILWAY_GATEWAY = process.env.NEXT_PUBLIC_GATEWAY_URL || 'https://bands-production-1ac7.up.railway.app'
+const PROXY_PATH = `${RAILWAY_GATEWAY}/api/polymarket/proxy`
 
 // Chain ID for Polygon
 const CHAIN_ID = 137
 
-// Gateway URL for non-proxy calls
-const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || ''
+// Gateway URL for non-proxy calls (same as RAILWAY_GATEWAY)
+const GATEWAY_URL = RAILWAY_GATEWAY
 
 /**
  * Install axios interceptor to redirect Polymarket requests through proxy

@@ -87,6 +87,21 @@ function buildUpstreamUrl(req: Request): string {
 }
 
 /**
+ * Read raw body from request stream
+ * This is more reliable than express.raw() which can fail silently
+ */
+async function readRawBody(req: Request): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    req.on('data', (chunk: Buffer) => chunks.push(chunk))
+    req.on('end', () => resolve(Buffer.concat(chunks)))
+    req.on('error', reject)
+    // Set timeout to avoid hanging
+    setTimeout(() => resolve(Buffer.concat(chunks)), 5000)
+  })
+}
+
+/**
  * Forward request to Polymarket CLOB
  * 
  * CRITICAL: Body is forwarded as RAW BYTES (Buffer).
@@ -120,12 +135,33 @@ async function forwardRequest(req: Request, res: Response): Promise<void> {
     }
   }
   
-  // Get raw body as Buffer (set by express.raw() in index.ts)
-  // CRITICAL: Do NOT modify this - it contains the signed payload
-  const rawBody: Buffer | undefined = Buffer.isBuffer(req.body) ? req.body : undefined
+  // Try multiple methods to get body
+  let rawBody: Buffer | undefined
+  
+  // Method 1: Check if express.raw() already parsed it
+  if (Buffer.isBuffer(req.body) && req.body.length > 0) {
+    rawBody = req.body
+    logger.info(`[Proxy] Body from express.raw(): ${rawBody.length} bytes`)
+  }
+  // Method 2: Check if it's a string (sometimes happens)
+  else if (typeof req.body === 'string' && req.body.length > 0) {
+    rawBody = Buffer.from(req.body, 'utf8')
+    logger.info(`[Proxy] Body from string: ${rawBody.length} bytes`)
+  }
+  // Method 3: Try to read from stream (for cases where body wasn't parsed)
+  else if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+    logger.info(`[Proxy] Attempting to read body from stream...`)
+    try {
+      rawBody = await readRawBody(req)
+      logger.info(`[Proxy] Body from stream: ${rawBody.length} bytes`)
+    } catch (err) {
+      logger.error(`[Proxy] Failed to read body from stream: ${err}`)
+    }
+  }
+  
   const hasBody = rawBody && rawBody.length > 0
   
-  // DEBUG: Log body type for debugging
+  // DEBUG: Log body status
   logger.info(`[Proxy] req.body type: ${typeof req.body}, isBuffer: ${Buffer.isBuffer(req.body)}, length: ${req.body?.length || 0}`)
   
   // Log request
@@ -154,7 +190,7 @@ async function forwardRequest(req: Request, res: Response): Promise<void> {
     }
   }
   
-  if (hasBody) {
+  if (hasBody && rawBody) {
     logger.info(`[Proxy] Raw body: ${rawBody.length} bytes (forwarding unchanged)`)
     
     // Log body details for debugging signature issues
@@ -197,7 +233,7 @@ async function forwardRequest(req: Request, res: Response): Promise<void> {
     
     // Forward raw body for POST/PUT/PATCH
     // CRITICAL: Use the raw Buffer directly - do NOT convert or modify
-    if (['POST', 'PUT', 'PATCH'].includes(req.method) && hasBody) {
+    if (['POST', 'PUT', 'PATCH'].includes(req.method) && hasBody && rawBody) {
       fetchOptions.body = rawBody
       // Ensure content-type is set (should already be from client)
       if (!forwardHeaders['content-type']) {
