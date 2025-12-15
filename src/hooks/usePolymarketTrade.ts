@@ -159,7 +159,19 @@ function clearCredentials(): void {
 // HELPER: Convert Privy wallet to ethers Signer
 // ============================================
 
-async function getEthersSigner(privyWallet: any): Promise<ethers.providers.JsonRpcSigner> {
+async function getEthersSigner(privyWallet: any, chainId?: number): Promise<ethers.providers.JsonRpcSigner> {
+  // If chainId specified, switch the wallet to that chain first
+  if (chainId) {
+    try {
+      console.log(`🔗 Switching embedded wallet to chain ${chainId}...`)
+      await privyWallet.switchChain(chainId)
+      console.log(`✅ Wallet switched to chain ${chainId}`)
+    } catch (switchError: any) {
+      // Chain might already be correct, or switching might not be needed
+      console.warn(`⚠️ Chain switch attempt:`, switchError.message || switchError)
+    }
+  }
+  
   const provider = await privyWallet.getEthereumProvider()
   const ethersProvider = new ethers.providers.Web3Provider(provider)
   return ethersProvider.getSigner()
@@ -733,7 +745,8 @@ export function usePolymarketTrade({
       console.log('🔐 Starting trading enablement for:', tradingWallet)
       
       // Get signer (needed for both credentials and approvals)
-      const signer = await getEthersSigner(embeddedWallet)
+      // IMPORTANT: Switch to Polygon (137) for trading operations
+      const signer = await getEthersSigner(embeddedWallet, 137)
       
       // Step 1-4: Derive credentials if needed
       if (needsCredentials) {
@@ -1065,8 +1078,8 @@ export function usePolymarketTrade({
         }
       }
 
-      // Get signer from Privy embedded wallet
-      const signer = await getEthersSigner(embeddedWallet)
+      // Get signer from Privy embedded wallet (ensure on Polygon)
+      const signer = await getEthersSigner(embeddedWallet, 137)
       
       // CRITICAL: Always fetch FRESH credentials from gateway to avoid stale secret issue
       // Gateway might have restarted and re-derived credentials with a new secret
