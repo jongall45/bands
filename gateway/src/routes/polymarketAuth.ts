@@ -184,6 +184,66 @@ router.get('/auth/status', healthLimiter, async (req: Request, res: Response) =>
 })
 
 /**
+ * POST /api/polymarket/auth/credentials
+ * Retrieve stored credentials for client-side ClobClient usage
+ * 
+ * IMPORTANT: This returns the full credentials to the frontend.
+ * This is required because ClobClient.createAndPostOrder() needs
+ * both the signer (Privy wallet in browser) AND the API credentials.
+ * 
+ * The credentials are wallet-specific (derived from L1 signature)
+ * and can only be used by the wallet that derived them.
+ * 
+ * Request must include a fresh L1 signature to prove wallet ownership.
+ */
+router.post('/auth/credentials', async (req: Request, res: Response) => {
+  const { wallet, signature, timestamp, nonce } = req.body
+  
+  if (!wallet || !signature || !timestamp) {
+    return res.status(400).json({ 
+      error: 'wallet, signature, and timestamp are required' 
+    })
+  }
+  
+  // Validate wallet address format
+  if (!/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+    return res.status(400).json({ error: 'Invalid wallet address format' })
+  }
+  
+  const normalizedWallet = wallet.toLowerCase()
+  
+  // Check timestamp is fresh (within 5 minutes)
+  const signatureTime = parseInt(timestamp, 10)
+  const now = Date.now()
+  if (isNaN(signatureTime) || Math.abs(now - signatureTime) > 5 * 60 * 1000) {
+    return res.status(400).json({ error: 'Signature timestamp expired or invalid' })
+  }
+  
+  // Look up stored credentials
+  const creds = getUserCreds(normalizedWallet)
+  
+  if (!creds) {
+    return res.status(401).json({
+      error: 'NO_CREDENTIALS',
+      message: 'No credentials found for this wallet. Complete auth flow first.',
+    })
+  }
+  
+  logger.info(`[Auth Credentials] Returning credentials for ${normalizedWallet.slice(0, 10)}...`)
+  
+  // Return credentials for client-side ClobClient usage
+  res.json({
+    success: true,
+    wallet: normalizedWallet,
+    credentials: {
+      key: creds.apiKey,
+      secret: creds.secret,
+      passphrase: creds.passphrase,
+    },
+  })
+})
+
+/**
  * GET /api/polymarket/health?wallet=0x...
  * Health check endpoint for Polymarket trading
  * 
