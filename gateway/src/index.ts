@@ -13,6 +13,7 @@ import ordersRoutes from './routes/orders.js'
 import positionsRoutes from './routes/positions.js'
 import polymarketRoutes from './routes/polymarket.js'
 import polymarketAuthRoutes from './routes/polymarketAuth.js'
+import polymarketOrdersRoutes from './routes/polymarketOrders.js'
 import polymarketTestRoutes from './routes/polymarketTest.js'
 import authRoutes from './routes/auth.js'
 
@@ -67,6 +68,7 @@ app.use('/api/orders', ordersRoutes)
 app.use('/api/positions', positionsRoutes)
 app.use('/api/polymarket', polymarketRoutes)
 app.use('/api/polymarket', polymarketAuthRoutes)
+app.use('/api/polymarket/orders', polymarketOrdersRoutes)
 app.use('/api/polymarket/test', polymarketTestRoutes)
 app.use('/api/auth', authRoutes)
 

@@ -28,12 +28,8 @@ import { polygon } from 'viem/chains'
 import { useQuery } from '@tanstack/react-query'
 import { ethers } from 'ethers'
 import { getMarketStats as getGatewayMarketStats, getPositions as getGatewayPositions } from '@/lib/gateway/client'
-// Direct ClobClient approach - no manual signing!
-import { 
-  createDirectClobClient, 
-  placeDirectOrder,
-  type ApiCredentials,
-} from '@/lib/polymarket/directTrade'
+// Gateway-based order placement (no CORS issues)
+import { placeOrderViaGateway } from '@/lib/polymarket/directTrade'
 
 import {
   POLYGON_USDC,
@@ -104,19 +100,15 @@ interface TradeResult {
 }
 
 // Trading session stored in localStorage
+// NOTE: Credentials stay SERVER-SIDE only (in gateway)
 interface TradingSession {
   tradingWallet: string
   hasUserCreds: boolean
   approvalsSet: boolean
   createdAt: number
-  // Store credentials for ClobClient (encrypted in real app)
-  credentials?: ApiCredentials
 }
 
 const SESSION_STORAGE_KEY = 'polymarket_eoa_session'
-
-// Credentials session key (separate for security - cleared more often)
-const CREDS_SESSION_KEY = 'polymarket_creds_session'
 
 // ============================================
 // HELPER: Convert Privy wallet to ethers Signer
@@ -266,94 +258,8 @@ async function checkAuthStatus(wallet: string): Promise<{ hasUserCreds: boolean 
   }
 }
 
-/**
- * Fetch API credentials from gateway for client-side ClobClient
- * 
- * This returns the full credentials so we can use ClobClient.createAndPostOrder()
- * directly from the browser with the Privy signer.
- */
-async function fetchCredentials(
-  wallet: string,
-  signer: ethers.providers.JsonRpcSigner
-): Promise<ApiCredentials | null> {
-  const timestamp = Date.now().toString()
-  const nonce = '0'
-  
-  // Sign a fresh message to prove ownership
-  const signature = await (signer as any)._signTypedData(
-    CLOB_AUTH_DOMAIN,
-    CLOB_AUTH_TYPES,
-    { address: wallet, timestamp, nonce, message: CLOB_AUTH_MESSAGE }
-  )
-  
-  const url = `${GATEWAY_URL}/api/polymarket/auth/credentials`
-  console.log('🔐 Fetching credentials from gateway...')
-  
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ wallet, signature, timestamp, nonce }),
-    credentials: 'include',
-  })
-  
-  if (!response.ok) {
-    const error = await response.json()
-    console.error('Failed to fetch credentials:', error)
-    return null
-  }
-  
-  const data = await response.json()
-  
-  if (data.success && data.credentials) {
-    console.log('✅ Got credentials from gateway:', {
-      hasKey: !!data.credentials.key,
-      hasSecret: !!data.credentials.secret,
-      hasPassphrase: !!data.credentials.passphrase,
-    })
-    return data.credentials
-  }
-  
-  return null
-}
-
-// Store credentials in sessionStorage (cleared on tab close)
-function saveCredentials(wallet: string, creds: ApiCredentials): void {
-  if (typeof window === 'undefined') return
-  sessionStorage.setItem(CREDS_SESSION_KEY, JSON.stringify({
-    wallet: wallet.toLowerCase(),
-    credentials: creds,
-    savedAt: Date.now(),
-  }))
-}
-
-// Load credentials from sessionStorage
-function loadCredentials(wallet: string): ApiCredentials | null {
-  if (typeof window === 'undefined') return null
-  
-  try {
-    const stored = sessionStorage.getItem(CREDS_SESSION_KEY)
-    if (!stored) return null
-    
-    const data = JSON.parse(stored)
-    
-    // Check if for same wallet and fresh (1 hour)
-    if (
-      data.wallet === wallet.toLowerCase() &&
-      Date.now() - data.savedAt < 60 * 60 * 1000
-    ) {
-      return data.credentials
-    }
-    
-    return null
-  } catch {
-    return null
-  }
-}
-
-function clearCredentials(): void {
-  if (typeof window === 'undefined') return
-  sessionStorage.removeItem(CREDS_SESSION_KEY)
-}
+// NOTE: Credentials stay server-side only (gateway)
+// No need to fetch/store them in browser
 
 // ============================================
 // MAIN HOOK
@@ -375,8 +281,7 @@ export function usePolymarketTrade({
   const [hasUserCreds, setHasUserCreds] = useState(false)
   const [session, setSession] = useState<TradingSession | null>(null)
   const [credRefreshAttempted, setCredRefreshAttempted] = useState(false)
-  // API credentials for ClobClient
-  const [apiCredentials, setApiCredentials] = useState<ApiCredentials | null>(null)
+  // NOTE: Credentials stay server-side only (gateway handles them)
 
   // Get the Privy embedded wallet (EOA) - this is the trading wallet
   // IMPORTANT: Must be walletClientType === 'privy', NOT the smart wallet
@@ -419,17 +324,6 @@ export function usePolymarketTrade({
       })
     }
   }, [tradingWallet, smartWalletAddress, eoaAssertion])
-  
-  // Load stored credentials when trading wallet changes
-  useEffect(() => {
-    if (tradingWallet && !apiCredentials) {
-      const storedCreds = loadCredentials(tradingWallet)
-      if (storedCreds) {
-        console.log('📂 Loaded stored credentials for', tradingWallet.slice(0, 10))
-        setApiCredentials(storedCreds)
-      }
-    }
-  }, [tradingWallet, apiCredentials])
 
   // Public client for reading Polygon state
   const publicClient = useMemo(() => createPublicClient({
@@ -615,23 +509,9 @@ export function usePolymarketTrade({
         throw new Error(result.error || 'Failed to derive credentials')
       }
       
-      console.log('✅ Credentials derived on gateway! Now fetching for ClobClient...')
+      console.log('✅ Trading enabled! Credentials stored on gateway.')
       
-      // Step 4: Fetch credentials for client-side ClobClient usage
-      setState({ status: 'preparing', message: 'Loading trading session...' })
-      const creds = await fetchCredentials(tradingWallet, signer)
-      
-      if (!creds) {
-        throw new Error('Failed to fetch credentials after derivation')
-      }
-      
-      console.log('✅ Trading enabled with full credentials!')
-      
-      // Store credentials
-      setApiCredentials(creds)
-      saveCredentials(tradingWallet, creds)
-      
-      // Update state
+      // Update state (credentials stay server-side)
       setHasUserCreds(true)
       const newSession: TradingSession = {
         tradingWallet,
@@ -723,7 +603,7 @@ export function usePolymarketTrade({
       // Calculate shares from USDC amount
       const size = amountNum / price
 
-      console.log('📤 Creating order via ClobClient (direct mode):')
+      console.log('📤 Placing order via gateway (server-side ClobClient):')
       console.log('   Trading Wallet:', tradingWallet)
       console.log('   Token ID:', tokenId.slice(0, 30) + '...')
       console.log('   Price:', price)
@@ -732,54 +612,21 @@ export function usePolymarketTrade({
       console.log('   Tick Size:', tickSize)
       console.log('   Side: BUY')
 
-      // Get signer from Privy embedded wallet
-      const signer = await getEthersSigner(embeddedWallet)
-      
-      // Ensure we have credentials
-      let creds = apiCredentials
-      if (!creds) {
-        console.log('🔐 No cached credentials, fetching from gateway...')
-        creds = loadCredentials(tradingWallet)
-        
-        if (!creds) {
-          console.log('🔐 No stored credentials, fetching from gateway...')
-          creds = await fetchCredentials(tradingWallet, signer)
-          
-          if (!creds) {
-            throw new Error('No API credentials available. Please enable trading first.')
-          }
-          
-          setApiCredentials(creds)
-          saveCredentials(tradingWallet, creds)
-        } else {
-          setApiCredentials(creds)
-        }
-      }
-
-      console.log('✅ Have credentials, creating ClobClient...')
-      
-      // Create ClobClient with signer + credentials
-      // THIS IS THE CORRECT WAY - let the SDK handle everything!
-      const clobClient = createDirectClobClient(
-        signer,
-        creds,
-        tradingWallet  // funder address = trading wallet
-      )
-
       setState({ status: 'submitting', message: 'Placing order...' })
       
-      // Use the SDK to create and post the order
-      // The SDK handles: signing, decimal conversion, payload construction
-      const result = await placeDirectOrder(clobClient, {
+      // Call gateway - it uses ClobClient server-side
+      // No CORS issues, credentials stay server-side
+      const result = await placeOrderViaGateway({
+        wallet: tradingWallet,
         tokenId,
         side: 'BUY',
         price,
         size,
-        tickSize: tickSize as any,
-        negRisk: false,
+        tickSize,
+        orderType: 'GTC',
       })
       
-      console.log('📦 ClobClient response:', result)
+      console.log('📦 Gateway response:', result)
 
       if (result.success) {
         setState({ 
@@ -809,15 +656,13 @@ export function usePolymarketTrade({
         errorMsg = 'Transaction rejected'
       } else if (errorMsg.includes('insufficient')) {
         errorMsg = 'Insufficient balance'
-      } else if (errorMsg.includes('USER_AUTH_REQUIRED') || errorMsg.includes('401') || errorMsg.includes('L1 Authentication')) {
+      } else if (errorMsg.includes('NO_CREDENTIALS') || errorMsg.includes('401') || errorMsg.includes('Authentication')) {
         // One-shot credential refresh: if we had creds but got 401, try to re-derive once
         if (hasUserCreds && !isRetry && !credRefreshAttempted) {
           console.log('🔄 Got 401 with existing creds - attempting one-shot refresh...')
           setCredRefreshAttempted(true)
           setHasUserCreds(false)
-          setApiCredentials(null)
           clearTradingSession()
-          clearCredentials()
           
           // Try to re-enable trading
           setState({ status: 'preparing', message: 'Re-authenticating...' })
@@ -834,8 +679,6 @@ export function usePolymarketTrade({
         } else {
           errorMsg = 'Trading not enabled. Please click "Enable Trading" first.'
           setHasUserCreds(false)
-          setApiCredentials(null)
-          clearCredentials()
         }
       }
       
@@ -867,7 +710,6 @@ export function usePolymarketTrade({
     onError,
     enableTrading,
     credRefreshAttempted,
-    apiCredentials,
   ])
 
   // ============================================
