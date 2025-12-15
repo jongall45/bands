@@ -19,6 +19,8 @@
 import { Router, Request, Response } from 'express'
 import { logger } from '../utils/logger.js'
 import { config } from '../config/index.js'
+import { getUserCreds } from '../services/userCredsStore.js'
+import { createHmac, createHash } from 'crypto'
 
 const router = Router()
 
@@ -197,23 +199,57 @@ async function forwardRequest(req: Request, res: Response): Promise<void> {
     const bodyString = rawBody.toString('utf8')
     
     // DEBUG: Hash body to verify it matches client-side
-    const crypto = require('crypto')
-    const bodyHash = crypto.createHash('sha256').update(rawBody).digest('hex').slice(0, 16)
+    const bodyHash = createHash('sha256').update(rawBody).digest('hex').slice(0, 16)
     logger.info(`[Proxy] Body hash (first 16 chars): ${bodyHash}`)
     logger.info(`[Proxy] Body first 100 chars: ${bodyString.slice(0, 100)}`)
     
     // DEBUG: Log the FULL message that Polymarket expects for signature verification
     // Message format: timestamp + method + path + body
     const polyTimestamp = forwardHeaders['POLY_TIMESTAMP'] || ''
+    const polyAddress = forwardHeaders['POLY_ADDRESS'] || ''
+    const receivedSignature = forwardHeaders['POLY_SIGNATURE'] || ''
+    
+    // Log what we're about to forward
     const expectedMessage = `${polyTimestamp}${req.method}${req.path}${bodyString}`
-    const messageHash = crypto.createHash('sha256').update(expectedMessage).digest('hex').slice(0, 16)
+    const messageHash = createHash('sha256').update(expectedMessage).digest('hex').slice(0, 16)
     logger.info(`[Proxy] Signature message components:`)
     logger.info(`[Proxy]   timestamp: ${polyTimestamp}`)
     logger.info(`[Proxy]   method: ${req.method}`)
     logger.info(`[Proxy]   path: ${req.path}`)
     logger.info(`[Proxy]   body length: ${bodyString.length}`)
     logger.info(`[Proxy]   full message hash: ${messageHash}`)
-    logger.info(`[Proxy] POLY_SIGNATURE received: ${forwardHeaders['POLY_SIGNATURE']?.slice(0, 20)}...`)
+    logger.info(`[Proxy] POLY_SIGNATURE received: ${receivedSignature.slice(0, 20)}...`)
+    
+    // DEBUG: Verify POLY_SIGNATURE by computing expected value
+    // This tells us if the HMAC signature is correct or not
+    if (polyAddress && req.path === '/order') {
+      const userCreds = getUserCreds(polyAddress.toLowerCase())
+      if (userCreds?.secret) {
+        logger.info(`[Proxy] VERIFYING HMAC: Found user creds for ${polyAddress.slice(0, 10)}...`)
+        
+        // Compute expected signature: HMAC-SHA256(timestamp + method + path + body, secret)
+        const hmac = createHmac('sha256', Buffer.from(userCreds.secret, 'base64'))
+        hmac.update(expectedMessage)
+        const expectedSig = hmac.digest('base64')
+        // Make URL-safe (SDK replaces + with - and / with _)
+        const expectedSigUrlSafe = expectedSig.replace(/\+/g, '-').replace(/\//g, '_')
+        
+        logger.info(`[Proxy] Expected POLY_SIGNATURE: ${expectedSigUrlSafe.slice(0, 20)}...`)
+        logger.info(`[Proxy] Received POLY_SIGNATURE: ${receivedSignature.slice(0, 20)}...`)
+        
+        if (expectedSigUrlSafe === receivedSignature) {
+          logger.info(`[Proxy] ✅ POLY_SIGNATURE MATCHES! HMAC is correct.`)
+        } else {
+          logger.error(`[Proxy] ❌ POLY_SIGNATURE MISMATCH!`)
+          logger.error(`[Proxy]   Expected (full): ${expectedSigUrlSafe}`)
+          logger.error(`[Proxy]   Received (full): ${receivedSignature}`)
+          logger.error(`[Proxy]   This means the HMAC computation differs between client and server.`)
+          logger.error(`[Proxy]   Check: timestamp, method, path, body bytes`)
+        }
+      } else {
+        logger.warn(`[Proxy] No user creds found for ${polyAddress.slice(0, 10)}... - cannot verify HMAC`)
+      }
+    }
     
     // Try to parse and log key fields (not secrets)
     try {
