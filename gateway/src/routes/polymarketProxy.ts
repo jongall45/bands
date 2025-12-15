@@ -202,6 +202,19 @@ async function forwardRequest(req: Request, res: Response): Promise<void> {
     logger.info(`[Proxy] Body hash (first 16 chars): ${bodyHash}`)
     logger.info(`[Proxy] Body first 100 chars: ${bodyString.slice(0, 100)}`)
     
+    // DEBUG: Log the FULL message that Polymarket expects for signature verification
+    // Message format: timestamp + method + path + body
+    const polyTimestamp = forwardHeaders['POLY_TIMESTAMP'] || ''
+    const expectedMessage = `${polyTimestamp}${req.method}${req.path}${bodyString}`
+    const messageHash = crypto.createHash('sha256').update(expectedMessage).digest('hex').slice(0, 16)
+    logger.info(`[Proxy] Signature message components:`)
+    logger.info(`[Proxy]   timestamp: ${polyTimestamp}`)
+    logger.info(`[Proxy]   method: ${req.method}`)
+    logger.info(`[Proxy]   path: ${req.path}`)
+    logger.info(`[Proxy]   body length: ${bodyString.length}`)
+    logger.info(`[Proxy]   full message hash: ${messageHash}`)
+    logger.info(`[Proxy] POLY_SIGNATURE received: ${forwardHeaders['POLY_SIGNATURE']?.slice(0, 20)}...`)
+    
     // Try to parse and log key fields (not secrets)
     try {
       const bodyJson = JSON.parse(bodyString)
