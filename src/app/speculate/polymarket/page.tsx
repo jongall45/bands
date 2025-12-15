@@ -164,8 +164,8 @@ export default function PolymarketPage() {
     ) || []
   }, [events])
 
-  // Trending/Hot markets (non-sports for variety)
-  const trendingEvents = useMemo(() => {
+  // Hot markets (non-sports for variety in the Trending section)
+  const hotMarkets = useMemo(() => {
     return events?.filter(e => 
       !sportsEvents.includes(e) && 
       e.volume > 10000
@@ -487,7 +487,7 @@ export default function PolymarketPage() {
                 <div className="px-4"><LoadingState /></div>
               ) : events && events.length > 0 ? (
                 <div className="flex gap-3 overflow-x-auto px-4 pb-2 scrollbar-hide">
-                  {(trendingEvents.length > 0 ? trendingEvents : events.slice(0, 6)).map((event) => (
+                  {(hotMarkets.length > 0 ? hotMarkets : events.slice(0, 6)).map((event) => (
                     <EventCard key={event.id} event={event} onSelect={handleSelectEvent} />
                   ))}
                 </div>
