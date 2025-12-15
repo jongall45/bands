@@ -44,6 +44,7 @@ export interface OrderParams {
   size: string | number  // Number of shares
   price: string | number // Price per share (0-1)
   tickSize?: string      // Market tick size (default: 0.01)
+  negRisk?: boolean      // True for multi-outcome markets (uses different exchange contract)
 }
 
 export interface OrderResult {
@@ -304,7 +305,7 @@ export async function placeOrder(
           side: params.side === 'BUY' ? Side.BUY : Side.SELL,
           size: sizeDecimal.toNumber(),
         },
-        { tickSize: tickSize as any, negRisk: false },
+        { tickSize: tickSize as any, negRisk: params.negRisk ?? false },
         OrderType.GTC
       )
       

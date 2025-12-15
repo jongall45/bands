@@ -999,13 +999,23 @@ export function usePolymarketTrade({
       
       // Use ClobClient - it will POST to our gateway proxy
       // which forwards to https://clob.polymarket.com/order
+      // CRITICAL: Use parsedMarket.negRisk to determine which exchange contract to use
+      // Multi-outcome markets (>2 outcomes) are negRisk markets!
+      console.log('[Trade] Order params:', {
+        tokenId: tokenId.slice(0, 30) + '...',
+        side: 'BUY',
+        price: orderPrice,
+        size,
+        negRisk: parsedMarket.negRisk,  // ← CRITICAL: must match market type!
+      })
+      
       const result = await placeDirectOrder(clobClient, {
         tokenId,
         side: 'BUY',
         price: orderPrice,  // Use best ask price from orderbook
         size,
         tickSize: tickSize as any,
-        negRisk: false,
+        negRisk: parsedMarket.negRisk,  // ← FIX: Use actual market negRisk flag
       })
       
       // #region agent log
