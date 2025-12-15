@@ -7,8 +7,8 @@
 import { createPublicClient, http, formatUnits } from 'viem'
 import { polygon } from 'viem/chains'
 import {
-  POLYGON_USDC,
-  POLYGON_USDC_E_DEPRECATED,
+  POLYGON_USDC,           // USDC.e (what Polymarket uses)
+  POLYGON_USDC_NATIVE,    // Native USDC (NOT used by Polymarket)
   CTF_EXCHANGE,
   NEG_RISK_CTF_EXCHANGE,
   NEG_RISK_ADAPTER,
@@ -173,9 +173,10 @@ export async function runPolymarketDiagnostics(
   }
   
   try {
-    // 1. Check native USDC balance
+    // 1. Check USDC.e balance (what Polymarket uses!)
+    // CRITICAL: Polymarket uses USDC.e (bridged from Ethereum), NOT native USDC
     const usdcBalance = await publicClient.readContract({
-      address: POLYGON_USDC,
+      address: POLYGON_USDC,  // This is USDC.e (0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174)
       abi: ERC20_ABI,
       functionName: 'balanceOf',
       args: [address],
@@ -187,26 +188,27 @@ export async function runPolymarketDiagnostics(
       ? usdcBalance >= BigInt(Math.ceil(requiredUsdc * 1e6))
       : usdcBalance > BigInt(0)
     
-    console.log(`💰 USDC Balance: ${result.usdcBalance} (${result.usdcBalanceRaw} raw)`)
+    console.log(`💰 USDC.e Balance (Polymarket uses this!): ${result.usdcBalance} (${result.usdcBalanceRaw} raw)`)
     
   } catch (e) {
-    errors.push(`Failed to fetch USDC balance: ${e}`)
+    errors.push(`Failed to fetch USDC.e balance: ${e}`)
   }
   
   try {
-    // 2. Check legacy USDC.e balance (for debugging)
-    const usdcEBalance = await publicClient.readContract({
-      address: POLYGON_USDC_E_DEPRECATED,
+    // 2. Check native USDC balance (NOT used by Polymarket, but useful for debugging)
+    const nativeUsdcBalance = await publicClient.readContract({
+      address: POLYGON_USDC_NATIVE,  // Native USDC (0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359)
       abi: ERC20_ABI,
       functionName: 'balanceOf',
       args: [address],
     }) as bigint
     
-    result.usdcEBalance = formatUnits(usdcEBalance, 6)
+    result.usdcEBalance = formatUnits(nativeUsdcBalance, 6) // Repurposing this field for native USDC
     
-    if (usdcEBalance > BigInt(0)) {
-      console.warn(`⚠️ You have ${result.usdcEBalance} USDC.e (deprecated bridged version). Polymarket uses native USDC!`)
-      errors.push(`You have ${result.usdcEBalance} USDC.e but Polymarket uses native USDC`)
+    if (nativeUsdcBalance > BigInt(0)) {
+      console.warn(`⚠️ You have ${result.usdcEBalance} native USDC, but Polymarket requires USDC.e!`)
+      console.warn(`   To trade on Polymarket, you need to swap native USDC → USDC.e or bridge USDC from Ethereum`)
+      errors.push(`You have ${result.usdcEBalance} native USDC but Polymarket requires USDC.e. Need to swap or bridge.`)
     }
     
   } catch (e) {

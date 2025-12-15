@@ -36,8 +36,8 @@ import {
 } from '@/lib/polymarket/directTrade'
 
 import {
-  POLYGON_USDC,
-  POLYGON_USDC_E_DEPRECATED,
+  POLYGON_USDC,        // USDC.e (what Polymarket uses)
+  POLYGON_USDC_NATIVE, // Native USDC (NOT used by Polymarket)
   CTF_EXCHANGE,
   NEG_RISK_CTF_EXCHANGE,
   CONDITIONAL_TOKENS,
@@ -1434,31 +1434,32 @@ export function usePolygonUsdcBalance() {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['polygon-usdc', tradingWallet],
     queryFn: async () => {
-      if (!tradingWallet) return { native: '0', bridged: '0' }
+      if (!tradingWallet) return { usdce: '0', native: '0' }
       
       try {
-        // Fetch native USDC balance (what Polymarket uses)
-        const nativeBal = await publicClient.readContract({
-          address: POLYGON_USDC,
+        // Fetch USDC.e balance (what Polymarket uses!)
+        // CRITICAL: Polymarket uses USDC.e, NOT native USDC
+        const usdceBal = await publicClient.readContract({
+          address: POLYGON_USDC,  // This is USDC.e (0x2791Bca...)
           abi: USDC_ABI,
           functionName: 'balanceOf',
           args: [tradingWallet as `0x${string}`],
         }) as bigint
         
-        // Also fetch USDC.e balance (legacy bridged version)
-        const bridgedBal = await publicClient.readContract({
-          address: POLYGON_USDC_E_DEPRECATED,
+        // Also fetch native USDC balance (NOT used by Polymarket, but useful to show user)
+        const nativeBal = await publicClient.readContract({
+          address: POLYGON_USDC_NATIVE,  // This is native USDC (0x3c499c...)
           abi: USDC_ABI,
           functionName: 'balanceOf',
           args: [tradingWallet as `0x${string}`],
         }) as bigint
         
         return {
+          usdce: formatUnits(usdceBal, 6),
           native: formatUnits(nativeBal, 6),
-          bridged: formatUnits(bridgedBal, 6),
         }
       } catch {
-        return { native: '0', bridged: '0' }
+        return { usdce: '0', native: '0' }
       }
     },
     enabled: !!tradingWallet,
@@ -1467,10 +1468,11 @@ export function usePolygonUsdcBalance() {
   })
 
   return {
-    balance: data?.native || '0',
-    nativeUsdcBalance: data?.native || '0',
-    bridgedUsdcBalance: data?.bridged || '0', // USDC.e
-    hasBridgedUsdc: parseFloat(data?.bridged || '0') > 0,
+    balance: data?.usdce || '0',  // USDC.e (what Polymarket uses)
+    usdceBalance: data?.usdce || '0',  // USDC.e (what Polymarket uses)
+    nativeUsdcBalance: data?.native || '0',  // Native USDC (NOT used by Polymarket)
+    hasNativeUsdc: parseFloat(data?.native || '0') > 0,
+    needsSwap: parseFloat(data?.native || '0') > 0 && parseFloat(data?.usdce || '0') === 0,
     isLoading,
     refetch,
     tradingWallet,
