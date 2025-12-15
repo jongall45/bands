@@ -1,6 +1,5 @@
 import express from 'express'
 import helmet from 'helmet'
-import cors from 'cors'
 import compression from 'compression'
 
 import { config, validateConfig } from './config/index.js'
@@ -24,11 +23,97 @@ validateConfig()
 const app = express()
 
 // ============================================
-// TRUST PROXY (must be before rate limiter!)
+// TRUST PROXY (must be before ANY middleware!)
 // ============================================
 // Required for Railway/Vercel deployments behind load balancers
 // Fixes: ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
 app.set('trust proxy', 1)
+
+// ============================================
+// ALLOWED ORIGINS
+// ============================================
+const ALLOWED_ORIGINS = [
+  'https://www.bands.cash',
+  'https://bands.cash',
+]
+
+const ALLOWED_PATTERNS = [
+  /^https:\/\/.*\.vercel\.app$/,
+  /^http:\/\/localhost:\d+$/,
+  /^http:\/\/127\.0\.0\.1:\d+$/,
+]
+
+function isOriginAllowed(origin: string | undefined): boolean {
+  if (!origin) return true // Allow server-to-server requests
+  if (ALLOWED_ORIGINS.includes(origin)) return true
+  return ALLOWED_PATTERNS.some(pattern => pattern.test(origin))
+}
+
+// ============================================
+// PREFLIGHT / CORS HANDLER (before everything!)
+// ============================================
+// Must be BEFORE helmet, rate limiter, body parser, etc.
+// This ensures OPTIONS requests are answered immediately.
+app.use((req, res, next) => {
+  const origin = req.headers.origin
+  
+  // Set CORS headers for ALL responses (not just OPTIONS)
+  if (origin && isOriginAllowed(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Access-Control-Allow-Credentials', 'true')
+    res.setHeader('Access-Control-Max-Age', '86400') // Cache preflight for 24h
+    
+    // Expose headers that frontend might need
+    res.setHeader('Access-Control-Expose-Headers', [
+      'X-Request-Id',
+      'X-RateLimit-Limit',
+      'X-RateLimit-Remaining',
+      'X-RateLimit-Reset',
+    ].join(', '))
+  }
+  
+  // Handle OPTIONS preflight requests IMMEDIATELY
+  if (req.method === 'OPTIONS') {
+    // CRITICAL: Dynamically reflect the requested headers
+    // This ensures we never miss a header that clob-client sends
+    const requestedHeaders = req.headers['access-control-request-headers']
+    if (requestedHeaders) {
+      res.setHeader('Access-Control-Allow-Headers', requestedHeaders)
+    } else {
+      // Fallback: allow common headers + all poly_* headers
+      res.setHeader('Access-Control-Allow-Headers', [
+        'Content-Type',
+        'Authorization',
+        'Accept',
+        'Origin',
+        'X-Requested-With',
+        // All Polymarket clob-client headers
+        'poly_address',
+        'poly_api_key',
+        'poly_signature',
+        'poly_timestamp',
+        'poly_nonce',
+        'poly_passphrase',
+        'POLY_ADDRESS',
+        'POLY_API_KEY',
+        'POLY_SIGNATURE',
+        'POLY_TIMESTAMP',
+        'POLY_NONCE',
+        'POLY_PASSPHRASE',
+      ].join(', '))
+    }
+    
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+    
+    // Log preflight for debugging
+    logger.info(`[CORS] OPTIONS ${req.path} from ${origin} - allowing headers: ${requestedHeaders || 'default set'}`)
+    
+    // Return 204 No Content immediately (don't continue to other middleware)
+    return res.status(204).end()
+  }
+  
+  next()
+})
 
 // ============================================
 // MIDDLEWARE
@@ -39,70 +124,13 @@ app.use(helmet({
   contentSecurityPolicy: false, // Disable CSP for API
 }))
 
-// CORS - allow frontend origins
-// Must include ALL headers that clob-client sends
-app.use(cors({
-  origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl)
-    if (!origin) return callback(null, true)
-    
-    // Allow bands.cash and vercel preview deployments
-    const allowedPatterns = [
-      'https://www.bands.cash',
-      'https://bands.cash',
-      /^https:\/\/.*\.vercel\.app$/,
-      /^http:\/\/localhost:\d+$/,
-    ]
-    
-    const isAllowed = allowedPatterns.some(pattern => 
-      typeof pattern === 'string' ? origin === pattern : pattern.test(origin)
-    )
-    
-    if (isAllowed) {
-      callback(null, true)
-    } else {
-      callback(null, config.frontendOrigin) // fallback to configured origin
-    }
-  },
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'Accept',
-    'Origin',
-    'X-Requested-With',
-    // ALL Polymarket/clob-client headers (case-insensitive but list all variants)
-    'POLY_ADDRESS',
-    'POLY_API_KEY',
-    'POLY_SIGNATURE',
-    'POLY_TIMESTAMP',
-    'POLY_NONCE',
-    'POLY_PASSPHRASE',
-    // Lowercase variants
-    'poly_address',
-    'poly_api_key',
-    'poly_signature',
-    'poly_timestamp',
-    'poly_nonce',
-    'poly_passphrase',
-  ],
-  exposedHeaders: [
-    'X-Request-Id',
-    'X-RateLimit-Limit',
-    'X-RateLimit-Remaining',
-    'X-RateLimit-Reset',
-  ],
-  credentials: true,
-  maxAge: 86400, // Cache preflight for 24 hours
-}))
-
 // Compression
 app.use(compression())
 
 // Body parsing
 app.use(express.json({ limit: '1mb' }))
 
-// Global rate limiting
+// Global rate limiting (AFTER preflight handling so OPTIONS isn't rate-limited)
 app.use(globalLimiter)
 
 // Request logging

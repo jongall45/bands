@@ -44,6 +44,10 @@ router.get('/:id', queryLimiter, async (req: Request, res: Response) => {
 /**
  * GET /api/markets/:id/stats
  * Get market statistics (orderbook, prices)
+ * 
+ * Returns the orderbook for a token, used for:
+ * - Displaying current bid/ask prices
+ * - Calculating mid price for trading UI
  */
 router.get('/:id/stats', queryLimiter, async (req: Request, res: Response) => {
   try {
@@ -52,7 +56,16 @@ router.get('/:id/stats', queryLimiter, async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'tokenId query parameter required' })
     }
     
-    const stats = await getMarketStats(tokenId)
+    const stats = await getMarketStats(tokenId) as any
+    
+    // Log orderbook summary for debugging
+    const bidsCount = stats?.bids?.length || 0
+    const asksCount = stats?.asks?.length || 0
+    const bestBid = stats?.bids?.[0]?.price
+    const bestAsk = stats?.asks?.[0]?.price
+    
+    logger.debug(`[Markets] Stats for ${tokenId.slice(0, 20)}...: bids=${bidsCount} asks=${asksCount} bestBid=${bestBid} bestAsk=${bestAsk}`)
+    
     res.json({ stats })
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error'

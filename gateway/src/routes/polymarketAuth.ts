@@ -244,6 +244,93 @@ router.post('/auth/credentials', async (req: Request, res: Response) => {
 })
 
 /**
+ * POST /api/polymarket/auth/test
+ * Test if credentials are valid by calling a lightweight CLOB endpoint
+ * 
+ * This helps diagnose 401 errors before placing orders.
+ */
+router.post('/auth/test', async (req: Request, res: Response) => {
+  const { wallet } = req.body
+  
+  if (!wallet || typeof wallet !== 'string') {
+    return res.status(400).json({ 
+      error: 'wallet is required in request body' 
+    })
+  }
+  
+  const normalizedWallet = wallet.toLowerCase()
+  const creds = getUserCreds(normalizedWallet)
+  
+  if (!creds) {
+    return res.json({
+      valid: false,
+      error: 'NO_CREDENTIALS',
+      message: 'No credentials found for this wallet. Complete auth flow first.',
+    })
+  }
+  
+  // Validate all three components are present
+  if (!creds.apiKey || !creds.secret || !creds.passphrase) {
+    return res.json({
+      valid: false,
+      error: 'INCOMPLETE_CREDENTIALS',
+      message: `Credentials incomplete: hasKey=${!!creds.apiKey} hasSecret=${!!creds.secret} hasPass=${!!creds.passphrase}`,
+    })
+  }
+  
+  // Test credentials by calling the /time endpoint (lightweight, authed)
+  try {
+    const clobApi = (process.env.CLOB_API || 'https://clob.polymarket.com').trim()
+    
+    // Create HMAC signature for the request
+    const timestamp = Math.floor(Date.now() / 1000).toString()
+    const message = timestamp + 'GET' + '/time'
+    const { createHmac } = await import('crypto')
+    const hmac = createHmac('sha256', Buffer.from(creds.secret, 'base64'))
+    hmac.update(message)
+    const signature = hmac.digest('base64')
+    
+    const response = await fetch(`${clobApi}/time`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'POLY_API_KEY': creds.apiKey,
+        'POLY_SIGNATURE': signature,
+        'POLY_TIMESTAMP': timestamp,
+        'POLY_PASSPHRASE': creds.passphrase,
+      },
+      signal: AbortSignal.timeout(5000),
+    })
+    
+    if (response.ok) {
+      logger.info(`[Auth Test] Credentials valid for ${normalizedWallet.slice(0, 10)}...`)
+      return res.json({
+        valid: true,
+        message: 'Credentials are valid',
+        keyPrefix: creds.apiKey.substring(0, 8) + '...',
+      })
+    } else {
+      const errorText = await response.text()
+      logger.warn(`[Auth Test] Credentials INVALID for ${normalizedWallet.slice(0, 10)}...: ${response.status} ${errorText}`)
+      return res.json({
+        valid: false,
+        error: 'INVALID_CREDENTIALS',
+        status: response.status,
+        message: errorText,
+      })
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    logger.error(`[Auth Test] Error testing credentials: ${errorMsg}`)
+    return res.json({
+      valid: false,
+      error: 'TEST_FAILED',
+      message: errorMsg,
+    })
+  }
+})
+
+/**
  * GET /api/polymarket/health?wallet=0x...
  * Health check endpoint for Polymarket trading
  * 

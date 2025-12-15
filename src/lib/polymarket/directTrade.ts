@@ -185,8 +185,11 @@ export async function placeDirectOrder(
     const errorMsg = error instanceof Error ? error.message : String(error)
     console.error('[DirectTrade] Order failed:', errorMsg)
     
-    // Try to extract more details
+    // Try to extract more details from various error formats
     let details: unknown = undefined
+    let friendlyError = errorMsg
+    
+    // Handle axios-style errors
     if (error && typeof error === 'object' && 'response' in error) {
       const axiosError = error as any
       details = {
@@ -195,12 +198,58 @@ export async function placeDirectOrder(
         data: axiosError.response?.data,
       }
       console.error('[DirectTrade] API error details:', details)
+      
+      // Make error message more useful
+      if (axiosError.response?.status === 401) {
+        friendlyError = 'Authentication failed - credentials may be expired. Try re-enabling trading.'
+      } else if (axiosError.response?.status === 400) {
+        const data = axiosError.response?.data
+        friendlyError = data?.error || data?.message || 'Invalid order parameters'
+      } else if (axiosError.response?.status === 403) {
+        friendlyError = 'Access denied - you may not have trading permissions for this market.'
+      }
+    }
+    
+    // Handle fetch-style errors
+    if (error && typeof error === 'object' && 'status' in error) {
+      const fetchError = error as any
+      details = {
+        status: fetchError.status,
+        statusText: fetchError.statusText,
+        body: fetchError.body,
+      }
+      
+      if (fetchError.status === 401) {
+        friendlyError = 'Authentication failed - credentials may be expired. Try re-enabling trading.'
+      }
+    }
+    
+    // Categorize error types for the UI
+    let errorType = 'UNKNOWN'
+    if (errorMsg.includes('Signer is needed')) {
+      errorType = 'NO_SIGNER'
+      friendlyError = 'Wallet signer not available. Make sure your wallet is connected.'
+    } else if (errorMsg.includes('CORS') || errorMsg.includes('cross-origin')) {
+      errorType = 'CORS'
+      friendlyError = 'Network error - unable to reach trading server.'
+    } else if (errorMsg.includes('timeout') || errorMsg.includes('Timeout')) {
+      errorType = 'TIMEOUT'
+      friendlyError = 'Request timed out - please try again.'
+    } else if (errorMsg.includes('network') || errorMsg.includes('Network')) {
+      errorType = 'NETWORK'
+      friendlyError = 'Network error - check your connection.'
+    } else if (errorMsg.includes('401') || errorMsg.includes('Unauthorized')) {
+      errorType = 'AUTH'
+      friendlyError = 'Authentication failed - try re-enabling trading.'
+    } else if (errorMsg.includes('Invalid order')) {
+      errorType = 'INVALID_ORDER'
+      friendlyError = 'Invalid order - check price and amount.'
     }
     
     return {
       success: false,
-      error: errorMsg,
-      details,
+      error: friendlyError,
+      details: { ...details as any, errorType, originalError: errorMsg },
     }
   }
 }

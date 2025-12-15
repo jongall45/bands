@@ -89,20 +89,27 @@ export async function searchMarkets(query: string): Promise<PolymarketMarket[]> 
 // IMPORTANT: Outcome order in Polymarket is NOT guaranteed to be [Yes, No]
 // We must find the YES/NO indices dynamically based on the outcomes array
 export function parseMarket(market: PolymarketMarket): ParsedMarket {
-  let prices: string[] = ['0.5', '0.5']
+  let prices: string[] = []
   let outcomes: string[] = ['Yes', 'No']
   let tokenIds: string[] = ['', '']
 
   try {
-    if (market.outcomePrices) prices = JSON.parse(market.outcomePrices)
-    if (market.outcomes) outcomes = JSON.parse(market.outcomes)
-    if (market.clobTokenIds) tokenIds = JSON.parse(market.clobTokenIds)
-  } catch {
-    // Use defaults
+    if (market.outcomePrices) {
+      prices = JSON.parse(market.outcomePrices)
+    }
+    if (market.outcomes) {
+      outcomes = JSON.parse(market.outcomes)
+    }
+    if (market.clobTokenIds) {
+      tokenIds = JSON.parse(market.clobTokenIds)
+    }
+  } catch (e) {
+    console.warn('[parseMarket] Failed to parse market data:', e)
   }
 
   // Find YES and NO indices dynamically
   // Polymarket uses various outcome labels: "Yes"/"No", "True"/"False", or custom outcomes
+  // For binary markets, typically first outcome = positive, second = negative
   const yesIndex = outcomes.findIndex(o => 
     o.toLowerCase() === 'yes' || o.toLowerCase() === 'true'
   )
@@ -110,14 +117,43 @@ export function parseMarket(market: PolymarketMarket): ParsedMarket {
     o.toLowerCase() === 'no' || o.toLowerCase() === 'false'
   )
   
-  // If we can't find Yes/No, assume first outcome is the "positive" one
+  // If we can't find Yes/No by label, use positions:
+  // For binary, index 0 = positive outcome, index 1 = negative outcome
   const positiveIndex = yesIndex >= 0 ? yesIndex : 0
-  const negativeIndex = noIndex >= 0 ? noIndex : (positiveIndex === 0 ? 1 : 0)
+  const negativeIndex = noIndex >= 0 ? noIndex : (outcomes.length > 1 ? 1 : 0)
+
+  // Parse prices carefully - use the actual value, not a default
+  // Only fall back to 0.5 if there's truly no data
+  const yesPrice = prices[positiveIndex] !== undefined 
+    ? parseFloat(prices[positiveIndex]) 
+    : null
+  const noPrice = prices[negativeIndex] !== undefined 
+    ? parseFloat(prices[negativeIndex]) 
+    : null
+
+  // Log for debugging
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[parseMarket] Parsed:', {
+      question: market.question?.slice(0, 50),
+      outcomes,
+      prices,
+      positiveIndex,
+      negativeIndex,
+      yesPrice,
+      noPrice,
+    })
+  }
+
+  // If we have no prices at all, log a warning
+  if (yesPrice === null && noPrice === null) {
+    console.warn('[parseMarket] No prices available for market:', market.question?.slice(0, 50))
+  }
 
   return {
     ...market,
-    yesPrice: parseFloat(prices[positiveIndex]) || 0.5,
-    noPrice: parseFloat(prices[negativeIndex]) || 0.5,
+    // Use the parsed price, or fallback to 0.5 only as last resort
+    yesPrice: yesPrice !== null && !isNaN(yesPrice) ? yesPrice : 0.5,
+    noPrice: noPrice !== null && !isNaN(noPrice) ? noPrice : 0.5,
     yesTokenId: tokenIds[positiveIndex] || '',
     noTokenId: tokenIds[negativeIndex] || '',
     outcomeLabels: outcomes,

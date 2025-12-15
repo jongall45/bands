@@ -23,27 +23,19 @@ const router = Router()
 // Upstream Polymarket CLOB API
 const CLOB_UPSTREAM = config.clobApi || 'https://clob.polymarket.com'
 
-// Headers to forward from client to upstream
-// Must include ALL poly_* headers that clob-client sends
-const FORWARD_REQUEST_HEADERS = [
-  'content-type',
-  'accept',
-  'authorization',
-  // Polymarket auth headers (L2 API key auth)
-  'poly_address',     // <-- This was missing! Required by clob-client
-  'poly_api_key',
-  'poly_signature',
-  'poly_timestamp',
-  'poly_nonce',
-  'poly_passphrase',
-  // Legacy/uppercase variants
-  'POLY_ADDRESS',
-  'POLY_API_KEY',
-  'POLY_SIGNATURE', 
-  'POLY_TIMESTAMP',
-  'POLY_NONCE',
-  'POLY_PASSPHRASE',
-]
+// Headers NOT to forward (hop-by-hop headers)
+const SKIP_REQUEST_HEADERS = new Set([
+  'host',
+  'connection',
+  'keep-alive',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+  'content-length', // Let fetch set this
+])
 
 // Headers to forward from upstream to client
 const FORWARD_RESPONSE_HEADERS = [
@@ -54,67 +46,86 @@ const FORWARD_RESPONSE_HEADERS = [
   'x-ratelimit-reset',
 ]
 
-// Headers that contain secrets (DO NOT LOG)
-const SECRET_HEADERS = [
-  'poly_signature',
-  'poly_passphrase',
-  'authorization',
-  'POLY_SIGNATURE',
-  'POLY_PASSPHRASE',
+// Headers that contain secrets (DO NOT LOG values)
+const SECRET_HEADER_PATTERNS = [
+  /poly_signature/i,
+  /poly_passphrase/i,
+  /poly_secret/i,
+  /authorization/i,
 ]
 
+function isSecretHeader(name: string): boolean {
+  return SECRET_HEADER_PATTERNS.some(pattern => pattern.test(name))
+}
+
 /**
- * Redact secret headers for logging
+ * Build safe log of headers (redact secrets)
  */
-function redactHeaders(headers: Record<string, string>): Record<string, string> {
-  const redacted: Record<string, string> = {}
+function logHeaders(headers: Record<string, string>): string {
+  const safe: Record<string, string> = {}
   for (const [key, value] of Object.entries(headers)) {
-    if (SECRET_HEADERS.some(s => key.toLowerCase() === s.toLowerCase())) {
-      redacted[key] = '[REDACTED]'
+    if (isSecretHeader(key)) {
+      safe[key] = `[REDACTED len=${value.length}]`
     } else {
-      redacted[key] = value
+      safe[key] = value
     }
   }
-  return redacted
+  return JSON.stringify(safe)
 }
 
 /**
  * Build upstream URL from request
  */
 function buildUpstreamUrl(req: Request): string {
-  // Get the path after /api/polymarket/proxy
-  // req.path will be something like /order or /books
   const upstreamPath = req.path
-  
-  // Build query string
   const queryString = Object.keys(req.query).length > 0 
     ? '?' + new URLSearchParams(req.query as Record<string, string>).toString()
     : ''
-  
   return `${CLOB_UPSTREAM}${upstreamPath}${queryString}`
 }
 
 /**
  * Forward request to Polymarket CLOB
+ * 
+ * IMPORTANT: We forward ALL headers except hop-by-hop ones.
+ * This ensures we never miss a header that clob-client sends.
  */
 async function forwardRequest(req: Request, res: Response): Promise<void> {
   const startTime = Date.now()
   const upstreamUrl = buildUpstreamUrl(req)
   
-  // Build headers to forward
+  // Build headers to forward - include ALL except hop-by-hop
   const forwardHeaders: Record<string, string> = {}
-  for (const headerName of FORWARD_REQUEST_HEADERS) {
-    const value = req.headers[headerName.toLowerCase()]
-    if (value && typeof value === 'string') {
-      forwardHeaders[headerName] = value
+  let polyHeadersFound: string[] = []
+  
+  for (const [key, value] of Object.entries(req.headers)) {
+    const lowerKey = key.toLowerCase()
+    
+    // Skip hop-by-hop headers
+    if (SKIP_REQUEST_HEADERS.has(lowerKey)) continue
+    
+    // Only forward string values (not arrays)
+    if (typeof value === 'string') {
+      // Polymarket expects specific header casing for poly_ headers
+      // The clob-client sends them as POLY_ADDRESS, etc.
+      // Express lowercases all headers, so we need to restore the original casing
+      if (lowerKey.startsWith('poly_')) {
+        // Convert to uppercase format: poly_address -> POLY_ADDRESS
+        const upperKey = key.toUpperCase()
+        forwardHeaders[upperKey] = value
+        polyHeadersFound.push(upperKey)
+      } else {
+        forwardHeaders[key] = value
+      }
     }
   }
   
-  // Log request (no secrets)
+  // Log request (including which poly headers we found)
   logger.info(`[Proxy] ${req.method} ${req.path} -> ${CLOB_UPSTREAM}${req.path}`)
-  if (process.env.NODE_ENV === 'development') {
-    logger.debug(`[Proxy] Headers: ${JSON.stringify(redactHeaders(forwardHeaders))}`)
-  }
+  logger.info(`[Proxy] poly_* headers found: ${polyHeadersFound.length > 0 ? polyHeadersFound.join(', ') : 'NONE'}`)
+  
+  // Debug log all headers (safe)
+  logger.debug(`[Proxy] Forwarding headers: ${logHeaders(forwardHeaders)}`)
   
   try {
     // Prepare fetch options
@@ -124,9 +135,12 @@ async function forwardRequest(req: Request, res: Response): Promise<void> {
     }
     
     // Add body for POST/PUT/PATCH
-    if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.body) {
+    if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.body && Object.keys(req.body).length > 0) {
       fetchOptions.body = JSON.stringify(req.body)
       forwardHeaders['content-type'] = 'application/json'
+      
+      // Log body keys (not values) for debugging
+      logger.debug(`[Proxy] Body keys: ${Object.keys(req.body).join(', ')}`)
     }
     
     // Make upstream request with timeout
@@ -152,8 +166,14 @@ async function forwardRequest(req: Request, res: Response): Promise<void> {
       responseBody = responseText
     }
     
-    // Log response (no secrets)
-    logger.info(`[Proxy] ${req.method} ${req.path} <- ${upstreamResponse.status} (${duration}ms)`)
+    // Log response
+    const logLevel = upstreamResponse.ok ? 'info' : 'warn'
+    logger[logLevel](`[Proxy] ${req.method} ${req.path} <- ${upstreamResponse.status} (${duration}ms)`)
+    
+    // Log error details for non-200 responses
+    if (!upstreamResponse.ok) {
+      logger.warn(`[Proxy] Upstream error body: ${JSON.stringify(responseBody)}`)
+    }
     
     // Forward response headers
     for (const headerName of FORWARD_RESPONSE_HEADERS) {
@@ -178,13 +198,25 @@ async function forwardRequest(req: Request, res: Response): Promise<void> {
     
     logger.error(`[Proxy] ${req.method} ${req.path} FAILED (${duration}ms): ${errorMsg}`)
     
-    // Handle specific errors
+    // Handle specific errors with clear messages
     if (errorMsg.includes('abort')) {
-      res.status(504).json({ error: 'Upstream timeout' })
+      res.status(504).json({ 
+        error: 'UPSTREAM_TIMEOUT',
+        message: 'Polymarket API did not respond in time',
+        path: req.path,
+      })
     } else if (errorMsg.includes('ECONNREFUSED') || errorMsg.includes('ENOTFOUND')) {
-      res.status(502).json({ error: 'Upstream unavailable' })
+      res.status(502).json({ 
+        error: 'UPSTREAM_UNAVAILABLE',
+        message: 'Polymarket API is unreachable',
+        path: req.path,
+      })
     } else {
-      res.status(500).json({ error: 'Proxy error', message: errorMsg })
+      res.status(500).json({ 
+        error: 'PROXY_ERROR',
+        message: errorMsg,
+        path: req.path,
+      })
     }
   }
 }
