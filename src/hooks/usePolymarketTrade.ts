@@ -1237,6 +1237,137 @@ export function usePolymarketTrade({
   ])
 
   // ============================================
+  // SELL EXECUTION
+  // ============================================
+  
+  /**
+   * Execute a SELL order via CLOB
+   * 
+   * CRITICAL: For selling, we MUST use the tokenId from the position,
+   * NOT from market parsing. The position's `asset` field is the tokenId.
+   * 
+   * @param tokenId - The outcome token ID from CLOB position (position.asset)
+   * @param shares - Number of shares to sell
+   * @param price - Sell price (0-1)
+   * @param outcome - YES or NO (for display purposes)
+   */
+  const executeSell = useCallback(async (
+    tokenId: string,
+    shares: number,
+    price: number,
+    outcome: 'YES' | 'NO'
+  ) => {
+    console.log('💰 executeSell called:', { tokenId, shares, price, outcome, tradingWallet: tradingWallet?.slice(0, 10) })
+
+    if (!embeddedWallet || !tradingWallet) {
+      setState({ status: 'error', error: 'Wallet not connected' })
+      onError?.('Wallet not connected')
+      return
+    }
+
+    if (!tokenId) {
+      setState({ status: 'error', error: 'Invalid token ID. Cannot sell without position data.' })
+      onError?.('Invalid token ID')
+      return
+    }
+
+    if (shares <= 0) {
+      setState({ status: 'error', error: 'No shares to sell' })
+      onError?.('No shares to sell')
+      return
+    }
+
+    if (price <= 0 || price >= 1) {
+      setState({ status: 'error', error: 'Invalid sell price' })
+      onError?.('Invalid sell price')
+      return
+    }
+
+    setState({ status: 'signing', message: 'Preparing sell order...' })
+
+    try {
+      // Get signer from Privy embedded wallet (ensure on Polygon)
+      const signer = await getEthersSigner(embeddedWallet, 137)
+      
+      // Fetch credentials
+      console.log('🔐 Fetching credentials for sell order...')
+      let creds = await fetchCredentials(tradingWallet, signer)
+      
+      if (!creds) {
+        creds = apiCredentials || loadCredentials(tradingWallet)
+        if (!creds) {
+          throw new Error('No API credentials available. Please enable trading first.')
+        }
+      } else {
+        setApiCredentials(creds)
+        saveCredentials(tradingWallet, creds)
+      }
+
+      console.log('✅ Creating SELL order via ClobClient...')
+      
+      // Create ClobClient
+      const clobClient = createDirectClobClient(
+        signer,
+        creds,
+        tradingWallet
+      )
+
+      setState({ status: 'submitting', message: 'Submitting sell order...' })
+      
+      // Get tick size from market
+      const tickSize = (market as any).minimum_tick_size || '0.01'
+
+      console.log('📤 SELL Order Details:')
+      console.log('   Token ID:', tokenId)
+      console.log('   Side: SELL')
+      console.log('   Price:', price, `(${(price * 100).toFixed(1)}%)`)
+      console.log('   Size (shares):', shares)
+      console.log('   Tick Size:', tickSize)
+      
+      // Place SELL order
+      const result = await placeDirectOrder(clobClient, {
+        tokenId,
+        side: 'SELL',
+        price,
+        size: shares,
+        tickSize: tickSize as any,
+        negRisk: parsedMarket.negRisk,
+      })
+
+      if (result.success) {
+        setState({ 
+          status: 'success', 
+          message: 'Sell order placed!',
+          orderId: result.orderId,
+        })
+        onSuccess?.(result.orderId || 'sell-order-submitted')
+        setTimeout(fetchBalancesAndAllowances, 2000)
+      } else {
+        throw new Error(result.error || 'Sell order failed')
+      }
+    } catch (err: unknown) {
+      console.error('Sell order failed:', err)
+      
+      let errorMsg = 'Sell order failed'
+      if (err instanceof Error) {
+        errorMsg = err.message
+      }
+      
+      setState({ status: 'error', error: errorMsg })
+      onError?.(errorMsg)
+    }
+  }, [
+    embeddedWallet,
+    tradingWallet,
+    market,
+    parsedMarket,
+    apiCredentials,
+    fetchBalancesAndAllowances,
+    onSuccess,
+    onError,
+  ])
+
+  // ============================================
   // HELPERS
   // ============================================
   
@@ -1278,6 +1409,7 @@ export function usePolymarketTrade({
     // Actions
     estimateTrade: getTradeEstimate,
     executeTrade,
+    executeSell,  // NEW: Proper SELL order execution
     enableTrading,
     reset,
   }

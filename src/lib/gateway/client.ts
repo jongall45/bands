@@ -252,9 +252,70 @@ export async function cancelOrder(
 }
 
 // ============================================
-// POSITION ENDPOINTS
+// POSITION ENDPOINTS (CLOB)
 // ============================================
 
+/**
+ * CLOB Position - Returned from Polymarket CLOB /positions endpoint
+ * 
+ * CRITICAL: The `asset` field is the tokenId needed for SELL orders.
+ * This is NOT the same as conditionId or marketId.
+ */
+export interface CLOBPosition {
+  asset: string           // TOKEN ID - CRITICAL for sell orders
+  market: string          // conditionId
+  side: 'YES' | 'NO' | string
+  size: string            // Total shares owned
+  avgPrice: string        // Average entry price
+  realizedPnl?: string    // Realized PnL
+  curPrice?: string       // Current price
+  
+  // Computed fields
+  sellableSize?: string   // size - locked
+  locked?: string         // Shares locked in open orders
+  
+  // Market info (enriched)
+  question?: string
+  slug?: string
+  imageUrl?: string
+}
+
+export interface CLOBPositionsResponse {
+  positions: CLOBPosition[]
+  totalValue?: string
+  totalPnl?: string
+}
+
+/**
+ * Fetch CLOB positions for a wallet
+ * 
+ * Uses the Polymarket CLOB /positions endpoint via gateway proxy.
+ * Returns positions with tokenId (asset) for proper SELL order submission.
+ */
+export async function getCLOBPositions(address: string): Promise<CLOBPositionsResponse> {
+  try {
+    // First try the gateway positions endpoint
+    const data = await gatewayFetch<CLOBPositionsResponse>(
+      `/api/polymarket/positions?address=${address}`
+    )
+    return data
+  } catch (e) {
+    console.warn('[getCLOBPositions] Gateway failed, trying proxy:', e)
+    
+    // Fallback: try direct proxy to CLOB
+    const proxyUrl = `/api/polymarket/proxy/positions?address=${address}`
+    const response = await fetch(proxyUrl, { credentials: 'include' })
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch positions: ${response.status}`)
+    }
+    
+    const data = await response.json()
+    return { positions: data || [] }
+  }
+}
+
+// Legacy interface for backwards compatibility
 export interface Position {
   id: string
   market: string

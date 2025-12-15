@@ -70,6 +70,7 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
     noPrice,
     estimateTrade,
     executeTrade,
+    executeSell,  // NEW: For SELL orders with proper tokenId
     enableTrading,
     reset,
   } = usePolymarketTrade({
@@ -204,9 +205,34 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
   }, [market.id, reset])
 
   const handleTrade = useCallback(() => {
-    if (!amountNum || hasInsufficientBalance || isLoading) return
-    executeTrade(amount, selectedOutcome)
-  }, [amount, selectedOutcome, amountNum, hasInsufficientBalance, isLoading, executeTrade])
+    if (isLoading) return
+    
+    if (tradeAction === 'BUY') {
+      // BUY: Check balance and execute
+      if (!amountNum || hasInsufficientBalance) return
+      executeTrade(amount, selectedOutcome)
+    } else {
+      // SELL: Need tokenId and shares from position
+      const sharesToSell = selectedOutcome === 'YES' ? userYesShares : userNoShares
+      if (sharesToSell <= 0) {
+        console.error('No shares to sell')
+        return
+      }
+      
+      // Get tokenId from parsed market
+      const tokenId = selectedOutcome === 'YES' ? parsedMarket.yesTokenId : parsedMarket.noTokenId
+      if (!tokenId) {
+        console.error('No tokenId for outcome:', selectedOutcome)
+        return
+      }
+      
+      // Use current price as sell price
+      const sellPrice = selectedOutcome === 'YES' ? yesPrice : noPrice
+      
+      console.log('📤 Executing SELL:', { tokenId, shares: sharesToSell, price: sellPrice, outcome: selectedOutcome })
+      executeSell(tokenId, sharesToSell, sellPrice, selectedOutcome)
+    }
+  }, [tradeAction, amount, selectedOutcome, amountNum, hasInsufficientBalance, isLoading, executeTrade, executeSell, userYesShares, userNoShares, parsedMarket, yesPrice, noPrice])
 
   const handleEnableTrading = useCallback(async () => {
     await enableTrading()
