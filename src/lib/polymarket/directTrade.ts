@@ -49,16 +49,28 @@ const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || ''
 let axiosInterceptorInstalled = false
 
 export function installProxyInterceptor(): void {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'directTrade.ts:installProxyInterceptor',message:'installProxyInterceptor called',data:{isWindow:typeof window!=='undefined',alreadyInstalled:axiosInterceptorInstalled},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+  // #endregion
+  
   if (typeof window === 'undefined') return // Server-side, skip
   if (axiosInterceptorInstalled) return // Already installed
   
   // Add request interceptor to axios
   axios.interceptors.request.use(
     (config) => {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'directTrade.ts:interceptor',message:'Axios interceptor fired',data:{url:config.url?.slice(0,80),method:config.method,startsWithCanonical:config.url?.startsWith(CANONICAL_CLOB_HOST),headerKeys:Object.keys(config.headers||{})},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+      // #endregion
+      
       // Check if this is a Polymarket request
       if (config.url?.startsWith(CANONICAL_CLOB_HOST)) {
         const originalUrl = config.url
         const rewrittenUrl = config.url.replace(CANONICAL_CLOB_HOST, PROXY_PATH)
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'directTrade.ts:rewrite',message:'URL rewritten for proxy',data:{originalUrl:originalUrl.slice(0,80),rewrittenUrl:rewrittenUrl.slice(0,80),polyHeaders:Object.keys(config.headers||{}).filter(h=>h.toUpperCase().startsWith('POLY'))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+        // #endregion
         
         console.log('[AxiosProxy] Redirecting:', originalUrl.slice(0, 60), '->', rewrittenUrl.slice(0, 50))
         
@@ -80,6 +92,35 @@ export function installProxyInterceptor(): void {
   
   axiosInterceptorInstalled = true
   console.log('[AxiosProxy] Installed - Polymarket requests will route through proxy')
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'directTrade.ts:installed',message:'Axios interceptor installed successfully',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+  // #endregion
+  
+  // H5: Also intercept fetch and XHR in case SDK uses those in browser
+  // #region agent log - intercept native fetch
+  const originalFetch = window.fetch;
+  window.fetch = function(...args: Parameters<typeof fetch>) {
+    const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request).url;
+    if (url.includes('clob.polymarket.com')) {
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'directTrade.ts:fetchIntercept',message:'Native fetch to clob.polymarket.com detected!',data:{url:url.slice(0,100)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
+      console.error('[BYPASS DETECTED] Native fetch to clob.polymarket.com:', url);
+    }
+    return originalFetch.apply(window, args);
+  };
+  // #endregion
+  
+  // #region agent log - intercept XHR
+  const originalXHROpen = XMLHttpRequest.prototype.open;
+  (XMLHttpRequest.prototype as any).open = function(this: XMLHttpRequest, method: string, url: string | URL, async: boolean = true, username?: string | null, password?: string | null) {
+    const urlStr = typeof url === 'string' ? url : url.toString();
+    if (urlStr.includes('clob.polymarket.com')) {
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'directTrade.ts:xhrIntercept',message:'XHR to clob.polymarket.com detected!',data:{method,url:urlStr.slice(0,100)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
+      console.error('[BYPASS DETECTED] XHR to clob.polymarket.com:', urlStr);
+    }
+    return (originalXHROpen as any).call(this, method, url, async, username, password);
+  };
+  // #endregion
 }
 
 /**
@@ -178,6 +219,10 @@ export async function placeDirectOrder(
   params: DirectOrderParams
 ): Promise<DirectOrderResult> {
   const { tokenId, side, price, size, tickSize = '0.01', negRisk = false } = params
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'directTrade.ts:placeDirectOrder',message:'placeDirectOrder called',data:{tokenId:tokenId.slice(0,30),side,price,size,tickSize,negRisk,interceptorInstalled:axiosInterceptorInstalled},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
+  // #endregion
   
   console.log('[DirectTrade] Placing order via ClobClient:', {
     tokenId: tokenId.slice(0, 30) + '...',

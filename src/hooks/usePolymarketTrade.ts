@@ -976,6 +976,10 @@ export function usePolymarketTrade({
 
       setState({ status: 'submitting', message: 'Placing order...' })
       
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:beforePlaceOrder',message:'About to call placeDirectOrder',data:{tokenId:tokenId.slice(0,30),orderPrice,size,tickSize},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
+      
       // Use ClobClient - it will POST to our gateway proxy
       // which forwards to https://clob.polymarket.com/order
       const result = await placeDirectOrder(clobClient, {
@@ -986,6 +990,10 @@ export function usePolymarketTrade({
         tickSize: tickSize as any,
         negRisk: false,
       })
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:afterPlaceOrder',message:'placeDirectOrder returned',data:{success:result.success,error:result.error,orderId:result.orderId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
       
       console.log('📦 ClobClient response:', result)
 
