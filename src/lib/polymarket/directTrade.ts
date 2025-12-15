@@ -119,10 +119,13 @@ export interface DirectOrderParams {
   negRisk?: boolean
   /**
    * Order type:
-   * - FOK (Fill or Kill): Execute fully immediately or cancel (DEFAULT for market orders)
-   * - GTC (Good Till Cancelled): Sit on orderbook until filled/cancelled
+   * - GTC (Good Till Cancelled): Place limit order at price, fills if liquidity exists (DEFAULT)
+   * - FOK (Fill or Kill): Execute fully immediately or cancel (risky, requires exact liquidity)
+   * 
+   * NOTE: GTC is default because FOK often fails on thin orderbooks.
+   * A GTC order at the current price will fill immediately if there's liquidity.
    */
-  orderType?: 'FOK' | 'GTC'
+  orderType?: 'GTC' | 'FOK'
 }
 
 /**
@@ -202,11 +205,13 @@ export async function placeDirectOrder(
   clobClient: ClobClient,
   params: DirectOrderParams
 ): Promise<DirectOrderResult> {
-  const { tokenId, side, price, size, tickSize = '0.01', negRisk = false, orderType = 'FOK' } = params
+  // Default to GTC - more reliable than FOK on thin orderbooks
+  // GTC at current price fills immediately if there's liquidity
+  const { tokenId, side, price, size, tickSize = '0.01', negRisk = false, orderType = 'GTC' } = params
   
   console.log('[DirectTrade] Placing order:', {
     side,
-    price,
+    price: `${price} (${(price * 100).toFixed(1)}%)`,
     size,
     orderType,
     method: orderType === 'FOK' ? 'createAndPostMarketOrder (FOK)' : 'createAndPostOrder (GTC)',

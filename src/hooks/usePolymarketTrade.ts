@@ -971,52 +971,33 @@ export function usePolymarketTrade({
     try {
       const tokenId = outcome === 'YES' ? parsedMarket.yesTokenId : parsedMarket.noTokenId
       
-      // For BUY orders: use best ASK from orderbook (what we'll pay)
-      // BUT: if orderbook looks suspicious, use Gamma price instead
-      const bestAsk = outcome === 'YES' ? livePrices?.yesBestAsk : livePrices?.noBestAsk
-      const gammaPrice = outcome === 'YES' ? parsedMarket.yesPrice : parsedMarket.noPrice
+      // Price sources for BUY orders:
+      // 1. Display price (what user sees) - most consistent UX
+      // 2. Gamma price (API fallback)
+      // We add a small buffer to improve fill rates
+      const FILL_BUFFER = 0.02  // 2% buffer for fills
       const displayPrice = outcome === 'YES' ? yesPrice : noPrice
+      const gammaPrice = outcome === 'YES' ? parsedMarket.yesPrice : parsedMarket.noPrice
+      const bestAsk = outcome === 'YES' ? livePrices?.yesBestAsk : livePrices?.noBestAsk
       
-      // CRITICAL: Check if we have any valid price at all
-      // gammaPrice = 0 means no price data from Gamma API
       console.log('📊 Price check:', {
         outcome,
-        bestAsk,
-        gammaPrice,
         displayPrice,
+        gammaPrice,
+        bestAsk,
         hasPrices: (parsedMarket as any).hasPrices,
       })
-      
-      // Detect suspicious orderbook (both sides have similar high prices)
-      const yesBestAskValue = livePrices?.yesBestAsk ?? null
-      const noBestAskValue = livePrices?.noBestAsk ?? null
-      const orderbookSuspicious = (
-        yesBestAskValue !== null && 
-        noBestAskValue !== null && 
-        Math.abs(yesBestAskValue - noBestAskValue) < 0.1 &&
-        yesBestAskValue > 0.4
-      )
       
       let orderPrice: number
       let priceSource: string
       
-      if (orderbookSuspicious) {
-        // Orderbook data is wrong - check if Gamma price is valid
-        if (gammaPrice > 0 && gammaPrice < 1) {
-          orderPrice = gammaPrice
-          priceSource = 'GAMMA (orderbook suspicious)'
-          console.warn('⚠️ Orderbook data suspicious, using Gamma price:', orderPrice)
-        } else {
-          // Both orderbook and Gamma prices are invalid
-          setState({ status: 'error', error: 'No valid price available. Orderbook and API data are both unavailable.' })
-          onError?.('No valid price available')
-          return
-        }
-      } else if (bestAsk !== null && bestAsk !== undefined && bestAsk > 0 && bestAsk < 1) {
-        // Valid best ask from orderbook
-        orderPrice = bestAsk
-        priceSource = 'ORDERBOOK BEST ASK'
-        console.log('✅ Using best ask from orderbook:', orderPrice)
+      // Use display price with buffer for consistent UX
+      // This is what the user sees, so they know what they're paying
+      if (displayPrice > 0 && displayPrice < 1) {
+        // Add buffer: willing to pay slightly more to ensure fill
+        orderPrice = Math.min(displayPrice + FILL_BUFFER, 0.99)
+        priceSource = 'DISPLAY + BUFFER'
+        console.log('✅ Using display price + buffer:', orderPrice, `(display: ${displayPrice})`)
       } else if (gammaPrice > 0 && gammaPrice < 1) {
         // Fall back to Gamma price (MUST be valid: 0 < price < 1)
         orderPrice = gammaPrice
@@ -1047,14 +1028,13 @@ export function usePolymarketTrade({
       console.log('   Token ID:', tokenId)
       console.log('   Outcome:', outcome)
       console.log('   Order Price:', orderPrice, `(${(orderPrice * 100).toFixed(1)}%)`)
-      console.log('   Gamma Price:', gammaPrice, `(${(gammaPrice * 100).toFixed(1)}%)`)
+      console.log('   Display Price:', displayPrice, `(${(displayPrice * 100).toFixed(1)}%)`)
       console.log('   Best Ask:', bestAsk)
       console.log('   Size (shares):', size.toFixed(4))
       console.log('   Amount (USDC):', amountNum)
       console.log('   Tick Size:', tickSize)
       console.log('   Side: BUY')
       console.log('   Price Source:', priceSource)
-      console.log('   Orderbook Suspicious:', orderbookSuspicious)
       
       // 🔍 RUN FULL DIAGNOSTICS before placing order
       console.log('🔍 Running Polymarket diagnostics before order...')

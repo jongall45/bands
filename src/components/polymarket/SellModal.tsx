@@ -68,8 +68,8 @@ export function SellModal({ isOpen, onClose, position, market }: SellModalProps)
     error,
     tradingWallet,
     hasUserCreds,
-    yesSellPrice,  // Best BID for YES
-    noSellPrice,   // Best BID for NO
+    yesPrice,
+    noPrice,
     executeSell,
     enableTrading,
     reset,
@@ -86,10 +86,11 @@ export function SellModal({ isOpen, onClose, position, market }: SellModalProps)
     },
   })
 
-  // CRITICAL: Use best BID price (what buyers will pay NOW)
-  // This ensures immediate execution via FOK order, not sitting on orderbook
-  const bestBidPrice = position.outcome === 'YES' ? yesSellPrice : noSellPrice
-  const sellPrice = customPrice ?? bestBidPrice ?? position.currentPrice
+  // Use display price with small buffer (subtract for sells)
+  // This is consistent with what user sees and uses GTC orders
+  const FILL_BUFFER = 0.01
+  const displayPrice = position.outcome === 'YES' ? yesPrice : noPrice
+  const sellPrice = customPrice ?? Math.max((displayPrice || position.currentPrice) - FILL_BUFFER, 0.01)
   const estimatedValue = sharesToSell * sellPrice
   const isYes = position.outcome === 'YES'
 
@@ -99,16 +100,16 @@ export function SellModal({ isOpen, onClose, position, market }: SellModalProps)
       return
     }
 
-    console.log('🔴 Executing SELL @ best BID:', {
+    console.log('🔴 Executing SELL:', {
       tokenId: position.tokenId,
       shares: sharesToSell,
       price: sellPrice,
-      bestBid: bestBidPrice,
+      displayPrice,
       outcome: position.outcome,
     })
 
     executeSell(position.tokenId, sharesToSell, sellPrice, position.outcome)
-  }, [position.tokenId, position.outcome, sharesToSell, sellPrice, bestBidPrice, executeSell])
+  }, [position.tokenId, position.outcome, sharesToSell, sellPrice, displayPrice, executeSell])
 
   const handlePercentage = (pct: number) => {
     setSharesToSell(position.shares * (pct / 100))
