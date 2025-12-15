@@ -1,16 +1,16 @@
 /**
  * Polymarket Trading via ClobClient + Gateway Proxy
  * 
- * ARCHITECTURE:
- * - ClobClient runs in BROWSER (signing with Privy wallet)
- * - ClobClient posts to GATEWAY PROXY (not directly to Polymarket)
- * - Gateway forwards to https://clob.polymarket.com
- * - No CORS issues (browser talks to same origin)
+ * CRITICAL ARCHITECTURE:
+ * - ClobClient MUST use canonical host (https://clob.polymarket.com) for correct EIP-712 domain
+ * - HTTP requests are intercepted and routed through Railway proxy
+ * - This preserves correct signature verification while avoiding CORS
  * 
- * This is the correct approach because:
- * - Signing MUST happen in browser (Privy embedded wallet)
- * - HTTP requests MUST go through gateway (CORS)
- * - ClobClient handles payload/signature/decimals correctly
+ * How it works:
+ * 1. ClobClient is created with canonical Polymarket URL
+ * 2. XMLHttpRequest is intercepted to redirect requests to our proxy
+ * 3. Signing uses correct EIP-712 domain (from canonical URL)
+ * 4. HTTP goes through proxy (avoiding CORS/IP blocks)
  */
 
 import { ClobClient, Side, OrderType, TickSize } from '@polymarket/clob-client'
@@ -20,21 +20,62 @@ import Decimal from 'decimal.js'
 // Configure Decimal.js
 Decimal.set({ precision: 20, rounding: Decimal.ROUND_DOWN })
 
-// Gateway URL for non-proxy API calls
-const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || ''
+// Canonical Polymarket CLOB URL - MUST use this for correct EIP-712 domain
+const CANONICAL_CLOB_HOST = 'https://clob.polymarket.com'
 
-// The proxy endpoint - use RELATIVE path for same-origin via Vercel rewrite
-// Browser calls: https://www.bands.cash/api/polymarket/proxy/order
-// Vercel rewrites to: https://railway.../api/polymarket/proxy/order
-// This avoids CORS entirely (same-origin request)
-const CLOB_PROXY_HOST = '/api/polymarket/proxy'
+// Our proxy endpoint (relative path for same-origin via Vercel rewrite)
+const PROXY_PATH = '/api/polymarket/proxy'
 
 // Chain ID for Polygon
 const CHAIN_ID = 137
 
+// Gateway URL for non-proxy calls
+const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || ''
+
+/**
+ * Install XHR interceptor to redirect Polymarket requests through proxy
+ * 
+ * CRITICAL: This must be called before any ClobClient operations.
+ * It intercepts XMLHttpRequest.open() to redirect clob.polymarket.com to our proxy.
+ * 
+ * This allows ClobClient to:
+ * - Use canonical host for EIP-712 signing (correct domain)
+ * - Have HTTP requests transparently routed through proxy (no CORS)
+ */
+let interceptorInstalled = false
+
+export function installProxyInterceptor(): void {
+  if (typeof window === 'undefined') return // Server-side, skip
+  if (interceptorInstalled) return // Already installed
+  
+  const originalXHROpen = XMLHttpRequest.prototype.open
+  
+  XMLHttpRequest.prototype.open = function(
+    method: string,
+    url: string | URL,
+    async: boolean = true,
+    username?: string | null,
+    password?: string | null
+  ): void {
+    let finalUrl = typeof url === 'string' ? url : url.toString()
+    
+    // Redirect Polymarket CLOB requests to our proxy
+    if (finalUrl.startsWith(CANONICAL_CLOB_HOST)) {
+      const originalUrl = finalUrl
+      finalUrl = finalUrl.replace(CANONICAL_CLOB_HOST, PROXY_PATH)
+      console.log('[ProxyInterceptor] Redirecting:', originalUrl.slice(0, 50), '->', finalUrl.slice(0, 50))
+    }
+    
+    // Call original with potentially modified URL
+    return originalXHROpen.call(this, method, finalUrl, async, username ?? undefined, password ?? undefined)
+  }
+  
+  interceptorInstalled = true
+  console.log('[ProxyInterceptor] Installed - Polymarket requests will route through proxy')
+}
+
 /**
  * API credentials for CLOB authentication
- * These are derived from L1 signature and stored server-side
  */
 export interface ApiCredentials {
   key: string      // apiKey
@@ -65,11 +106,11 @@ export interface DirectOrderResult {
 }
 
 /**
- * Create ClobClient that uses gateway proxy
+ * Create ClobClient with CANONICAL host for correct EIP-712 signing
  * 
- * IMPORTANT: The "host" is set to our gateway proxy, not clob.polymarket.com
- * This way all HTTP requests go through our gateway (avoiding CORS).
- * Signing still happens in browser using the Privy signer.
+ * IMPORTANT: Uses https://clob.polymarket.com as host (not proxy URL).
+ * This ensures EIP-712 signatures are created with the correct domain.
+ * HTTP requests are intercepted by installProxyInterceptor() and routed through proxy.
  * 
  * @param signer - Ethers signer from Privy embedded wallet
  * @param credentials - API credentials (key, secret, passphrase)
@@ -80,21 +121,25 @@ export function createDirectClobClient(
   credentials: ApiCredentials,
   funderAddress?: string
 ): ClobClient {
-  console.log('[DirectTrade] Creating ClobClient with proxy host:', {
-    host: CLOB_PROXY_HOST,
+  // Ensure interceptor is installed before creating client
+  installProxyInterceptor()
+  
+  console.log('[DirectTrade] Creating ClobClient with CANONICAL host:', {
+    host: CANONICAL_CLOB_HOST,
     chainId: CHAIN_ID,
     hasSigner: !!signer,
     hasCredentials: !!credentials.key && !!credentials.secret && !!credentials.passphrase,
     funderAddress: funderAddress?.slice(0, 10) || 'not set',
+    note: 'HTTP requests will be intercepted and routed through proxy',
   })
   
-  // Create ClobClient with our proxy as the host
-  // All requests will go to: GATEWAY_URL/api/polymarket/proxy/...
-  // Which gets forwarded to: https://clob.polymarket.com/...
+  // Create ClobClient with CANONICAL host
+  // This ensures EIP-712 domain is correct for signature verification
+  // HTTP requests are transparently proxied via the XHR interceptor
   return new ClobClient(
-    CLOB_PROXY_HOST,  // Use gateway proxy instead of clob.polymarket.com
+    CANONICAL_CLOB_HOST,  // MUST use canonical URL for correct signing domain
     CHAIN_ID,
-    signer as any,    // Cast needed for type compatibility
+    signer as any,
     {
       key: credentials.key,
       secret: credentials.secret,
@@ -113,9 +158,8 @@ export function createDirectClobClient(
  * 
  * ClobClient.createAndPostOrder() will:
  * - Build the order with correct decimals
- * - Sign using the Privy signer (in browser)
- * - POST to CLOB_PROXY_HOST/order (our gateway)
- * - Gateway forwards to https://clob.polymarket.com/order
+ * - Sign using correct EIP-712 domain (from canonical host)
+ * - POST request gets intercepted and routed through proxy
  */
 export async function placeDirectOrder(
   clobClient: ClobClient,
@@ -134,6 +178,7 @@ export async function placeDirectOrder(
   
   try {
     // Use the official SDK method
+    // Signing uses canonical domain, HTTP goes through proxy
     const response = await clobClient.createAndPostOrder(
       {
         tokenID: tokenId,
@@ -185,7 +230,7 @@ export async function placeDirectOrder(
     const errorMsg = error instanceof Error ? error.message : String(error)
     console.error('[DirectTrade] Order failed:', errorMsg)
     
-    // Try to extract more details from various error formats
+    // Extract error details
     let details: unknown = undefined
     let friendlyError = errorMsg
     
@@ -199,7 +244,6 @@ export async function placeDirectOrder(
       }
       console.error('[DirectTrade] API error details:', details)
       
-      // Make error message more useful
       if (axiosError.response?.status === 401) {
         friendlyError = 'Authentication failed - credentials may be expired. Try re-enabling trading.'
       } else if (axiosError.response?.status === 400) {
@@ -210,40 +254,20 @@ export async function placeDirectOrder(
       }
     }
     
-    // Handle fetch-style errors
-    if (error && typeof error === 'object' && 'status' in error) {
-      const fetchError = error as any
-      details = {
-        status: fetchError.status,
-        statusText: fetchError.statusText,
-        body: fetchError.body,
-      }
-      
-      if (fetchError.status === 401) {
-        friendlyError = 'Authentication failed - credentials may be expired. Try re-enabling trading.'
-      }
-    }
-    
-    // Categorize error types for the UI
+    // Categorize error types
     let errorType = 'UNKNOWN'
     if (errorMsg.includes('Signer is needed')) {
       errorType = 'NO_SIGNER'
       friendlyError = 'Wallet signer not available. Make sure your wallet is connected.'
+    } else if (errorMsg.includes('invalid signature')) {
+      errorType = 'INVALID_SIGNATURE'
+      friendlyError = 'Signature verification failed. Please try again.'
     } else if (errorMsg.includes('CORS') || errorMsg.includes('cross-origin')) {
       errorType = 'CORS'
       friendlyError = 'Network error - unable to reach trading server.'
     } else if (errorMsg.includes('timeout') || errorMsg.includes('Timeout')) {
       errorType = 'TIMEOUT'
       friendlyError = 'Request timed out - please try again.'
-    } else if (errorMsg.includes('network') || errorMsg.includes('Network')) {
-      errorType = 'NETWORK'
-      friendlyError = 'Network error - check your connection.'
-    } else if (errorMsg.includes('401') || errorMsg.includes('Unauthorized')) {
-      errorType = 'AUTH'
-      friendlyError = 'Authentication failed - try re-enabling trading.'
-    } else if (errorMsg.includes('Invalid order')) {
-      errorType = 'INVALID_ORDER'
-      friendlyError = 'Invalid order - check price and amount.'
     }
     
     return {
@@ -251,40 +275,6 @@ export async function placeDirectOrder(
       error: friendlyError,
       details: { ...details as any, errorType, originalError: errorMsg },
     }
-  }
-}
-
-/**
- * Derive API credentials using ClobClient
- * 
- * This calls the Polymarket auth endpoints via our proxy
- */
-export async function deriveApiCredentials(
-  clobClient: ClobClient
-): Promise<ApiCredentials | null> {
-  try {
-    console.log('[DirectTrade] Deriving API credentials...')
-    
-    const creds = await clobClient.createOrDeriveApiKey()
-    
-    console.log('[DirectTrade] Credentials derived:', {
-      hasKey: !!creds?.key,
-      hasSecret: !!creds?.secret,
-      hasPassphrase: !!creds?.passphrase,
-    })
-    
-    if (creds?.key && creds?.secret && creds?.passphrase) {
-      return {
-        key: creds.key,
-        secret: creds.secret,
-        passphrase: creds.passphrase,
-      }
-    }
-    
-    return null
-  } catch (error) {
-    console.error('[DirectTrade] Failed to derive credentials:', error)
-    return null
   }
 }
 
@@ -328,13 +318,8 @@ export async function cancelDirectOrder(
   }
 }
 
-// ============================================
-// GATEWAY FALLBACK (for server-side operations)
-// ============================================
-
 /**
  * Check trading status via gateway
- * (used when we don't have credentials yet)
  */
 export async function checkTradingStatus(wallet: string): Promise<{
   canTrade: boolean
