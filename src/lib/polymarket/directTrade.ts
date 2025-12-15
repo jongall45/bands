@@ -2,25 +2,28 @@
  * Polymarket Trading via ClobClient + Gateway Proxy
  * 
  * CRITICAL ARCHITECTURE:
- * - ClobClient MUST use canonical host (https://clob.polymarket.com) for correct EIP-712 domain
- * - HTTP requests are intercepted via fetch override and routed through Railway proxy
- * - This preserves correct signature verification while avoiding CORS
+ * - ClobClient MUST use canonical host (https://clob.polymarket.com)
+ * - The SDK signs requests using the PATH (/order, not the full URL)
+ * - We intercept axios to rewrite URLs AFTER signing but BEFORE sending
+ * - This preserves correct HMAC signature while routing through proxy
  * 
- * How it works:
- * 1. ClobClient is created with canonical Polymarket URL
- * 2. Global fetch is overridden to redirect clob.polymarket.com to our proxy
- * 3. Signing uses correct EIP-712 domain (from canonical URL)
- * 4. HTTP goes through proxy (avoiding CORS/IP blocks)
+ * How the SDK works:
+ * 1. ClobClient computes POLY_SIGNATURE = HMAC(secret, method + "/order" + timestamp + body)
+ * 2. ClobClient calls axios with URL "https://clob.polymarket.com/order"
+ * 3. Our axios interceptor rewrites to "/api/polymarket/proxy/order"
+ * 4. Request goes through Vercel → Railway → Polymarket
+ * 5. Polymarket verifies signature against "/order" ✓
  */
 
 import { ClobClient, Side, OrderType, TickSize } from '@polymarket/clob-client'
 import { ethers } from 'ethers'
 import Decimal from 'decimal.js'
+import axios from 'axios'
 
 // Configure Decimal.js
 Decimal.set({ precision: 20, rounding: Decimal.ROUND_DOWN })
 
-// Canonical Polymarket CLOB URL - MUST use this for correct EIP-712 domain
+// Canonical Polymarket CLOB URL - MUST use this for correct HMAC signing
 const CANONICAL_CLOB_HOST = 'https://clob.polymarket.com'
 
 // Our proxy endpoint (relative path for same-origin via Vercel rewrite)
@@ -33,75 +36,50 @@ const CHAIN_ID = 137
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || ''
 
 /**
- * Install fetch interceptor to redirect Polymarket requests through proxy
+ * Install axios interceptor to redirect Polymarket requests through proxy
  * 
- * CRITICAL: This overrides window.fetch to intercept all requests.
- * Requests to clob.polymarket.com are transparently redirected to our proxy.
+ * CRITICAL: The SDK uses axios internally. We intercept requests AFTER
+ * the HMAC signature is computed (using the canonical path like /order)
+ * but BEFORE the network request is made.
  * 
- * This allows ClobClient to:
- * - Use canonical host for EIP-712 signing (correct domain)
- * - Have HTTP requests transparently routed through proxy (no CORS)
+ * This allows:
+ * - SDK signs with path "/order" (correct for Polymarket verification)
+ * - HTTP request goes to "/api/polymarket/proxy/order" (our proxy)
  */
-let fetchInterceptorInstalled = false
-let originalFetch: typeof fetch | null = null
+let axiosInterceptorInstalled = false
 
 export function installProxyInterceptor(): void {
   if (typeof window === 'undefined') return // Server-side, skip
-  if (fetchInterceptorInstalled) return // Already installed
+  if (axiosInterceptorInstalled) return // Already installed
   
-  // Store original fetch
-  originalFetch = window.fetch.bind(window)
-  
-  // Create proxy-aware fetch
-  const proxyFetch: typeof fetch = (input, init) => {
-    let url: string
-    
-    // Handle different input types
-    if (typeof input === 'string') {
-      url = input
-    } else if (input instanceof URL) {
-      url = input.toString()
-    } else if (input instanceof Request) {
-      url = input.url
-    } else {
-      // Unknown type, pass through
-      return originalFetch!(input, init)
-    }
-    
-    // Redirect Polymarket CLOB requests to our proxy
-    if (url.startsWith(CANONICAL_CLOB_HOST)) {
-      const proxiedUrl = url.replace(CANONICAL_CLOB_HOST, PROXY_PATH)
-      console.log('[ProxyFetch] Redirecting:', url.slice(0, 60), '->', proxiedUrl.slice(0, 60))
-      
-      // If input was a Request, we need to create a new Request with the new URL
-      if (input instanceof Request) {
-        const newRequest = new Request(proxiedUrl, {
-          method: input.method,
-          headers: input.headers,
-          body: init?.body ?? (input.method !== 'GET' && input.method !== 'HEAD' ? input.body : undefined),
-          mode: 'cors',
-          credentials: input.credentials,
-          cache: input.cache,
-          redirect: input.redirect,
-          referrer: input.referrer,
-          integrity: input.integrity,
-        })
-        return originalFetch!(newRequest)
+  // Add request interceptor to axios
+  axios.interceptors.request.use(
+    (config) => {
+      // Check if this is a Polymarket request
+      if (config.url?.startsWith(CANONICAL_CLOB_HOST)) {
+        const originalUrl = config.url
+        const rewrittenUrl = config.url.replace(CANONICAL_CLOB_HOST, PROXY_PATH)
+        
+        console.log('[AxiosProxy] Redirecting:', originalUrl.slice(0, 60), '->', rewrittenUrl.slice(0, 50))
+        
+        // Rewrite the URL to our proxy
+        config.url = rewrittenUrl
+        
+        // Log headers being sent (for debugging)
+        const polyHeaders = Object.keys(config.headers || {})
+          .filter(h => h.toUpperCase().startsWith('POLY'))
+        console.log('[AxiosProxy] POLY headers:', polyHeaders.join(', ') || 'none')
       }
       
-      // String or URL input - just use the proxied URL
-      return originalFetch!(proxiedUrl, init)
+      return config
+    },
+    (error) => {
+      return Promise.reject(error)
     }
-    
-    // Non-Polymarket requests pass through unchanged
-    return originalFetch!(input, init)
-  }
+  )
   
-  // Override global fetch
-  window.fetch = proxyFetch
-  
-  fetchInterceptorInstalled = true
-  console.log('[ProxyFetch] Installed - Polymarket requests will route through proxy')
+  axiosInterceptorInstalled = true
+  console.log('[AxiosProxy] Installed - Polymarket requests will route through proxy')
 }
 
 /**
@@ -136,11 +114,15 @@ export interface DirectOrderResult {
 }
 
 /**
- * Create ClobClient with CANONICAL host for correct EIP-712 signing
+ * Create ClobClient with CANONICAL host for correct HMAC signing
  * 
- * IMPORTANT: Uses https://clob.polymarket.com as host (not proxy URL).
- * This ensures EIP-712 signatures are created with the correct domain.
- * HTTP requests are intercepted by global fetch override and routed through proxy.
+ * CRITICAL: The SDK computes POLY_SIGNATURE as:
+ *   HMAC(secret, method + requestPath + timestamp + body)
+ * 
+ * Where requestPath is "/order", "/book", etc. (NOT the full URL).
+ * 
+ * We use the canonical host so the SDK signs with the correct path.
+ * Our axios interceptor then rewrites the URL for transport.
  * 
  * @param signer - Ethers signer from Privy embedded wallet
  * @param credentials - API credentials (key, secret, passphrase)
@@ -151,7 +133,7 @@ export function createDirectClobClient(
   credentials: ApiCredentials,
   funderAddress?: string
 ): ClobClient {
-  // Ensure fetch interceptor is installed before creating client
+  // Ensure axios interceptor is installed before creating client
   installProxyInterceptor()
   
   console.log('[DirectTrade] Creating ClobClient with CANONICAL host:', {
@@ -160,14 +142,14 @@ export function createDirectClobClient(
     hasSigner: !!signer,
     hasCredentials: !!credentials.key && !!credentials.secret && !!credentials.passphrase,
     funderAddress: funderAddress?.slice(0, 10) || 'not set',
-    note: 'HTTP requests intercepted via fetch override → routed through proxy',
+    note: 'Axios interceptor will rewrite URLs to proxy AFTER signing',
   })
   
   // Create ClobClient with CANONICAL host
-  // This ensures EIP-712 domain is correct for signature verification
-  // HTTP requests are transparently proxied via the fetch override
+  // SDK will sign paths like "/order" (correct for Polymarket verification)
+  // Axios interceptor rewrites URLs to our proxy for transport
   return new ClobClient(
-    CANONICAL_CLOB_HOST,  // MUST use canonical URL for correct signing domain
+    CANONICAL_CLOB_HOST,  // MUST use canonical URL for correct HMAC signing
     CHAIN_ID,
     signer as any,
     {
