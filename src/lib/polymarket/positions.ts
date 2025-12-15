@@ -22,11 +22,16 @@
  * - Cost basis stored from trade history
  * - Unrealized PnL = (currentValue - costBasis)
  * - PnL % = (currentValue - costBasis) / costBasis * 100
+ * 
+ * CRITICAL FOR SELL ORDERS:
+ * - SELL orders MUST use ERC-1155 balance as source of truth (NOT USDC)
+ * - TokenId from ERC-1155 balance is what Polymarket CLOB expects
+ * - sellableShares = min(ERC-1155 balance, requested shares)
  */
 
 import { createPublicClient, http, type Log, formatUnits, parseAbiItem } from 'viem'
 import { polygon } from 'viem/chains'
-import { CONDITIONAL_TOKENS, ERC1155_ABI } from './constants'
+import { CONDITIONAL_TOKENS, ERC1155_ABI, POLYGON_USDC, USDC_ABI, CTF_EXCHANGE, NEG_RISK_CTF_EXCHANGE } from './constants'
 
 // ============================================
 // TYPES
@@ -796,4 +801,338 @@ export function getKnownTokenIds(marketId: string): { yesTokenId?: string; noTok
     yesTokenId: mapping?.yesTokenId,
     noTokenId: mapping?.noTokenId,
   }
+}
+
+// ============================================
+// TRADE DEBUGGING & SNAPSHOT
+// ============================================
+
+export interface TradeSnapshot {
+  timestamp: string
+  marketId: string
+  outcomeSide: 'YES' | 'NO'
+  action: 'BUY' | 'SELL'
+  tokenId: string
+  walletAddress: string
+  
+  // ERC-1155 position data (source of truth for SELL)
+  ownedERC1155Balance: {
+    raw: string
+    formatted: string
+  }
+  
+  // Requested trade details
+  requestedShares: {
+    raw: string
+    formatted: string
+  }
+  
+  // For BUY: USDC balance and allowance
+  usdcBalance?: {
+    raw: string
+    formatted: string
+  }
+  usdcAllowanceCTF?: {
+    raw: string
+    formatted: string
+  }
+  usdcAllowanceNegRisk?: {
+    raw: string
+    formatted: string
+  }
+  
+  // Order payload sent to CLOB
+  orderPayload: {
+    tokenId: string
+    side: string
+    price: number
+    size: number
+    tickSize: string
+    negRisk: boolean
+  }
+  
+  // Validation status
+  canExecute: boolean
+  blockers: string[]
+}
+
+/**
+ * Debug trade snapshot - MUST be called before every trade attempt
+ * 
+ * This logs all relevant data to help debug trade failures.
+ * For SELL orders, the ERC-1155 balance is the source of truth.
+ */
+export async function debugTradeSnapshot({
+  marketId,
+  outcomeSide,
+  action,
+  tokenId,
+  walletAddress,
+  requestedShares,
+  orderPrice,
+  tickSize = '0.01',
+  negRisk = false,
+}: {
+  marketId: string
+  outcomeSide: 'YES' | 'NO'
+  action: 'BUY' | 'SELL'
+  tokenId: string
+  walletAddress: string
+  requestedShares: number
+  orderPrice: number
+  tickSize?: string
+  negRisk?: boolean
+}): Promise<TradeSnapshot> {
+  const blockers: string[] = []
+  
+  console.log('🔍 ===== DEBUG TRADE SNAPSHOT =====')
+  console.log(`📋 Action: ${action} ${outcomeSide} for market ${marketId.slice(0, 20)}...`)
+  console.log(`👛 Wallet: ${walletAddress}`)
+  console.log(`🎫 Token ID: ${tokenId}`)
+  
+  // 1. Query ERC-1155 balance (CRITICAL for SELL)
+  let erc1155Balance = BigInt(0)
+  let erc1155Formatted = '0'
+  
+  try {
+    const balance = await publicClient.readContract({
+      address: CONDITIONAL_TOKENS as `0x${string}`,
+      abi: ERC1155_ABI,
+      functionName: 'balanceOf',
+      args: [walletAddress as `0x${string}`, BigInt(tokenId)],
+    }) as bigint
+    
+    erc1155Balance = balance
+    erc1155Formatted = formatUnits(balance, 6)
+    console.log(`🎯 ERC-1155 Balance: ${erc1155Formatted} shares (raw: ${balance.toString()})`)
+  } catch (e) {
+    console.error('❌ Failed to query ERC-1155 balance:', e)
+    blockers.push('Failed to query ERC-1155 balance')
+  }
+  
+  // 2. For SELL: Check if we have enough shares
+  if (action === 'SELL') {
+    const ownedShares = parseFloat(erc1155Formatted)
+    if (ownedShares <= 0) {
+      console.error(`❌ SELL BLOCKED: No ERC-1155 balance. Cannot sell what you don't own.`)
+      blockers.push(`No ${outcomeSide} shares owned. ERC-1155 balance: 0`)
+    } else if (requestedShares > ownedShares) {
+      console.error(`❌ SELL BLOCKED: Trying to sell ${requestedShares} but only own ${ownedShares}`)
+      blockers.push(`Requested ${requestedShares.toFixed(4)} shares but only own ${ownedShares.toFixed(4)}`)
+    } else {
+      console.log(`✅ SELL OK: Selling ${requestedShares} of ${ownedShares} owned shares`)
+    }
+  }
+  
+  // 3. For BUY: Check USDC balance and allowances
+  let usdcBalance: { raw: string; formatted: string } | undefined
+  let usdcAllowanceCTF: { raw: string; formatted: string } | undefined
+  let usdcAllowanceNegRisk: { raw: string; formatted: string } | undefined
+  
+  if (action === 'BUY') {
+    try {
+      const balance = await publicClient.readContract({
+        address: POLYGON_USDC as `0x${string}`,
+        abi: USDC_ABI,
+        functionName: 'balanceOf',
+        args: [walletAddress as `0x${string}`],
+      }) as bigint
+      
+      usdcBalance = {
+        raw: balance.toString(),
+        formatted: formatUnits(balance, 6),
+      }
+      console.log(`💵 USDC Balance: $${usdcBalance.formatted}`)
+      
+      // Check allowance for CTF Exchange
+      const ctfAllowance = await publicClient.readContract({
+        address: POLYGON_USDC as `0x${string}`,
+        abi: USDC_ABI,
+        functionName: 'allowance',
+        args: [walletAddress as `0x${string}`, CTF_EXCHANGE as `0x${string}`],
+      }) as bigint
+      
+      usdcAllowanceCTF = {
+        raw: ctfAllowance.toString(),
+        formatted: formatUnits(ctfAllowance, 6),
+      }
+      console.log(`🔓 USDC Allowance (CTF): $${usdcAllowanceCTF.formatted}`)
+      
+      // Check allowance for NegRisk Exchange
+      const negRiskAllowance = await publicClient.readContract({
+        address: POLYGON_USDC as `0x${string}`,
+        abi: USDC_ABI,
+        functionName: 'allowance',
+        args: [walletAddress as `0x${string}`, NEG_RISK_CTF_EXCHANGE as `0x${string}`],
+      }) as bigint
+      
+      usdcAllowanceNegRisk = {
+        raw: negRiskAllowance.toString(),
+        formatted: formatUnits(negRiskAllowance, 6),
+      }
+      console.log(`🔓 USDC Allowance (NegRisk): $${usdcAllowanceNegRisk.formatted}`)
+      
+      // Check if enough balance/allowance for BUY
+      const requiredUsdc = requestedShares * orderPrice
+      if (parseFloat(usdcBalance.formatted) < requiredUsdc) {
+        blockers.push(`Insufficient USDC: need $${requiredUsdc.toFixed(2)} but have $${usdcBalance.formatted}`)
+      }
+      
+      const relevantAllowance = negRisk ? parseFloat(usdcAllowanceNegRisk.formatted) : parseFloat(usdcAllowanceCTF.formatted)
+      if (relevantAllowance < requiredUsdc) {
+        blockers.push(`Insufficient USDC allowance: need $${requiredUsdc.toFixed(2)} but allowed $${relevantAllowance.toFixed(2)}`)
+      }
+    } catch (e) {
+      console.error('❌ Failed to query USDC balance/allowance:', e)
+      blockers.push('Failed to query USDC balance/allowance')
+    }
+  }
+  
+  // Build snapshot
+  const snapshot: TradeSnapshot = {
+    timestamp: new Date().toISOString(),
+    marketId,
+    outcomeSide,
+    action,
+    tokenId,
+    walletAddress,
+    ownedERC1155Balance: {
+      raw: erc1155Balance.toString(),
+      formatted: erc1155Formatted,
+    },
+    requestedShares: {
+      raw: requestedShares.toString(),
+      formatted: requestedShares.toFixed(6),
+    },
+    usdcBalance,
+    usdcAllowanceCTF,
+    usdcAllowanceNegRisk,
+    orderPayload: {
+      tokenId,
+      side: action,
+      price: orderPrice,
+      size: requestedShares,
+      tickSize,
+      negRisk,
+    },
+    canExecute: blockers.length === 0,
+    blockers,
+  }
+  
+  console.log('📦 Order Payload:', snapshot.orderPayload)
+  console.log(`🚦 Can Execute: ${snapshot.canExecute ? '✅ YES' : '❌ NO'}`)
+  if (blockers.length > 0) {
+    console.log('🚫 Blockers:', blockers)
+  }
+  console.log('🔍 ===== END TRADE SNAPSHOT =====')
+  
+  return snapshot
+}
+
+/**
+ * Verify ERC-1155 balance before SELL order
+ * 
+ * CRITICAL: Call this before placing any SELL order.
+ * Returns the sellable shares (clamped to actual balance).
+ */
+export async function verifySellableBalance(
+  walletAddress: string,
+  tokenId: string,
+  requestedShares: number
+): Promise<{
+  canSell: boolean
+  ownedShares: number
+  sellableShares: number
+  error?: string
+}> {
+  try {
+    const balance = await publicClient.readContract({
+      address: CONDITIONAL_TOKENS as `0x${string}`,
+      abi: ERC1155_ABI,
+      functionName: 'balanceOf',
+      args: [walletAddress as `0x${string}`, BigInt(tokenId)],
+    }) as bigint
+    
+    const ownedShares = parseFloat(formatUnits(balance, 6))
+    
+    if (ownedShares <= 0) {
+      return {
+        canSell: false,
+        ownedShares: 0,
+        sellableShares: 0,
+        error: 'No shares owned for this outcome',
+      }
+    }
+    
+    // Clamp to owned amount
+    const sellableShares = Math.min(requestedShares, ownedShares)
+    
+    return {
+      canSell: sellableShares > 0,
+      ownedShares,
+      sellableShares,
+    }
+  } catch (e) {
+    return {
+      canSell: false,
+      ownedShares: 0,
+      sellableShares: 0,
+      error: `Failed to query balance: ${e instanceof Error ? e.message : String(e)}`,
+    }
+  }
+}
+
+/**
+ * Map common Polymarket CLOB errors to user-friendly messages
+ */
+export function mapPolymarketError(error: string | undefined, context: { action: 'BUY' | 'SELL'; shares?: number }): string {
+  if (!error) return 'Unknown error from Polymarket'
+  
+  const errorLower = error.toLowerCase()
+  
+  // Balance/allowance errors
+  if (errorLower.includes('not enough balance') || errorLower.includes('insufficient balance')) {
+    if (context.action === 'SELL') {
+      return `Not enough shares. You may have open orders locking some shares.${context.shares ? ` Requested: ${context.shares.toFixed(2)}` : ''}`
+    }
+    return 'Insufficient USDC balance. Please add more funds.'
+  }
+  
+  if (errorLower.includes('allowance') || errorLower.includes('not enough allowance')) {
+    if (context.action === 'SELL') {
+      return 'Position tokens not approved for trading. Please re-enable trading.'
+    }
+    return 'USDC spending not approved. Please enable trading first.'
+  }
+  
+  // Authentication errors
+  if (errorLower.includes('invalid signature') || errorLower.includes('signature')) {
+    return 'Signature verification failed. Please re-enable trading.'
+  }
+  
+  if (errorLower.includes('l1 authentication') || errorLower.includes('unauthorized')) {
+    return 'Trading session expired. Please enable trading again.'
+  }
+  
+  // Order validation errors
+  if (errorLower.includes('minimum') || errorLower.includes('too small')) {
+    return 'Order too small. Minimum order value is $1.'
+  }
+  
+  if (errorLower.includes('price') && errorLower.includes('tick')) {
+    return 'Invalid price. Must be a valid increment.'
+  }
+  
+  // Market errors
+  if (errorLower.includes('market closed') || errorLower.includes('not active')) {
+    return 'This market is closed and no longer accepting trades.'
+  }
+  
+  // Rate limiting
+  if (errorLower.includes('rate limit') || errorLower.includes('too many requests')) {
+    return 'Too many requests. Please wait a moment and try again.'
+  }
+  
+  // Default: return cleaned up version of original error
+  return error.replace(/^error:\s*/i, '').slice(0, 150)
 }

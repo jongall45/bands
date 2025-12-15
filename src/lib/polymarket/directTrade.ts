@@ -239,9 +239,19 @@ export async function placeDirectOrder(
       }
     }
     
+    // Try to extract any error information from the response
+    const extractedError = 
+      response?.error ||
+      response?.message ||
+      (typeof response === 'string' ? response : null) ||
+      (response?.data?.error) ||
+      (response?.data?.message)
+    
+    console.error('[DirectTrade] Non-successful response:', response)
+    
     return {
       success: false,
-      error: 'Unknown response from Polymarket',
+      error: extractedError || `Order rejected. Response: ${JSON.stringify(response)?.slice(0, 200)}`,
       details: response,
     }
     
@@ -252,29 +262,59 @@ export async function placeDirectOrder(
     // Extract error details
     let details: unknown = undefined
     let friendlyError = errorMsg
+    let errorType = 'UNKNOWN'
     
     // Handle axios-style errors
     if (error && typeof error === 'object' && 'response' in error) {
       const axiosError = error as any
-      details = {
-        status: axiosError.response?.status,
-        statusText: axiosError.response?.statusText,
-        data: axiosError.response?.data,
-      }
-      console.error('[DirectTrade] API error details:', details)
+      const status = axiosError.response?.status
+      const data = axiosError.response?.data
       
-      if (axiosError.response?.status === 401) {
+      details = {
+        status,
+        statusText: axiosError.response?.statusText,
+        data,
+      }
+      console.error('[DirectTrade] API error details:', JSON.stringify(details, null, 2))
+      
+      // Extract the actual error message from response
+      const serverError = 
+        data?.error || 
+        data?.message || 
+        data?.errorMsg ||
+        (typeof data === 'string' ? data : null)
+      
+      if (status === 400) {
+        errorType = 'BAD_REQUEST'
+        // Surface the actual error from Polymarket
+        if (serverError) {
+          friendlyError = serverError
+          // Check for common 400 errors
+          const errorLower = serverError.toLowerCase()
+          if (errorLower.includes('not enough balance') || errorLower.includes('insufficient')) {
+            friendlyError = `Not enough balance: ${serverError}`
+          } else if (errorLower.includes('allowance')) {
+            friendlyError = `Allowance error: ${serverError}`
+          }
+        } else {
+          friendlyError = 'Order rejected by Polymarket. Check your balance and try again.'
+        }
+      } else if (status === 401) {
+        errorType = 'AUTH_FAILED'
         friendlyError = 'Authentication failed - credentials may be expired. Try re-enabling trading.'
-      } else if (axiosError.response?.status === 400) {
-        const data = axiosError.response?.data
-        friendlyError = data?.error || data?.message || 'Invalid order parameters'
-      } else if (axiosError.response?.status === 403) {
+      } else if (status === 403) {
+        errorType = 'FORBIDDEN'
         friendlyError = 'Access denied - you may not have trading permissions for this market.'
+      } else if (status >= 500) {
+        errorType = 'SERVER_ERROR'
+        friendlyError = 'Polymarket server error. Please try again in a moment.'
+      } else if (serverError) {
+        // Use server error for other status codes
+        friendlyError = serverError
       }
     }
     
-    // Categorize error types
-    let errorType = 'UNKNOWN'
+    // Categorize other error types
     if (errorMsg.includes('Signer is needed')) {
       errorType = 'NO_SIGNER'
       friendlyError = 'Wallet signer not available. Make sure your wallet is connected.'

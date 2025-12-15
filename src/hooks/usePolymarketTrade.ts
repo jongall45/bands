@@ -1244,8 +1244,10 @@ export function usePolymarketTrade({
   /**
    * Execute a SELL order via CLOB
    * 
-   * CRITICAL: For selling, we MUST use the tokenId from the position,
-   * NOT from market parsing. The position's `asset` field is the tokenId.
+   * CRITICAL: For selling, we MUST:
+   * 1. Verify ERC-1155 balance BEFORE placing order (source of truth)
+   * 2. Use the correct tokenId from position data
+   * 3. Clamp sell amount to actual owned shares
    * 
    * @param tokenId - The outcome token ID from CLOB position (position.asset)
    * @param shares - Number of shares to sell
@@ -1279,18 +1281,67 @@ export function usePolymarketTrade({
     }
 
     if (price <= 0 || price >= 1) {
-      setState({ status: 'error', error: 'Invalid sell price' })
+      setState({ status: 'error', error: 'Invalid sell price. Must be between 0 and 1.' })
       onError?.('Invalid sell price')
       return
     }
 
-    setState({ status: 'signing', message: 'Preparing sell order...' })
+    setState({ status: 'preparing', message: 'Verifying position...' })
 
     try {
-      // Get signer from Privy embedded wallet (ensure on Polygon)
+      // CRITICAL: Import and use position verification
+      const { verifySellableBalance, debugTradeSnapshot, mapPolymarketError } = await import('@/lib/polymarket/positions')
+      
+      // 1. VERIFY ERC-1155 BALANCE (Source of truth for SELL)
+      console.log('🔍 Verifying ERC-1155 balance before SELL...')
+      const verification = await verifySellableBalance(tradingWallet, tokenId, shares)
+      
+      if (!verification.canSell) {
+        const errorMsg = verification.error || `No ${outcome} shares to sell. You own ${verification.ownedShares.toFixed(4)} shares.`
+        console.error('❌ SELL blocked:', errorMsg)
+        setState({ status: 'error', error: errorMsg })
+        onError?.(errorMsg)
+        return
+      }
+      
+      // Clamp to actual owned shares
+      const actualSharesToSell = verification.sellableShares
+      if (actualSharesToSell < shares) {
+        console.warn(`⚠️ Clamping sell from ${shares} to ${actualSharesToSell} (max owned)`)
+      }
+      
+      console.log(`✅ ERC-1155 verification passed: Selling ${actualSharesToSell} of ${verification.ownedShares} owned shares`)
+      
+      // 2. Debug trade snapshot
+      const marketId = (market as any).conditionId || (market as any).id || 'unknown'
+      const tickSize = (market as any).minimum_tick_size || '0.01'
+      
+      const snapshot = await debugTradeSnapshot({
+        marketId,
+        outcomeSide: outcome,
+        action: 'SELL',
+        tokenId,
+        walletAddress: tradingWallet,
+        requestedShares: actualSharesToSell,
+        orderPrice: price,
+        tickSize,
+        negRisk: parsedMarket.negRisk,
+      })
+      
+      if (!snapshot.canExecute) {
+        const errorMsg = snapshot.blockers.join('. ') || 'Cannot execute sell order'
+        console.error('❌ Trade snapshot blockers:', snapshot.blockers)
+        setState({ status: 'error', error: errorMsg })
+        onError?.(errorMsg)
+        return
+      }
+      
+      setState({ status: 'signing', message: 'Preparing sell order...' })
+
+      // 3. Get signer from Privy embedded wallet (ensure on Polygon)
       const signer = await getEthersSigner(embeddedWallet, 137)
       
-      // Fetch credentials
+      // 4. Fetch credentials
       console.log('🔐 Fetching credentials for sell order...')
       let creds = await fetchCredentials(tradingWallet, signer)
       
@@ -1306,7 +1357,7 @@ export function usePolymarketTrade({
 
       console.log('✅ Creating SELL order via ClobClient...')
       
-      // Create ClobClient
+      // 5. Create ClobClient
       const clobClient = createDirectClobClient(
         signer,
         creds,
@@ -1314,23 +1365,21 @@ export function usePolymarketTrade({
       )
 
       setState({ status: 'submitting', message: 'Submitting sell order...' })
-      
-      // Get tick size from market
-      const tickSize = (market as any).minimum_tick_size || '0.01'
 
       console.log('📤 SELL Order Details:')
       console.log('   Token ID:', tokenId)
       console.log('   Side: SELL')
       console.log('   Price:', price, `(${(price * 100).toFixed(1)}%)`)
-      console.log('   Size (shares):', shares)
+      console.log('   Size (shares):', actualSharesToSell)
       console.log('   Tick Size:', tickSize)
+      console.log('   Owned Shares:', verification.ownedShares)
       
-      // Place SELL order
+      // 6. Place SELL order
       const result = await placeDirectOrder(clobClient, {
         tokenId,
         side: 'SELL',
         price,
-        size: shares,
+        size: actualSharesToSell,
         tickSize: tickSize as any,
         negRisk: parsedMarket.negRisk,
       })
@@ -1344,7 +1393,9 @@ export function usePolymarketTrade({
         onSuccess?.(result.orderId || 'sell-order-submitted')
         setTimeout(fetchBalancesAndAllowances, 2000)
       } else {
-        throw new Error(result.error || 'Sell order failed')
+        // Map error to user-friendly message
+        const friendlyError = mapPolymarketError(result.error, { action: 'SELL', shares: actualSharesToSell })
+        throw new Error(friendlyError)
       }
     } catch (err: unknown) {
       console.error('Sell order failed:', err)
@@ -1352,6 +1403,12 @@ export function usePolymarketTrade({
       let errorMsg = 'Sell order failed'
       if (err instanceof Error) {
         errorMsg = err.message
+      }
+      
+      // Try to map the error if not already mapped
+      if (errorMsg === 'Sell order failed' || errorMsg.includes('Unknown')) {
+        const { mapPolymarketError } = await import('@/lib/polymarket/positions')
+        errorMsg = mapPolymarketError(errorMsg, { action: 'SELL', shares })
       }
       
       setState({ status: 'error', error: errorMsg })

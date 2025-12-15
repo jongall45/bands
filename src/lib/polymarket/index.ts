@@ -16,6 +16,7 @@ export {
   type Position as IndexedPosition,
   type TradeRecord,
   type PositionsState,
+  type TradeSnapshot,
   loadTokenMappings,
   saveTokenMappings,
   getMarketTokenMapping,
@@ -34,4 +35,8 @@ export {
   hasPositionInMarket,
   getKnownTokenIds,
   parseErc1155TransfersFromLogs,
+  // NEW: Trade debugging and validation
+  debugTradeSnapshot,
+  verifySellableBalance,
+  mapPolymarketError,
 } from './positions'

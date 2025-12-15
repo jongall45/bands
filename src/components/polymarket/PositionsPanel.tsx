@@ -1,13 +1,14 @@
 'use client'
 
 /**
- * Positions Panel - Full-screen Frens-style layout
+ * Positions Panel - Card-style bottom sheet (Frens-inspired)
  * 
  * Features:
- * - Total value header (includes wallet + positions)
- * - No separate Trading Wallet card
- * - Full-screen, no nested scrolling
- * - Tap position → opens full-screen Sell modal
+ * - Bottom sheet card layout (NOT full-screen)
+ * - Positions | Activity tabs
+ * - Cash balance row
+ * - Position rows with PnL
+ * - Tap position → opens sell modal
  */
 
 import { useState, useMemo } from 'react'
@@ -20,6 +21,8 @@ import {
   DollarSign,
   ArrowUpRight,
   ArrowDownRight,
+  Wallet,
+  Activity,
 } from 'lucide-react'
 import Image from 'next/image'
 import { formatProbability } from '@/lib/polymarket/api'
@@ -33,8 +36,11 @@ interface PositionsPanelProps {
   onClose: () => void
 }
 
+type TabType = 'positions' | 'activity'
+
 export function PositionsPanel({ isOpen, onClose }: PositionsPanelProps) {
   const queryClient = useQueryClient()
+  const [activeTab, setActiveTab] = useState<TabType>('positions')
   const [selectedPosition, setSelectedPosition] = useState<Position | null>(null)
   
   // Use the EOA trading wallet
@@ -86,11 +92,9 @@ export function PositionsPanel({ isOpen, onClose }: PositionsPanelProps) {
     
     // Enrich positions with CLOB tokenId
     return enriched.map(pos => {
-      // Try to find matching CLOB position
       const clobPos = clobMap.get(pos.tokenId)
       return {
         ...pos,
-        // Use CLOB tokenId if available (more reliable for selling)
         tokenId: clobPos?.asset || pos.tokenId,
         sellableSize: clobPos ? parseFloat(clobPos.size) : pos.shares,
       }
@@ -117,107 +121,163 @@ export function PositionsPanel({ isOpen, onClose }: PositionsPanelProps) {
 
   return (
     <>
-      {/* Full-screen positions view */}
-      <div className="fixed inset-0 z-50 bg-[#09090b] flex flex-col">
-        {/* Header */}
+      {/* Bottom Sheet Overlay */}
+      <div className="fixed inset-0 z-50 flex items-end justify-center">
+        {/* Backdrop */}
         <div 
-          className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]"
-          style={{ paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))' }}
+          className="absolute inset-0 bg-black/80 backdrop-blur-sm" 
+          onClick={onClose} 
+        />
+        
+        {/* Card Panel */}
+        <div 
+          className="relative w-full max-w-[430px] bg-[#0a0a0a] border-t border-white/[0.08] rounded-t-3xl max-h-[70vh] flex flex-col"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px))' }}
         >
-          <button onClick={onClose} className="p-2 -ml-2 hover:bg-white/[0.05] rounded-full">
-            <X className="w-5 h-5 text-white/60" />
-          </button>
-          <h1 className="text-white font-semibold">Positions</h1>
-          <button
-            onClick={handleRefresh}
-            disabled={isLoading}
-            className="p-2 -mr-2 hover:bg-white/[0.05] rounded-full disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 text-white/40 ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
+          {/* Handle */}
+          <div className="flex justify-center pt-3 pb-2 flex-shrink-0">
+            <div className="w-10 h-1 bg-white/20 rounded-full" />
+          </div>
 
-        {/* Total Value Card */}
-        <div className="px-4 py-5 border-b border-white/[0.06]">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-white/50 text-sm">Total Value</span>
-            {totalPnl !== 0 && (
-              <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                totalPnl >= 0 
-                  ? 'bg-green-500/20 text-green-400' 
-                  : 'bg-red-500/20 text-red-400'
-              }`}>
-                {totalPnl >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                {totalPnl >= 0 ? '+' : ''}{totalPnl.toFixed(2)}
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 pb-3 flex-shrink-0">
+            <h2 className="text-white font-bold text-lg">Portfolio</h2>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleRefresh}
+                disabled={isLoading}
+                className="p-2 hover:bg-white/[0.05] rounded-full disabled:opacity-50 transition-colors"
+              >
+                <RefreshCw className={`w-4 h-4 text-white/40 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
+              <button 
+                onClick={onClose} 
+                className="p-2 hover:bg-white/[0.05] rounded-full transition-colors"
+              >
+                <X className="w-5 h-5 text-white/60" />
+              </button>
+            </div>
+          </div>
+
+          {/* Total Value */}
+          <div className="px-4 pb-4 flex-shrink-0">
+            <div className="bg-gradient-to-br from-[#1E1E24] to-[#16161a] rounded-2xl p-4 border border-white/[0.06]">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-white/50 text-xs font-medium">Total Value</span>
+                {totalPnl !== 0 && (
+                  <div className={`flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                    totalPnl >= 0 
+                      ? 'bg-green-500/20 text-green-400' 
+                      : 'bg-red-500/20 text-red-400'
+                  }`}>
+                    {totalPnl >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                    {totalPnl >= 0 ? '+' : ''}{totalPnl.toFixed(2)}
+                  </div>
+                )}
+              </div>
+              <div className="text-white text-3xl font-bold tracking-tight">
+                ${totalValue.toFixed(2)}
+              </div>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-1 px-4 pb-3 flex-shrink-0">
+            <button
+              onClick={() => setActiveTab('positions')}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                activeTab === 'positions'
+                  ? 'bg-white/[0.1] text-white'
+                  : 'text-white/40 hover:text-white/60'
+              }`}
+            >
+              <Wallet className="w-4 h-4" />
+              Positions
+            </button>
+            <button
+              onClick={() => setActiveTab('activity')}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                activeTab === 'activity'
+                  ? 'bg-white/[0.1] text-white'
+                  : 'text-white/40 hover:text-white/60'
+              }`}
+            >
+              <Activity className="w-4 h-4" />
+              Activity
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto px-4 pb-4">
+            {activeTab === 'positions' ? (
+              <>
+                {!tradingWallet ? (
+                  <div className="flex items-center justify-center py-8">
+                    <p className="text-white/40 text-sm">Connect wallet to view positions</p>
+                  </div>
+                ) : isLoading && positions.length === 0 ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map(i => (
+                      <div key={i} className="bg-white/[0.03] rounded-xl p-3 animate-pulse">
+                        <div className="flex gap-3">
+                          <div className="w-10 h-10 bg-white/[0.05] rounded-lg" />
+                          <div className="flex-1">
+                            <div className="h-4 bg-white/[0.05] rounded w-3/4 mb-2" />
+                            <div className="h-3 bg-white/[0.05] rounded w-1/2" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {/* Cash Balance Row */}
+                    <div className="bg-white/[0.03] border border-white/[0.04] rounded-xl p-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="relative w-10 h-10 rounded-lg bg-gradient-to-br from-green-400/20 to-emerald-500/20 flex items-center justify-center">
+                            <DollarSign className="w-5 h-5 text-green-400" />
+                            <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#8247E5] border border-[#0a0a0a] flex items-center justify-center">
+                              <span className="text-[8px] text-white font-bold">P</span>
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-white font-medium text-sm">USDC.e</p>
+                            <p className="text-white/40 text-xs">Polygon Cash</p>
+                          </div>
+                        </div>
+                        <p className="text-white font-semibold">${cashBalance.toFixed(2)}</p>
+                      </div>
+                    </div>
+
+                    {/* Market Positions */}
+                    {positions.length === 0 ? (
+                      <div className="text-center py-8">
+                        <TrendingUp className="w-10 h-10 text-white/10 mx-auto mb-2" />
+                        <p className="text-white/40 text-sm">No positions yet</p>
+                        <p className="text-white/20 text-xs mt-0.5">Your trades will appear here</p>
+                      </div>
+                    ) : (
+                      positions.map((position) => (
+                        <PositionRow 
+                          key={`${position.marketId}-${position.outcome}`} 
+                          position={position}
+                          onClick={() => handlePositionClick(position)}
+                        />
+                      ))
+                    )}
+                  </div>
+                )}
+              </>
+            ) : (
+              // Activity Tab
+              <div className="text-center py-8">
+                <Activity className="w-10 h-10 text-white/10 mx-auto mb-2" />
+                <p className="text-white/40 text-sm">No recent activity</p>
+                <p className="text-white/20 text-xs mt-0.5">Trades and fills will appear here</p>
               </div>
             )}
           </div>
-          <div className="text-white text-4xl font-bold tracking-tight">
-            ${totalValue.toFixed(2)}
-          </div>
-        </div>
-
-        {/* Positions List */}
-        <div className="flex-1 overflow-y-auto">
-          {!tradingWallet ? (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-white/40 text-sm">Connect wallet to view positions</p>
-            </div>
-          ) : isLoading && positions.length === 0 ? (
-            <div className="p-4 space-y-3">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="bg-white/[0.03] rounded-xl p-4 animate-pulse">
-                  <div className="flex gap-3">
-                    <div className="w-10 h-10 bg-white/[0.05] rounded-lg" />
-                    <div className="flex-1">
-                      <div className="h-4 bg-white/[0.05] rounded w-3/4 mb-2" />
-                      <div className="h-3 bg-white/[0.05] rounded w-1/2" />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="p-4 space-y-2">
-              {/* Cash Balance Row */}
-              <div className="bg-white/[0.03] border border-white/[0.04] rounded-xl p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="relative w-10 h-10 rounded-lg bg-gradient-to-br from-green-400/20 to-emerald-500/20 flex items-center justify-center">
-                      <DollarSign className="w-5 h-5 text-green-400" />
-                      <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#8247E5] border border-[#09090b] flex items-center justify-center">
-                        <span className="text-[8px] text-white font-bold">P</span>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-white font-medium">USDC.e</p>
-                      <p className="text-white/40 text-xs">Polygon • Cash</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-white font-semibold text-lg">${cashBalance.toFixed(2)}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Market Positions */}
-              {positions.length === 0 ? (
-                <div className="text-center py-12">
-                  <TrendingUp className="w-12 h-12 text-white/10 mx-auto mb-3" />
-                  <p className="text-white/40 text-sm">No positions yet</p>
-                  <p className="text-white/20 text-xs mt-1">Your trades will appear here</p>
-                </div>
-              ) : (
-                positions.map((position) => (
-                  <PositionRow 
-                    key={`${position.marketId}-${position.outcome}`} 
-                    position={position}
-                    onClick={() => handlePositionClick(position)}
-                  />
-                ))
-              )}
-            </div>
-          )}
         </div>
       </div>
 
@@ -257,7 +317,7 @@ function PositionRow({ position, onClick }: { position: Position; onClick: () =>
   return (
     <button
       onClick={onClick}
-      className="w-full bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.04] rounded-xl p-4 transition-colors text-left"
+      className="w-full bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.04] rounded-xl p-3 transition-colors text-left"
     >
       <div className="flex items-center gap-3">
         {/* Market Image */}
@@ -273,7 +333,7 @@ function PositionRow({ position, onClick }: { position: Position; onClick: () =>
               )}
             </div>
           )}
-          <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#3B5EE8] border border-[#09090b] flex items-center justify-center">
+          <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#3B5EE8] border border-[#0a0a0a] flex items-center justify-center">
             <span className="text-[8px] text-white font-bold">P</span>
           </div>
         </div>
@@ -295,7 +355,7 @@ function PositionRow({ position, onClick }: { position: Position; onClick: () =>
 
         {/* Value & PnL */}
         <div className="text-right flex-shrink-0">
-          <p className="text-white font-semibold">${position.value.toFixed(2)}</p>
+          <p className="text-white font-semibold text-sm">${position.value.toFixed(2)}</p>
           {hasPnl && position.pnlPercent !== undefined && (
             <div className={`flex items-center justify-end gap-0.5 text-xs font-medium ${
               position.pnl! >= 0 ? 'text-green-400' : 'text-red-400'

@@ -484,44 +484,44 @@ export default function PolymarketPage() {
           </div>
         ) : (
           <>
-            {/* 🏈 NFL Section - Horizontal Carousel */}
+            {/* 🏈 NFL Section - Horizontal Carousel with Game Cards */}
             {(isLoading || nflEvents.length > 0) && (
               <div className="mb-5">
-                <div className="flex items-center justify-between px-4 mb-2">
+                <div className="flex items-center justify-between px-4 mb-3">
                   <div className="flex items-center gap-2">
                     <span className="text-xl">🏈</span>
-                    <h2 className="text-white font-bold text-base">NFL</h2>
+                    <h2 className="text-white font-bold text-base">NFL Games</h2>
                   </div>
-                  {!isLoading && <span className="text-white/30 text-xs">{nflEvents.length} markets</span>}
+                  {!isLoading && <span className="text-white/30 text-xs">{nflEvents.length} games</span>}
                 </div>
                 {isLoading ? (
                   <HorizontalLoadingState />
                 ) : (
                   <div className="flex gap-3 overflow-x-auto px-4 pb-2 scrollbar-hide">
                     {nflEvents.slice(0, 8).map((event) => (
-                      <CompactEventCard key={event.id} event={event} onSelect={handleSelectEvent} />
+                      <SportsGameCard key={event.id} event={event} onSelect={handleSelectEvent} />
                     ))}
                   </div>
                 )}
               </div>
             )}
 
-            {/* 🏀 NBA Section - Horizontal Carousel */}
+            {/* 🏀 NBA Section - Horizontal Carousel with Game Cards */}
             {(isLoading || nbaEvents.length > 0) && (
               <div className="mb-5">
-                <div className="flex items-center justify-between px-4 mb-2">
+                <div className="flex items-center justify-between px-4 mb-3">
                   <div className="flex items-center gap-2">
                     <span className="text-xl">🏀</span>
-                    <h2 className="text-white font-bold text-base">NBA</h2>
+                    <h2 className="text-white font-bold text-base">NBA Games</h2>
                   </div>
-                  {!isLoading && <span className="text-white/30 text-xs">{nbaEvents.length} markets</span>}
+                  {!isLoading && <span className="text-white/30 text-xs">{nbaEvents.length} games</span>}
                 </div>
                 {isLoading ? (
                   <HorizontalLoadingState />
                 ) : (
                   <div className="flex gap-3 overflow-x-auto px-4 pb-2 scrollbar-hide">
                     {nbaEvents.slice(0, 8).map((event) => (
-                      <CompactEventCard key={event.id} event={event} onSelect={handleSelectEvent} />
+                      <SportsGameCard key={event.id} event={event} onSelect={handleSelectEvent} />
                     ))}
                   </div>
                 )}
@@ -640,6 +640,210 @@ export default function PolymarketPage() {
 function formatPriceCents(price: number): string {
   if (!price || price <= 0 || price >= 1) return '—'
   return `${(price * 100).toFixed(0)}¢`
+}
+
+// ============================================
+// SPORTS TEAM MAPPING
+// ============================================
+
+interface TeamInfo {
+  name: string
+  abbrev: string
+  emoji: string
+  color: string
+}
+
+// NFL Teams
+const NFL_TEAMS: Record<string, TeamInfo> = {
+  'dolphins': { name: 'Miami Dolphins', abbrev: 'MIA', emoji: '🐬', color: '#008E97' },
+  'steelers': { name: 'Pittsburgh Steelers', abbrev: 'PIT', emoji: '⚙️', color: '#FFB612' },
+  'chiefs': { name: 'Kansas City Chiefs', abbrev: 'KC', emoji: '⚔️', color: '#E31837' },
+  'eagles': { name: 'Philadelphia Eagles', abbrev: 'PHI', emoji: '🦅', color: '#004C54' },
+  'cowboys': { name: 'Dallas Cowboys', abbrev: 'DAL', emoji: '⭐', color: '#003594' },
+  '49ers': { name: 'San Francisco 49ers', abbrev: 'SF', emoji: '⛏️', color: '#AA0000' },
+  'ravens': { name: 'Baltimore Ravens', abbrev: 'BAL', emoji: '🐦‍⬛', color: '#241773' },
+  'bills': { name: 'Buffalo Bills', abbrev: 'BUF', emoji: '🦬', color: '#00338D' },
+  'packers': { name: 'Green Bay Packers', abbrev: 'GB', emoji: '🧀', color: '#203731' },
+  'bengals': { name: 'Cincinnati Bengals', abbrev: 'CIN', emoji: '🐅', color: '#FB4F14' },
+  'lions': { name: 'Detroit Lions', abbrev: 'DET', emoji: '🦁', color: '#0076B6' },
+  'jets': { name: 'New York Jets', abbrev: 'NYJ', emoji: '✈️', color: '#125740' },
+  'giants': { name: 'New York Giants', abbrev: 'NYG', emoji: '🗽', color: '#0B2265' },
+  'patriots': { name: 'New England Patriots', abbrev: 'NE', emoji: '🇺🇸', color: '#002244' },
+  'texans': { name: 'Houston Texans', abbrev: 'HOU', emoji: '🤠', color: '#03202F' },
+  'colts': { name: 'Indianapolis Colts', abbrev: 'IND', emoji: '🐴', color: '#002C5F' },
+  'jaguars': { name: 'Jacksonville Jaguars', abbrev: 'JAX', emoji: '🐆', color: '#006778' },
+  'titans': { name: 'Tennessee Titans', abbrev: 'TEN', emoji: '⚡', color: '#0C2340' },
+  'broncos': { name: 'Denver Broncos', abbrev: 'DEN', emoji: '🐎', color: '#FB4F14' },
+  'raiders': { name: 'Las Vegas Raiders', abbrev: 'LV', emoji: '☠️', color: '#000000' },
+  'chargers': { name: 'Los Angeles Chargers', abbrev: 'LAC', emoji: '⚡', color: '#0080C6' },
+  'rams': { name: 'Los Angeles Rams', abbrev: 'LAR', emoji: '🐏', color: '#003594' },
+  'seahawks': { name: 'Seattle Seahawks', abbrev: 'SEA', emoji: '🦅', color: '#002244' },
+  'cardinals': { name: 'Arizona Cardinals', abbrev: 'ARI', emoji: '🐦', color: '#97233F' },
+  'falcons': { name: 'Atlanta Falcons', abbrev: 'ATL', emoji: '🦅', color: '#A71930' },
+  'panthers': { name: 'Carolina Panthers', abbrev: 'CAR', emoji: '🐆', color: '#0085CA' },
+  'bears': { name: 'Chicago Bears', abbrev: 'CHI', emoji: '🐻', color: '#0B162A' },
+  'browns': { name: 'Cleveland Browns', abbrev: 'CLE', emoji: '🏈', color: '#311D00' },
+  'commanders': { name: 'Washington Commanders', abbrev: 'WSH', emoji: '🏛️', color: '#773141' },
+  'saints': { name: 'New Orleans Saints', abbrev: 'NO', emoji: '⚜️', color: '#D3BC8D' },
+  'vikings': { name: 'Minnesota Vikings', abbrev: 'MIN', emoji: '⚔️', color: '#4F2683' },
+  'buccaneers': { name: 'Tampa Bay Buccaneers', abbrev: 'TB', emoji: '🏴‍☠️', color: '#D50A0A' },
+}
+
+// NBA Teams
+const NBA_TEAMS: Record<string, TeamInfo> = {
+  'lakers': { name: 'Los Angeles Lakers', abbrev: 'LAL', emoji: '💜', color: '#552583' },
+  'celtics': { name: 'Boston Celtics', abbrev: 'BOS', emoji: '☘️', color: '#007A33' },
+  'warriors': { name: 'Golden State Warriors', abbrev: 'GSW', emoji: '⚔️', color: '#1D428A' },
+  'pistons': { name: 'Detroit Pistons', abbrev: 'DET', emoji: '🔧', color: '#C8102E' },
+  'bulls': { name: 'Chicago Bulls', abbrev: 'CHI', emoji: '🐂', color: '#CE1141' },
+  'knicks': { name: 'New York Knicks', abbrev: 'NYK', emoji: '🗽', color: '#006BB6' },
+  'nets': { name: 'Brooklyn Nets', abbrev: 'BKN', emoji: '🌉', color: '#000000' },
+  'heat': { name: 'Miami Heat', abbrev: 'MIA', emoji: '🔥', color: '#98002E' },
+  'bucks': { name: 'Milwaukee Bucks', abbrev: 'MIL', emoji: '🦌', color: '#00471B' },
+  '76ers': { name: 'Philadelphia 76ers', abbrev: 'PHI', emoji: '🔔', color: '#006BB6' },
+  'sixers': { name: 'Philadelphia 76ers', abbrev: 'PHI', emoji: '🔔', color: '#006BB6' },
+  'raptors': { name: 'Toronto Raptors', abbrev: 'TOR', emoji: '🦖', color: '#CE1141' },
+  'nuggets': { name: 'Denver Nuggets', abbrev: 'DEN', emoji: '⛏️', color: '#0E2240' },
+  'suns': { name: 'Phoenix Suns', abbrev: 'PHX', emoji: '☀️', color: '#1D1160' },
+  'clippers': { name: 'Los Angeles Clippers', abbrev: 'LAC', emoji: '⛵', color: '#C8102E' },
+  'mavs': { name: 'Dallas Mavericks', abbrev: 'DAL', emoji: '🐴', color: '#00538C' },
+  'mavericks': { name: 'Dallas Mavericks', abbrev: 'DAL', emoji: '🐴', color: '#00538C' },
+  'spurs': { name: 'San Antonio Spurs', abbrev: 'SAS', emoji: '⚙️', color: '#C4CED4' },
+  'rockets': { name: 'Houston Rockets', abbrev: 'HOU', emoji: '🚀', color: '#CE1141' },
+  'grizzlies': { name: 'Memphis Grizzlies', abbrev: 'MEM', emoji: '🐻', color: '#5D76A9' },
+  'pelicans': { name: 'New Orleans Pelicans', abbrev: 'NOP', emoji: '🦅', color: '#0C2340' },
+  'thunder': { name: 'Oklahoma City Thunder', abbrev: 'OKC', emoji: '⚡', color: '#007AC1' },
+  'jazz': { name: 'Utah Jazz', abbrev: 'UTA', emoji: '🎺', color: '#002B5C' },
+  'timberwolves': { name: 'Minnesota Timberwolves', abbrev: 'MIN', emoji: '🐺', color: '#0C2340' },
+  'blazers': { name: 'Portland Trail Blazers', abbrev: 'POR', emoji: '🔥', color: '#E03A3E' },
+  'kings': { name: 'Sacramento Kings', abbrev: 'SAC', emoji: '👑', color: '#5A2D81' },
+  'hawks': { name: 'Atlanta Hawks', abbrev: 'ATL', emoji: '🦅', color: '#E03A3E' },
+  'hornets': { name: 'Charlotte Hornets', abbrev: 'CHA', emoji: '🐝', color: '#1D1160' },
+  'magic': { name: 'Orlando Magic', abbrev: 'ORL', emoji: '✨', color: '#0077C0' },
+  'pacers': { name: 'Indiana Pacers', abbrev: 'IND', emoji: '🏎️', color: '#002D62' },
+  'wizards': { name: 'Washington Wizards', abbrev: 'WAS', emoji: '🧙', color: '#002B5C' },
+  'cavaliers': { name: 'Cleveland Cavaliers', abbrev: 'CLE', emoji: '⚔️', color: '#860038' },
+  'cavs': { name: 'Cleveland Cavaliers', abbrev: 'CLE', emoji: '⚔️', color: '#860038' },
+}
+
+const ALL_TEAMS = { ...NFL_TEAMS, ...NBA_TEAMS }
+
+/**
+ * Parse game title to extract team info
+ * Returns [team1, team2] or null if not a game
+ */
+function parseGameTeams(title: string): [TeamInfo, TeamInfo] | null {
+  const lower = title.toLowerCase()
+  
+  // Find teams mentioned in the title
+  const foundTeams: TeamInfo[] = []
+  
+  for (const [key, team] of Object.entries(ALL_TEAMS)) {
+    if (lower.includes(key)) {
+      foundTeams.push(team)
+    }
+  }
+  
+  // Need exactly 2 teams for a game
+  if (foundTeams.length >= 2) {
+    return [foundTeams[0], foundTeams[1]]
+  }
+  
+  return null
+}
+
+// Sports Game Card - Frens-style with team logos and moneyline buttons
+function SportsGameCard({ event, onSelect }: { event: PolymarketEvent; onSelect: (e: PolymarketEvent) => void }) {
+  const firstMarket = event.markets?.[0]
+  const parsed = firstMarket ? parseMarket(firstMarket) : null
+  const yesPrice = parsed?.yesPrice || 0
+  const noPrice = parsed?.noPrice || 0
+  
+  // Try to parse team info from title
+  const teams = parseGameTeams(event.title)
+  
+  // If we can identify teams, show game-style card
+  if (teams) {
+    const [team1, team2] = teams
+    
+    return (
+      <button
+        onClick={() => onSelect(event)}
+        className="flex-shrink-0 w-[280px] bg-gradient-to-br from-[#1a1a1f] to-[#121216] rounded-2xl overflow-hidden border border-white/[0.06] hover:border-white/[0.12] transition-all shadow-lg"
+      >
+        {/* Header with volume */}
+        <div className="px-4 pt-3 pb-2 flex items-center justify-between border-b border-white/[0.04]">
+          <span className="text-white/40 text-[10px] font-medium uppercase tracking-wide">
+            {event.slug?.includes('nfl') ? '🏈 NFL' : '🏀 NBA'}
+          </span>
+          <span className="text-white/30 text-[10px]">{formatVolume(event.volume)}</span>
+        </div>
+        
+        {/* Teams Display */}
+        <div className="px-4 py-4">
+          <div className="flex items-center justify-between">
+            {/* Team 1 */}
+            <div className="flex flex-col items-center flex-1">
+              <div 
+                className="w-12 h-12 rounded-full flex items-center justify-center text-2xl mb-2"
+                style={{ backgroundColor: `${team1.color}20` }}
+              >
+                {team1.emoji}
+              </div>
+              <span className="text-white font-bold text-lg">{team1.abbrev}</span>
+            </div>
+            
+            {/* VS */}
+            <div className="px-3">
+              <span className="text-white/20 text-xs font-bold">VS</span>
+            </div>
+            
+            {/* Team 2 */}
+            <div className="flex flex-col items-center flex-1">
+              <div 
+                className="w-12 h-12 rounded-full flex items-center justify-center text-2xl mb-2"
+                style={{ backgroundColor: `${team2.color}20` }}
+              >
+                {team2.emoji}
+              </div>
+              <span className="text-white font-bold text-lg">{team2.abbrev}</span>
+            </div>
+          </div>
+        </div>
+        
+        {/* Bet Buttons - Moneyline style */}
+        <div className="flex gap-2 px-3 pb-3">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onSelect(event)
+            }}
+            className="flex-1 py-3 rounded-xl bg-gradient-to-r from-green-500/20 to-emerald-500/10 border border-green-500/30 hover:border-green-500/50 transition-all"
+          >
+            <div className="text-center">
+              <span className="text-green-400 text-sm font-bold">{team1.abbrev}</span>
+              <span className="text-white font-bold text-lg ml-1.5">{formatPriceCents(yesPrice)}</span>
+            </div>
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onSelect(event)
+            }}
+            className="flex-1 py-3 rounded-xl bg-gradient-to-r from-blue-500/20 to-indigo-500/10 border border-blue-500/30 hover:border-blue-500/50 transition-all"
+          >
+            <div className="text-center">
+              <span className="text-blue-400 text-sm font-bold">{team2.abbrev}</span>
+              <span className="text-white font-bold text-lg ml-1.5">{formatPriceCents(noPrice)}</span>
+            </div>
+          </button>
+        </div>
+      </button>
+    )
+  }
+  
+  // Fallback to compact card for non-game events
+  return <CompactEventCard event={event} onSelect={onSelect} />
 }
 
 // Compact Event Card - For sports carousels (smaller, more compact)
