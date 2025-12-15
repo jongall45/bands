@@ -55,6 +55,11 @@ export interface PolymarketDiagnostics {
   chain: 'polygon'
   timestamp: string
   
+  // Native MATIC/POL balance (for gas)
+  maticBalance: string
+  maticBalanceRaw: string
+  hasEnoughGas: boolean
+  
   // USDC balances (native USDC, not USDC.e)
   usdcBalance: string
   usdcBalanceRaw: string
@@ -118,6 +123,9 @@ export async function runPolymarketDiagnostics(
     address: walletAddress,
     chain: 'polygon',
     timestamp: new Date().toISOString(),
+    maticBalance: '0',
+    maticBalanceRaw: '0',
+    hasEnoughGas: false,
     usdcBalance: '0',
     usdcBalanceRaw: '0',
     usdcEBalance: '0',
@@ -143,6 +151,25 @@ export async function runPolymarketDiagnostics(
     hasAllCtfApprovals: false,
     canTrade: false,
     errors: [],
+  }
+  
+  try {
+    // 0. Check native MATIC/POL balance (for gas)
+    const maticBalance = await publicClient.getBalance({ address })
+    
+    result.maticBalanceRaw = maticBalance.toString()
+    result.maticBalance = formatUnits(maticBalance, 18)
+    // Need at least 0.01 MATIC for gas (about $0.005)
+    result.hasEnoughGas = maticBalance >= BigInt('10000000000000000') // 0.01 MATIC
+    
+    console.log(`⛽ MATIC Balance: ${result.maticBalance} (${result.hasEnoughGas ? '✅' : '❌ NEED GAS!'})`)
+    
+    if (!result.hasEnoughGas) {
+      errors.push(`No MATIC for gas! Balance: ${result.maticBalance}. Send at least 0.1 MATIC to ${walletAddress}`)
+    }
+    
+  } catch (e) {
+    errors.push(`Failed to fetch MATIC balance: ${e}`)
   }
   
   try {
@@ -250,7 +277,7 @@ export async function runPolymarketDiagnostics(
     result.ctfApprovals.negRiskAdapter
   
   // 5. Summary
-  result.canTrade = result.hasEnoughBalance && result.hasAllUsdcAllowances
+  result.canTrade = result.hasEnoughGas && result.hasEnoughBalance && result.hasAllUsdcAllowances
   result.errors = errors
   
   if (requiredUsdc) {
@@ -260,6 +287,7 @@ export async function runPolymarketDiagnostics(
   // Log summary
   console.log('📊 Polymarket Diagnostics Summary:')
   console.log(`   Address: ${walletAddress}`)
+  console.log(`   MATIC (gas): ${result.maticBalance} ${result.hasEnoughGas ? '✅' : '❌ NEED GAS!'}`)
   console.log(`   USDC Balance: ${result.usdcBalance}`)
   console.log(`   Has Enough Balance: ${result.hasEnoughBalance ? '✅' : '❌'}`)
   console.log(`   Has All USDC Allowances: ${result.hasAllUsdcAllowances ? '✅' : '❌'}`)

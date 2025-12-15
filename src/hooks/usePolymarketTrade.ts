@@ -797,7 +797,28 @@ export function usePolymarketTrade({
       console.log('📋 Approval status:', approvalStatus)
       
       if (!approvalStatus.allApproved) {
-        console.log('⚠️ Approvals missing! Sending approval transactions...')
+        console.log('⚠️ Approvals missing! Checking gas balance first...')
+        
+        // Check if wallet has gas (MATIC) for approval transactions
+        const maticBalance = await publicClient.getBalance({ 
+          address: tradingWallet as `0x${string}` 
+        })
+        const maticBalanceFormatted = parseFloat(formatUnits(maticBalance, 18))
+        
+        console.log(`⛽ MATIC balance: ${maticBalanceFormatted}`)
+        
+        if (maticBalance < BigInt('10000000000000000')) { // 0.01 MATIC
+          console.error('❌ No MATIC for gas! Cannot send approval transactions.')
+          throw new Error(
+            `No MATIC for gas on Polygon! Your trading wallet needs MATIC to pay for transaction fees.\n\n` +
+            `Trading Wallet: ${tradingWallet}\n` +
+            `Current MATIC: ${maticBalanceFormatted.toFixed(6)}\n` +
+            `Required: ~0.1 MATIC\n\n` +
+            `Please send MATIC to your trading wallet on Polygon.`
+          )
+        }
+        
+        console.log('⚠️ Gas available! Sending approval transactions...')
         setState({ status: 'signing', message: 'Approve USDC spending...' })
         
         // Get approval transactions
