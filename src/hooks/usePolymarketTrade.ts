@@ -1042,6 +1042,33 @@ export function usePolymarketTrade({
         errorMsg = 'Transaction rejected'
       } else if (errorMsg.includes('insufficient')) {
         errorMsg = 'Insufficient balance'
+      } else if (errorMsg.includes('invalid signature')) {
+        // HMAC signature mismatch - credentials are stale (gateway restarted)
+        console.log('🔄 Invalid signature detected - clearing stale credentials...')
+        if (hasUserCreds && !isRetry && !credRefreshAttempted) {
+          setCredRefreshAttempted(true)
+          setHasUserCreds(false)
+          setApiCredentials(null)
+          clearCredentials()
+          clearTradingSession()
+          
+          // Try to re-enable trading
+          setState({ status: 'preparing', message: 'Refreshing credentials...' })
+          const refreshSuccess = await enableTrading()
+          
+          if (refreshSuccess) {
+            console.log('✅ Credential refresh succeeded - retrying trade...')
+            return executeTrade(amount, outcome, true)
+          } else {
+            console.log('❌ Credential refresh failed')
+            errorMsg = 'Credentials expired. Please try again.'
+          }
+        } else {
+          errorMsg = 'Signature verification failed. Please re-enable trading.'
+          setHasUserCreds(false)
+          setApiCredentials(null)
+          clearCredentials()
+        }
       } else if (errorMsg.includes('NO_CREDENTIALS') || errorMsg.includes('401') || errorMsg.includes('Authentication') || errorMsg.includes('L1 Authentication')) {
         // One-shot credential refresh: if we had creds but got 401, try to re-derive once
         if (hasUserCreds && !isRetry && !credRefreshAttempted) {
