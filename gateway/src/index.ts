@@ -124,10 +124,23 @@ app.use(helmet({
   contentSecurityPolicy: false, // Disable CSP for API
 }))
 
-// Compression
-app.use(compression())
+// Compression (skip for proxy to avoid modifying bytes)
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/polymarket/proxy')) {
+    return next() // Skip compression for proxy routes
+  }
+  compression()(req, res, next)
+})
 
-// Body parsing
+// ============================================
+// POLYMARKET PROXY - RAW BODY (BEFORE json parsing!)
+// ============================================
+// CRITICAL: This MUST be before express.json()
+// The proxy forwards bytes UNCHANGED to preserve EIP-712 signatures.
+// express.json() would parse and re-stringify, changing key order/whitespace.
+app.use('/api/polymarket/proxy', express.raw({ type: '*/*', limit: '1mb' }), polymarketProxyRoutes)
+
+// Body parsing for all OTHER routes
 app.use(express.json({ limit: '1mb' }))
 
 // Global rate limiting (AFTER preflight handling so OPTIONS isn't rate-limited)
@@ -154,7 +167,7 @@ app.use('/api/positions', positionsRoutes)
 app.use('/api/polymarket', polymarketRoutes)
 app.use('/api/polymarket', polymarketAuthRoutes)
 app.use('/api/polymarket/orders', polymarketOrdersRoutes)
-app.use('/api/polymarket/proxy', polymarketProxyRoutes)  // CLOB reverse proxy
+// NOTE: polymarketProxyRoutes already mounted above with raw body handling
 app.use('/api/polymarket/test', polymarketTestRoutes)
 app.use('/api/auth', authRoutes)
 

@@ -104,12 +104,46 @@ export interface MarketStats {
 }
 
 export async function getMarketStats(marketId: string, tokenId: string): Promise<MarketStats> {
+  // Try fetching orderbook directly via proxy first (more reliable)
+  // This uses the same proxy path as orders, which goes directly to Polymarket
+  try {
+    const proxyUrl = `/api/polymarket/proxy/book?token_id=${encodeURIComponent(tokenId)}`
+    console.log('[getMarketStats] Fetching orderbook via proxy:', proxyUrl)
+    
+    const response = await fetch(proxyUrl)
+    if (response.ok) {
+      const data = await response.json()
+      console.log('[getMarketStats] Proxy response:', {
+        hasBids: !!data?.bids,
+        bidsCount: data?.bids?.length || 0,
+        hasAsks: !!data?.asks,
+        asksCount: data?.asks?.length || 0,
+        bestBid: data?.bids?.[0]?.price,
+        bestAsk: data?.asks?.[0]?.price,
+      })
+      
+      // Format response to match MarketStats interface
+      return {
+        bids: data?.bids || [],
+        asks: data?.asks || [],
+        spread: data?.spread,
+        midPrice: data?.mid,
+      }
+    }
+    console.warn('[getMarketStats] Proxy fetch failed, falling back to gateway endpoint')
+  } catch (e) {
+    console.warn('[getMarketStats] Proxy fetch error:', e)
+  }
+  
+  // Fallback to gateway endpoint
   const data = await gatewayFetch<{ stats: MarketStats }>(
     `/api/markets/${marketId}/stats?tokenId=${tokenId}`
   )
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:110',message:'getMarketStats response',data:{hasStats:!!data?.stats,hasBids:!!data?.stats?.bids,bidsCount:data?.stats?.bids?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
+  console.log('[getMarketStats] Gateway response:', {
+    hasStats: !!data?.stats,
+    hasBids: !!data?.stats?.bids,
+    bidsCount: data?.stats?.bids?.length || 0,
+  })
   return data.stats
 }
 

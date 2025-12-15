@@ -1,17 +1,19 @@
 /**
  * Polymarket CLOB Reverse Proxy
  * 
- * THIS IS THE CORRECT ARCHITECTURE:
- * - Browser ClobClient signs orders using Privy wallet (client-side)
- * - ClobClient posts to THIS proxy (same-origin, no CORS)
- * - Proxy forwards to https://clob.polymarket.com
- * - Polymarket response returned to browser
+ * CRITICAL: This proxy forwards request bodies as RAW BYTES.
+ * DO NOT parse or modify the body in any way.
  * 
- * Why this works:
- * - Signing stays in browser (Privy embedded wallet)
- * - No CORS issues (browser talks to our origin)
- * - IP rate limiting uses Railway IP (not user IP)
- * - ClobClient handles payload/signature/decimals correctly
+ * Why? ClobClient signs the exact JSON bytes. If we:
+ * - Parse with JSON.parse()
+ * - Re-stringify with JSON.stringify()
+ * The key order and whitespace may change, breaking the EIP-712 signature.
+ * 
+ * Architecture:
+ * - Browser ClobClient signs orders using Privy wallet (client-side)
+ * - ClobClient posts to THIS proxy
+ * - Proxy forwards raw bytes to https://clob.polymarket.com
+ * - Polymarket response returned to browser
  */
 
 import { Router, Request, Response } from 'express'
@@ -34,7 +36,7 @@ const SKIP_REQUEST_HEADERS = new Set([
   'trailer',
   'transfer-encoding',
   'upgrade',
-  'content-length', // Let fetch set this
+  'content-length', // Let fetch recalculate
 ])
 
 // Headers to forward from upstream to client
@@ -87,8 +89,8 @@ function buildUpstreamUrl(req: Request): string {
 /**
  * Forward request to Polymarket CLOB
  * 
- * IMPORTANT: We forward ALL headers except hop-by-hop ones.
- * This ensures we never miss a header that clob-client sends.
+ * CRITICAL: Body is forwarded as RAW BYTES (Buffer).
+ * We do NOT parse or modify the body in any way.
  */
 async function forwardRequest(req: Request, res: Response): Promise<void> {
   const startTime = Date.now()
@@ -96,7 +98,7 @@ async function forwardRequest(req: Request, res: Response): Promise<void> {
   
   // Build headers to forward - include ALL except hop-by-hop
   const forwardHeaders: Record<string, string> = {}
-  let polyHeadersFound: string[] = []
+  const polyHeadersFound: string[] = []
   
   for (const [key, value] of Object.entries(req.headers)) {
     const lowerKey = key.toLowerCase()
@@ -106,11 +108,9 @@ async function forwardRequest(req: Request, res: Response): Promise<void> {
     
     // Only forward string values (not arrays)
     if (typeof value === 'string') {
-      // Polymarket expects specific header casing for poly_ headers
-      // The clob-client sends them as POLY_ADDRESS, etc.
-      // Express lowercases all headers, so we need to restore the original casing
+      // Polymarket expects uppercase POLY_ headers
+      // Express lowercases all headers, so restore original casing
       if (lowerKey.startsWith('poly_')) {
-        // Convert to uppercase format: poly_address -> POLY_ADDRESS
         const upperKey = key.toUpperCase()
         forwardHeaders[upperKey] = value
         polyHeadersFound.push(upperKey)
@@ -120,12 +120,23 @@ async function forwardRequest(req: Request, res: Response): Promise<void> {
     }
   }
   
-  // Log request (including which poly headers we found)
-  logger.info(`[Proxy] ${req.method} ${req.path} -> ${CLOB_UPSTREAM}${req.path}`)
-  logger.info(`[Proxy] poly_* headers found: ${polyHeadersFound.length > 0 ? polyHeadersFound.join(', ') : 'NONE'}`)
+  // Get raw body as Buffer (set by express.raw() in index.ts)
+  // CRITICAL: Do NOT modify this - it contains the signed payload
+  const rawBody: Buffer | undefined = Buffer.isBuffer(req.body) ? req.body : undefined
+  const hasBody = rawBody && rawBody.length > 0
   
-  // Debug log all headers (safe)
-  logger.debug(`[Proxy] Forwarding headers: ${logHeaders(forwardHeaders)}`)
+  // Log request
+  logger.info(`[Proxy] ${req.method} ${req.path} -> ${CLOB_UPSTREAM}${req.path}`)
+  logger.info(`[Proxy] poly_* headers: ${polyHeadersFound.length > 0 ? polyHeadersFound.join(', ') : 'NONE'}`)
+  
+  if (hasBody) {
+    logger.info(`[Proxy] Raw body: ${rawBody.length} bytes (forwarding unchanged)`)
+    // Log first 100 chars for debugging (safe - just structure, not secrets)
+    const preview = rawBody.toString('utf8').slice(0, 100)
+    logger.debug(`[Proxy] Body preview: ${preview}...`)
+  }
+  
+  logger.debug(`[Proxy] Headers: ${logHeaders(forwardHeaders)}`)
   
   try {
     // Prepare fetch options
@@ -134,13 +145,14 @@ async function forwardRequest(req: Request, res: Response): Promise<void> {
       headers: forwardHeaders,
     }
     
-    // Add body for POST/PUT/PATCH
-    if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.body && Object.keys(req.body).length > 0) {
-      fetchOptions.body = JSON.stringify(req.body)
-      forwardHeaders['content-type'] = 'application/json'
-      
-      // Log body keys (not values) for debugging
-      logger.debug(`[Proxy] Body keys: ${Object.keys(req.body).join(', ')}`)
+    // Forward raw body for POST/PUT/PATCH
+    // CRITICAL: Use the raw Buffer directly - do NOT convert or modify
+    if (['POST', 'PUT', 'PATCH'].includes(req.method) && hasBody) {
+      fetchOptions.body = rawBody
+      // Ensure content-type is set (should already be from client)
+      if (!forwardHeaders['content-type']) {
+        forwardHeaders['content-type'] = 'application/json'
+      }
     }
     
     // Make upstream request with timeout
@@ -172,7 +184,7 @@ async function forwardRequest(req: Request, res: Response): Promise<void> {
     
     // Log error details for non-200 responses
     if (!upstreamResponse.ok) {
-      logger.warn(`[Proxy] Upstream error body: ${JSON.stringify(responseBody)}`)
+      logger.warn(`[Proxy] Upstream error: ${JSON.stringify(responseBody)}`)
     }
     
     // Forward response headers
