@@ -68,9 +68,14 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
     parsedMarket,
     yesPrice,
     noPrice,
+    // Executable prices (BUY hits ASK, SELL hits BID)
+    yesBuyPrice,
+    noBuyPrice,
+    yesSellPrice,
+    noSellPrice,
     estimateTrade,
     executeTrade,
-    executeSell,  // NEW: For SELL orders with proper tokenId
+    executeSell,  // SELL orders with FOK execution
     enableTrading,
     reset,
   } = usePolymarketTrade({
@@ -191,7 +196,25 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
   const displayBalance = parseFloat(usdceBalance) > 0 ? usdceBalance : usdcBalance
   const balanceNum = parseFloat(displayBalance) || 0
 
-  const currentPrice = selectedOutcome === 'YES' ? yesPrice : noPrice
+  // CRITICAL: Use EXECUTABLE prices, not display prices
+  // BUY: We pay the ASK (what sellers want) - this is yesBuyPrice/noBuyPrice
+  // SELL: We receive the BID (what buyers pay) - this is yesSellPrice/noSellPrice
+  const getBuyPrice = (outcome: 'YES' | 'NO') => {
+    const execPrice = outcome === 'YES' ? yesBuyPrice : noBuyPrice
+    const fallback = outcome === 'YES' ? yesPrice : noPrice
+    return execPrice ?? fallback
+  }
+  
+  const getSellPrice = (outcome: 'YES' | 'NO') => {
+    const execPrice = outcome === 'YES' ? yesSellPrice : noSellPrice
+    const fallback = outcome === 'YES' ? yesPrice : noPrice
+    return execPrice ?? fallback
+  }
+  
+  // Current executable price based on action
+  const currentPrice = tradeAction === 'BUY' 
+    ? getBuyPrice(selectedOutcome)
+    : getSellPrice(selectedOutcome)
   
   // Check if user needs to bridge (only if balance is very low, not just < $1)
   const needsBridge = balanceNum < 0.01
@@ -208,7 +231,7 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
     if (isLoading) return
     
     if (tradeAction === 'BUY') {
-      // BUY: Check balance and execute
+      // BUY: Check balance and execute (uses best ASK internally)
       if (!amountNum || hasInsufficientBalance) return
       executeTrade(amount, selectedOutcome)
     } else {
@@ -226,13 +249,20 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
         return
       }
       
-      // Use current price as sell price
-      const sellPrice = selectedOutcome === 'YES' ? yesPrice : noPrice
+      // CRITICAL: Use best BID price (what buyers will pay NOW)
+      // This ensures immediate execution instead of placing on orderbook
+      const sellPrice = getSellPrice(selectedOutcome)
       
-      console.log('📤 Executing SELL:', { tokenId, shares: sharesToSell, price: sellPrice, outcome: selectedOutcome })
+      console.log('📤 Executing SELL @ best BID:', { 
+        tokenId, 
+        shares: sharesToSell, 
+        price: sellPrice, 
+        outcome: selectedOutcome,
+        bestBid: selectedOutcome === 'YES' ? yesSellPrice : noSellPrice,
+      })
       executeSell(tokenId, sharesToSell, sellPrice, selectedOutcome)
     }
-  }, [tradeAction, amount, selectedOutcome, amountNum, hasInsufficientBalance, isLoading, executeTrade, executeSell, userYesShares, userNoShares, parsedMarket, yesPrice, noPrice])
+  }, [tradeAction, amount, selectedOutcome, amountNum, hasInsufficientBalance, isLoading, executeTrade, executeSell, userYesShares, userNoShares, parsedMarket, yesSellPrice, noSellPrice, yesPrice, noPrice])
 
   const handleEnableTrading = useCallback(async () => {
     await enableTrading()

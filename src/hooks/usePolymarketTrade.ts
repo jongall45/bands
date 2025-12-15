@@ -94,8 +94,15 @@ interface TradeResult {
   
   // Market data
   parsedMarket: ParsedMarket
-  yesPrice: number
-  noPrice: number
+  yesPrice: number       // Display price (midpoint or gamma)
+  noPrice: number        // Display price (midpoint or gamma)
+  
+  // Executable prices (for immediate fills)
+  // BUY hits the ASK, SELL hits the BID
+  yesBuyPrice: number | null   // Best ASK - price to BUY YES
+  noBuyPrice: number | null    // Best ASK - price to BUY NO
+  yesSellPrice: number | null  // Best BID - price to SELL YES
+  noSellPrice: number | null   // Best BID - price to SELL NO
   
   // Actions
   estimateTrade: (amount: string, outcome: 'YES' | 'NO') => TradeEstimate
@@ -618,8 +625,12 @@ export function usePolymarketTrade({
   
   // For order execution: use best ask (BUY) or best bid (SELL)
   // These are the executable prices from the orderbook
+  // BUY hits the ASK (what sellers want)
+  // SELL hits the BID (what buyers are paying)
   const yesBestAsk = livePrices?.yesBestAsk
   const noBestAsk = livePrices?.noBestAsk
+  const yesBestBid = livePrices?.yesBestBid
+  const noBestBid = livePrices?.noBestBid
   const hasLiquidity = livePrices?.hasLiquidity ?? false
   
   // Debug log current prices
@@ -1461,13 +1472,20 @@ export function usePolymarketTrade({
     
     // Market data
     parsedMarket,
-    yesPrice,
-    noPrice,
+    yesPrice,  // Display price (midpoint)
+    noPrice,   // Display price (midpoint)
+    
+    // Executable prices for immediate fills
+    // BUY hits ASK (what sellers want), SELL hits BID (what buyers pay)
+    yesBuyPrice: yesBestAsk ?? null,   // Price to BUY YES (best ask)
+    noBuyPrice: noBestAsk ?? null,     // Price to BUY NO (best ask)
+    yesSellPrice: yesBestBid ?? null,  // Price to SELL YES (best bid)
+    noSellPrice: noBestBid ?? null,    // Price to SELL NO (best bid)
     
     // Actions
     estimateTrade: getTradeEstimate,
     executeTrade,
-    executeSell,  // NEW: Proper SELL order execution
+    executeSell,  // SELL order with FOK execution
     enableTrading,
     reset,
   }

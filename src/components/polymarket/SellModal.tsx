@@ -68,6 +68,8 @@ export function SellModal({ isOpen, onClose, position, market }: SellModalProps)
     error,
     tradingWallet,
     hasUserCreds,
+    yesSellPrice,  // Best BID for YES
+    noSellPrice,   // Best BID for NO
     executeSell,
     enableTrading,
     reset,
@@ -84,7 +86,10 @@ export function SellModal({ isOpen, onClose, position, market }: SellModalProps)
     },
   })
 
-  const sellPrice = customPrice ?? position.currentPrice
+  // CRITICAL: Use best BID price (what buyers will pay NOW)
+  // This ensures immediate execution via FOK order, not sitting on orderbook
+  const bestBidPrice = position.outcome === 'YES' ? yesSellPrice : noSellPrice
+  const sellPrice = customPrice ?? bestBidPrice ?? position.currentPrice
   const estimatedValue = sharesToSell * sellPrice
   const isYes = position.outcome === 'YES'
 
@@ -94,15 +99,16 @@ export function SellModal({ isOpen, onClose, position, market }: SellModalProps)
       return
     }
 
-    console.log('🔴 Executing SELL:', {
+    console.log('🔴 Executing SELL @ best BID:', {
       tokenId: position.tokenId,
       shares: sharesToSell,
       price: sellPrice,
+      bestBid: bestBidPrice,
       outcome: position.outcome,
     })
 
     executeSell(position.tokenId, sharesToSell, sellPrice, position.outcome)
-  }, [position.tokenId, position.outcome, sharesToSell, sellPrice, executeSell])
+  }, [position.tokenId, position.outcome, sharesToSell, sellPrice, bestBidPrice, executeSell])
 
   const handlePercentage = (pct: number) => {
     setSharesToSell(position.shares * (pct / 100))

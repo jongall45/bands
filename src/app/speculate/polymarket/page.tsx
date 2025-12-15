@@ -731,25 +731,20 @@ const ALL_TEAMS = { ...NFL_TEAMS, ...NBA_TEAMS }
 /**
  * Parse game title to extract team info
  * Returns [team1, team2] or null if not a game
- * 
- * IMPORTANT: Deduplicates by team abbreviation to handle aliases
- * (e.g., "76ers" and "sixers" both map to PHI)
  */
 function parseGameTeams(title: string): [TeamInfo, TeamInfo] | null {
   const lower = title.toLowerCase()
   
-  // Find teams mentioned in the title, deduplicate by abbreviation
-  const seenAbbrevs = new Set<string>()
+  // Find teams mentioned in the title
   const foundTeams: TeamInfo[] = []
   
   for (const [key, team] of Object.entries(ALL_TEAMS)) {
-    if (lower.includes(key) && !seenAbbrevs.has(team.abbrev)) {
-      seenAbbrevs.add(team.abbrev)
+    if (lower.includes(key)) {
       foundTeams.push(team)
     }
   }
   
-  // Need exactly 2 distinct teams for a game
+  // Need exactly 2 teams for a game
   if (foundTeams.length >= 2) {
     return [foundTeams[0], foundTeams[1]]
   }

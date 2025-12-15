@@ -117,6 +117,12 @@ export interface DirectOrderParams {
   size: number      // Number of shares
   tickSize?: TickSize
   negRisk?: boolean
+  /**
+   * Order type:
+   * - FOK (Fill or Kill): Execute fully immediately or cancel (DEFAULT for market orders)
+   * - GTC (Good Till Cancelled): Sit on orderbook until filled/cancelled
+   */
+  orderType?: 'FOK' | 'GTC'
 }
 
 /**
@@ -184,33 +190,76 @@ export function createDirectClobClient(
 /**
  * Place an order using ClobClient
  * 
- * ClobClient.createAndPostOrder() will:
- * - Build the order with correct decimals
- * - Sign using correct EIP-712 domain (from canonical host)
- * - POST request gets intercepted and routed through proxy
+ * IMPORTANT: Two different methods for different order types:
+ * - createAndPostOrder: For GTC (limit orders that sit on book)
+ * - createAndPostMarketOrder: For FOK/FAK (immediate execution, market orders)
+ * 
+ * We use FOK by default for market-taking orders.
+ * This ensures orders either execute fully immediately or cancel entirely.
+ * No partial fills sitting on the orderbook locking shares.
  */
 export async function placeDirectOrder(
   clobClient: ClobClient,
   params: DirectOrderParams
 ): Promise<DirectOrderResult> {
-  const { tokenId, side, price, size, tickSize = '0.01', negRisk = false } = params
+  const { tokenId, side, price, size, tickSize = '0.01', negRisk = false, orderType = 'FOK' } = params
+  
+  console.log('[DirectTrade] Placing order:', {
+    side,
+    price,
+    size,
+    orderType,
+    method: orderType === 'FOK' ? 'createAndPostMarketOrder (FOK)' : 'createAndPostOrder (GTC)',
+  })
   
   try {
-    // Use the official SDK method
-    // Signing uses canonical domain, HTTP goes through proxy
-    const response = await clobClient.createAndPostOrder(
-      {
-        tokenID: tokenId,
-        price: price,
-        side: side === 'BUY' ? Side.BUY : Side.SELL,
-        size: size,
-      },
-      {
-        tickSize: tickSize as TickSize,
-        negRisk: negRisk,
-      },
-      OrderType.GTC
-    )
+    let response: any
+    
+    if (orderType === 'FOK') {
+      // Use MARKET ORDER method for immediate execution (Fill or Kill)
+      // This will fill at market price or cancel entirely
+      // 
+      // UserMarketOrder.amount:
+      // - BUY: USDC amount to spend (e.g., $10)
+      // - SELL: Number of shares to sell (e.g., 6.45 shares)
+      const amount = side === 'BUY' ? size * price : size
+      
+      console.log('[DirectTrade] Market order params:', {
+        side,
+        price: price ? `${price} (${(price * 100).toFixed(1)}%)` : 'market',
+        amount,
+        amountType: side === 'BUY' ? 'USDC' : 'shares',
+      })
+      
+      response = await clobClient.createAndPostMarketOrder(
+        {
+          tokenID: tokenId,
+          price: price,  // Max price willing to pay (BUY) or min willing to receive (SELL)
+          side: side === 'BUY' ? Side.BUY : Side.SELL,
+          amount: amount,
+        },
+        {
+          tickSize: tickSize as TickSize,
+          negRisk: negRisk,
+        },
+        OrderType.FOK  // Fill or Kill - execute fully or cancel
+      )
+    } else {
+      // Use LIMIT ORDER method for GTC (Good Till Cancelled)
+      response = await clobClient.createAndPostOrder(
+        {
+          tokenID: tokenId,
+          price: price,
+          side: side === 'BUY' ? Side.BUY : Side.SELL,
+          size: size,
+        },
+        {
+          tickSize: tickSize as TickSize,
+          negRisk: negRisk,
+        },
+        OrderType.GTC  // Limit order sits on book until filled/cancelled
+      )
+    }
     
     console.log('[DirectTrade] Order response:', response)
     
