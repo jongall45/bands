@@ -19,17 +19,28 @@ import { useWallets } from '@privy-io/react-auth'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 
 // USDC addresses per chain
+// CRITICAL: Polymarket uses USDC.e (bridged) on Polygon, NOT native USDC!
 const USDC_ADDRESSES: Record<number, `0x${string}`> = {
-  [polygon.id]: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', // Native USDC on Polygon
+  [polygon.id]: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', // USDC.e on Polygon (Polymarket uses this!)
   [arbitrum.id]: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', // Native USDC on Arbitrum
   [base.id]: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // Native USDC on Base
 }
 
+// Chain icon URLs
+const CHAIN_ICONS: Record<number, string> = {
+  [arbitrum.id]: 'https://cryptologos.cc/logos/arbitrum-arb-logo.png',
+  [base.id]: 'https://avatars.githubusercontent.com/u/108554348?s=200&v=4',
+  [polygon.id]: 'https://cryptologos.cc/logos/polygon-matic-logo.png',
+}
+
+// USDC icon
+const USDC_ICON = 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png'
+
 // Chain configs
 const CHAIN_CONFIGS = [
-  { id: arbitrum.id, name: 'Arbitrum', icon: '🔵', chain: arbitrum },
-  { id: base.id, name: 'Base', icon: '🔷', chain: base },
-  { id: polygon.id, name: 'Polygon', icon: '🟣', chain: polygon },
+  { id: arbitrum.id, name: 'Arbitrum', chain: arbitrum },
+  { id: base.id, name: 'Base', chain: base },
+  { id: polygon.id, name: 'Polygon', chain: polygon },
 ]
 
 // Simple ERC20 ABI for transfer
@@ -368,7 +379,7 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
                   </button>
                 </div>
                 <p className="text-purple-400/50 text-[10px] mt-1">
-                  USDC in this wallet is used for Polymarket trading
+                  USDC.e (bridged USDC) in this wallet is used for Polymarket trading
                 </p>
               </div>
             </div>
@@ -382,9 +393,16 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
                 className="w-full flex items-center justify-between p-3 bg-white/[0.03] border border-white/[0.06] rounded-xl hover:bg-white/[0.05] transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-lg">{selectedChainConfig?.icon}</span>
+                  <div className="relative">
+                    <img src={USDC_ICON} alt="USDC" className="w-7 h-7 rounded-full" />
+                    <img 
+                      src={CHAIN_ICONS[selectedChainId]} 
+                      alt={selectedChainConfig?.name} 
+                      className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border border-[#0D0D0D]"
+                    />
+                  </div>
                   <span className="text-white font-medium">{selectedChainConfig?.name}</span>
-                  <span className="text-white/40 text-sm">${parseFloat(selectedChainBalance).toFixed(2)} USDC</span>
+                  <span className="text-white/40 text-sm">${parseFloat(selectedChainBalance).toFixed(2)}</span>
                 </div>
                 <ChevronDown className={`w-4 h-4 text-white/40 transition-transform ${showChainSelector ? 'rotate-180' : ''}`} />
               </button>
@@ -406,7 +424,14 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
                         }`}
                       >
                         <div className="flex items-center gap-2">
-                          <span className="text-lg">{config.icon}</span>
+                          <div className="relative">
+                            <img src={USDC_ICON} alt="USDC" className="w-6 h-6 rounded-full" />
+                            <img 
+                              src={CHAIN_ICONS[config.id]} 
+                              alt={config.name} 
+                              className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border border-[#1A1A1A]"
+                            />
+                          </div>
                           <span className="text-white">{config.name}</span>
                         </div>
                         <span className={`text-sm ${hasBalance ? 'text-green-400' : 'text-white/30'}`}>
@@ -450,16 +475,23 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
               <button onClick={handleMaxClick} className="text-[#7B9EFF] text-xs font-medium hover:text-[#5B7EDF]">MAX</button>
             </div>
             <div className="flex items-center gap-3">
-              <img src="https://cryptologos.cc/logos/usd-coin-usdc-logo.png" alt="USDC" className="w-8 h-8 rounded-full" />
+              <div className="relative flex-shrink-0">
+                <img src={USDC_ICON} alt="USDC" className="w-8 h-8 rounded-full" />
+                <img 
+                  src={CHAIN_ICONS[polygon.id]} 
+                  alt="Polygon" 
+                  className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border border-[#0D0D0D]"
+                />
+              </div>
               <input
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0.00"
-                className="flex-1 bg-transparent text-white text-2xl font-bold outline-none placeholder:text-white/20"
+                className="flex-1 min-w-0 bg-transparent text-white text-2xl font-bold outline-none placeholder:text-white/20"
                 disabled={status === 'pending'}
               />
-              <span className="text-white/60 font-medium">USDC</span>
+              <span className="text-white/60 text-sm font-medium flex-shrink-0">USDC.e</span>
             </div>
             <p className="text-white/40 text-xs mt-2">Available: ${parseFloat(sourceBalance).toFixed(2)}</p>
           </div>
@@ -529,13 +561,13 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
           <div className="space-y-2">
             <p className="text-white/30 text-xs text-center">
               {mode === 'deposit' 
-                ? `Bridge & deposit USDC from ${selectedChainConfig?.name} to your Polymarket trading wallet.`
-                : 'Transfer USDC from your trading wallet back to your Smart Wallet on Polygon.'
+                ? `Bridge USDC from ${selectedChainConfig?.name} → USDC.e on Polygon for your trading wallet.`
+                : 'Transfer USDC.e from your trading wallet back to your Smart Wallet on Polygon.'
               }
             </p>
             <div className="bg-white/[0.02] border border-white/[0.06] rounded-lg p-2">
               <p className="text-white/40 text-[10px] text-center">
-                💡 Your trading wallet (EOA) holds USDC for Polymarket orders. Enable trading first to place orders.
+                💡 Polymarket uses USDC.e (bridged USDC). Enable trading first to place orders.
               </p>
             </div>
           </div>

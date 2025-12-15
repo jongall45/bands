@@ -25,7 +25,8 @@ import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { checkGatewayHealth } from '@/lib/gateway/client'
 
 // Native USDC on Polygon (what Polymarket uses)
-const POLYGON_USDC = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'
+// CRITICAL: Polymarket uses USDC.e (bridged USDC), NOT native USDC!
+const POLYGON_USDC_E = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'
 
 // Category pills with icons
 const PILLS = [
@@ -89,7 +90,7 @@ export default function PolymarketPage() {
   // Fetch Smart Wallet USDC balance (on Polygon) - for showing available funds to deposit
   const { data: smartWalletBalance } = useBalance({
     address: smartWalletAddress,
-    token: POLYGON_USDC as `0x${string}`,
+    token: POLYGON_USDC_E as `0x${string}`,
     chainId: polygon.id,
     query: { enabled: !!smartWalletAddress },
   })
@@ -98,7 +99,7 @@ export default function PolymarketPage() {
   // Fetch Polygon USDC balance (from trading wallet EOA)
   const { data: polygonUsdcBalance, refetch: refetchBalance } = useBalance({
     address: tradingWallet as `0x${string}`,
-    token: POLYGON_USDC as `0x${string}`,
+    token: POLYGON_USDC_E as `0x${string}`,
     chainId: polygon.id,
     query: { enabled: !!tradingWallet },
   })
