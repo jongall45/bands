@@ -110,10 +110,11 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
   const hasPosition = userYesShares > 0 || userNoShares > 0
 
   // Get full balance info including USDC.e
-  const { nativeUsdcBalance, bridgedUsdcBalance, hasBridgedUsdc, refetch: refetchBalance } = usePolygonUsdcBalance()
+  // CRITICAL: Polymarket uses USDC.e (bridged), NOT native USDC!
+  const { usdceBalance, nativeUsdcBalance, hasNativeUsdc, needsSwap, refetch: refetchBalance } = usePolygonUsdcBalance()
 
-  // Use the native USDC balance (prefer the fresh hook value over the trade hook)
-  const displayBalance = parseFloat(nativeUsdcBalance) > 0 ? nativeUsdcBalance : usdcBalance
+  // Use USDC.e balance (what Polymarket actually uses)
+  const displayBalance = parseFloat(usdceBalance) > 0 ? usdceBalance : usdcBalance
   const balanceNum = parseFloat(displayBalance) || 0
 
   // Calculate estimate
@@ -300,18 +301,18 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
         </p>
       </div>
 
-      {/* USDC.e Warning */}
-      {hasBridgedUsdc && (
+      {/* Native USDC Warning - Polymarket uses USDC.e, not native USDC! */}
+      {needsSwap && (
         <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 mb-4">
           <div className="flex items-start gap-2">
             <AlertCircle className="w-4 h-4 text-orange-400 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-orange-400 text-xs font-medium">
-                You have ${parseFloat(bridgedUsdcBalance).toFixed(2)} USDC.e (bridged)
+                You have ${parseFloat(nativeUsdcBalance).toFixed(2)} native USDC (wrong type!)
               </p>
               <p className="text-orange-400/70 text-xs mt-1">
-                Polymarket requires <strong>native USDC</strong>, not USDC.e. 
-                You&apos;ll need to swap USDC.e → USDC on Polygon or bridge native USDC from another chain.
+                Polymarket requires <strong>USDC.e (bridged)</strong>, not native USDC. 
+                You&apos;ll need to swap native USDC → USDC.e on Polygon (QuickSwap/Uniswap).
               </p>
             </div>
           </div>
