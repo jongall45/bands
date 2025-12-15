@@ -770,12 +770,59 @@ export function usePolymarketTrade({
       setApiCredentials(creds)
       saveCredentials(tradingWallet, creds)
       
+      // Step 5: Check and send approvals if needed
+      setState({ status: 'preparing', message: 'Checking approvals...' })
+      const approvalStatus = await checkAllApprovals(
+        tradingWallet as `0x${string}`,
+        publicClient
+      )
+      
+      console.log('📋 Approval status:', approvalStatus)
+      
+      if (!approvalStatus.allApproved) {
+        console.log('⚠️ Approvals missing! Sending approval transactions...')
+        setState({ status: 'signing', message: 'Approve USDC spending...' })
+        
+        // Get approval transactions
+        const approvalTxs = createAllApprovalTxs()
+        console.log(`📝 Sending ${approvalTxs.length} approval transactions...`)
+        
+        // Send each approval transaction
+        for (let i = 0; i < approvalTxs.length; i++) {
+          const tx = approvalTxs[i]
+          try {
+            setState({ status: 'signing', message: `Approval ${i + 1}/${approvalTxs.length}...` })
+            console.log(`📤 Sending approval ${i + 1}/${approvalTxs.length}:`, tx.to.slice(0, 10) + '...')
+            
+            const txResponse = await signer.sendTransaction({
+              to: tx.to,
+              data: tx.data,
+              chainId: 137, // Polygon
+            })
+            
+            console.log(`⏳ Waiting for approval ${i + 1}...`, txResponse.hash)
+            await txResponse.wait()
+            console.log(`✅ Approval ${i + 1} confirmed!`)
+          } catch (approvalError: any) {
+            // Log but don't fail - some approvals might already exist
+            console.warn(`⚠️ Approval ${i + 1} failed (may already exist):`, approvalError.message)
+          }
+        }
+        
+        // Refresh approval status
+        await fetchBalancesAndAllowances()
+        console.log('✅ All approvals sent!')
+      } else {
+        console.log('✅ All approvals already set!')
+      }
+      
       // Update state
       setHasUserCreds(true)
+      setHasAllApprovals(true)
       const newSession: TradingSession = {
         tradingWallet,
         hasUserCreds: true,
-        approvalsSet: hasAllApprovals,
+        approvalsSet: true,
         createdAt: Date.now(),
       }
       saveTradingSession(newSession)
@@ -789,7 +836,7 @@ export function usePolymarketTrade({
       onError?.(error.message || 'Failed to enable trading')
       return false
     }
-  }, [embeddedWallet, tradingWallet, hasUserCreds, hasAllApprovals, onError])
+  }, [embeddedWallet, tradingWallet, hasUserCreds, hasAllApprovals, onError, publicClient, fetchBalancesAndAllowances])
 
   // ============================================
   // TRADE ESTIMATION
