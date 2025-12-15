@@ -5,6 +5,12 @@
       "maxDuration": 30
     }
   },
+  "rewrites": [
+    {
+      "source": "/api/polymarket/proxy/:path*",
+      "destination": "https://bands-production-1ac7.up.railway.app/api/polymarket/proxy/:path*"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",
@@ -17,4 +23,3 @@
     }
   ]
 }
-

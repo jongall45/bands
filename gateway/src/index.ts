@@ -24,6 +24,13 @@ validateConfig()
 const app = express()
 
 // ============================================
+// TRUST PROXY (must be before rate limiter!)
+// ============================================
+// Required for Railway/Vercel deployments behind load balancers
+// Fixes: ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+app.set('trust proxy', 1)
+
+// ============================================
 // MIDDLEWARE
 // ============================================
 
@@ -33,7 +40,7 @@ app.use(helmet({
 }))
 
 // CORS - allow frontend origins
-// Must include all headers that clob-client sends
+// Must include ALL headers that clob-client sends
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps or curl)
@@ -62,12 +69,22 @@ app.use(cors({
     'Content-Type',
     'Authorization',
     'Accept',
-    // Polymarket auth headers (clob-client sends these)
+    'Origin',
+    'X-Requested-With',
+    // ALL Polymarket/clob-client headers (case-insensitive but list all variants)
+    'POLY_ADDRESS',
     'POLY_API_KEY',
     'POLY_SIGNATURE',
     'POLY_TIMESTAMP',
     'POLY_NONCE',
     'POLY_PASSPHRASE',
+    // Lowercase variants
+    'poly_address',
+    'poly_api_key',
+    'poly_signature',
+    'poly_timestamp',
+    'poly_nonce',
+    'poly_passphrase',
   ],
   exposedHeaders: [
     'X-Request-Id',
@@ -76,6 +93,7 @@ app.use(cors({
     'X-RateLimit-Reset',
   ],
   credentials: true,
+  maxAge: 86400, // Cache preflight for 24 hours
 }))
 
 // Compression

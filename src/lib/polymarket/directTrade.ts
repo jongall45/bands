@@ -20,13 +20,14 @@ import Decimal from 'decimal.js'
 // Configure Decimal.js
 Decimal.set({ precision: 20, rounding: Decimal.ROUND_DOWN })
 
-// Gateway URL - ClobClient will use this as "host" instead of clob.polymarket.com
+// Gateway URL for non-proxy API calls
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || ''
 
-// The proxy endpoint on our gateway
-// ClobClient will POST to: GATEWAY_URL + /api/polymarket/proxy + /order
-// Which gets forwarded to: https://clob.polymarket.com/order
-const CLOB_PROXY_HOST = `${GATEWAY_URL}/api/polymarket/proxy`
+// The proxy endpoint - use RELATIVE path for same-origin via Vercel rewrite
+// Browser calls: https://www.bands.cash/api/polymarket/proxy/order
+// Vercel rewrites to: https://railway.../api/polymarket/proxy/order
+// This avoids CORS entirely (same-origin request)
+const CLOB_PROXY_HOST = '/api/polymarket/proxy'
 
 // Chain ID for Polygon
 const CHAIN_ID = 137

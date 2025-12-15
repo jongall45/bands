@@ -24,17 +24,20 @@ const router = Router()
 const CLOB_UPSTREAM = config.clobApi || 'https://clob.polymarket.com'
 
 // Headers to forward from client to upstream
+// Must include ALL poly_* headers that clob-client sends
 const FORWARD_REQUEST_HEADERS = [
   'content-type',
   'accept',
   'authorization',
   // Polymarket auth headers (L2 API key auth)
+  'poly_address',     // <-- This was missing! Required by clob-client
   'poly_api_key',
   'poly_signature',
   'poly_timestamp',
   'poly_nonce',
   'poly_passphrase',
-  // Legacy header names (some versions use different casing)
+  // Legacy/uppercase variants
+  'POLY_ADDRESS',
   'POLY_API_KEY',
   'POLY_SIGNATURE', 
   'POLY_TIMESTAMP',

@@ -456,29 +456,85 @@ export function usePolymarketTrade({
           getGatewayMarketStats(marketId, parsedMarket.noTokenId),
         ])
         
-        const yesBid = yesBook?.bids?.[0]?.price ? parseFloat(yesBook.bids[0].price) : 0
-        const yesAsk = yesBook?.asks?.[0]?.price ? parseFloat(yesBook.asks[0].price) : 1
-        const yesMid = (yesBid + yesAsk) / 2
+        // Only use live prices if we have actual orderbook data
+        // Otherwise fall back to Gamma prices (don't default to 0.5!)
+        const hasYesBook = yesBook?.bids?.length > 0 || yesBook?.asks?.length > 0
+        const hasNoBook = noBook?.bids?.length > 0 || noBook?.asks?.length > 0
         
-        const noBid = noBook?.bids?.[0]?.price ? parseFloat(noBook.bids[0].price) : 0
-        const noAsk = noBook?.asks?.[0]?.price ? parseFloat(noBook.asks[0].price) : 1
-        const noMid = (noBid + noAsk) / 2
-        
-        setLivePrices({ yesPrice: yesMid, noPrice: noMid })
+        if (hasYesBook || hasNoBook) {
+          // Calculate mid prices from orderbook
+          // For BUY orders, we care about the best ask (what we pay)
+          // Using midpoint is more representative for display
+          const yesBid = yesBook?.bids?.[0]?.price ? parseFloat(yesBook.bids[0].price) : null
+          const yesAsk = yesBook?.asks?.[0]?.price ? parseFloat(yesBook.asks[0].price) : null
+          
+          const noBid = noBook?.bids?.[0]?.price ? parseFloat(noBook.bids[0].price) : null
+          const noAsk = noBook?.asks?.[0]?.price ? parseFloat(noBook.asks[0].price) : null
+          
+          // Calculate midpoint if both sides exist, otherwise use available side
+          let yesLivePrice = null
+          if (yesBid !== null && yesAsk !== null) {
+            yesLivePrice = (yesBid + yesAsk) / 2
+          } else if (yesAsk !== null) {
+            yesLivePrice = yesAsk // For buying, use ask
+          } else if (yesBid !== null) {
+            yesLivePrice = yesBid
+          }
+          
+          let noLivePrice = null
+          if (noBid !== null && noAsk !== null) {
+            noLivePrice = (noBid + noAsk) / 2
+          } else if (noAsk !== null) {
+            noLivePrice = noAsk
+          } else if (noBid !== null) {
+            noLivePrice = noBid
+          }
+          
+          // Only set live prices if we got valid data
+          // Otherwise let it fall back to Gamma prices
+          if (yesLivePrice !== null || noLivePrice !== null) {
+            setLivePrices({ 
+              yesPrice: yesLivePrice ?? parsedMarket.yesPrice,
+              noPrice: noLivePrice ?? parsedMarket.noPrice,
+            })
+            
+            console.log('📊 Live prices updated:', {
+              yesPrice: yesLivePrice ?? 'using Gamma',
+              noPrice: noLivePrice ?? 'using Gamma',
+              yesBid, yesAsk, noBid, noAsk,
+            })
+          }
+        } else {
+          console.log('📊 No orderbook data, using Gamma prices:', {
+            yesPrice: parsedMarket.yesPrice,
+            noPrice: parsedMarket.noPrice,
+          })
+        }
       } catch (e) {
         console.warn('Failed to fetch live CLOB prices:', e)
-        // Fall back to Gamma prices
+        // Fall back to Gamma prices (livePrices stays null)
       }
     }
     
     fetchLivePrices()
     const interval = setInterval(fetchLivePrices, 5000) // Refresh every 5s
     return () => clearInterval(interval)
-  }, [market, parsedMarket.yesTokenId, parsedMarket.noTokenId])
+  }, [market, parsedMarket.yesTokenId, parsedMarket.noTokenId, parsedMarket.yesPrice, parsedMarket.noPrice])
   
   // Use live prices if available, otherwise fall back to Gamma prices
   const yesPrice = livePrices?.yesPrice ?? parsedMarket.yesPrice
   const noPrice = livePrices?.noPrice ?? parsedMarket.noPrice
+  
+  // Debug log current prices
+  useEffect(() => {
+    console.log('💰 Current prices for trading:', {
+      yesPrice,
+      noPrice,
+      usingLive: livePrices !== null,
+      gammaYes: parsedMarket.yesPrice,
+      gammaNo: parsedMarket.noPrice,
+    })
+  }, [yesPrice, noPrice, livePrices, parsedMarket.yesPrice, parsedMarket.noPrice])
 
   // ============================================
   // LOAD SESSION AND CHECK AUTH STATUS ON MOUNT
@@ -722,12 +778,15 @@ export function usePolymarketTrade({
 
       console.log('📤 Placing order via ClobClient (through gateway proxy):')
       console.log('   Trading Wallet:', tradingWallet)
-      console.log('   Token ID:', tokenId.slice(0, 30) + '...')
-      console.log('   Price:', price)
+      console.log('   Token ID:', tokenId)
+      console.log('   Outcome:', outcome)
+      console.log('   Price:', price, `(${(price * 100).toFixed(1)}%)`)
       console.log('   Size (shares):', size.toFixed(4))
       console.log('   Amount (USDC):', amountNum)
       console.log('   Tick Size:', tickSize)
       console.log('   Side: BUY')
+      console.log('   Price source:', livePrices ? 'LIVE ORDERBOOK' : 'GAMMA API')
+      console.log('   Gamma prices:', { yesPrice: parsedMarket.yesPrice, noPrice: parsedMarket.noPrice })
 
       // Get signer from Privy embedded wallet
       const signer = await getEthersSigner(embeddedWallet)
