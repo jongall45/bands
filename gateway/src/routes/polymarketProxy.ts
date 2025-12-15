@@ -224,8 +224,22 @@ async function forwardRequest(req: Request, res: Response): Promise<void> {
     // This tells us if the HMAC signature is correct or not
     if (polyAddress && req.path === '/order') {
       const userCreds = getUserCreds(polyAddress.toLowerCase())
+      const receivedApiKey = forwardHeaders['POLY_API_KEY'] || ''
+      
       if (userCreds?.secret) {
         logger.info(`[Proxy] VERIFYING HMAC: Found user creds for ${polyAddress.slice(0, 10)}...`)
+        
+        // Compare API keys to check if credentials match
+        logger.info(`[Proxy] Gateway stored API key: ${userCreds.apiKey.slice(0, 12)}...`)
+        logger.info(`[Proxy] Request API key:        ${receivedApiKey.slice(0, 12)}...`)
+        if (userCreds.apiKey !== receivedApiKey) {
+          logger.error(`[Proxy] ❌ API KEY MISMATCH! Frontend has stale credentials!`)
+          logger.error(`[Proxy]   Gateway has: ${userCreds.apiKey}`)
+          logger.error(`[Proxy]   Client sent: ${receivedApiKey}`)
+          logger.error(`[Proxy]   FIX: Clear localStorage and re-enable trading`)
+        } else {
+          logger.info(`[Proxy] ✅ API keys match`)
+        }
         
         // Compute expected signature: HMAC-SHA256(timestamp + method + path + body, secret)
         const hmac = createHmac('sha256', Buffer.from(userCreds.secret, 'base64'))
