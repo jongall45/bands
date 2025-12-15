@@ -843,65 +843,34 @@ export function usePolymarketTrade({
           const tx = approvalTxs[i]
           try {
             setState({ status: 'signing', message: `Approval ${i + 1}/${approvalTxs.length}...` })
-            console.log(`📤 Sending approval ${i + 1}/${approvalTxs.length}:`, tx.to.slice(0, 10) + '...')
-            
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:835',message:'Before sendTransaction',data:{approvalIndex:i+1,to:tx.to,hasData:!!tx.data,signerType:typeof signer},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
-            // #endregion
-            
-            console.log(`🔐 Requesting wallet signature for approval ${i + 1}... (check for popup)`)
             
             const txResponse = await signer.sendTransaction({
               to: tx.to,
               data: tx.data,
-              chainId: 137, // Polygon
+              chainId: 137,
             })
             
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:847',message:'After sendTransaction',data:{approvalIndex:i+1,txHash:txResponse.hash},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
-            // #endregion
-            
-            console.log(`⏳ Waiting for approval ${i + 1}...`, txResponse.hash)
             await txResponse.wait()
-            
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:855',message:'Approval confirmed',data:{approvalIndex:i+1,txHash:txResponse.hash},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
-            // #endregion
-            
-            console.log(`✅ Approval ${i + 1} confirmed!`)
           } catch (approvalError: any) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:863',message:'Approval failed',data:{approvalIndex:i+1,error:approvalError.message,code:approvalError.code},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
-            // #endregion
-            
-            // Log but don't fail - some approvals might already exist
-            console.warn(`⚠️ Approval ${i + 1} failed (may already exist):`, approvalError.message)
+            // Some approvals might already exist - that's OK
+            console.warn(`Approval ${i + 1} may already exist:`, approvalError.message)
           }
         }
         
         // Refresh approval status locally
         await fetchBalancesAndAllowances()
-        console.log('✅ All approvals sent!')
         
-        // CRITICAL: Tell Polymarket to refresh their view of our approvals
-        console.log('🔄 Notifying Polymarket of new approvals...')
+        // Tell Polymarket to refresh their view of our approvals
         try {
-          // Create a temporary ClobClient to call updateBalanceAllowance
           const tempCreds = apiCredentials || loadCredentials(tradingWallet)
           if (tempCreds) {
             const tempClient = createDirectClobClient(signer, tempCreds, tradingWallet)
             await tempClient.updateBalanceAllowance({ asset_type: 'COLLATERAL' as any })
-            console.log('✅ Polymarket notified of new USDC approvals')
-            
-            // Wait for Polymarket to index
-            console.log('⏳ Waiting 3s for Polymarket indexer...')
-            await new Promise(resolve => setTimeout(resolve, 3000))
+            await new Promise(resolve => setTimeout(resolve, 2000))
           }
-        } catch (notifyErr) {
-          console.warn('⚠️ Could not notify Polymarket:', notifyErr)
+        } catch {
+          // Non-critical error
         }
-      } else {
-        console.log('✅ All approvals already set!')
       }
       
       // Update state
@@ -1131,81 +1100,22 @@ export function usePolymarketTrade({
 
       setState({ status: 'submitting', message: 'Placing order...' })
       
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:beforePlaceOrder',message:'About to call placeDirectOrder',data:{tokenId:tokenId.slice(0,30),orderPrice,size,tickSize},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
-      // #endregion
-      
-      // DEBUG: Check what Polymarket sees for our balance/allowance
-      // Import AssetType enum values: COLLATERAL = USDC, CONDITIONAL = tokens
-      console.log('🔍 Checking Polymarket balance/allowance via SDK...')
-      try {
-        // COLLATERAL = USDC collateral
-        const balanceResponse = await clobClient.getBalanceAllowance({ asset_type: 'COLLATERAL' as any })
-        console.log('💰 Polymarket sees our USDC balance/allowance:', balanceResponse)
-        
-        // Also check for the specific token (CONDITIONAL)
-        const tokenBalanceResponse = await clobClient.getBalanceAllowance({ 
-          asset_type: 'CONDITIONAL' as any,
-          token_id: tokenId 
-        })
-        console.log('🎫 Polymarket sees our token balance/allowance:', tokenBalanceResponse)
-      } catch (e) {
-        console.warn('⚠️ Could not check Polymarket balance:', e)
-      }
-      
-      // Also call updateBalanceAllowance to tell Polymarket to refresh
-      // CRITICAL: We need to update for COLLATERAL (USDC) specifically
-      console.log('🔄 Telling Polymarket to refresh our USDC balance/allowance...')
+      // Refresh Polymarket's balance cache before placing order
       try {
         await clobClient.updateBalanceAllowance({ asset_type: 'COLLATERAL' as any })
-        console.log('✅ USDC balance/allowance update requested')
-        
-        // Wait a bit for Polymarket's indexer to process
-        console.log('⏳ Waiting 2s for indexer...')
-        await new Promise(resolve => setTimeout(resolve, 2000))
-        
-        // Check again after update
-        const updatedBalance = await clobClient.getBalanceAllowance({ asset_type: 'COLLATERAL' as any })
-        console.log('💰 After update, Polymarket sees USDC:', updatedBalance)
-        
-        // If still 0, try one more time
-        if (updatedBalance?.balance === '0') {
-          console.log('⚠️ Still showing 0 balance. Refreshing again...')
-          await clobClient.updateBalanceAllowance({ asset_type: 'COLLATERAL' as any })
-          await new Promise(resolve => setTimeout(resolve, 3000))
-          const finalBalance = await clobClient.getBalanceAllowance({ asset_type: 'COLLATERAL' as any })
-          console.log('💰 Final check - Polymarket sees USDC:', finalBalance)
-        }
-      } catch (e) {
-        console.warn('⚠️ Could not update balance:', e)
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      } catch {
+        // Non-critical, continue with order
       }
-      
-      // Use ClobClient - it will POST to our gateway proxy
-      // which forwards to https://clob.polymarket.com/order
-      // CRITICAL: Use parsedMarket.negRisk to determine which exchange contract to use
-      // Multi-outcome markets (>2 outcomes) are negRisk markets!
-      console.log('[Trade] Order params:', {
-        tokenId: tokenId.slice(0, 30) + '...',
-        side: 'BUY',
-        price: orderPrice,
-        size,
-        negRisk: parsedMarket.negRisk,  // ← CRITICAL: must match market type!
-      })
       
       const result = await placeDirectOrder(clobClient, {
         tokenId,
         side: 'BUY',
-        price: orderPrice,  // Use best ask price from orderbook
+        price: orderPrice,
         size,
         tickSize: tickSize as any,
-        negRisk: parsedMarket.negRisk,  // ← FIX: Use actual market negRisk flag
+        negRisk: parsedMarket.negRisk,
       })
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:afterPlaceOrder',message:'placeDirectOrder returned',data:{success:result.success,error:result.error,orderId:result.orderId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
-      // #endregion
-      
-      console.log('📦 ClobClient response:', result)
 
       if (result.success) {
         setState({ 

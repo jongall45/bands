@@ -1,7 +1,5 @@
 'use client'
 
-import { useState } from 'react'
-import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { useQuery } from '@tanstack/react-query'
 import {
   X,
@@ -14,6 +12,7 @@ import {
   DollarSign,
 } from 'lucide-react'
 import { formatProbability } from '@/lib/polymarket/api'
+import { usePolygonUsdcBalance } from '@/hooks/usePolymarketTrade'
 
 interface Position {
   tokenId: string
@@ -38,20 +37,20 @@ interface PositionsPanelProps {
 }
 
 export function PositionsPanel({ isOpen, onClose }: PositionsPanelProps) {
-  const { client: smartWalletClient } = useSmartWallets()
-  const smartWalletAddress = smartWalletClient?.account?.address
+  // Use the EOA trading wallet (where Polymarket positions actually live)
+  const { tradingWallet } = usePolygonUsdcBalance()
 
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['polymarket-positions', smartWalletAddress],
+    queryKey: ['polymarket-positions', tradingWallet],
     queryFn: async () => {
-      if (!smartWalletAddress) return { positions: [], totalValue: '0' }
+      if (!tradingWallet) return { positions: [], totalValue: '0' }
       
-      const response = await fetch(`/api/polymarket/positions?address=${smartWalletAddress}`)
+      const response = await fetch(`/api/polymarket/positions?address=${tradingWallet}`)
       if (!response.ok) return { positions: [], totalValue: '0' }
       
       return response.json()
     },
-    enabled: !!smartWalletAddress && isOpen,
+    enabled: !!tradingWallet && isOpen,
     staleTime: 30000,
     refetchInterval: 60000,
   })
@@ -117,7 +116,7 @@ export function PositionsPanel({ isOpen, onClose }: PositionsPanelProps) {
 
         {/* Positions List */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          {!smartWalletAddress ? (
+          {!tradingWallet ? (
             <div className="text-center py-12">
               <Wallet className="w-12 h-12 text-white/20 mx-auto mb-4" />
               <p className="text-white/40 text-sm">Connect wallet to view positions</p>
@@ -144,7 +143,7 @@ export function PositionsPanel({ isOpen, onClose }: PositionsPanelProps) {
         </div>
 
         {/* View on Polymarket */}
-        {smartWalletAddress && (
+        {tradingWallet && (
           <div className="px-5 py-3 border-t border-white/[0.06] flex-shrink-0">
             <a
               href={`https://polymarket.com/portfolio`}
