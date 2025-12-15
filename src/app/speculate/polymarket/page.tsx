@@ -125,30 +125,69 @@ export default function PolymarketPage() {
   const events = selectedCategory ? categoryEvents : trendingEvents
   const isLoading = selectedCategory ? categoryLoading : trendingLoading
 
-  // Group events by category for horizontal scrolling
+  // Group events by category for horizontal scrolling carousels
+  // NFL markets
+  const nflEvents = useMemo(() => {
+    return events?.filter(e => 
+      e.title?.toLowerCase().includes('nfl') ||
+      e.slug?.toLowerCase().includes('nfl') ||
+      e.title?.toLowerCase().includes('super bowl') ||
+      e.title?.toLowerCase().includes('chiefs') ||
+      e.title?.toLowerCase().includes('eagles') ||
+      e.title?.toLowerCase().includes('cowboys') ||
+      e.title?.toLowerCase().includes('49ers')
+    ) || []
+  }, [events])
+
+  // NBA markets  
+  const nbaEvents = useMemo(() => {
+    return events?.filter(e => 
+      e.title?.toLowerCase().includes('nba') ||
+      e.slug?.toLowerCase().includes('nba') ||
+      e.title?.toLowerCase().includes('lakers') ||
+      e.title?.toLowerCase().includes('celtics') ||
+      e.title?.toLowerCase().includes('warriors')
+    ) || []
+  }, [events])
+
+  // All sports markets
   const sportsEvents = useMemo(() => {
     return events?.filter(e => 
       e.slug?.toLowerCase().includes('sports') || 
       e.slug?.toLowerCase().includes('nfl') ||
       e.slug?.toLowerCase().includes('nba') ||
-      e.slug?.toLowerCase().includes('ufc')
+      e.slug?.toLowerCase().includes('ufc') ||
+      e.slug?.toLowerCase().includes('soccer') ||
+      e.slug?.toLowerCase().includes('football') ||
+      e.title?.toLowerCase().includes('game') ||
+      e.title?.toLowerCase().includes('championship')
     ) || []
   }, [events])
+
+  // Trending/Hot markets (non-sports for variety)
+  const trendingEvents = useMemo(() => {
+    return events?.filter(e => 
+      !sportsEvents.includes(e) && 
+      e.volume > 10000
+    ).slice(0, 6) || []
+  }, [events, sportsEvents])
 
   const politicsEvents = useMemo(() => {
     return events?.filter(e => 
       e.slug?.toLowerCase().includes('politics') ||
       e.slug?.toLowerCase().includes('election') ||
-      e.slug?.toLowerCase().includes('trump') ||
-      e.slug?.toLowerCase().includes('biden')
+      e.title?.toLowerCase().includes('trump') ||
+      e.title?.toLowerCase().includes('biden') ||
+      e.title?.toLowerCase().includes('president')
     ) || []
   }, [events])
 
   const cryptoEvents = useMemo(() => {
     return events?.filter(e => 
       e.slug?.toLowerCase().includes('crypto') ||
-      e.slug?.toLowerCase().includes('bitcoin') ||
-      e.slug?.toLowerCase().includes('ethereum')
+      e.title?.toLowerCase().includes('bitcoin') ||
+      e.title?.toLowerCase().includes('ethereum') ||
+      e.title?.toLowerCase().includes('btc')
     ) || []
   }, [events])
 
@@ -385,15 +424,62 @@ export default function PolymarketPage() {
           </div>
         ) : (
           <>
-            {/* Trending Section - Horizontal Cards */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between px-4 mb-3">
-                <h2 className="text-white font-extrabold text-lg tracking-wide">🔥 Hot Markets</h2>
+            {/* 🏈 NFL Section - Horizontal Carousel */}
+            {(isLoading || nflEvents.length > 0) && (
+              <div className="mb-5">
+                <div className="flex items-center justify-between px-4 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🏈</span>
+                    <h2 className="text-white font-bold text-base">NFL</h2>
+                  </div>
+                  {!isLoading && <span className="text-white/30 text-xs">{nflEvents.length} markets</span>}
+                </div>
+                {isLoading ? (
+                  <HorizontalLoadingState />
+                ) : (
+                  <div className="flex gap-3 overflow-x-auto px-4 pb-2 scrollbar-hide">
+                    {nflEvents.slice(0, 8).map((event) => (
+                      <CompactEventCard key={event.id} event={event} onSelect={handleSelectEvent} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 🏀 NBA Section - Horizontal Carousel */}
+            {(isLoading || nbaEvents.length > 0) && (
+              <div className="mb-5">
+                <div className="flex items-center justify-between px-4 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🏀</span>
+                    <h2 className="text-white font-bold text-base">NBA</h2>
+                  </div>
+                  {!isLoading && <span className="text-white/30 text-xs">{nbaEvents.length} markets</span>}
+                </div>
+                {isLoading ? (
+                  <HorizontalLoadingState />
+                ) : (
+                  <div className="flex gap-3 overflow-x-auto px-4 pb-2 scrollbar-hide">
+                    {nbaEvents.slice(0, 8).map((event) => (
+                      <CompactEventCard key={event.id} event={event} onSelect={handleSelectEvent} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 🔥 Trending Section - Horizontal Cards */}
+            <div className="mb-5">
+              <div className="flex items-center justify-between px-4 mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">🔥</span>
+                  <h2 className="text-white font-bold text-base">Trending</h2>
+                </div>
                 <button 
                   onClick={() => refetchTrending()}
-                  className="p-2 hover:bg-white/[0.05] rounded-lg transition-colors"
+                  className="p-1.5 hover:bg-white/[0.05] rounded-lg transition-colors"
                 >
-                  <RefreshCw className="w-4 h-4 text-white/40" />
+                  <RefreshCw className="w-3.5 h-3.5 text-white/40" />
                 </button>
               </div>
               
@@ -401,7 +487,7 @@ export default function PolymarketPage() {
                 <div className="px-4"><LoadingState /></div>
               ) : events && events.length > 0 ? (
                 <div className="flex gap-3 overflow-x-auto px-4 pb-2 scrollbar-hide">
-                  {events.slice(0, 6).map((event) => (
+                  {(trendingEvents.length > 0 ? trendingEvents : events.slice(0, 6)).map((event) => (
                     <EventCard key={event.id} event={event} onSelect={handleSelectEvent} />
                   ))}
                 </div>
@@ -410,14 +496,14 @@ export default function PolymarketPage() {
               )}
             </div>
 
-            {/* All Markets - Vertical List */}
+            {/* All Markets - Compact Vertical List */}
             <div className="px-4">
-              <h2 className="text-white font-extrabold text-lg tracking-wide mb-3">All Markets</h2>
+              <h2 className="text-white font-bold text-base mb-3">All Markets</h2>
               {isLoading ? (
                 <LoadingState />
               ) : events && events.length > 0 ? (
                 <div className="space-y-2">
-                  {events.slice(6).map((event) => (
+                  {events.slice(0, 20).map((event) => (
                     <EventRow key={event.id} event={event} onSelect={handleSelectEvent} />
                   ))}
                 </div>
@@ -494,6 +580,47 @@ export default function PolymarketPage() {
 function formatPriceCents(price: number): string {
   if (!price || price <= 0 || price >= 1) return '—'
   return `${(price * 100).toFixed(0)}¢`
+}
+
+// Compact Event Card - For sports carousels (smaller, more compact)
+function CompactEventCard({ event, onSelect }: { event: PolymarketEvent; onSelect: (e: PolymarketEvent) => void }) {
+  const firstMarket = event.markets?.[0]
+  const parsed = firstMarket ? parseMarket(firstMarket) : null
+  const yesPrice = parsed?.yesPrice || 0
+  const noPrice = parsed?.noPrice || 0
+
+  return (
+    <button
+      onClick={() => onSelect(event)}
+      className="flex-shrink-0 w-[200px] bg-[#121214] rounded-2xl p-3 border border-[#27272a] hover:border-[#3f3f46] transition-all text-left"
+    >
+      {/* Header */}
+      <div className="flex items-start gap-2 mb-3">
+        {event.image && (
+          <div className="relative w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 bg-[#27272a]">
+            <Image src={event.image} alt="" fill className="object-cover" unoptimized />
+          </div>
+        )}
+        <h3 className="text-white font-semibold text-xs line-clamp-2 leading-tight flex-1">{event.title}</h3>
+      </div>
+
+      {/* Odds Chips */}
+      <div className="flex gap-1.5">
+        <div className="flex-1 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20 text-center">
+          <span className="text-green-400 text-xs font-bold">
+            {formatPriceCents(yesPrice)}
+          </span>
+          <span className="text-green-400/60 text-[10px] ml-0.5">Y</span>
+        </div>
+        <div className="flex-1 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-center">
+          <span className="text-red-400 text-xs font-bold">
+            {formatPriceCents(noPrice)}
+          </span>
+          <span className="text-red-400/60 text-[10px] ml-0.5">N</span>
+        </div>
+      </div>
+    </button>
+  )
 }
 
 // Event Card Component - Horizontal scrolling card
@@ -729,11 +856,48 @@ function EventDetailPanel({
   )
 }
 
-// Loading State
+// Loading State - Skeleton Loaders
 function LoadingState() {
   return (
-    <div className="flex items-center justify-center py-12">
-      <Loader2 className="w-8 h-8 text-[#3B5EE8] animate-spin" />
+    <div className="space-y-2">
+      {[1, 2, 3].map(i => (
+        <div key={i} className="bg-[#121214] border border-[#27272a] rounded-2xl p-4 animate-pulse">
+          <div className="flex gap-3">
+            <div className="w-12 h-12 rounded-xl bg-white/[0.05]" />
+            <div className="flex-1">
+              <div className="h-4 bg-white/[0.05] rounded w-3/4 mb-2" />
+              <div className="h-3 bg-white/[0.05] rounded w-1/2" />
+            </div>
+            <div className="flex flex-col items-end gap-1">
+              <div className="h-6 w-12 bg-white/[0.05] rounded-lg" />
+              <div className="h-6 w-12 bg-white/[0.05] rounded-lg" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Horizontal Skeleton Loaders
+function HorizontalLoadingState() {
+  return (
+    <div className="flex gap-3 overflow-x-auto px-4 pb-2 scrollbar-hide">
+      {[1, 2, 3, 4].map(i => (
+        <div key={i} className="flex-shrink-0 w-[200px] bg-[#121214] rounded-2xl p-3 border border-[#27272a] animate-pulse">
+          <div className="flex items-start gap-2 mb-3">
+            <div className="w-8 h-8 rounded-lg bg-white/[0.05]" />
+            <div className="flex-1">
+              <div className="h-3 bg-white/[0.05] rounded w-full mb-1" />
+              <div className="h-3 bg-white/[0.05] rounded w-2/3" />
+            </div>
+          </div>
+          <div className="flex gap-1.5">
+            <div className="flex-1 h-7 bg-white/[0.05] rounded-lg" />
+            <div className="flex-1 h-7 bg-white/[0.05] rounded-lg" />
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

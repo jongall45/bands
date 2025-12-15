@@ -1,18 +1,20 @@
 'use client'
 
 /**
- * Polymarket Funding Modal
+ * Polymarket Funding Modal - Compact Design
  * 
  * ARCHITECTURE: EOA-only mode
  * - tradingWallet = Privy embedded EOA address
  * - Deposits go directly to the trading wallet (EOA) on Polygon
  * - No Safe wallet involvement
  * - Cross-chain bridging via Relay for non-Polygon chains
+ * 
+ * UX: Compact, no-scroll layout with purple trading wallet callout
  */
 
 import { useState, useEffect, useMemo } from 'react'
-import { X, ArrowDown, ArrowUp, Wallet, Loader2, CheckCircle, AlertCircle, ExternalLink, ChevronDown, Copy, Check, Info } from 'lucide-react'
-import { formatUnits, parseUnits, encodeFunctionData } from 'viem'
+import { X, ArrowDown, ArrowUp, Wallet, Loader2, CheckCircle, AlertCircle, ExternalLink, ChevronDown, Copy, Check } from 'lucide-react'
+import { formatUnits, parseUnits } from 'viem'
 import { useBalance } from 'wagmi'
 import { polygon, arbitrum, base } from 'viem/chains'
 import { useWallets } from '@privy-io/react-auth'
@@ -355,34 +357,22 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
             </button>
           </div>
 
-          {/* Trading Wallet Info */}
-          <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-3">
-            <div className="flex items-start gap-2">
-              <Info className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-purple-400 text-xs font-medium mb-1">
-                  Your Polymarket Trading Wallet (EOA)
-                </p>
-                <div className="flex items-center gap-2">
-                  <span className="text-purple-400/70 text-xs font-mono">
-                    {tradingWallet?.slice(0, 10)}...{tradingWallet?.slice(-8)}
-                  </span>
-                  <button
-                    onClick={handleCopyAddress}
-                    className="text-purple-400 hover:text-purple-300"
-                  >
-                    {copiedAddress ? (
-                      <Check className="w-3 h-3" />
-                    ) : (
-                      <Copy className="w-3 h-3" />
-                    )}
-                  </button>
-                </div>
-                <p className="text-purple-400/50 text-[10px] mt-1">
-                  USDC.e (bridged USDC) in this wallet is used for Polymarket trading
-                </p>
+          {/* Trading Wallet Info - Compact Purple Callout */}
+          <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl px-3 py-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Wallet className="w-4 h-4 text-purple-400" />
+                <span className="text-purple-400 text-sm font-medium">Polymarket Wallet</span>
               </div>
+              <button
+                onClick={handleCopyAddress}
+                className="flex items-center gap-1.5 text-purple-400/80 hover:text-purple-400 transition-colors"
+              >
+                <span className="font-mono text-xs">{tradingWallet?.slice(0, 6)}...{tradingWallet?.slice(-4)}</span>
+                {copiedAddress ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+              </button>
             </div>
+            <p className="text-purple-400/50 text-[10px] mt-1">This wallet trades on Polymarket (Polygon USDC.e)</p>
           </div>
 
           {/* Chain Selector (Deposit only) */}
@@ -445,26 +435,22 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
             </div>
           )}
 
-          {/* Balance Display */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className={`p-3 rounded-xl border ${mode === 'deposit' ? 'bg-white/[0.03] border-green-500/30' : 'bg-white/[0.02] border-white/[0.06]'}`}>
-              <p className="text-white/40 text-xs mb-1">
-                {mode === 'deposit' ? `From ${selectedChainConfig?.name}` : 'Smart Wallet'}
+          {/* Compact Balance Cards */}
+          <div className="flex items-center gap-2">
+            <div className={`flex-1 p-2.5 rounded-xl border ${mode === 'deposit' ? 'bg-green-500/5 border-green-500/20' : 'bg-white/[0.02] border-white/[0.06]'}`}>
+              <p className="text-white/40 text-[10px] mb-0.5">
+                {mode === 'deposit' ? selectedChainConfig?.name : 'Smart Wallet'}
               </p>
-              <p className="text-white font-medium">${parseFloat(mode === 'deposit' ? selectedChainBalance : (polygonBalance ? formatUnits(polygonBalance.value, 6) : '0')).toFixed(2)}</p>
-              <p className="text-white/40 text-[10px] truncate">{smartWalletAddress?.slice(0, 8)}...{smartWalletAddress?.slice(-6)}</p>
+              <p className="text-white font-semibold text-sm">${parseFloat(mode === 'deposit' ? selectedChainBalance : (polygonBalance ? formatUnits(polygonBalance.value, 6) : '0')).toFixed(2)}</p>
             </div>
-            <div className={`p-3 rounded-xl border ${mode === 'withdraw' ? 'bg-white/[0.03] border-orange-500/30' : 'bg-white/[0.02] border-white/[0.06]'}`}>
-              <p className="text-white/40 text-xs mb-1">Trading Wallet (EOA)</p>
-              <p className="text-white font-medium">${parseFloat(tradingWalletUsdcBalance).toFixed(2)}</p>
-              <p className="text-white/40 text-[10px] truncate">{tradingWallet?.slice(0, 8)}...{tradingWallet?.slice(-6)}</p>
+            
+            <div className={`p-1.5 rounded-full ${mode === 'deposit' ? 'bg-green-500/20' : 'bg-orange-500/20'}`}>
+              {mode === 'deposit' ? <ArrowDown className="w-4 h-4 text-green-400" /> : <ArrowUp className="w-4 h-4 text-orange-400" />}
             </div>
-          </div>
-
-          {/* Arrow indicator */}
-          <div className="flex justify-center">
-            <div className={`p-2 rounded-full ${mode === 'deposit' ? 'bg-green-500/20' : 'bg-orange-500/20'}`}>
-              {mode === 'deposit' ? <ArrowDown className="w-5 h-5 text-green-400" /> : <ArrowUp className="w-5 h-5 text-orange-400" />}
+            
+            <div className={`flex-1 p-2.5 rounded-xl border ${mode === 'withdraw' ? 'bg-orange-500/5 border-orange-500/20' : 'bg-white/[0.02] border-white/[0.06]'}`}>
+              <p className="text-white/40 text-[10px] mb-0.5">Trading</p>
+              <p className="text-white font-semibold text-sm">${parseFloat(tradingWalletUsdcBalance).toFixed(2)}</p>
             </div>
           </div>
 
@@ -557,20 +543,10 @@ export function PolymarketFundingModal({ isOpen, onClose, onSuccess }: Polymarke
             )}
           </button>
 
-          {/* Info */}
-          <div className="space-y-2">
-            <p className="text-white/30 text-xs text-center">
-              {mode === 'deposit' 
-                ? `Bridge USDC from ${selectedChainConfig?.name} → USDC.e on Polygon for your trading wallet.`
-                : 'Transfer USDC.e from your trading wallet back to your Smart Wallet on Polygon.'
-              }
-            </p>
-            <div className="bg-white/[0.02] border border-white/[0.06] rounded-lg p-2">
-              <p className="text-white/40 text-[10px] text-center">
-                💡 Polymarket uses USDC.e (bridged USDC). Enable trading first to place orders.
-              </p>
-            </div>
-          </div>
+          {/* Compact Info */}
+          <p className="text-white/30 text-[10px] text-center">
+            Polymarket uses USDC.e on Polygon • ~1-2 min bridging
+          </p>
         </div>
       </div>
     </div>

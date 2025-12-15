@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Batch check balances (up to 100 at a time)
+    // Batch check balances using balanceOfBatch for efficiency
     const positions: any[] = []
     const batchSize = 50
 
@@ -98,22 +98,35 @@ export async function GET(request: NextRequest) {
       const batch = tokenIds.slice(i, i + batchSize)
       
       try {
-        // Use multicall to batch balance checks
-        const balances = await Promise.all(
-          batch.map(async ({ tokenId }) => {
-            try {
-              const balance = await publicClient.readContract({
-                address: CONDITIONAL_TOKENS as `0x${string}`,
-                abi: ERC1155_ABI,
-                functionName: 'balanceOf',
-                args: [address as `0x${string}`, BigInt(tokenId)],
-              })
-              return balance
-            } catch {
-              return BigInt(0)
-            }
-          })
-        )
+        // Use balanceOfBatch for efficient batch queries (PART G optimization)
+        const accounts = batch.map(() => address as `0x${string}`)
+        const ids = batch.map(({ tokenId }) => BigInt(tokenId))
+        
+        let balances: bigint[]
+        try {
+          balances = await publicClient.readContract({
+            address: CONDITIONAL_TOKENS as `0x${string}`,
+            abi: ERC1155_ABI,
+            functionName: 'balanceOfBatch',
+            args: [accounts, ids],
+          }) as bigint[]
+        } catch {
+          // Fallback to individual queries if batch fails
+          balances = await Promise.all(
+            batch.map(async ({ tokenId }) => {
+              try {
+                return await publicClient.readContract({
+                  address: CONDITIONAL_TOKENS as `0x${string}`,
+                  abi: ERC1155_ABI,
+                  functionName: 'balanceOf',
+                  args: [address as `0x${string}`, BigInt(tokenId)],
+                }) as bigint
+              } catch {
+                return BigInt(0)
+              }
+            })
+          )
+        }
 
         // Filter and add positions with non-zero balance
         batch.forEach((item, index) => {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   X,
   TrendingUp,
@@ -18,11 +18,17 @@ import {
   ArrowLeftRight,
   ShieldCheck,
   Copy,
+  DollarSign,
 } from 'lucide-react'
 import { formatProbability, formatVolume, parseMarket } from '@/lib/polymarket/api'
 import type { PolymarketMarket } from '@/lib/polymarket/api'
 import { usePolymarketTrade, usePolygonUsdcBalance } from '@/hooks/usePolymarketTrade'
 import { BridgeModal } from '@/components/bridge/BridgeModal'
+import {
+  hasPositionInMarket,
+  trackFillAndSyncPositions,
+  upsertMarketTokenMapping,
+} from '@/lib/polymarket/positions'
 
 interface PolymarketTradingPanelProps {
   market: PolymarketMarket
@@ -35,6 +41,7 @@ type TradeAction = 'BUY' | 'SELL'
 export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPanelProps) {
   const { authenticated, login } = usePrivy()
   const { wallets } = useWallets()
+  const queryClient = useQueryClient()
   
   // Get the Privy embedded wallet (EOA) - this IS the trading wallet
   const embeddedWallet = useMemo(() => {
@@ -67,23 +74,82 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
     reset,
   } = usePolymarketTrade({
     market,
-    onSuccess: (txHash) => {
+    onSuccess: async (txHash) => {
       console.log('Trade successful:', txHash)
+      
+      // Track the fill in our positions indexer
+      const parsed = parseMarket(market)
+      if (tradingWallet && parsed.yesTokenId && parsed.noTokenId) {
+        await trackFillAndSyncPositions({
+          marketId: market.id || market.conditionId,
+          conditionId: market.conditionId,
+          question: market.question,
+          slug: market.slug,
+          imageUrl: market.image,
+          yesTokenId: parsed.yesTokenId,
+          noTokenId: parsed.noTokenId,
+          txHash,
+          walletAddress: tradingWallet,
+          side: tradeAction,
+          outcome: selectedOutcome,
+          shares: parseFloat(estimate?.shares || '0'),
+          price: selectedOutcome === 'YES' ? yesPrice : noPrice,
+          total: parseFloat(amount) || 0,
+        })
+      }
+      
       refetchPosition()
+      // Also invalidate the global positions query
+      queryClient.invalidateQueries({ queryKey: ['polymarket-positions'] })
     },
     onError: (err) => {
       console.error('Trade failed:', err)
     },
   })
 
-  // Fetch user's position in this market
+  // Store market token mapping on mount for later position lookups
+  useEffect(() => {
+    const parsed = parseMarket(market)
+    if (parsed.yesTokenId && parsed.noTokenId) {
+      upsertMarketTokenMapping({
+        marketId: market.id || market.conditionId,
+        conditionId: market.conditionId,
+        yesTokenId: parsed.yesTokenId,
+        noTokenId: parsed.noTokenId,
+        question: market.question,
+        slug: market.slug,
+        imageUrl: market.image,
+        learnedAt: Date.now(),
+        source: 'gamma',
+      })
+    }
+  }, [market])
+
+  // Fetch user's position in this market - using direct onchain ERC-1155 balances
   const { data: positionData, refetch: refetchPosition } = useQuery({
-    queryKey: ['market-position', market.id, tradingWallet],
+    queryKey: ['market-position-onchain', market.id, tradingWallet],
     queryFn: async () => {
       if (!tradingWallet) return null
       const parsed = parseMarket(market)
       
-      // Check position for both YES and NO tokens
+      // Query ERC-1155 balances directly for accurate position data
+      if (parsed.yesTokenId && parsed.noTokenId) {
+        const result = await hasPositionInMarket(
+          tradingWallet,
+          parsed.yesTokenId,
+          parsed.noTokenId
+        )
+        return {
+          yesShares: result.yesShares,
+          noShares: result.noShares,
+          yesValue: result.yesShares * yesPrice,
+          noValue: result.noShares * noPrice,
+          hasYes: result.hasYes,
+          hasNo: result.hasNo,
+        }
+      }
+      
+      // Fallback to API if no token IDs
       const response = await fetch(`/api/polymarket/positions?address=${tradingWallet}`)
       if (!response.ok) return null
       
@@ -99,15 +165,22 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
         noShares: parseFloat(noPosition?.shares || '0'),
         yesValue: parseFloat(yesPosition?.value || '0'),
         noValue: parseFloat(noPosition?.value || '0'),
+        hasYes: parseFloat(yesPosition?.shares || '0') > 0,
+        hasNo: parseFloat(noPosition?.shares || '0') > 0,
       }
     },
     enabled: !!tradingWallet,
-    staleTime: 10000,
+    staleTime: 5000, // Shorter stale time for more frequent updates
+    refetchInterval: 15000, // Auto-refresh every 15 seconds
   })
   
   const userYesShares = positionData?.yesShares || 0
   const userNoShares = positionData?.noShares || 0
   const hasPosition = userYesShares > 0 || userNoShares > 0
+  
+  // Calculate estimate for display
+  const amountNum = parseFloat(amount) || 0
+  const estimate = amountNum > 0 ? estimateTrade(amount, selectedOutcome) : null
 
   // Get full balance info including USDC.e
   // CRITICAL: Polymarket uses USDC.e (bridged), NOT native USDC!
@@ -117,9 +190,6 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
   const displayBalance = parseFloat(usdceBalance) > 0 ? usdceBalance : usdcBalance
   const balanceNum = parseFloat(displayBalance) || 0
 
-  // Calculate estimate
-  const amountNum = parseFloat(amount) || 0
-  const estimate = amountNum > 0 ? estimateTrade(amount, selectedOutcome) : null
   const currentPrice = selectedOutcome === 'YES' ? yesPrice : noPrice
   
   // Check if user needs to bridge (only if balance is very low, not just < $1)
@@ -215,163 +285,82 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
         </button>
       </div>
 
-      {/* Trading Wallet Display */}
-      {tradingWallet && (
-        <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 mb-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Wallet className="w-4 h-4 text-white/40" />
-              <span className="text-white/60 text-xs">Trading Wallet (EOA)</span>
+      {/* Cash Balance - Compact Display */}
+      <div className="flex items-center justify-between bg-white/[0.02] rounded-xl px-3 py-2 mb-3">
+        <div className="flex items-center gap-2">
+          <DollarSign className="w-4 h-4 text-green-400" />
+          <span className="text-white/60 text-sm">Cash</span>
+        </div>
+        <span className="text-white font-semibold">${balanceNum.toFixed(2)}</span>
+      </div>
+
+      {/* Enable Trading Banner - Only show if NOT enabled */}
+      {!hasUserCreds && (
+        <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-3 mb-3">
+          <div className="flex items-center gap-3">
+            <ShieldCheck className="w-5 h-5 text-purple-400 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-purple-400 text-sm font-medium">Enable Trading</p>
+              <p className="text-purple-400/60 text-xs">Sign once to start trading</p>
             </div>
             <button
-              onClick={handleCopyAddress}
-              className="flex items-center gap-1 text-white/60 hover:text-white text-xs transition-colors"
+              onClick={handleEnableTrading}
+              disabled={isLoading}
+              className="px-3 py-1.5 bg-purple-500 hover:bg-purple-600 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
             >
-              <span className="font-mono">{tradingWallet.slice(0, 6)}...{tradingWallet.slice(-4)}</span>
-              {copiedAddress ? (
-                <Check className="w-3 h-3 text-green-400" />
+              {isLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <Copy className="w-3 h-3" />
+                'Enable'
               )}
             </button>
           </div>
         </div>
       )}
 
-      {/* Enable Trading Button (if not yet enabled OR approvals missing) */}
-      {(!hasUserCreds || !hasAllApprovals) && (
-        <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4 mb-4">
-          <div className="flex items-start gap-3">
-            <ShieldCheck className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-purple-400 text-sm font-medium mb-1">
-                {!hasUserCreds ? 'Enable Trading' : 'Approve USDC Spending'}
-              </p>
-              <p className="text-purple-400/70 text-xs mb-3">
-                {!hasUserCreds 
-                  ? 'Sign a message to enable trading on Polymarket. This derives your API credentials for order submission.'
-                  : 'Your trading credentials are ready, but USDC spending needs to be approved. Click below to approve.'}
-              </p>
-              <button
-                onClick={handleEnableTrading}
-                disabled={isLoading}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    {state.message || 'Enabling...'}
-                  </>
-                ) : (
-                  <>
-                    <ShieldCheck className="w-4 h-4" />
-                    {!hasUserCreds ? 'Enable Trading' : 'Approve USDC'}
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Wallet Balance with Bridge Button */}
-      <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 mb-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <img 
-              src="https://cryptologos.cc/logos/usd-coin-usdc-logo.png" 
-              alt="USDC" 
-              className="w-6 h-6 rounded-full"
-            />
-            <span className="text-white/60 text-sm">Polygon USDC</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-white font-medium">${balanceNum.toFixed(2)}</span>
-            <button
-              onClick={() => setShowBridgeModal(true)}
-              className="p-1.5 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg transition-colors"
-              title="Bridge USDC to Polygon"
-            >
-              <ArrowLeftRight className="w-4 h-4 text-purple-400" />
-            </button>
-          </div>
-        </div>
-        <p className="text-white/30 text-xs mt-2">
-          Funds in your trading wallet (EOA) on Polygon
-        </p>
-      </div>
-
-      {/* Native USDC Warning - Polymarket uses USDC.e, not native USDC! */}
-      {needsSwap && (
-        <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 mb-4">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-orange-400 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-orange-400 text-xs font-medium">
-                You have ${parseFloat(nativeUsdcBalance).toFixed(2)} native USDC (wrong type!)
-              </p>
-              <p className="text-orange-400/70 text-xs mt-1">
-                Polymarket requires <strong>USDC.e (bridged)</strong>, not native USDC. 
-                You&apos;ll need to swap native USDC → USDC.e on Polygon (QuickSwap/Uniswap).
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bridge Prompt */}
-      {needsBridge && tradeAction === 'BUY' && (
-        <div className="bg-[#3B5EE8]/10 border border-[#3B5EE8]/20 rounded-xl p-4 mb-4">
-          <div className="flex items-start gap-3">
-            <Info className="w-5 h-5 text-[#7B9EFF] flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-[#7B9EFF] text-sm font-medium mb-1">
-                No Native USDC on Polygon
-              </p>
-              <p className="text-[#7B9EFF]/70 text-xs mb-3">
-                Bridge native USDC from Base or Arbitrum to your trading wallet on Polygon.
-              </p>
-              <button
-                onClick={() => setShowBridgeModal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-[#3B5EE8] hover:bg-[#2D4BC0] text-white text-sm font-medium rounded-lg transition-colors"
-              >
-                <ArrowLeftRight className="w-4 h-4" />
-                Bridge to Polygon
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Your Position */}
+      {/* Position Indicator - Show if user has a position */}
       {hasPosition && (
-        <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 mb-4">
-          <p className="text-white/40 text-xs mb-2">Your Position</p>
-          <div className="flex gap-3">
+        <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-xl p-3 mb-3">
+          <p className="text-green-400/60 text-xs mb-2">Your Position</p>
+          <div className="flex gap-2">
             {userYesShares > 0 && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 rounded-lg">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-green-500/20 rounded-lg">
                 <TrendingUp className="w-3.5 h-3.5 text-green-400" />
-                <span className="text-green-400 text-sm font-medium">
+                <span className="text-green-400 text-sm font-semibold">
                   {userYesShares.toFixed(2)} YES
                 </span>
                 <span className="text-green-400/60 text-xs">
-                  @ {formatProbability(yesPrice)}
+                  ≈ ${(userYesShares * yesPrice).toFixed(2)}
                 </span>
               </div>
             )}
             {userNoShares > 0 && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 rounded-lg">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-red-500/20 rounded-lg">
                 <TrendingDown className="w-3.5 h-3.5 text-red-400" />
-                <span className="text-red-400 text-sm font-medium">
+                <span className="text-red-400 text-sm font-semibold">
                   {userNoShares.toFixed(2)} NO
                 </span>
                 <span className="text-red-400/60 text-xs">
-                  @ {formatProbability(noPrice)}
+                  ≈ ${(userNoShares * noPrice).toFixed(2)}
                 </span>
               </div>
             )}
           </div>
         </div>
+      )}
+
+      {/* Bridge Prompt - Compact, only if no balance */}
+      {needsBridge && tradeAction === 'BUY' && (
+        <button
+          onClick={() => setShowBridgeModal(true)}
+          className="w-full flex items-center justify-between bg-[#3B5EE8]/10 border border-[#3B5EE8]/20 rounded-xl p-3 mb-3 hover:bg-[#3B5EE8]/20 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <ArrowLeftRight className="w-4 h-4 text-[#7B9EFF]" />
+            <span className="text-[#7B9EFF] text-sm font-medium">Bridge USDC to trade</span>
+          </div>
+          <ArrowRight className="w-4 h-4 text-[#7B9EFF]" />
+        </button>
       )}
 
       {/* Buy/Sell Toggle */}
@@ -595,7 +584,7 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
         >
           New Trade
         </button>
-      ) : (!hasUserCreds || !hasAllApprovals) ? (
+      ) : !hasUserCreds ? (
         <button
           onClick={handleEnableTrading}
           disabled={isLoading}
@@ -609,7 +598,7 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
           ) : (
             <>
               <ShieldCheck className="w-5 h-5" />
-              {!hasUserCreds ? 'Enable Trading' : 'Approve USDC Spending'}
+              Enable Trading
             </>
           )}
         </button>
@@ -653,30 +642,10 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
         </button>
       )}
 
-      {/* Where are my funds? Explainer */}
-      <details className="mt-4 group">
-        <summary className="flex items-center gap-2 cursor-pointer text-white/40 hover:text-white/60 text-xs">
-          <Info className="w-3.5 h-3.5" />
-          <span>Where are my funds?</span>
-        </summary>
-        <div className="mt-2 p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl text-white/40 text-xs space-y-2">
-          <p>
-            <strong className="text-white/60">Trading Wallet (EOA):</strong> Your Privy embedded wallet on Polygon. 
-            USDC here is used for Polymarket orders submitted via bands.cash.
-          </p>
-          <p>
-            <strong className="text-white/60">Smart Wallet:</strong> Your multi-chain account abstraction wallet. 
-            Funds here need to be deposited to your trading wallet before trading.
-          </p>
-          <p>
-            <strong className="text-white/60">This is NOT Polymarket Safe custody.</strong> You retain full control 
-            of your trading wallet at all times.
-          </p>
-          <p className="pt-1 border-t border-white/[0.06]">
-            Each share pays $1 if the outcome occurs. Trades settle on Polygon.
-          </p>
-        </div>
-      </details>
+      {/* Quick Info */}
+      <p className="text-white/30 text-xs text-center mt-3">
+        Each share pays $1 if correct • Trades on Polygon
+      </p>
 
       {/* Bridge Modal */}
       <BridgeModal
