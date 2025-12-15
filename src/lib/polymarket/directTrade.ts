@@ -98,27 +98,52 @@ export function installProxyInterceptor(): void {
   // #endregion
   
   // H5: Also intercept fetch and XHR in case SDK uses those in browser
-  // #region agent log - intercept native fetch
+  // #region agent log - intercept native fetch and REWRITE URLs
   const originalFetch = window.fetch;
-  window.fetch = function(...args: Parameters<typeof fetch>) {
-    const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request).url;
-    if (url.includes('clob.polymarket.com')) {
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'directTrade.ts:fetchIntercept',message:'Native fetch to clob.polymarket.com detected!',data:{url:url.slice(0,100)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
-      console.error('[BYPASS DETECTED] Native fetch to clob.polymarket.com:', url);
+  window.fetch = function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    let url = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : (input as Request).url);
+    
+    // CRITICAL: Rewrite Polymarket CLOB URLs to our proxy
+    if (url.startsWith(CANONICAL_CLOB_HOST)) {
+      const originalUrl = url;
+      const rewrittenUrl = url.replace(CANONICAL_CLOB_HOST, PROXY_PATH);
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'directTrade.ts:fetchRewrite',message:'Fetch URL rewritten to proxy',data:{originalUrl:originalUrl.slice(0,80),rewrittenUrl:rewrittenUrl.slice(0,80)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5-FIX'})}).catch(()=>{});
+      // #endregion
+      
+      console.log('[FetchProxy] Rewriting:', originalUrl.slice(0, 60), '->', rewrittenUrl.slice(0, 50));
+      
+      // If input was a Request, create a new one with the rewritten URL
+      if (input instanceof Request) {
+        input = new Request(rewrittenUrl, input);
+      } else {
+        input = rewrittenUrl;
+      }
     }
-    return originalFetch.apply(window, args);
+    
+    return originalFetch.call(window, input, init);
   };
   // #endregion
   
-  // #region agent log - intercept XHR
+  // #region agent log - intercept XHR and REWRITE URLs
   const originalXHROpen = XMLHttpRequest.prototype.open;
   (XMLHttpRequest.prototype as any).open = function(this: XMLHttpRequest, method: string, url: string | URL, async: boolean = true, username?: string | null, password?: string | null) {
-    const urlStr = typeof url === 'string' ? url : url.toString();
-    if (urlStr.includes('clob.polymarket.com')) {
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'directTrade.ts:xhrIntercept',message:'XHR to clob.polymarket.com detected!',data:{method,url:urlStr.slice(0,100)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
-      console.error('[BYPASS DETECTED] XHR to clob.polymarket.com:', urlStr);
+    let urlStr = typeof url === 'string' ? url : url.toString();
+    
+    // CRITICAL: Rewrite Polymarket CLOB URLs to our proxy
+    if (urlStr.startsWith(CANONICAL_CLOB_HOST)) {
+      const originalUrl = urlStr;
+      urlStr = urlStr.replace(CANONICAL_CLOB_HOST, PROXY_PATH);
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'directTrade.ts:xhrRewrite',message:'XHR URL rewritten to proxy',data:{method,originalUrl:originalUrl.slice(0,80),rewrittenUrl:urlStr.slice(0,80)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5-FIX'})}).catch(()=>{});
+      // #endregion
+      
+      console.log('[XHRProxy] Rewriting:', originalUrl.slice(0, 60), '->', urlStr.slice(0, 50));
     }
-    return (originalXHROpen as any).call(this, method, url, async, username, password);
+    
+    return (originalXHROpen as any).call(this, method, urlStr, async, username, password);
   };
   // #endregion
 }
