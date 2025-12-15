@@ -879,9 +879,27 @@ export function usePolymarketTrade({
           }
         }
         
-        // Refresh approval status
+        // Refresh approval status locally
         await fetchBalancesAndAllowances()
         console.log('✅ All approvals sent!')
+        
+        // CRITICAL: Tell Polymarket to refresh their view of our approvals
+        console.log('🔄 Notifying Polymarket of new approvals...')
+        try {
+          // Create a temporary ClobClient to call updateBalanceAllowance
+          const tempCreds = apiCredentials || loadCredentials(tradingWallet)
+          if (tempCreds) {
+            const tempClient = createDirectClobClient(signer, tempCreds, tradingWallet)
+            await tempClient.updateBalanceAllowance({ asset_type: 'COLLATERAL' as any })
+            console.log('✅ Polymarket notified of new USDC approvals')
+            
+            // Wait for Polymarket to index
+            console.log('⏳ Waiting 3s for Polymarket indexer...')
+            await new Promise(resolve => setTimeout(resolve, 3000))
+          }
+        } catch (notifyErr) {
+          console.warn('⚠️ Could not notify Polymarket:', notifyErr)
+        }
       } else {
         console.log('✅ All approvals already set!')
       }
@@ -1136,14 +1154,28 @@ export function usePolymarketTrade({
       }
       
       // Also call updateBalanceAllowance to tell Polymarket to refresh
-      console.log('🔄 Telling Polymarket to refresh our balance/allowance...')
+      // CRITICAL: We need to update for COLLATERAL (USDC) specifically
+      console.log('🔄 Telling Polymarket to refresh our USDC balance/allowance...')
       try {
-        await clobClient.updateBalanceAllowance()
-        console.log('✅ Balance/allowance update requested')
+        await clobClient.updateBalanceAllowance({ asset_type: 'COLLATERAL' as any })
+        console.log('✅ USDC balance/allowance update requested')
+        
+        // Wait a bit for Polymarket's indexer to process
+        console.log('⏳ Waiting 2s for indexer...')
+        await new Promise(resolve => setTimeout(resolve, 2000))
         
         // Check again after update
         const updatedBalance = await clobClient.getBalanceAllowance({ asset_type: 'COLLATERAL' as any })
-        console.log('💰 After update, Polymarket sees:', updatedBalance)
+        console.log('💰 After update, Polymarket sees USDC:', updatedBalance)
+        
+        // If still 0, try one more time
+        if (updatedBalance?.balance === '0') {
+          console.log('⚠️ Still showing 0 balance. Refreshing again...')
+          await clobClient.updateBalanceAllowance({ asset_type: 'COLLATERAL' as any })
+          await new Promise(resolve => setTimeout(resolve, 3000))
+          const finalBalance = await clobClient.getBalanceAllowance({ asset_type: 'COLLATERAL' as any })
+          console.log('💰 Final check - Polymarket sees USDC:', finalBalance)
+        }
       } catch (e) {
         console.warn('⚠️ Could not update balance:', e)
       }
