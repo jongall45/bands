@@ -1117,21 +1117,33 @@ export function usePolymarketTrade({
       fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'usePolymarketTrade.ts:beforePlaceOrder',message:'About to call placeDirectOrder',data:{tokenId:tokenId.slice(0,30),orderPrice,size,tickSize},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
       // #endregion
       
-      // DEBUG: Test credentials before placing order
-      console.log('🔑 Testing credentials before order...')
+      // DEBUG: Check what Polymarket sees for our balance/allowance
+      console.log('🔍 Checking Polymarket balance/allowance via SDK...')
       try {
-        const testResponse = await fetch(`${process.env.NEXT_PUBLIC_GATEWAY_URL || 'https://bands-production-1ac7.up.railway.app'}/api/polymarket/auth/test`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ wallet: tradingWallet }),
+        const balanceResponse = await clobClient.getBalanceAllowance({ asset_type: 'USDC' })
+        console.log('💰 Polymarket sees our USDC balance/allowance:', balanceResponse)
+        
+        // Also check for the specific token
+        const tokenBalanceResponse = await clobClient.getBalanceAllowance({ 
+          asset_type: 'CONDITIONAL',
+          token_id: tokenId 
         })
-        const testResult = await testResponse.json()
-        console.log('🔑 Credentials test result:', testResult)
-        if (!testResult.valid) {
-          console.error('❌ Credentials are INVALID! Error:', testResult.error, testResult.message)
-        }
+        console.log('🎫 Polymarket sees our token balance/allowance:', tokenBalanceResponse)
       } catch (e) {
-        console.warn('⚠️ Could not test credentials:', e)
+        console.warn('⚠️ Could not check Polymarket balance:', e)
+      }
+      
+      // Also call updateBalanceAllowance to tell Polymarket to refresh
+      console.log('🔄 Telling Polymarket to refresh our balance/allowance...')
+      try {
+        await clobClient.updateBalanceAllowance()
+        console.log('✅ Balance/allowance update requested')
+        
+        // Check again after update
+        const updatedBalance = await clobClient.getBalanceAllowance({ asset_type: 'USDC' })
+        console.log('💰 After update, Polymarket sees:', updatedBalance)
+      } catch (e) {
+        console.warn('⚠️ Could not update balance:', e)
       }
       
       // Use ClobClient - it will POST to our gateway proxy
