@@ -54,6 +54,7 @@ import {
   createAllApprovalTxs,
   checkAllApprovals,
 } from '@/lib/polymarket/relayer'
+import { runPolymarketDiagnostics } from '@/lib/polymarket/diagnostics'
 import {
   assertIsEOA,
   quickPreflight,
@@ -714,61 +715,77 @@ export function usePolymarketTrade({
       return false
     }
 
-    // Check if already has creds
-    if (hasUserCreds) {
-      console.log('✅ Already has user credentials')
+    // Check if already has creds AND approvals
+    if (hasUserCreds && hasAllApprovals) {
+      console.log('✅ Already has user credentials AND approvals')
       return true
     }
 
-    setState({ status: 'preparing', message: 'Enabling trading...' })
+    // If we have creds but no approvals, just do the approval step
+    const needsCredentials = !hasUserCreds
+    const needsApprovals = !hasAllApprovals
+    
+    console.log('🔍 Enable trading check:', { needsCredentials, needsApprovals, hasUserCreds, hasAllApprovals })
+
+    setState({ status: 'preparing', message: needsCredentials ? 'Enabling trading...' : 'Setting approvals...' })
 
     try {
       console.log('🔐 Starting trading enablement for:', tradingWallet)
       
-      // Step 1: Get auth challenge from gateway
-      const challenge = await getAuthChallenge(tradingWallet)
-      console.log('📋 Got auth challenge:', { nonce: challenge.nonce, timestamp: challenge.timestamp })
-      
-      // Step 2: Sign the challenge with Privy EOA
-      setState({ status: 'signing', message: 'Sign to enable trading...' })
+      // Get signer (needed for both credentials and approvals)
       const signer = await getEthersSigner(embeddedWallet)
       
-      // Sign using EIP-712 typed data
-      const signature = await (signer as any)._signTypedData(
-        challenge.typedData.domain,
-        challenge.typedData.types,
-        challenge.typedData.message
-      )
-      console.log('✅ Got signature:', signature.slice(0, 20) + '...')
-      
-      // Step 3: Complete auth with gateway (derives and caches creds)
-      setState({ status: 'preparing', message: 'Deriving credentials...' })
-      const result = await completeAuth({
-        wallet: tradingWallet,
-        signature,
-        timestamp: challenge.timestamp,
-        nonce: challenge.nonce,
-      })
-      
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to derive credentials')
+      // Step 1-4: Derive credentials if needed
+      if (needsCredentials) {
+        console.log('📝 Step 1: Deriving credentials...')
+        
+        // Get auth challenge from gateway
+        const challenge = await getAuthChallenge(tradingWallet)
+        console.log('📋 Got auth challenge:', { nonce: challenge.nonce, timestamp: challenge.timestamp })
+        
+        // Sign the challenge with Privy EOA
+        setState({ status: 'signing', message: 'Sign to enable trading...' })
+        
+        // Sign using EIP-712 typed data
+        const signature = await (signer as any)._signTypedData(
+          challenge.typedData.domain,
+          challenge.typedData.types,
+          challenge.typedData.message
+        )
+        console.log('✅ Got signature:', signature.slice(0, 20) + '...')
+        
+        // Complete auth with gateway (derives and caches creds)
+        setState({ status: 'preparing', message: 'Deriving credentials...' })
+        const result = await completeAuth({
+          wallet: tradingWallet,
+          signature,
+          timestamp: challenge.timestamp,
+          nonce: challenge.nonce,
+        })
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to derive credentials')
+        }
+        
+        console.log('✅ Credentials derived on gateway! Now fetching for ClobClient...')
+        
+        // Fetch credentials for client-side ClobClient usage
+        setState({ status: 'preparing', message: 'Loading trading session...' })
+        const creds = await fetchCredentials(tradingWallet, signer)
+        
+        if (!creds) {
+          throw new Error('Failed to fetch credentials after derivation')
+        }
+        
+        console.log('✅ Trading enabled with full credentials!')
+        
+        // Store credentials in sessionStorage
+        setApiCredentials(creds)
+        saveCredentials(tradingWallet, creds)
+        setHasUserCreds(true)
+      } else {
+        console.log('✅ Already have credentials, skipping derivation')
       }
-      
-      console.log('✅ Credentials derived on gateway! Now fetching for ClobClient...')
-      
-      // Step 4: Fetch credentials for client-side ClobClient usage
-      setState({ status: 'preparing', message: 'Loading trading session...' })
-      const creds = await fetchCredentials(tradingWallet, signer)
-      
-      if (!creds) {
-        throw new Error('Failed to fetch credentials after derivation')
-      }
-      
-      console.log('✅ Trading enabled with full credentials!')
-      
-      // Store credentials in sessionStorage
-      setApiCredentials(creds)
-      saveCredentials(tradingWallet, creds)
       
       // Step 5: Check and send approvals if needed
       setState({ status: 'preparing', message: 'Checking approvals...' })
@@ -986,6 +1003,27 @@ export function usePolymarketTrade({
       console.log('   Side: BUY')
       console.log('   Price Source:', priceSource)
       console.log('   Orderbook Suspicious:', orderbookSuspicious)
+      
+      // 🔍 RUN FULL DIAGNOSTICS before placing order
+      console.log('🔍 Running Polymarket diagnostics before order...')
+      const diagnostics = await runPolymarketDiagnostics(tradingWallet, amountNum)
+      console.log('🔍 Diagnostics result:', diagnostics)
+      
+      if (!diagnostics.canTrade) {
+        console.error('❌ CANNOT TRADE! Diagnostics show issues:')
+        console.error('   USDC Balance:', diagnostics.usdcBalance)
+        console.error('   Has Enough Balance:', diagnostics.hasEnoughBalance)
+        console.error('   Has USDC Allowances:', diagnostics.hasAllUsdcAllowances)
+        console.error('   Allowances:', diagnostics.allowances)
+        
+        if (!diagnostics.hasEnoughBalance) {
+          throw new Error(`Insufficient USDC balance on Polygon. You have $${diagnostics.usdcBalance} but need $${amountNum.toFixed(2)}. Please fund your trading wallet on Polygon.`)
+        }
+        
+        if (!diagnostics.hasAllUsdcAllowances) {
+          throw new Error(`USDC allowances not set. Please re-enable trading to approve USDC spending.`)
+        }
+      }
 
       // Get signer from Privy embedded wallet
       const signer = await getEthersSigner(embeddedWallet)
