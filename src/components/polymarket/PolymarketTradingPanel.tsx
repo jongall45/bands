@@ -194,9 +194,14 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
           </h2>
           <div className="flex items-center gap-2 mt-2">
             <span className="text-white/40 text-xs">Volume: {formatVolume(market.volume)}</span>
-            {hasUserCreds && (
+            {hasUserCreds && hasAllApprovals && (
               <span className="text-green-400/60 text-xs flex items-center gap-1">
-                <ShieldCheck className="w-3 h-3" /> Trading Enabled
+                <ShieldCheck className="w-3 h-3" /> Trading Ready
+              </span>
+            )}
+            {hasUserCreds && !hasAllApprovals && (
+              <span className="text-yellow-400/60 text-xs flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" /> Approval Needed
               </span>
             )}
           </div>
@@ -232,17 +237,19 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
         </div>
       )}
 
-      {/* Enable Trading Button (if not yet enabled) */}
-      {!hasUserCreds && (
+      {/* Enable Trading Button (if not yet enabled OR approvals missing) */}
+      {(!hasUserCreds || !hasAllApprovals) && (
         <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4 mb-4">
           <div className="flex items-start gap-3">
             <ShieldCheck className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-purple-400 text-sm font-medium mb-1">
-                Enable Trading
+                {!hasUserCreds ? 'Enable Trading' : 'Approve USDC Spending'}
               </p>
               <p className="text-purple-400/70 text-xs mb-3">
-                Sign a message to enable trading on Polymarket. This derives your API credentials for order submission.
+                {!hasUserCreds 
+                  ? 'Sign a message to enable trading on Polymarket. This derives your API credentials for order submission.'
+                  : 'Your trading credentials are ready, but USDC spending needs to be approved. Click below to approve.'}
               </p>
               <button
                 onClick={handleEnableTrading}
@@ -257,7 +264,7 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
                 ) : (
                   <>
                     <ShieldCheck className="w-4 h-4" />
-                    Enable Trading
+                    {!hasUserCreds ? 'Enable Trading' : 'Approve USDC'}
                   </>
                 )}
               </button>
@@ -587,7 +594,7 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
         >
           New Trade
         </button>
-      ) : !hasUserCreds ? (
+      ) : (!hasUserCreds || !hasAllApprovals) ? (
         <button
           onClick={handleEnableTrading}
           disabled={isLoading}
@@ -601,7 +608,7 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
           ) : (
             <>
               <ShieldCheck className="w-5 h-5" />
-              Enable Trading
+              {!hasUserCreds ? 'Enable Trading' : 'Approve USDC Spending'}
             </>
           )}
         </button>

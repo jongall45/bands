@@ -214,3 +214,19 @@
 {"location":"directTrade.ts:xhrRewrite","message":"XHR URL rewritten to proxy","data":{"method":"GET","originalUrl":"https://clob.polymarket.com/fee-rate?token_id=1128380951114616838809445167269381","rewrittenUrl":"https://bands-production-1ac7.up.railway.app/api/polymarket/proxy/fee-rate?token"},"timestamp":1765818642044,"sessionId":"debug-session","hypothesisId":"H5-FIX"}
 {"location":"directTrade.ts:xhrRewrite","message":"XHR URL rewritten to proxy","data":{"method":"POST","originalUrl":"https://clob.polymarket.com/order","rewrittenUrl":"https://bands-production-1ac7.up.railway.app/api/polymarket/proxy/order"},"timestamp":1765818642709,"sessionId":"debug-session","hypothesisId":"H5-FIX"}
 {"location":"usePolymarketTrade.ts:afterPlaceOrder","message":"placeDirectOrder returned","data":{"success":false,"error":"Unknown response from Polymarket"},"timestamp":1765818643103,"sessionId":"debug-session","hypothesisId":"H2"}
+{"location":"gateway/client.ts:197","message":"Health check start","data":{},"timestamp":1765819303409,"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
+{"location":"gateway/client.ts:201","message":"Health check success","data":{"status":"ok"},"timestamp":1765819303943,"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
+{"location":"gateway/client.ts:197","message":"Health check start","data":{},"timestamp":1765819468497,"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
+{"location":"gateway/client.ts:201","message":"Health check success","data":{"status":"ok"},"timestamp":1765819468980,"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
+{"location":"gateway/client.ts:197","message":"Health check start","data":{},"timestamp":1765819497566,"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
+{"location":"gateway/client.ts:201","message":"Health check success","data":{"status":"ok"},"timestamp":1765819497986,"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
+{"location":"gateway/client.ts:197","message":"Health check start","data":{},"timestamp":1765819501484,"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
+{"location":"gateway/client.ts:201","message":"Health check success","data":{"status":"ok"},"timestamp":1765819501916,"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
+{"location":"gateway/client.ts:197","message":"Health check start","data":{},"timestamp":1765819538366,"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
+{"location":"gateway/client.ts:201","message":"Health check success","data":{"status":"ok"},"timestamp":1765819538816,"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
+{"location":"gateway/client.ts:197","message":"Health check start","data":{},"timestamp":1765819562162,"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
+{"location":"gateway/client.ts:201","message":"Health check success","data":{"status":"ok"},"timestamp":1765819562675,"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
+{"location":"gateway/client.ts:197","message":"Health check start","data":{},"timestamp":1765819577888,"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
+{"location":"gateway/client.ts:201","message":"Health check success","data":{"status":"ok"},"timestamp":1765819578473,"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
+{"location":"gateway/client.ts:197","message":"Health check start","data":{},"timestamp":1765819629036,"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
+{"location":"gateway/client.ts:201","message":"Health check success","data":{"status":"ok"},"timestamp":1765819629497,"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
