@@ -131,9 +131,29 @@ async function forwardRequest(req: Request, res: Response): Promise<void> {
   
   if (hasBody) {
     logger.info(`[Proxy] Raw body: ${rawBody.length} bytes (forwarding unchanged)`)
-    // Log first 100 chars for debugging (safe - just structure, not secrets)
-    const preview = rawBody.toString('utf8').slice(0, 100)
-    logger.debug(`[Proxy] Body preview: ${preview}...`)
+    
+    // Log body details for debugging signature issues
+    const bodyString = rawBody.toString('utf8')
+    
+    // Try to parse and log key fields (not secrets)
+    try {
+      const bodyJson = JSON.parse(bodyString)
+      if (bodyJson.order) {
+        logger.info(`[Proxy] Order details: maker=${bodyJson.order.maker?.slice(0, 10)}... side=${bodyJson.order.side} signatureType=${bodyJson.order.signatureType}`)
+        logger.info(`[Proxy] Order amounts: maker=${bodyJson.order.makerAmount} taker=${bodyJson.order.takerAmount}`)
+        logger.info(`[Proxy] Signature length: ${bodyJson.order.signature?.length || 0}`)
+      }
+      if (bodyJson.owner) {
+        logger.info(`[Proxy] Owner: ${bodyJson.owner?.slice(0, 10)}...`)
+      }
+    } catch {
+      // Not JSON, just log preview
+      const preview = bodyString.slice(0, 100)
+      logger.debug(`[Proxy] Body preview: ${preview}...`)
+    }
+    
+    // Log first 200 chars of raw body to verify exact format
+    logger.debug(`[Proxy] Raw body start: ${bodyString.slice(0, 200)}`)
   }
   
   logger.debug(`[Proxy] Headers: ${logHeaders(forwardHeaders)}`)

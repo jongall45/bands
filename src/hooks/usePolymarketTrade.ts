@@ -457,6 +457,21 @@ export function usePolymarketTrade({
         return
       }
       
+      // VALIDATION: Check if token IDs are different
+      if (parsedMarket.yesTokenId === parsedMarket.noTokenId) {
+        console.error('📊 ERROR: YES and NO token IDs are identical! Using Gamma prices.')
+        setLivePrices({
+          yesPrice: parsedMarket.yesPrice,
+          noPrice: parsedMarket.noPrice,
+          yesBestAsk: null,
+          noBestAsk: null,
+          yesBestBid: null,
+          noBestBid: null,
+          hasLiquidity: false,
+        })
+        return
+      }
+      
       try {
         const marketId =
           (market as any).conditionId ||
@@ -466,8 +481,10 @@ export function usePolymarketTrade({
 
         console.log('📊 Fetching orderbooks for:', {
           marketId,
-          yesTokenId: parsedMarket.yesTokenId.slice(0, 20) + '...',
-          noTokenId: parsedMarket.noTokenId.slice(0, 20) + '...',
+          yesTokenId: parsedMarket.yesTokenId,
+          noTokenId: parsedMarket.noTokenId,
+          gammaYes: parsedMarket.yesPrice,
+          gammaNo: parsedMarket.noPrice,
         })
 
         const [yesBook, noBook] = await Promise.all([
@@ -480,6 +497,35 @@ export function usePolymarketTrade({
         const yesBestAsk = yesBook?.asks?.[0]?.price ? parseFloat(yesBook.asks[0].price) : null
         const noBestBid = noBook?.bids?.[0]?.price ? parseFloat(noBook.bids[0].price) : null
         const noBestAsk = noBook?.asks?.[0]?.price ? parseFloat(noBook.asks[0].price) : null
+        
+        console.log('📊 Raw orderbook data:', {
+          yesBestBid, yesBestAsk, noBestBid, noBestAsk,
+        })
+        
+        // VALIDATION: In a binary market, YES + NO prices should roughly equal 1
+        // If both asks are > 0.9 (like 0.99), the data is suspicious
+        const orderbookSuspicious = (
+          (yesBestAsk !== null && noBestAsk !== null && yesBestAsk + noBestAsk > 1.5) ||
+          (yesBestAsk !== null && noBestAsk !== null && Math.abs(yesBestAsk - noBestAsk) < 0.1 && yesBestAsk > 0.4)
+        )
+        
+        if (orderbookSuspicious) {
+          console.warn('📊 Orderbook data looks suspicious (both tokens have similar prices)!')
+          console.warn('📊 Falling back to Gamma prices for display.')
+          
+          // Use Gamma prices for display, but keep orderbook data for execution
+          // The orderbook might still be valid for one side
+          setLivePrices({
+            yesPrice: parsedMarket.yesPrice,
+            noPrice: parsedMarket.noPrice,
+            yesBestAsk,
+            noBestAsk,
+            yesBestBid,
+            noBestBid,
+            hasLiquidity: yesBestAsk !== null || noBestAsk !== null,
+          })
+          return
+        }
         
         // For display: use midpoint if both sides exist, else use best available
         let yesDisplayPrice: number | null = null
@@ -501,23 +547,20 @@ export function usePolymarketTrade({
         }
         
         // Check if there's any liquidity for trading
-        // For BUY orders, we need asks. For SELL, we need bids.
         const hasYesLiquidity = yesBestAsk !== null || yesBestBid !== null
         const hasNoLiquidity = noBestAsk !== null || noBestBid !== null
         const hasLiquidity = hasYesLiquidity || hasNoLiquidity
         
-        console.log('📊 Orderbook prices:', {
-          yesBestBid, yesBestAsk, yesDisplayPrice,
-          noBestBid, noBestAsk, noDisplayPrice,
+        console.log('📊 Calculated prices:', {
+          yesDisplayPrice, noDisplayPrice,
           hasLiquidity,
+          usingGammaForDisplay: yesDisplayPrice === null && noDisplayPrice === null,
         })
         
         if (yesDisplayPrice !== null || noDisplayPrice !== null) {
           setLivePrices({ 
-            // For display, use calculated price or fall back to Gamma
             yesPrice: yesDisplayPrice ?? parsedMarket.yesPrice,
             noPrice: noDisplayPrice ?? parsedMarket.noPrice,
-            // Store raw best bid/ask for order execution
             yesBestAsk,
             noBestAsk,
             yesBestBid,
@@ -525,8 +568,7 @@ export function usePolymarketTrade({
             hasLiquidity,
           })
         } else {
-          // No orderbook data - fall back to Gamma but mark no liquidity
-          console.warn('📊 No orderbook data! Using Gamma prices (may not be executable)')
+          console.warn('📊 No orderbook data! Using Gamma prices.')
           setLivePrices({
             yesPrice: parsedMarket.yesPrice,
             noPrice: parsedMarket.noPrice,
@@ -539,7 +581,6 @@ export function usePolymarketTrade({
         }
       } catch (e) {
         console.error('Failed to fetch live CLOB prices:', e)
-        // Set a state that indicates error
         setLivePrices({
           yesPrice: parsedMarket.yesPrice,
           noPrice: parsedMarket.noPrice,
@@ -553,7 +594,7 @@ export function usePolymarketTrade({
     }
     
     fetchLivePrices()
-    const interval = setInterval(fetchLivePrices, 5000) // Refresh every 5s
+    const interval = setInterval(fetchLivePrices, 5000)
     return () => clearInterval(interval)
   }, [market, parsedMarket.yesTokenId, parsedMarket.noTokenId, parsedMarket.yesPrice, parsedMarket.noPrice])
   
@@ -815,32 +856,49 @@ export function usePolymarketTrade({
       const tokenId = outcome === 'YES' ? parsedMarket.yesTokenId : parsedMarket.noTokenId
       
       // For BUY orders: use best ASK from orderbook (what we'll pay)
-      // This ensures we're placing an order that can actually execute
+      // BUT: if orderbook looks suspicious, use Gamma price instead
       const bestAsk = outcome === 'YES' ? livePrices?.yesBestAsk : livePrices?.noBestAsk
+      const gammaPrice = outcome === 'YES' ? parsedMarket.yesPrice : parsedMarket.noPrice
       const displayPrice = outcome === 'YES' ? yesPrice : noPrice
       
-      // Use best ask if available, otherwise fall back to display price
-      // But warn if we're using fallback price
+      // Detect suspicious orderbook (both sides have similar high prices)
+      const yesBestAskValue = livePrices?.yesBestAsk ?? null
+      const noBestAskValue = livePrices?.noBestAsk ?? null
+      const orderbookSuspicious = (
+        yesBestAskValue !== null && 
+        noBestAskValue !== null && 
+        Math.abs(yesBestAskValue - noBestAskValue) < 0.1 &&
+        yesBestAskValue > 0.4
+      )
+      
       let orderPrice: number
-      if (bestAsk !== null && bestAsk !== undefined && bestAsk > 0) {
+      let priceSource: string
+      
+      if (orderbookSuspicious) {
+        // Orderbook data is wrong - use Gamma price
+        orderPrice = gammaPrice
+        priceSource = 'GAMMA (orderbook suspicious)'
+        console.warn('⚠️ Orderbook data suspicious, using Gamma price:', orderPrice)
+      } else if (bestAsk !== null && bestAsk !== undefined && bestAsk > 0 && bestAsk < 1) {
+        // Valid best ask from orderbook
         orderPrice = bestAsk
+        priceSource = 'ORDERBOOK BEST ASK'
         console.log('✅ Using best ask from orderbook:', orderPrice)
-      } else if (!hasLiquidity) {
-        // No liquidity at all - warn user
-        setState({ status: 'error', error: 'No liquidity available for this market. Try again later.' })
-        onError?.('No liquidity available')
-        return
+      } else if (gammaPrice > 0 && gammaPrice < 1) {
+        // Fall back to Gamma price
+        orderPrice = gammaPrice
+        priceSource = 'GAMMA (no orderbook)'
+        console.warn('⚠️ No valid best ask, using Gamma price:', orderPrice)
       } else {
-        // Has some liquidity but no ask for this outcome - use display price with warning
-        orderPrice = displayPrice
-        console.warn('⚠️ No best ask available, using display price:', orderPrice)
+        // No valid price available
+        setState({ status: 'error', error: 'No valid price available for this market.' })
+        onError?.('No valid price available')
+        return
       }
       
-      // Validate price is reasonable (not 0 or 1)
-      if (orderPrice <= 0 || orderPrice >= 1) {
-        setState({ status: 'error', error: `Invalid price: ${orderPrice}. Must be between 0 and 1.` })
-        onError?.(`Invalid price: ${orderPrice}`)
-        return
+      // Validate price is reasonable (between 0.01 and 0.99)
+      if (orderPrice <= 0.01 || orderPrice >= 0.99) {
+        console.warn(`⚠️ Price ${orderPrice} is extreme, may not execute well`)
       }
 
       // Get tick size from market or use default
@@ -855,14 +913,14 @@ export function usePolymarketTrade({
       console.log('   Token ID:', tokenId)
       console.log('   Outcome:', outcome)
       console.log('   Order Price:', orderPrice, `(${(orderPrice * 100).toFixed(1)}%)`)
-      console.log('   Display Price:', displayPrice, `(${(displayPrice * 100).toFixed(1)}%)`)
+      console.log('   Gamma Price:', gammaPrice, `(${(gammaPrice * 100).toFixed(1)}%)`)
       console.log('   Best Ask:', bestAsk)
       console.log('   Size (shares):', size.toFixed(4))
       console.log('   Amount (USDC):', amountNum)
       console.log('   Tick Size:', tickSize)
       console.log('   Side: BUY')
-      console.log('   Has Liquidity:', hasLiquidity)
-      console.log('   Price source:', bestAsk ? 'ORDERBOOK BEST ASK' : 'DISPLAY/GAMMA')
+      console.log('   Price Source:', priceSource)
+      console.log('   Orderbook Suspicious:', orderbookSuspicious)
 
       // Get signer from Privy embedded wallet
       const signer = await getEthersSigner(embeddedWallet)
