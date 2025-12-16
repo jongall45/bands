@@ -16,6 +16,10 @@ const VIEM_CHAINS = {
   137: polygon,
 } as const
 
+// USDC.e on Polygon - REQUIRED for Polymarket collateral
+// Native USDC on Polygon will NOT work with Polymarket
+const POLYGON_USDC_E = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' as `0x${string}`
+
 // Chain configurations with logos
 const CHAINS = {
   base: {
@@ -23,18 +27,21 @@ const CHAINS = {
     name: 'Base',
     logo: 'https://raw.githubusercontent.com/base-org/brand-kit/001c0e9b40a67799ebe0418671ac4e02a0c683ce/logo/symbol/Base_Symbol_Blue.svg',
     usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as `0x${string}`,
+    usdcLabel: 'USDC',
   },
   arbitrum: {
     id: 42161,
     name: 'Arbitrum',
     logo: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png',
     usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as `0x${string}`,
+    usdcLabel: 'USDC',
   },
   polygon: {
     id: 137,
     name: 'Polygon',
     logo: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png',
-    usdc: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' as `0x${string}`, // Native USDC
+    usdc: POLYGON_USDC_E, // USDC.e - bridged USDC, required for Polymarket
+    usdcLabel: 'USDC.e',
   },
 } as const
 
@@ -114,9 +121,10 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
     chainId: arbitrum.id,
   })
 
+  // For Polygon, we check USDC.e balance (bridged USDC)
   const { data: polygonBalance } = useBalance({
     address: smartWalletAddress,
-    token: CHAINS.polygon.usdc,
+    token: POLYGON_USDC_E,
     chainId: polygon.id,
   })
 
@@ -363,8 +371,13 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
               {title || `Bridge to ${destConfig.name}`}
             </h2>
             <p className="text-white/40 text-sm">
-              {subtitle || `Move USDC to ${destConfig.name}`}
+              {subtitle || `Move ${destConfig.usdcLabel} to ${destConfig.name}`}
             </p>
+            {destinationChain === 'polygon' && (
+              <p className="text-blue-400/70 text-xs mt-1">
+                Polymarket requires USDC.e on Polygon
+              </p>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -382,7 +395,7 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
             </div>
             <h3 className="text-white font-semibold text-lg mb-2">Bridge Complete!</h3>
             <p className="text-white/40 text-sm text-center mb-2">
-              Your USDC is now on {destConfig.name}
+              Your {destConfig.usdcLabel} is now on {destConfig.name}
             </p>
             
             {txHash && (
@@ -444,7 +457,7 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
                             <img src={config.logo} alt={config.name} className="w-6 h-6 rounded-full" />
                             <div className="flex-1 text-left">
                               <div className="text-white text-sm font-medium">{config.name}</div>
-                              <div className="text-white/40 text-xs">{parseFloat(bal).toFixed(2)} USDC</div>
+                              <div className="text-white/40 text-xs">{parseFloat(bal).toFixed(2)} {config.usdcLabel}</div>
                             </div>
                           </button>
                         )
@@ -463,7 +476,7 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
                   value={inputValue}
                   onChange={handleInputChange}
                   disabled={isLoading}
-                  className="flex-1 bg-transparent text-white text-3xl font-semibold outline-none placeholder:text-white/20 disabled:opacity-50"
+                  className="flex-1 bg-transparent text-white text-3xl font-semibold outline-none placeholder:text-white/20 disabled:opacity-50 focus:outline-none"
                 />
                 <div className="flex items-center gap-2 bg-white/[0.05] rounded-xl px-3 py-2">
                   <img 
@@ -471,7 +484,7 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
                     alt="USDC" 
                     className="w-6 h-6 rounded-full"
                   />
-                  <span className="text-white font-semibold">USDC</span>
+                  <span className="text-white font-semibold">{sourceConfig.usdcLabel}</span>
                 </div>
               </div>
 
@@ -482,7 +495,7 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
                   disabled={isLoading}
                   className="text-[#3B5EE8] text-xs font-medium hover:underline disabled:opacity-50"
                 >
-                  Balance: {parseFloat(sourceBalance).toFixed(2)} USDC
+                  Balance: {parseFloat(sourceBalance).toFixed(2)} {sourceConfig.usdcLabel}
                 </button>
               </div>
             </div>
@@ -516,7 +529,7 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
                     alt="USDC" 
                     className="w-6 h-6 rounded-full"
                   />
-                  <span className="text-white font-semibold">USDC</span>
+                  <span className="text-white font-semibold">{destConfig.usdcLabel}</span>
                 </div>
               </div>
 
@@ -524,7 +537,7 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
                 <span className="text-white/30 text-sm">
                   ≈ ${quote ? parseFloat(quote.amountOut).toFixed(2) : '0.00'}
                 </span>
-                <span className="text-white/30 text-xs">Current: {parseFloat(destBalance).toFixed(2)} USDC</span>
+                <span className="text-white/30 text-xs">Current: {parseFloat(destBalance).toFixed(2)} {destConfig.usdcLabel}</span>
               </div>
             </div>
 
@@ -607,7 +620,7 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
               ) : !quote ? (
                 'Fetching quote...'
               ) : (
-                `Bridge $${amountNum.toFixed(2)} USDC`
+                `Bridge $${amountNum.toFixed(2)} ${sourceConfig.usdcLabel}`
               )}
             </button>
 

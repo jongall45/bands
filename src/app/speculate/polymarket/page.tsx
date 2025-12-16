@@ -5,8 +5,7 @@ import { useBalance } from 'wagmi'
 import { polygon } from 'viem/chains'
 import { formatUnits } from 'viem'
 import { 
-  ArrowLeft, Search, RefreshCw, Loader2, Trophy, Wallet, X, TrendingUp, 
-  Circle, DollarSign
+  ArrowLeft, Search, RefreshCw, Loader2, Trophy, Wallet, X, TrendingUp, DollarSign
 } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -27,6 +26,8 @@ const POLYGON_USDC_E = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'
 const POLYMARKET_LOGO = 'https://pbs.twimg.com/profile_images/1965851729825546240/fLHeW0Ji_400x400.jpg'
 const LEAGUES = ['NFL', 'NBA', 'NHL', 'CFB'] as const
 const PRICE_STALE_MS = 5000 // 5 seconds
+const MAX_CONTENT_WIDTH = 480 // Phone canvas max width
+const POLYMARKET_BLUE = '#3B5EE8' // Brand color for buttons
 
 // ==============================================
 // TYPES
@@ -174,6 +175,21 @@ export default function SportsPage() {
     return Object.values(gamesByLeague).reduce((sum, games) => sum + games.length, 0)
   }, [gamesByLeague])
 
+  // Refresh handler - updates both cash balance and positions
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    try {
+      await Promise.all([
+        refetchBalance(),
+        refetch(),
+        queryClient.invalidateQueries({ queryKey: ['polymarket-positions'] }),
+      ])
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 500)
+    }
+  }
+
   return (
     <>
       {/* ====== BACKGROUND - Negative Space with Gradient ====== */}
@@ -192,89 +208,87 @@ export default function SportsPage() {
         />
       </div>
       
-      {/* ====== CENTERED CONTENT COLUMN ====== */}
-      <div className="relative min-h-screen flex flex-col items-center px-4 md:px-6">
-        <div className="w-full max-w-[460px] min-h-screen flex flex-col">
+      {/* ====== CENTERED CONTENT COLUMN (Phone Canvas) ====== */}
+      <div className="relative min-h-screen flex flex-col items-center px-4">
+        <div className="w-full min-h-screen flex flex-col" style={{ maxWidth: MAX_CONTENT_WIDTH }}>
           
-          {/* ====== HEADER ====== */}
+          {/* ====== COMPACT HEADER ====== */}
           <header 
-            className="sticky top-0 z-30 pt-safe"
-            style={{ paddingTop: 'max(env(safe-area-inset-top, 12px), 12px)' }}
+            className="sticky top-0 z-30 bg-[#050508]/95 backdrop-blur-md"
+            style={{ paddingTop: 'max(env(safe-area-inset-top, 8px), 8px)' }}
           >
-            {/* Glass header card */}
-            <div className="bg-[#12121a]/90 backdrop-blur-xl rounded-2xl border border-white/[0.06] shadow-xl shadow-black/20 mb-4">
-              {/* Top row */}
-              <div className="flex items-center justify-between px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <Link 
-                    href="/" 
-                    className="w-9 h-9 flex items-center justify-center hover:bg-white/[0.06] rounded-xl transition-colors"
-                  >
-                    <ArrowLeft className="w-5 h-5 text-white/70" />
-                  </Link>
-                  <div className="flex items-center gap-2">
-                    <Trophy className="w-5 h-5 text-amber-400" />
-                    <h1 className="text-lg font-bold text-white">Sports</h1>
-                  </div>
-                </div>
+            {/* Main header row */}
+            <div className="flex items-center justify-between py-3 px-1">
+              {/* Left: Back + Trophy + Sports */}
+              <div className="flex items-center gap-2">
+                <Link 
+                  href="/" 
+                  className="w-8 h-8 flex items-center justify-center hover:bg-white/[0.06] rounded-lg transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4 text-white/70" />
+                </Link>
+                <Trophy className="w-4 h-4 text-amber-400" />
+                <h1 className="text-base font-semibold text-white">Sports</h1>
                 
-                <div className="flex items-center gap-2">
-                  {/* Live indicator */}
-                  <div className="flex items-center gap-1.5 px-2 py-1 bg-green-500/10 rounded-lg">
-                    <Circle className="w-2 h-2 fill-green-400 text-green-400 animate-pulse" />
-                    <span className="text-green-400 text-[10px] font-medium uppercase tracking-wide">Live</span>
-                  </div>
-                  
-                  <button
-                    onClick={() => refetch()}
-                    className="w-9 h-9 flex items-center justify-center hover:bg-white/[0.06] rounded-xl transition-colors"
-                    title="Refresh"
-                  >
-                    <RefreshCw className={`w-4 h-4 text-white/50 ${isLoading ? 'animate-spin' : ''}`} />
-                  </button>
-                  
-                  <button
-                    onClick={() => setShowPositions(true)}
-                    className="w-9 h-9 flex items-center justify-center hover:bg-white/[0.06] rounded-xl transition-colors"
-                  >
-                    <Wallet className="w-5 h-5 text-white/70" />
-                  </button>
-                </div>
+                {/* Refresh button */}
+                <button
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                  className="w-7 h-7 flex items-center justify-center hover:bg-white/[0.06] rounded-lg transition-colors ml-1"
+                  title="Refresh balances"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-white/40 ${isRefreshing || isLoading ? 'animate-spin' : ''}`} />
+                </button>
               </div>
-
-              {/* Cash balance row */}
-              <div className="px-4 pb-4">
-                <div className="flex items-center justify-between bg-[#1a1a24]/80 rounded-xl p-3 border border-white/[0.04]">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-emerald-600 rounded-xl flex items-center justify-center">
-                      <DollarSign className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-white/50 text-[11px] uppercase tracking-wide">Cash Balance</p>
-                      <p className="text-white font-bold text-xl">${parseFloat(usdcBalance).toFixed(2)}</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setShowBridgeModal(true)}
-                    className="px-4 py-2.5 bg-purple-500 hover:bg-purple-600 active:scale-[0.98] text-white font-semibold rounded-xl text-sm transition-all shadow-lg shadow-purple-500/20"
-                  >
-                    Deposit
-                  </button>
-                </div>
+              
+              {/* Right: Position button + Deposit button */}
+              <div className="flex items-center gap-2">
+                {/* Position button with balance */}
+                <button
+                  onClick={() => setShowPositions(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg transition-colors"
+                >
+                  <Wallet className="w-3.5 h-3.5 text-white/60" />
+                  <span className="text-white text-xs font-medium">${parseFloat(usdcBalance).toFixed(2)}</span>
+                </button>
+                
+                {/* Deposit button - Polymarket blue */}
+                <button
+                  onClick={() => setShowBridgeModal(true)}
+                  className="px-3 py-1.5 text-white font-medium rounded-lg text-xs transition-all hover:brightness-110 active:scale-[0.98]"
+                  style={{ backgroundColor: POLYMARKET_BLUE }}
+                >
+                  Deposit
+                </button>
               </div>
+            </div>
 
-              {/* Search */}
-              <div className="px-4 pb-4">
-                <div className="relative">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-                  <input
-                    type="text"
-                    placeholder="Search games..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-[#1a1a24]/80 border border-white/[0.06] rounded-xl text-white placeholder:text-white/30 outline-none focus:border-white/[0.12] focus:bg-[#1a1a24] transition-all text-sm"
-                  />
-                </div>
+            {/* Search bar */}
+            <div className="pb-2 px-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
+                <input
+                  type="text"
+                  placeholder="Search games..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-white/[0.04] border border-white/[0.06] rounded-lg text-white placeholder:text-white/30 outline-none focus:border-white/[0.12] focus:bg-white/[0.06] transition-all text-sm"
+                />
+              </div>
+            </div>
+
+            {/* Polymarket tab row - subtle */}
+            <div className="flex items-center gap-2 px-1 pb-3 border-b border-white/[0.04]">
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-white/[0.04] rounded-md">
+                <Image 
+                  src={POLYMARKET_LOGO}
+                  alt="Polymarket"
+                  width={14}
+                  height={14}
+                  className="rounded-sm"
+                  unoptimized
+                />
+                <span className="text-white/60 text-[11px] font-medium">Markets</span>
               </div>
             </div>
           </header>
