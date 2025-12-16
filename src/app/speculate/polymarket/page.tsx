@@ -10,9 +10,16 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { useTrendingEvents, useEventsByTag } from '@/hooks/usePolymarket'
+import { useQuery } from '@tanstack/react-query'
 import { formatVolume, parseMarket } from '@/lib/polymarket/api'
 import type { PolymarketEvent, PolymarketMarket } from '@/lib/polymarket/api'
+
+// Fetch all sports games (moneyline only)
+async function fetchAllSportsGames() {
+  const response = await fetch('/api/polymarket/sports')
+  if (!response.ok) throw new Error('Failed to fetch sports')
+  return response.json()
+}
 import { BottomNav } from '@/components/ui/BottomNav'
 import { PolymarketTradingPanel } from '@/components/polymarket/PolymarketTradingPanel'
 import { PositionsPanel } from '@/components/polymarket/PositionsPanel'
@@ -23,17 +30,8 @@ import { checkGatewayHealth } from '@/lib/gateway/client'
 // USDC.e on Polygon (what Polymarket uses)
 const POLYGON_USDC_E = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'
 
-// Sports leagues to show
+// Sports leagues to display
 const LEAGUES = ['NFL', 'NBA', 'NHL', 'NCAA Football', 'NCAA Basketball'] as const
-
-// Team name patterns for detection
-const TEAM_PATTERNS: Record<string, string[]> = {
-  NFL: ['chiefs', 'eagles', 'cowboys', '49ers', 'dolphins', 'steelers', 'ravens', 'bills', 'packers', 'lions', 'vikings', 'bears', 'rams', 'seahawks', 'cardinals', 'saints', 'buccaneers', 'falcons', 'panthers', 'broncos', 'raiders', 'chargers', 'texans', 'colts', 'jaguars', 'titans', 'bengals', 'browns', 'commanders', 'giants', 'jets', 'patriots'],
-  NBA: ['lakers', 'celtics', 'warriors', 'nets', 'knicks', 'heat', 'bulls', 'mavericks', 'suns', 'clippers', 'nuggets', 'bucks', 'sixers', '76ers', 'raptors', 'thunder', 'grizzlies', 'pelicans', 'timberwolves', 'hawks', 'hornets', 'wizards', 'magic', 'pistons', 'pacers', 'cavaliers', 'kings', 'spurs', 'rockets', 'jazz', 'blazers', 'trail blazers'],
-  NHL: ['bruins', 'rangers', 'maple leafs', 'canadiens', 'blackhawks', 'penguins', 'capitals', 'flyers', 'red wings', 'blues', 'avalanche', 'golden knights', 'oilers', 'flames', 'canucks', 'jets', 'wild', 'predators', 'lightning', 'hurricanes', 'panthers', 'blue jackets', 'islanders', 'devils', 'senators', 'sabres', 'ducks', 'kings', 'sharks', 'coyotes', 'kraken'],
-  'NCAA Football': ['alabama', 'georgia', 'ohio state', 'michigan', 'clemson', 'texas', 'oklahoma', 'usc', 'penn state', 'oregon', 'florida state', 'lsu', 'notre dame', 'tennessee', 'auburn', 'florida'],
-  'NCAA Basketball': ['duke', 'kentucky', 'north carolina', 'kansas', 'gonzaga', 'villanova', 'michigan state', 'ucla', 'uconn', 'purdue', 'houston', 'baylor', 'arizona', 'indiana'],
-}
 
 export default function PolymarketPage() {
   const { isConnected } = useAccount()
@@ -60,79 +58,25 @@ export default function PolymarketPage() {
   })
   const usdcBalance = polygonUsdcBalance ? formatUnits(polygonUsdcBalance.value, 6) : '0'
 
-  // Fetch sports events
-  const { data: sportsEvents, isLoading, refetch } = useEventsByTag('sports', 50)
-  const { data: allEvents } = useTrendingEvents(50)
+  // Fetch sports games (moneyline only) from dedicated endpoint
+  const { data: sportsData, isLoading, refetch } = useQuery({
+    queryKey: ['polymarket-sports-games'],
+    queryFn: fetchAllSportsGames,
+    staleTime: 60 * 1000, // 1 minute
+    refetchInterval: 60 * 1000,
+  })
 
-  // Combine and filter for binary sports markets
-  const allSportsEvents = useMemo(() => {
-    const combined = [...(sportsEvents || []), ...(allEvents || [])]
-    // Dedupe by ID
-    const unique = Array.from(new Map(combined.map(e => [e.id, e])).values())
-    return unique
-  }, [sportsEvents, allEvents])
-
-  // Check if event is a binary game
-  const isBinaryGame = useCallback((event: PolymarketEvent) => {
-    const market = event.markets?.[0]
-    if (!market) return false
-    try {
-      const outcomes = market.outcomes ? JSON.parse(market.outcomes) : []
-      if (outcomes.length !== 2) return false
-      // Check prices sum to ~1
-      const parsed = parseMarket(market)
-      const sum = parsed.yesPrice + parsed.noPrice
-      return sum > 0.9 && sum < 1.1
-    } catch {
-      return false
-    }
-  }, [])
-
-  // Detect league from event
-  const detectLeague = useCallback((event: PolymarketEvent): string | null => {
-    const title = event.title?.toLowerCase() || ''
-    const slug = event.slug?.toLowerCase() || ''
-    
-    // Check explicit tags/slug first
-    if (slug.includes('nfl') || title.includes('nfl')) return 'NFL'
-    if (slug.includes('nba') || title.includes('nba')) return 'NBA'
-    if (slug.includes('nhl') || title.includes('nhl')) return 'NHL'
-    if (slug.includes('ncaaf') || slug.includes('college-football') || title.includes('cfp')) return 'NCAA Football'
-    if (slug.includes('ncaab') || slug.includes('march-madness') || title.includes('march madness')) return 'NCAA Basketball'
-    
-    // Check team patterns
-    for (const [league, teams] of Object.entries(TEAM_PATTERNS)) {
-      for (const team of teams) {
-        if (title.includes(team)) return league
-      }
-    }
-    
-    return null
-  }, [])
-
-  // Group events by league
+  // Extract events by league from API response
   const eventsByLeague = useMemo(() => {
-    const result: Record<string, PolymarketEvent[]> = {}
-    
-    for (const league of LEAGUES) {
-      result[league] = []
+    const sports = sportsData?.sports || {}
+    return {
+      'NFL': sports['NFL'] || [],
+      'NBA': sports['NBA'] || [],
+      'NHL': sports['NHL'] || [],
+      'NCAA Football': sports['NCAA Football'] || [],
+      'NCAA Basketball': sports['NCAA Basketball'] || [],
     }
-    
-    for (const event of allSportsEvents) {
-      if (!isBinaryGame(event)) continue
-      const league = detectLeague(event)
-      if (league && result[league]) {
-        result[league].push(event)
-      }
-    }
-    
-    // Sort by volume
-    for (const league of LEAGUES) {
-      result[league].sort((a, b) => (b.volume || 0) - (a.volume || 0))
-    }
-    
-    return result
-  }, [allSportsEvents, isBinaryGame, detectLeague])
+  }, [sportsData])
 
   // Filter by search
   const filteredByLeague = useMemo(() => {
@@ -140,7 +84,7 @@ export default function PolymarketPage() {
     
     const result: Record<string, PolymarketEvent[]> = {}
     for (const [league, events] of Object.entries(eventsByLeague)) {
-      result[league] = events.filter(e => 
+      result[league] = events.filter((e: PolymarketEvent) => 
         e.title?.toLowerCase().includes(searchQuery.toLowerCase())
       )
     }
@@ -249,7 +193,7 @@ export default function PolymarketPage() {
                   {/* Horizontal Scroll Carousel */}
                   <div className="overflow-x-auto scrollbar-hide">
                     <div className="flex gap-3 px-4 pb-2">
-                      {events.slice(0, 10).map(event => (
+                      {(events as PolymarketEvent[]).slice(0, 15).map((event: PolymarketEvent) => (
                         <GameCard 
                           key={event.id} 
                           event={event} 

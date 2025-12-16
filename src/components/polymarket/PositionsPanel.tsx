@@ -121,23 +121,18 @@ export function PositionsPanel({ isOpen, onClose }: PositionsPanelProps) {
 
   return (
     <>
-      {/* Bottom Sheet Overlay */}
-      <div className="fixed inset-0 z-50 flex items-end justify-center">
+      {/* Centered Modal Overlay (Ostium-style) */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         {/* Backdrop */}
         <div 
           className="absolute inset-0 bg-black/80 backdrop-blur-sm" 
           onClick={onClose} 
         />
         
-        {/* Card Panel */}
+        {/* Centered Card */}
         <div 
-          className="relative w-full max-w-[430px] bg-[#0a0a0a] border-t border-white/[0.08] rounded-t-3xl max-h-[70vh] flex flex-col"
-          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px))' }}
+          className="relative w-full max-w-[400px] bg-[#0a0a0a] border border-white/[0.1] rounded-3xl max-h-[80vh] flex flex-col shadow-2xl"
         >
-          {/* Handle */}
-          <div className="flex justify-center pt-3 pb-2 flex-shrink-0">
-            <div className="w-10 h-1 bg-white/20 rounded-full" />
-          </div>
 
           {/* Header */}
           <div className="flex items-center justify-between px-4 pb-3 flex-shrink-0">
