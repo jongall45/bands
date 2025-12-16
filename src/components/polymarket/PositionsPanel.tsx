@@ -101,10 +101,10 @@ export function PositionsPanel({ isOpen, onClose }: PositionsPanelProps) {
     })
   }, [enrichedData, clobData])
 
-  const cashBalance = parseFloat(usdceBalance || '0')
-  const positionsValue = enrichedData?.totalValue || 0
-  const totalValue = cashBalance + positionsValue
-  const totalPnl = enrichedData?.totalPnl || 0
+  const cashBalance = parseFloat(usdceBalance || '0') || 0
+  const positionsValue = parseFloat(String(enrichedData?.totalValue || 0)) || 0
+  const totalValue = (isNaN(cashBalance) ? 0 : cashBalance) + (isNaN(positionsValue) ? 0 : positionsValue)
+  const totalPnl = parseFloat(String(enrichedData?.totalPnl || 0)) || 0
   const isLoading = clobLoading || enrichedLoading
 
   const handleRefresh = () => {
@@ -164,13 +164,13 @@ export function PositionsPanel({ isOpen, onClose }: PositionsPanelProps) {
                       ? 'bg-green-500/20 text-green-400' 
                       : 'bg-red-500/20 text-red-400'
                   }`}>
-                    {totalPnl >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                    {totalPnl >= 0 ? '+' : ''}{totalPnl.toFixed(2)}
+                    {(totalPnl || 0) >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                    {(totalPnl || 0) >= 0 ? '+' : ''}{(totalPnl || 0).toFixed(2)}
                   </div>
                 )}
               </div>
               <div className="text-white text-3xl font-bold tracking-tight">
-                ${totalValue.toFixed(2)}
+                ${(totalValue || 0).toFixed(2)}
               </div>
             </div>
           </div>
@@ -240,7 +240,7 @@ export function PositionsPanel({ isOpen, onClose }: PositionsPanelProps) {
                             <p className="text-white/40 text-xs">Polygon Cash</p>
                           </div>
                         </div>
-                        <p className="text-white font-semibold">${cashBalance.toFixed(2)}</p>
+                        <p className="text-white font-semibold">${(cashBalance || 0).toFixed(2)}</p>
                       </div>
                     </div>
 
@@ -342,24 +342,24 @@ function PositionRow({ position, onClick }: { position: Position; onClick: () =>
               {position.outcome}
             </span>
             <span className="text-white/40 text-xs">
-              {position.shares.toFixed(2)} shares
+              {(parseFloat(String(position.shares)) || 0).toFixed(2)} shares
             </span>
           </div>
         </div>
 
         {/* Value & PnL */}
         <div className="text-right flex-shrink-0">
-          <p className="text-white font-semibold text-sm">${position.value.toFixed(2)}</p>
+          <p className="text-white font-semibold text-sm">${(parseFloat(String(position.value)) || 0).toFixed(2)}</p>
           {hasPnl && position.pnlPercent !== undefined && (
             <div className={`flex items-center justify-end gap-0.5 text-xs font-medium ${
-              position.pnl! >= 0 ? 'text-green-400' : 'text-red-400'
+              (position.pnl || 0) >= 0 ? 'text-green-400' : 'text-red-400'
             }`}>
-              {position.pnl! >= 0 ? (
+              {(position.pnl || 0) >= 0 ? (
                 <ArrowUpRight className="w-3 h-3" />
               ) : (
                 <ArrowDownRight className="w-3 h-3" />
               )}
-              <span>{position.pnl! >= 0 ? '+' : ''}{position.pnlPercent.toFixed(1)}%</span>
+              <span>{(position.pnl || 0) >= 0 ? '+' : ''}{(parseFloat(String(position.pnlPercent)) || 0).toFixed(1)}%</span>
             </div>
           )}
           {!hasPnl && (

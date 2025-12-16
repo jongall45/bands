@@ -54,16 +54,20 @@ async function fetchAllSportsGames() {
   return response.json()
 }
 
-// Format volume
-function formatVolume(volume: number): string {
-  if (volume >= 1_000_000) return `$${(volume / 1_000_000).toFixed(1)}M`
-  if (volume >= 1_000) return `$${(volume / 1_000).toFixed(1)}K`
-  return `$${volume.toFixed(0)}`
+// Format volume - ensure number type
+function formatVolume(volume: number | string | undefined): string {
+  const vol = typeof volume === 'string' ? parseFloat(volume) : (volume || 0)
+  if (isNaN(vol)) return '$0'
+  if (vol >= 1_000_000) return `$${(vol / 1_000_000).toFixed(1)}M`
+  if (vol >= 1_000) return `$${(vol / 1_000).toFixed(1)}K`
+  return `$${Math.round(vol)}`
 }
 
-// Format price as cents
-function formatPriceCents(price: number): string {
-  const cents = Math.round(price * 100)
+// Format price as cents - ensure number type
+function formatPriceCents(price: number | string | undefined): string {
+  const p = typeof price === 'string' ? parseFloat(price) : (price || 0)
+  if (isNaN(p)) return '0¢'
+  const cents = Math.round(p * 100)
   return `${cents}¢`
 }
 
@@ -440,15 +444,17 @@ function TradePanel({
   const [selectedSide, setSelectedSide] = useState(selectedOutcomeIndex)
   
   const selectedOutcome = game.outcomes[selectedSide]
-  const price = selectedOutcome?.price || 0
-  const pricePercent = Math.round(price * 100)
+  const rawPrice = selectedOutcome?.price
+  const price = typeof rawPrice === 'string' ? parseFloat(rawPrice) : (rawPrice || 0)
+  const pricePercent = Math.round((isNaN(price) ? 0 : price) * 100)
   
-  // Calculate estimates
+  // Calculate estimates - ensure all values are numbers
   const inputAmount = parseFloat(amount) || 0
+  const safePrice = isNaN(price) ? 0 : price
   const estShares = mode === 'buy' 
-    ? (price > 0 ? inputAmount / price : 0)
+    ? (safePrice > 0 ? inputAmount / safePrice : 0)
     : inputAmount
-  const estCost = mode === 'buy' ? inputAmount : estShares * price
+  const estCost = mode === 'buy' ? inputAmount : estShares * safePrice
   const estPayout = estShares * 1 // $1 per share if win
   const estProfit = estPayout - estCost
   
@@ -518,7 +524,7 @@ function TradePanel({
                       : 'border-transparent bg-white/[0.05] text-white/60 hover:bg-white/[0.08]'
                   }`}
                 >
-                  {getTeamAbbrev(outcome.name)} • {Math.round(outcome.price * 100)}¢
+                  {getTeamAbbrev(outcome.name)} • {Math.round((parseFloat(String(outcome.price)) || 0) * 100)}¢
                 </button>
               ))}
             </div>
@@ -531,7 +537,7 @@ function TradePanel({
                 {mode === 'buy' ? 'Amount (USD)' : 'Shares to Sell'}
               </label>
               <span className="text-white/40 text-xs">
-                Balance: ${cashBalance.toFixed(2)}
+                Balance: ${(cashBalance || 0).toFixed(2)}
               </span>
             </div>
             <div className="relative">
@@ -581,8 +587,8 @@ function TradePanel({
               </span>
               <span className="text-white font-medium">
                 {mode === 'buy' 
-                  ? estShares.toFixed(2)
-                  : `$${estCost.toFixed(2)}`
+                  ? (isNaN(estShares) ? '0.00' : estShares.toFixed(2))
+                  : `$${isNaN(estCost) ? '0.00' : estCost.toFixed(2)}`
                 }
               </span>
             </div>
@@ -590,11 +596,11 @@ function TradePanel({
               <>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-white/50">Payout if Win</span>
-                  <span className="text-white font-medium">${estPayout.toFixed(2)}</span>
+                  <span className="text-white font-medium">${isNaN(estPayout) ? '0.00' : estPayout.toFixed(2)}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-white/50">Potential Profit</span>
-                  <span className="text-green-400 font-medium">+${estProfit.toFixed(2)}</span>
+                  <span className="text-green-400 font-medium">+${isNaN(estProfit) ? '0.00' : estProfit.toFixed(2)}</span>
                 </div>
               </>
             )}
