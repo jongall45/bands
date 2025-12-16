@@ -66,9 +66,7 @@ function formatGameTime(startTime?: string): string {
   }
   
   // Otherwise show date + time
-  const dateStr = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-  const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  return `${dateStr} ${timeStr}`
+  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
 // ==============================================
@@ -717,4 +715,3 @@ function EnableTradingModal({
     </div>
   )
 }
-
