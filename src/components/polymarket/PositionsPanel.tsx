@@ -131,11 +131,10 @@ export function PositionsPanel({ isOpen, onClose }: PositionsPanelProps) {
         
         {/* Centered Card */}
         <div 
-          className="relative w-full max-w-[400px] bg-[#0a0a0a] border border-white/[0.1] rounded-3xl max-h-[80vh] flex flex-col shadow-2xl"
+          className="relative w-full max-w-[400px] bg-[#1a1a1f] border border-white/[0.1] rounded-3xl max-h-[80vh] flex flex-col shadow-2xl overflow-hidden"
         >
-
           {/* Header */}
-          <div className="flex items-center justify-between px-4 pb-3 flex-shrink-0">
+          <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
             <h2 className="text-white font-bold text-lg">Portfolio</h2>
             <div className="flex items-center gap-2">
               <button
@@ -155,8 +154,8 @@ export function PositionsPanel({ isOpen, onClose }: PositionsPanelProps) {
           </div>
 
           {/* Total Value */}
-          <div className="px-4 pb-4 flex-shrink-0">
-            <div className="bg-gradient-to-br from-[#1E1E24] to-[#16161a] rounded-2xl p-4 border border-white/[0.06]">
+          <div className="px-5 pb-4 flex-shrink-0">
+            <div className="bg-gradient-to-br from-[#252530] to-[#1a1a1f] rounded-2xl p-4 border border-white/[0.08]">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-white/50 text-xs font-medium">Total Value</span>
                 {totalPnl !== 0 && (
