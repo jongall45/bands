@@ -709,13 +709,11 @@ export function PolymarketTradingPanel({
             (tradeAction === 'SELL' && (selectedOutcome === 'YES' ? userYesShares : userNoShares) <= 0) ||
             isLoading
           }
-          className={`w-full py-4 font-semibold rounded-2xl flex items-center justify-center gap-2 transition-colors ${
-            tradeAction === 'BUY'
-              ? selectedOutcome === 'YES'
-                ? 'bg-green-500 hover:bg-green-600 disabled:bg-green-500/30'
-                : 'bg-red-500 hover:bg-red-600 disabled:bg-red-500/30'
-              : 'bg-orange-500 hover:bg-orange-600 disabled:bg-orange-500/30'
-          } text-white disabled:cursor-not-allowed`}
+          className="w-full py-4 font-semibold rounded-2xl flex items-center justify-center gap-2 transition-all text-white disabled:cursor-not-allowed disabled:opacity-40 hover:brightness-110"
+          style={{
+            backgroundColor: tradeAction === 'SELL' ? '#F97316' : getOutcomeColor(selectedOutcome),
+            boxShadow: `0 4px 14px ${tradeAction === 'SELL' ? '#F9731640' : getOutcomeColor(selectedOutcome)}40`,
+          }}
         >
           {isLoading ? (
             <>
@@ -729,11 +727,11 @@ export function PolymarketTradingPanel({
           ) : tradeAction === 'BUY' && hasInsufficientBalance ? (
             'Insufficient Balance'
           ) : tradeAction === 'SELL' && (selectedOutcome === 'YES' ? userYesShares : userNoShares) <= 0 ? (
-            `No ${selectedOutcome} shares to sell`
+            `No ${getOutcomeLabel(selectedOutcome)} shares to sell`
           ) : (
             <>
               <Zap className="w-5 h-5" />
-              {tradeAction === 'BUY' ? 'Buy' : 'Sell'} {selectedOutcome} @ {formatProbability(currentPrice)}
+              {tradeAction === 'BUY' ? 'Buy' : 'Sell'} {getOutcomeLabel(selectedOutcome)} @ {formatProbability(currentPrice)}
             </>
           )}
         </button>

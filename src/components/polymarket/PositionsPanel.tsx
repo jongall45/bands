@@ -123,10 +123,51 @@ export function PositionsPanel({ isOpen, onClose }: PositionsPanelProps) {
     refetchInterval: isOpen ? 10000 : false,
   })
 
-  // Merge CLOB positions with enriched data
+  // Fetch market resolution status for positions
+  const { data: marketResolutions } = useQuery({
+    queryKey: ['market-resolutions', enrichedData?.positions?.map(p => p.marketId)],
+    queryFn: async () => {
+      const positions = enrichedData?.positions || []
+      if (positions.length === 0) return {}
+      
+      // Fetch market data to check resolution status
+      const resolutions: Record<string, { resolved: boolean; winningOutcome?: string; resolutionTime?: number }> = {}
+      
+      try {
+        // Batch fetch market data
+        for (const pos of positions) {
+          try {
+            const res = await fetch(`/api/polymarket/market/${pos.marketId}`)
+            if (res.ok) {
+              const market = await res.json()
+              if (market.closed || market.resolved) {
+                resolutions[pos.marketId] = {
+                  resolved: true,
+                  winningOutcome: market.winningOutcome || market.outcome,
+                  resolutionTime: market.endDate ? new Date(market.endDate).getTime() : Date.now(),
+                }
+              }
+            }
+          } catch (e) {
+            // Market fetch failed, assume open
+            console.log(`Could not fetch resolution for ${pos.marketId}`)
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch market resolutions:', e)
+      }
+      
+      return resolutions
+    },
+    enabled: !!enrichedData?.positions?.length && isOpen,
+    staleTime: 30000,
+  })
+
+  // Merge CLOB positions with enriched data and resolution status
   const { openPositions, resolvedPositions } = useMemo(() => {
     const enriched = enrichedData?.positions || []
     const clob = clobData?.positions || []
+    const resolutions = marketResolutions || {}
     
     // Create a map of tokenId -> CLOB position for quick lookup
     const clobMap = new Map<string, CLOBPosition>()
@@ -135,24 +176,38 @@ export function PositionsPanel({ isOpen, onClose }: PositionsPanelProps) {
     }
     
     // Separate open vs resolved
-    const open: Position[] = []
-    const resolved: Position[] = []
+    const open: (Position & { isResolved?: boolean; didWin?: boolean })[] = []
+    const resolved: (Position & { isResolved: boolean; didWin: boolean })[] = []
     
     for (const pos of enriched) {
       const clobPos = clobMap.get(pos.tokenId)
+      const resolution = resolutions[pos.marketId]
+      
       const enhanced = {
         ...pos,
         tokenId: clobPos?.asset || pos.tokenId,
         sellableSize: clobPos ? parseFloat(clobPos.size) : pos.shares,
       }
       
-      // Check if market is resolved (would need market data)
-      // For now, treat all as open - resolved detection would need market.closed flag
-      open.push(enhanced)
+      if (resolution?.resolved) {
+        // Market is resolved - determine win/loss
+        const didWin = resolution.winningOutcome?.toUpperCase() === pos.outcome?.toUpperCase()
+        resolved.push({
+          ...enhanced,
+          isResolved: true,
+          didWin,
+          // Override value: $0 if lost, shares * $1 if won
+          value: didWin ? pos.shares : 0,
+          pnl: didWin ? pos.shares - (pos.costBasis || 0) : -(pos.costBasis || 0),
+        })
+      } else {
+        // Market is open - show current best bid value
+        open.push(enhanced)
+      }
     }
     
     return { openPositions: open, resolvedPositions: resolved }
-  }, [enrichedData, clobData])
+  }, [enrichedData, clobData, marketResolutions])
 
   const cashBalance = parseFloat(usdceBalance || '0') || 0
   const positionsValue = openPositions.reduce((sum, p) => sum + (parseFloat(String(p.value)) || 0), 0)
@@ -186,19 +241,22 @@ export function PositionsPanel({ isOpen, onClose }: PositionsPanelProps) {
     setSelectedPosition(null)
   }
 
-  // Create mock activity items from positions
+  // Create activity items from resolved positions
   const activityItems: ActivityItem[] = useMemo(() => {
-    // In a real implementation, this would come from trade history API
-    return resolvedPositions.map(pos => ({
-      id: pos.marketId,
-      type: 'resolved' as const,
-      marketTitle: pos.question,
-      outcome: pos.outcome,
-      timestamp: pos.lastUpdated,
-      amount: pos.value,
-      status: pos.value > 0 ? 'won' : 'lost',
-      pnl: pos.pnl,
-    }))
+    return resolvedPositions.map(pos => {
+      return {
+        id: pos.marketId,
+        type: 'resolved' as const,
+        marketTitle: pos.question,
+        outcome: pos.outcome,
+        teamLogo: pos.imageUrl,
+        timestamp: pos.lastUpdated,
+        shares: pos.shares,
+        amount: pos.didWin ? pos.shares : 0, // $1 per share if won, $0 if lost
+        status: pos.didWin ? ('claimable' as const) : ('lost' as const),
+        pnl: pos.pnl,
+      }
+    })
   }, [resolvedPositions])
 
   if (!isOpen) return null

@@ -195,8 +195,14 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
   }, [])
 
   // Fetch quote using Relay API (same pattern as Ostium bridge)
+  // CRITICAL: For Polymarket, recipient MUST be the EOA trading wallet (tradingWalletAddress)
+  // NOT the smart wallet. Funds must land in the EOA for Polymarket CLOB trades.
   const fetchQuote = useCallback(async (amount: string) => {
-    if (!smartWalletAddress) return
+    // For Polymarket (Polygon), we MUST use the EOA trading wallet as recipient
+    // For other destinations, use smart wallet
+    const recipientAddress = destinationChain === 'polygon' ? tradingWalletAddress : smartWalletAddress
+    
+    if (!smartWalletAddress || !recipientAddress) return
 
     setStatus('quoting')
     setError(null)
@@ -205,8 +211,8 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
       const amountWei = parseUnits(amount, 6).toString()
       
       const requestBody = {
-        user: smartWalletAddress,
-        recipient: smartWalletAddress,
+        user: smartWalletAddress, // Sender is smart wallet (has the funds on Base/Arb)
+        recipient: recipientAddress, // CRITICAL: For Polygon, this is the EOA trading wallet
         originChainId: sourceConfig.id,
         destinationChainId: destConfig.id,
         originCurrency: sourceConfig.usdc,
@@ -214,13 +220,13 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
         amount: amountWei,
         tradeType: 'EXACT_INPUT',
         useDepositAddress: true,
-        refundTo: smartWalletAddress,
+        refundTo: smartWalletAddress, // Refunds go back to smart wallet
         usePermit: false,
         useExternalLiquidity: false,
         referrer: 'bands.cash',
       }
 
-      console.log('📤 Fetching bridge quote:', requestBody)
+      console.log('📤 Fetching bridge quote:', { ...requestBody, recipientType: destinationChain === 'polygon' ? 'EOA Trading Wallet' : 'Smart Wallet' })
 
       const response = await fetch(`${RELAY_API}/quote`, {
         method: 'POST',
@@ -258,7 +264,7 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
       setError(err.message || 'Failed to get quote')
       setStatus('error')
     }
-  }, [smartWalletAddress, sourceConfig, destConfig])
+  }, [smartWalletAddress, tradingWalletAddress, sourceConfig, destConfig, destinationChain])
 
   // Debounced quote fetch
   useEffect(() => {
@@ -435,7 +441,7 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
               </div>
             )}
             <p className="text-[#3B5EE8]/70 text-[11px] mt-2">
-              Send USDC.e on Polygon only • This is your Polymarket trading EOA
+              Funds are sent to your Polymarket trading wallet • USDC.e only
             </p>
           </div>
         )}
@@ -447,7 +453,10 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
             </div>
             <h3 className="text-white font-semibold text-lg mb-2">Bridge Complete!</h3>
             <p className="text-white/40 text-sm text-center mb-2">
-              Your {destConfig.usdcLabel} is now on {destConfig.name}
+              {destinationChain === 'polygon' 
+                ? 'Funds sent to your Polymarket trading wallet'
+                : `Your ${destConfig.usdcLabel} is now on ${destConfig.name}`
+              }
             </p>
             
             {txHash && (
