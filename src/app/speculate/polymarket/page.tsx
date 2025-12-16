@@ -29,6 +29,46 @@ const PRICE_STALE_MS = 5000 // 5 seconds
 const MAX_CONTENT_WIDTH = 480 // Phone canvas max width
 const POLYMARKET_BLUE = '#3B5EE8' // Brand color for buttons
 
+// League logos from ESPN
+const LEAGUE_LOGOS: Record<string, string> = {
+  NFL: 'https://a.espncdn.com/i/teamlogos/leagues/500/nfl.png',
+  NBA: 'https://a.espncdn.com/i/teamlogos/leagues/500/nba.png',
+  NHL: 'https://a.espncdn.com/i/teamlogos/leagues/500/nhl.png',
+  CFB: 'https://a.espncdn.com/i/teamlogos/ncaa/500/ncaa.png',
+  MLB: 'https://a.espncdn.com/i/teamlogos/leagues/500/mlb.png',
+}
+
+// Check if a game is live based on start time
+function isGameLive(startTime?: string): boolean {
+  if (!startTime) return false
+  const start = new Date(startTime).getTime()
+  const now = Date.now()
+  // Consider live if started within last 4 hours
+  return start <= now && start > now - 4 * 60 * 60 * 1000
+}
+
+// Format game time for display
+function formatGameTime(startTime?: string): string {
+  if (!startTime) return ''
+  const date = new Date(startTime)
+  const now = new Date()
+  
+  // If today, show time only
+  if (date.toDateString() === now.toDateString()) {
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  }
+  
+  // If tomorrow, show "Tomorrow" + time
+  const tomorrow = new Date(now)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  if (date.toDateString() === tomorrow.toDateString()) {
+    return `Tomorrow ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+  }
+  
+  // Otherwise show date + time
+  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
 // ==============================================
 // TYPES
 // ==============================================
@@ -149,15 +189,34 @@ export default function SportsPage() {
     return filtered
   }, [marketsData])
 
-  // Filter by search
+  // Filter by search and sort by start time (live games first, then soonest)
   const filteredByLeague = useMemo(() => {
-    if (!searchQuery) return gamesByLeague
     const result: Record<string, MoneylineGame[]> = {}
+    
     for (const [league, games] of Object.entries(gamesByLeague)) {
-      result[league] = games.filter((g) => 
-        g.title?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+      // Filter by search if query exists
+      let filtered = searchQuery 
+        ? games.filter((g) => g.title?.toLowerCase().includes(searchQuery.toLowerCase()))
+        : games
+      
+      // Sort: live games first, then by start time (soonest first)
+      filtered = [...filtered].sort((a, b) => {
+        const aLive = isGameLive(a.startTime)
+        const bLive = isGameLive(b.startTime)
+        
+        // Live games come first
+        if (aLive && !bLive) return -1
+        if (!aLive && bLive) return 1
+        
+        // Sort by start time (soonest first)
+        const aTime = a.startTime ? new Date(a.startTime).getTime() : Infinity
+        const bTime = b.startTime ? new Date(b.startTime).getTime() : Infinity
+        return aTime - bTime
+      })
+      
+      result[league] = filtered
     }
+    
     return result
   }, [gamesByLeague, searchQuery])
 
@@ -324,9 +383,23 @@ export default function SportsPage() {
 
                   return (
                     <section key={league}>
-                      {/* League Header */}
-                      <div className="flex items-center justify-between mb-3">
-                        <h2 className="text-white font-semibold text-base">{league}</h2>
+                      {/* League Header with Logo */}
+                      <div className="flex items-center justify-between mb-3 px-1">
+                        <div className="flex items-center gap-2">
+                          {LEAGUE_LOGOS[league] && (
+                            <div className="w-6 h-6 rounded-md overflow-hidden bg-white/10 flex items-center justify-center">
+                              <Image 
+                                src={LEAGUE_LOGOS[league]} 
+                                alt={league}
+                                width={20}
+                                height={20}
+                                className="object-contain"
+                                unoptimized
+                              />
+                            </div>
+                          )}
+                          <h2 className="text-white font-semibold text-base">{league}</h2>
+                        </div>
                         <span className="text-white/40 text-xs">{games.length} {games.length === 1 ? 'game' : 'games'}</span>
                       </div>
 
@@ -379,6 +452,9 @@ export default function SportsPage() {
           <div className="relative w-full max-w-[420px]">
             <PolymarketTradingPanel
               market={selectedGame.rawMarket}
+              homeTeam={selectedGame.homeTeam}
+              awayTeam={selectedGame.awayTeam}
+              initialOutcome={selectedOutcomeIdx}
               onClose={() => {
                 closeTradeModal()
                 refetchBalance()
@@ -436,16 +512,30 @@ function GameCard({
   // Abbreviations
   const abbrev1 = team1?.abbreviation || outcome1.name?.split(' ').pop()?.slice(0, 3).toUpperCase() || 'T1'
   const abbrev2 = team2?.abbreviation || outcome2.name?.split(' ').pop()?.slice(0, 3).toUpperCase() || 'T2'
+  
+  // Check if game is live
+  const live = isGameLive(game.startTime)
+  const gameTime = formatGameTime(game.startTime)
 
   return (
     <div className="flex-shrink-0 w-[270px] bg-[#14141c] rounded-2xl border border-white/[0.06] overflow-hidden shadow-lg shadow-black/20 hover:border-white/[0.1] transition-all">
       {/* Card content */}
       <div className="p-4">
-        {/* Title */}
-        <h3 className="text-white font-medium text-sm leading-snug line-clamp-2 mb-1 min-h-[40px]">
-          {game.title}
-        </h3>
-        <p className="text-white/40 text-[11px] mb-4">{formatVolume(game.volume)} volume</p>
+        {/* Title with time/live indicator */}
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <h3 className="text-white font-medium text-sm leading-snug line-clamp-2 flex-1 min-h-[40px]">
+            {game.title}
+          </h3>
+          {live ? (
+            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-500/20 rounded text-red-400 flex-shrink-0">
+              <div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-pulse" />
+              <span className="text-[10px] font-semibold uppercase">Live</span>
+            </div>
+          ) : gameTime ? (
+            <span className="text-white/40 text-[10px] flex-shrink-0">{gameTime}</span>
+          ) : null}
+        </div>
+        <p className="text-white/40 text-[11px] mb-3">{formatVolume(game.volume)} volume</p>
 
         {/* Teams Row */}
         <div className="flex items-center justify-between mb-4">
@@ -502,7 +592,7 @@ function GameCard({
           </div>
         </div>
 
-        {/* Price Buttons */}
+        {/* Price Buttons - Team vs Team style */}
         <div className="flex gap-2">
           <button
             onClick={() => onOutcomeClick(game, 0)}

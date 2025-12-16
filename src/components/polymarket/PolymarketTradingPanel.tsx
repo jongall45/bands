@@ -30,15 +30,33 @@ import {
   upsertMarketTokenMapping,
 } from '@/lib/polymarket/positions'
 
+interface TeamInfo {
+  name: string
+  abbreviation: string
+  logo?: string
+  color?: string
+}
+
 interface PolymarketTradingPanelProps {
   market: PolymarketMarket
   onClose: () => void
+  // Optional team info for sports games - enables Team vs Team display
+  homeTeam?: TeamInfo | null
+  awayTeam?: TeamInfo | null
+  // Preselected outcome index (0 = YES/home, 1 = NO/away)
+  initialOutcome?: 0 | 1
 }
 
 type Outcome = 'YES' | 'NO'
 type TradeAction = 'BUY' | 'SELL'
 
-export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPanelProps) {
+export function PolymarketTradingPanel({ 
+  market, 
+  onClose,
+  homeTeam,
+  awayTeam,
+  initialOutcome,
+}: PolymarketTradingPanelProps) {
   const { authenticated, login } = usePrivy()
   const { wallets } = useWallets()
   const queryClient = useQueryClient()
@@ -48,7 +66,27 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
     return wallets.find(w => w.walletClientType === 'privy')
   }, [wallets])
   
-  const [selectedOutcome, setSelectedOutcome] = useState<Outcome>('YES')
+  // Check if this is a sports market with team info
+  const isSportsMarket = !!(homeTeam && awayTeam)
+  
+  // For sports markets: YES = home team, NO = away team
+  const getOutcomeLabel = useCallback((outcome: Outcome) => {
+    if (!isSportsMarket) return outcome
+    return outcome === 'YES' 
+      ? homeTeam?.abbreviation || homeTeam?.name || 'YES'
+      : awayTeam?.abbreviation || awayTeam?.name || 'NO'
+  }, [isSportsMarket, homeTeam, awayTeam])
+  
+  const getOutcomeColor = useCallback((outcome: Outcome) => {
+    if (!isSportsMarket) return outcome === 'YES' ? '#22C55E' : '#EF4444'
+    return outcome === 'YES'
+      ? homeTeam?.color || '#22C55E'
+      : awayTeam?.color || '#EF4444'
+  }, [isSportsMarket, homeTeam, awayTeam])
+  
+  const [selectedOutcome, setSelectedOutcome] = useState<Outcome>(
+    initialOutcome === 1 ? 'NO' : 'YES'
+  )
   const [tradeAction, setTradeAction] = useState<TradeAction>('BUY')
   const [amount, setAmount] = useState('')
   const [showBridgeModal, setShowBridgeModal] = useState(false)
@@ -375,23 +413,29 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
           <p className="text-green-400/60 text-xs mb-2">Your Position</p>
           <div className="flex gap-2">
             {userYesShares > 0 && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-green-500/20 rounded-lg">
-                <TrendingUp className="w-3.5 h-3.5 text-green-400" />
-                <span className="text-green-400 text-sm font-semibold">
-                  {userYesShares.toFixed(2)} YES
+              <div 
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg"
+                style={{ backgroundColor: `${getOutcomeColor('YES')}33` }}
+              >
+                {!isSportsMarket && <TrendingUp className="w-3.5 h-3.5 text-green-400" />}
+                <span className="text-sm font-semibold" style={{ color: getOutcomeColor('YES') }}>
+                  {userYesShares.toFixed(2)} {getOutcomeLabel('YES')}
                 </span>
-                <span className="text-green-400/60 text-xs">
+                <span className="text-xs" style={{ color: `${getOutcomeColor('YES')}99` }}>
                   ≈ ${(userYesShares * yesPrice).toFixed(2)}
                 </span>
               </div>
             )}
             {userNoShares > 0 && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-red-500/20 rounded-lg">
-                <TrendingDown className="w-3.5 h-3.5 text-red-400" />
-                <span className="text-red-400 text-sm font-semibold">
-                  {userNoShares.toFixed(2)} NO
+              <div 
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg"
+                style={{ backgroundColor: `${getOutcomeColor('NO')}33` }}
+              >
+                {!isSportsMarket && <TrendingDown className="w-3.5 h-3.5 text-red-400" />}
+                <span className="text-sm font-semibold" style={{ color: getOutcomeColor('NO') }}>
+                  {userNoShares.toFixed(2)} {getOutcomeLabel('NO')}
                 </span>
-                <span className="text-red-400/60 text-xs">
+                <span className="text-xs" style={{ color: `${getOutcomeColor('NO')}99` }}>
                   ≈ ${(userNoShares * noPrice).toFixed(2)}
                 </span>
               </div>
@@ -442,31 +486,33 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
         </button>
       </div>
 
-      {/* Outcome Selector */}
+      {/* Outcome Selector - Team vs Team for sports, YES/NO otherwise */}
       <div className="flex gap-2 mb-4">
         <button
           onClick={() => setSelectedOutcome('YES')}
           disabled={isLoading}
-          className={`flex-1 py-3.5 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
-            selectedOutcome === 'YES'
-              ? 'bg-green-500 text-white'
-              : 'bg-white/[0.05] text-white/60 hover:bg-white/[0.08]'
-          }`}
+          className="flex-1 py-3.5 rounded-xl font-semibold transition-all flex items-center justify-center gap-2"
+          style={{
+            backgroundColor: selectedOutcome === 'YES' ? getOutcomeColor('YES') : 'rgba(255,255,255,0.05)',
+            color: selectedOutcome === 'YES' ? 'white' : 'rgba(255,255,255,0.6)',
+            boxShadow: selectedOutcome === 'YES' ? `0 4px 14px ${getOutcomeColor('YES')}40` : 'none',
+          }}
         >
-          <TrendingUp className="w-4 h-4" />
-          YES {formatProbability(yesPrice)}
+          {!isSportsMarket && <TrendingUp className="w-4 h-4" />}
+          {getOutcomeLabel('YES')} {formatProbability(yesPrice)}
         </button>
         <button
           onClick={() => setSelectedOutcome('NO')}
           disabled={isLoading}
-          className={`flex-1 py-3.5 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
-            selectedOutcome === 'NO'
-              ? 'bg-red-500 text-white'
-              : 'bg-white/[0.05] text-white/60 hover:bg-white/[0.08]'
-          }`}
+          className="flex-1 py-3.5 rounded-xl font-semibold transition-all flex items-center justify-center gap-2"
+          style={{
+            backgroundColor: selectedOutcome === 'NO' ? getOutcomeColor('NO') : 'rgba(255,255,255,0.05)',
+            color: selectedOutcome === 'NO' ? 'white' : 'rgba(255,255,255,0.6)',
+            boxShadow: selectedOutcome === 'NO' ? `0 4px 14px ${getOutcomeColor('NO')}40` : 'none',
+          }}
         >
-          <TrendingDown className="w-4 h-4" />
-          NO {formatProbability(noPrice)}
+          {!isSportsMarket && <TrendingDown className="w-4 h-4" />}
+          {getOutcomeLabel('NO')} {formatProbability(noPrice)}
         </button>
       </div>
 

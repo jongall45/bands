@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { X, ArrowDown, Loader2, Check, AlertCircle, ChevronDown, ExternalLink } from 'lucide-react'
+import { X, ArrowDown, Loader2, Check, AlertCircle, ChevronDown, ExternalLink, Copy, Wallet } from 'lucide-react'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { useBalance } from 'wagmi'
@@ -86,6 +86,9 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
   const { client: smartWalletClient, getClientForChain } = useSmartWallets()
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
   const smartWalletAddress = smartWalletClient?.account?.address
+  
+  // The EOA trading wallet for Polymarket - this is where USDC.e goes for trading
+  const tradingWalletAddress = embeddedWallet?.address
 
   const [sourceChain, setSourceChain] = useState<ChainKey>('base')
   const [showSourceDropdown, setShowSourceDropdown] = useState(false)
@@ -95,6 +98,19 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
   const [quote, setQuote] = useState<DepositQuote | null>(null)
   const [txHash, setTxHash] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
+  const [copied, setCopied] = useState(false)
+  
+  // Copy address to clipboard
+  const copyAddress = useCallback(async () => {
+    if (!tradingWalletAddress) return
+    try {
+      await navigator.clipboard.writeText(tradingWalletAddress)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }, [tradingWalletAddress])
   
   const inputRef = useRef<HTMLInputElement>(null)
   const quoteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -365,7 +381,7 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-white font-semibold text-lg">
               {title || `Bridge to ${destConfig.name}`}
@@ -373,11 +389,6 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
             <p className="text-white/40 text-sm">
               {subtitle || `Move ${destConfig.usdcLabel} to ${destConfig.name}`}
             </p>
-            {destinationChain === 'polygon' && (
-              <p className="text-blue-400/70 text-xs mt-1">
-                Polymarket requires USDC.e on Polygon
-              </p>
-            )}
           </div>
           <button
             onClick={onClose}
@@ -387,6 +398,47 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
             <X className="w-5 h-5 text-white/60" />
           </button>
         </div>
+
+        {/* Trading Wallet Card - Polymarket EOA */}
+        {destinationChain === 'polygon' && (
+          <div className="bg-[#3B5EE8]/10 border border-[#3B5EE8]/30 rounded-xl p-3 mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Wallet className="w-4 h-4 text-[#3B5EE8]" />
+              <span className="text-white/80 text-xs font-medium">Trading Wallet (Polymarket)</span>
+            </div>
+            {tradingWalletAddress ? (
+              <div className="flex items-center justify-between gap-2">
+                <code className="text-white/90 text-sm font-mono bg-black/20 px-2 py-1 rounded flex-1 truncate">
+                  {tradingWalletAddress.slice(0, 6)}...{tradingWalletAddress.slice(-4)}
+                </code>
+                <button
+                  onClick={copyAddress}
+                  className="flex items-center gap-1 px-2 py-1 bg-[#3B5EE8]/20 hover:bg-[#3B5EE8]/30 rounded text-[#3B5EE8] text-xs font-medium transition-colors"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-3 h-3" />
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3" />
+                      Copy
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="h-6 bg-white/10 rounded animate-pulse flex-1" />
+                <span className="text-white/40 text-xs">Loading wallet...</span>
+              </div>
+            )}
+            <p className="text-[#3B5EE8]/70 text-[11px] mt-2">
+              Send USDC.e on Polygon only • This is your Polymarket trading EOA
+            </p>
+          </div>
+        )}
 
         {status === 'complete' ? (
           <div className="flex flex-col items-center py-8">
