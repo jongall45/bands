@@ -382,81 +382,50 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
       />
 
       <div 
-        className="relative w-full max-w-[400px] bg-[#0a0a0a] border border-white/10 rounded-3xl p-6 max-h-[90vh] overflow-y-auto"
+        className="relative w-full max-w-[380px] bg-[#0a0a0a] border border-white/10 rounded-2xl p-4"
         style={{ zIndex: 100000 }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-white font-semibold text-lg">
-              {title || `Bridge to ${destConfig.name}`}
-            </h2>
-            <p className="text-white/40 text-sm">
-              {subtitle || `Move ${destConfig.usdcLabel} to ${destConfig.name}`}
-            </p>
-          </div>
+        {/* Compact Header */}
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-white font-semibold text-base">
+            {title || 'Fund Trading Wallet'}
+          </h2>
           <button
             onClick={onClose}
             disabled={isLoading}
-            className="p-2 hover:bg-white/10 rounded-full disabled:opacity-50"
+            className="p-1.5 hover:bg-white/10 rounded-full disabled:opacity-50"
           >
-            <X className="w-5 h-5 text-white/60" />
+            <X className="w-4 h-4 text-white/60" />
           </button>
         </div>
 
-        {/* Trading Wallet Card - Polymarket EOA */}
-        {destinationChain === 'polygon' && (
-          <div className="bg-[#3B5EE8]/10 border border-[#3B5EE8]/30 rounded-xl p-3 mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Wallet className="w-4 h-4 text-[#3B5EE8]" />
-              <span className="text-white/80 text-xs font-medium">Trading Wallet (Polymarket)</span>
+        {/* Compact Trading Wallet - Polymarket EOA */}
+        {destinationChain === 'polygon' && tradingWalletAddress && (
+          <div className="flex items-center justify-between bg-[#3B5EE8]/10 border border-[#3B5EE8]/20 rounded-lg px-3 py-2 mb-3">
+            <div className="flex items-center gap-2">
+              <Wallet className="w-3.5 h-3.5 text-[#3B5EE8]" />
+              <code className="text-white/80 text-xs font-mono">
+                {tradingWalletAddress.slice(0, 6)}...{tradingWalletAddress.slice(-4)}
+              </code>
             </div>
-            {tradingWalletAddress ? (
-              <div className="flex items-center justify-between gap-2">
-                <code className="text-white/90 text-sm font-mono bg-black/20 px-2 py-1 rounded flex-1 truncate">
-                  {tradingWalletAddress.slice(0, 6)}...{tradingWalletAddress.slice(-4)}
-                </code>
-                <button
-                  onClick={copyAddress}
-                  className="flex items-center gap-1 px-2 py-1 bg-[#3B5EE8]/20 hover:bg-[#3B5EE8]/30 rounded text-[#3B5EE8] text-xs font-medium transition-colors"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="w-3 h-3" />
-                      Copied
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3 h-3" />
-                      Copy
-                    </>
-                  )}
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <div className="h-6 bg-white/10 rounded animate-pulse flex-1" />
-                <span className="text-white/40 text-xs">Loading wallet...</span>
-              </div>
-            )}
-            <p className="text-[#3B5EE8]/70 text-[11px] mt-2">
-              Funds are sent to your Polymarket trading wallet • USDC.e only
-            </p>
+            <button
+              onClick={copyAddress}
+              className="text-[#3B5EE8] text-[10px] font-medium hover:underline"
+            >
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
           </div>
         )}
 
         {status === 'complete' ? (
-          <div className="flex flex-col items-center py-8">
-            <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-4">
-              <Check className="w-8 h-8 text-green-400" />
+          <div className="flex flex-col items-center py-4">
+            <div className="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center mb-3">
+              <Check className="w-6 h-6 text-green-400" />
             </div>
-            <h3 className="text-white font-semibold text-lg mb-2">Bridge Complete!</h3>
-            <p className="text-white/40 text-sm text-center mb-2">
-              {destinationChain === 'polygon' 
-                ? 'Funds sent to your Polymarket trading wallet'
-                : `Your ${destConfig.usdcLabel} is now on ${destConfig.name}`
-              }
+            <h3 className="text-white font-semibold text-base mb-1">Bridge Complete!</h3>
+            <p className="text-white/40 text-xs text-center mb-3">
+              Funds sent to your trading wallet
             </p>
             
             {txHash && (
@@ -464,7 +433,7 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
                 href={getExplorerUrl(sourceChain, txHash)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-400 text-xs hover:underline mb-4 flex items-center gap-1"
+                className="text-blue-400 text-[11px] hover:underline mb-3 flex items-center gap-1"
               >
                 View transaction <ExternalLink className="w-3 h-3" />
               </a>
@@ -475,30 +444,30 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
                 onSuccess()
                 onClose()
               }}
-              className="w-full py-3 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-xl"
+              className="w-full py-2.5 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg text-sm"
             >
               Done
             </button>
           </div>
         ) : (
           <>
-            {/* FROM section with chain dropdown */}
-            <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 mb-3">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-white/50 text-sm">From</span>
+            {/* FROM section - compact */}
+            <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 mb-2">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-white/40 text-xs">From</span>
                 <div className="relative">
                   <button
                     onClick={() => setShowSourceDropdown(!showSourceDropdown)}
                     disabled={isLoading}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.05] hover:bg-white/[0.08] rounded-xl transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-2 py-1 bg-white/[0.05] hover:bg-white/[0.08] rounded-lg transition-colors disabled:opacity-50"
                   >
-                    <img src={sourceConfig.logo} alt={sourceConfig.name} className="w-5 h-5 rounded-full" />
-                    <span className="text-white text-sm font-medium">{sourceConfig.name}</span>
-                    <ChevronDown className="w-4 h-4 text-white/40" />
+                    <img src={sourceConfig.logo} alt={sourceConfig.name} className="w-4 h-4 rounded-full" />
+                    <span className="text-white text-xs font-medium">{sourceConfig.name}</span>
+                    <ChevronDown className="w-3 h-3 text-white/40" />
                   </button>
 
                   {showSourceDropdown && (
-                    <div className="absolute right-0 top-full mt-1 bg-[#1a1a1a] border border-white/10 rounded-xl overflow-hidden z-10 min-w-[180px]">
+                    <div className="absolute right-0 top-full mt-1 bg-[#1a1a1a] border border-white/10 rounded-lg overflow-hidden z-10 min-w-[160px]">
                       {availableSourceChains.map(chain => {
                         const config = CHAINS[chain]
                         const bal = balances[chain]
@@ -511,14 +480,14 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
                               setQuote(null)
                               setStatus('idle')
                             }}
-                            className={`w-full px-4 py-3 flex items-center gap-3 hover:bg-white/[0.05] transition-colors ${
+                            className={`w-full px-3 py-2 flex items-center gap-2 hover:bg-white/[0.05] transition-colors ${
                               chain === sourceChain ? 'bg-white/[0.05]' : ''
                             }`}
                           >
-                            <img src={config.logo} alt={config.name} className="w-6 h-6 rounded-full" />
+                            <img src={config.logo} alt={config.name} className="w-5 h-5 rounded-full" />
                             <div className="flex-1 text-left">
-                              <div className="text-white text-sm font-medium">{config.name}</div>
-                              <div className="text-white/40 text-xs">{parseFloat(bal).toFixed(2)} {config.usdcLabel}</div>
+                              <div className="text-white text-xs font-medium">{config.name}</div>
+                              <div className="text-white/40 text-[10px]">{parseFloat(bal).toFixed(2)} {config.usdcLabel}</div>
                             </div>
                           </button>
                         )
@@ -528,7 +497,7 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <input
                   ref={inputRef}
                   type="text"
@@ -537,140 +506,112 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
                   value={inputValue}
                   onChange={handleInputChange}
                   disabled={isLoading}
-                  className="flex-1 bg-transparent text-white text-3xl font-semibold outline-none placeholder:text-white/20 disabled:opacity-50 focus:outline-none"
+                  className="flex-1 bg-transparent text-white text-2xl font-semibold outline-none placeholder:text-white/20 disabled:opacity-50 min-w-0"
+                  style={{ border: 'none', boxShadow: 'none' }}
                 />
-                <div className="flex items-center gap-2 bg-white/[0.05] rounded-xl px-3 py-2">
+                <div className="flex items-center gap-1.5 bg-white/[0.05] rounded-lg px-2 py-1.5 flex-shrink-0">
                   <img 
                     src="https://cryptologos.cc/logos/usd-coin-usdc-logo.png" 
                     alt="USDC" 
-                    className="w-6 h-6 rounded-full"
+                    className="w-5 h-5 rounded-full"
                   />
-                  <span className="text-white font-semibold">{sourceConfig.usdcLabel}</span>
+                  <span className="text-white text-sm font-medium">{sourceConfig.usdcLabel}</span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between mt-3">
-                <span className="text-white/30 text-sm">≈ ${amountNum.toFixed(2)}</span>
+              <div className="flex items-center justify-end mt-1.5">
                 <button
                   onClick={handleMax}
                   disabled={isLoading}
-                  className="text-[#3B5EE8] text-xs font-medium hover:underline disabled:opacity-50"
+                  className="text-[#3B5EE8] text-[11px] font-medium hover:underline disabled:opacity-50"
                 >
-                  Balance: {parseFloat(sourceBalance).toFixed(2)} {sourceConfig.usdcLabel}
+                  Max: {parseFloat(sourceBalance).toFixed(2)}
                 </button>
               </div>
             </div>
 
-            {/* Arrow */}
-            <div className="flex justify-center -my-1 relative z-10">
-              <div className="w-10 h-10 bg-[#1a1a1a] rounded-full flex items-center justify-center border border-white/10">
-                <ArrowDown className="w-5 h-5 text-[#3B5EE8]" />
+            {/* Arrow - compact */}
+            <div className="flex justify-center -my-1.5 relative z-10">
+              <div className="w-8 h-8 bg-[#1a1a1a] rounded-full flex items-center justify-center border border-white/10">
+                <ArrowDown className="w-4 h-4 text-[#3B5EE8]" />
               </div>
             </div>
 
-            {/* TO section */}
-            <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 mb-4 mt-3">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-white/50 text-sm">To</span>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.05] rounded-xl">
-                  <img src={destConfig.logo} alt={destConfig.name} className="w-5 h-5 rounded-full" />
-                  <span className="text-white text-sm font-medium">{destConfig.name}</span>
+            {/* TO section - compact */}
+            <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 mb-3 mt-2">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-white/40 text-xs">To (Polygon)</span>
+                <div className="flex items-center gap-1.5 px-2 py-1 bg-white/[0.05] rounded-lg">
+                  <img src={destConfig.logo} alt={destConfig.name} className="w-4 h-4 rounded-full" />
+                  <span className="text-white text-xs font-medium">{destConfig.name}</span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <span className="text-white text-3xl font-semibold">
+              <div className="flex items-center gap-2">
+                <span className="text-white text-2xl font-semibold flex-1">
                   {status === 'quoting' ? '...' : 
                    quote ? parseFloat(quote.amountOut).toFixed(2) : 
                    amountNum > 0 ? amountNum.toFixed(2) : '0.00'}
                 </span>
-                <div className="flex items-center gap-2 bg-white/[0.05] rounded-xl px-3 py-2">
+                <div className="flex items-center gap-1.5 bg-white/[0.05] rounded-lg px-2 py-1.5 flex-shrink-0">
                   <img 
                     src="https://cryptologos.cc/logos/usd-coin-usdc-logo.png" 
                     alt="USDC" 
-                    className="w-6 h-6 rounded-full"
+                    className="w-5 h-5 rounded-full"
                   />
-                  <span className="text-white font-semibold">{destConfig.usdcLabel}</span>
+                  <span className="text-white text-sm font-medium">{destConfig.usdcLabel}</span>
                 </div>
-              </div>
-
-              <div className="flex items-center justify-between mt-3">
-                <span className="text-white/30 text-sm">
-                  ≈ ${quote ? parseFloat(quote.amountOut).toFixed(2) : '0.00'}
-                </span>
-                <span className="text-white/30 text-xs">Current: {parseFloat(destBalance).toFixed(2)} {destConfig.usdcLabel}</span>
               </div>
             </div>
 
-            {/* Quote info */}
+            {/* Quote info - inline and compact */}
             {quote && (
-              <div className="bg-white/[0.02] rounded-xl p-3 mb-4 text-xs">
-                <div className="flex justify-between mb-1">
-                  <span className="text-white/50">Fee</span>
-                  <span className="text-white/70">${quote.fees.total}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white/50">Time</span>
-                  <span className="text-white/70">~30 seconds</span>
-                </div>
+              <div className="flex items-center justify-between text-[11px] text-white/40 mb-3 px-1">
+                <span>Fee: ${quote.fees.total}</span>
+                <span>~30 seconds</span>
               </div>
             )}
 
-            {/* Status messages */}
-            {status === 'quoting' && (
-              <div className="flex items-center gap-2 mb-4 p-3 bg-white/5 rounded-xl">
-                <Loader2 className="w-4 h-4 text-white/60 animate-spin" />
-                <span className="text-white/60 text-sm">Getting quote...</span>
-              </div>
-            )}
-
-            {(status === 'confirming' || status === 'depositing') && (
-              <div className="flex items-center gap-2 mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-                <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
-                <span className="text-blue-400 text-sm">
-                  {status === 'confirming' ? 'Confirm in wallet...' : 'Sending to bridge...'}
+            {/* Status messages - compact */}
+            {(status === 'confirming' || status === 'depositing' || status === 'bridging') && (
+              <div className="flex items-center gap-2 mb-3 p-2 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                <span className="text-blue-400 text-xs">
+                  {status === 'confirming' ? 'Confirm in wallet...' : 
+                   status === 'depositing' ? 'Sending...' : 'Bridging...'}
                 </span>
-              </div>
-            )}
-
-            {status === 'bridging' && (
-              <div className="mb-4 p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl">
-                <div className="flex items-center gap-2 mb-2">
-                  <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
-                  <span className="text-purple-400 text-sm">Bridge in progress...</span>
-                </div>
-                {txHash && (
+                {txHash && status === 'bridging' && (
                   <a
                     href={getExplorerUrl(sourceChain, txHash)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-purple-400/70 text-xs hover:underline flex items-center gap-1"
+                    className="text-blue-400/70 text-[10px] hover:underline ml-auto"
                   >
-                    View transaction <ExternalLink className="w-3 h-3" />
+                    View tx
                   </a>
                 )}
               </div>
             )}
 
-            {/* Error */}
+            {/* Error - compact */}
             {error && status === 'error' && (
-              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                <span className="text-red-400 text-sm">{error}</span>
+              <div className="mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2">
+                <AlertCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                <span className="text-red-400 text-xs">{error}</span>
               </div>
             )}
 
-            {/* Bridge button */}
+            {/* Bridge button - compact */}
             <button
               onClick={executeBridge}
               disabled={!canBridge || isLoading}
-              className="w-full py-4 bg-[#3B5EE8] hover:bg-[#2D4BC0] disabled:bg-[#3B5EE8]/30 disabled:cursor-not-allowed text-white font-semibold rounded-2xl flex items-center justify-center gap-2 transition-colors"
+              className="w-full py-3 bg-[#3B5EE8] hover:bg-[#2D4BC0] disabled:bg-[#3B5EE8]/30 disabled:cursor-not-allowed text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors text-sm"
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                   {status === 'quoting' ? 'Getting quote...' : 
-                   status === 'confirming' ? 'Confirm in wallet...' :
+                   status === 'confirming' ? 'Confirm...' :
                    status === 'depositing' ? 'Sending...' :
                    status === 'bridging' ? 'Bridging...' : 'Processing...'}
                 </>
@@ -679,14 +620,14 @@ export function BridgeModal({ isOpen, onClose, onSuccess, destinationChain, titl
               ) : amountNum > balanceNum ? (
                 'Insufficient balance'
               ) : !quote ? (
-                'Fetching quote...'
+                status === 'quoting' ? 'Getting quote...' : 'Enter amount'
               ) : (
-                `Bridge $${amountNum.toFixed(2)} ${sourceConfig.usdcLabel}`
+                `Bridge $${amountNum.toFixed(2)}`
               )}
             </button>
 
-            {/* Footer */}
-            <p className="text-center text-white/20 text-xs mt-4">
+            {/* Footer - minimal */}
+            <p className="text-center text-white/20 text-[10px] mt-2">
               Powered by Relay
             </p>
           </>

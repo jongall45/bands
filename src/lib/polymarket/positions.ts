@@ -70,6 +70,11 @@ export interface Position {
   pnl?: number
   pnlPercent?: number
   lastUpdated: number
+  // Team info for sports markets
+  teamName?: string
+  teamLogo?: string
+  teamColor?: string
+  league?: string
 }
 
 export interface TradeRecord {
