@@ -50,6 +50,23 @@ interface PolymarketTradingPanelProps {
 type Outcome = 'YES' | 'NO'
 type TradeAction = 'BUY' | 'SELL'
 
+// Helper to detect league from question text
+function detectLeague(question: string): string | undefined {
+  const q = question.toLowerCase()
+  if (q.includes('nfl') || q.includes('football') || q.includes('bowl') || 
+      q.includes('dolphins') || q.includes('rams') || q.includes('seahawks') || 
+      q.includes('steelers') || q.includes('falcons') || q.includes('cardinals') ||
+      q.includes('chiefs') || q.includes('titans') || q.includes('packers') ||
+      q.includes('eagles') || q.includes('cowboys') || q.includes('patriots')) return 'NFL'
+  if (q.includes('nba') || q.includes('basketball') || q.includes('lakers') || 
+      q.includes('celtics') || q.includes('warriors') || q.includes('heat') ||
+      q.includes('bucks') || q.includes('nuggets')) return 'NBA'
+  if (q.includes('nhl') || q.includes('hockey')) return 'NHL'
+  if (q.includes('mlb') || q.includes('baseball')) return 'MLB'
+  if (q.includes('ncaa') || q.includes('college')) return 'CFB'
+  return undefined
+}
+
 export function PolymarketTradingPanel({ 
   market, 
   onClose,
@@ -119,6 +136,9 @@ export function PolymarketTradingPanel({
       // Track the fill in our positions indexer
       const parsed = parseMarket(market)
       if (tradingWallet && parsed.yesTokenId && parsed.noTokenId) {
+        // Get the team info for the selected outcome
+        const selectedTeam = selectedOutcome === 'YES' ? homeTeam : awayTeam
+        
         await trackFillAndSyncPositions({
           marketId: market.id || market.conditionId,
           conditionId: market.conditionId,
@@ -134,6 +154,11 @@ export function PolymarketTradingPanel({
           shares: parseFloat(estimate?.shares || '0'),
           price: selectedOutcome === 'YES' ? yesPrice : noPrice,
           total: parseFloat(amount) || 0,
+          // CRITICAL: Pass team info for correct portfolio/activity display
+          teamName: selectedTeam?.abbreviation || selectedTeam?.name,
+          teamLogo: selectedTeam?.logo,
+          teamColor: selectedTeam?.color,
+          league: isSportsMarket ? detectLeague(market.question) : undefined,
         })
       }
       
@@ -408,37 +433,20 @@ export function PolymarketTradingPanel({
       )}
 
       {/* Position Indicator - Show if user has a position */}
+      {/* Position - Minimal, no heavy green box */}
       {hasPosition && (
-        <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-xl p-3 mb-3">
-          <p className="text-green-400/60 text-xs mb-2">Your Position</p>
-          <div className="flex gap-2">
+        <div className="flex items-center justify-between px-1 mb-3">
+          <span className="text-white/40 text-xs font-medium">My Position</span>
+          <div className="flex items-center gap-3">
             {userYesShares > 0 && (
-              <div 
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg"
-                style={{ backgroundColor: `${getOutcomeColor('YES')}33` }}
-              >
-                {!isSportsMarket && <TrendingUp className="w-3.5 h-3.5 text-green-400" />}
-                <span className="text-sm font-semibold" style={{ color: getOutcomeColor('YES') }}>
-                  {userYesShares.toFixed(2)} {getOutcomeLabel('YES')}
-                </span>
-                <span className="text-xs" style={{ color: `${getOutcomeColor('YES')}99` }}>
-                  ≈ ${(userYesShares * yesPrice).toFixed(2)}
-                </span>
-              </div>
+              <span className="text-xs" style={{ color: getOutcomeColor('YES') }}>
+                <span className="font-semibold">{userYesShares.toFixed(2)}</span> {getOutcomeLabel('YES')} · ${(userYesShares * yesPrice).toFixed(2)}
+              </span>
             )}
             {userNoShares > 0 && (
-              <div 
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg"
-                style={{ backgroundColor: `${getOutcomeColor('NO')}33` }}
-              >
-                {!isSportsMarket && <TrendingDown className="w-3.5 h-3.5 text-red-400" />}
-                <span className="text-sm font-semibold" style={{ color: getOutcomeColor('NO') }}>
-                  {userNoShares.toFixed(2)} {getOutcomeLabel('NO')}
-                </span>
-                <span className="text-xs" style={{ color: `${getOutcomeColor('NO')}99` }}>
-                  ≈ ${(userNoShares * noPrice).toFixed(2)}
-                </span>
-              </div>
+              <span className="text-xs" style={{ color: getOutcomeColor('NO') }}>
+                <span className="font-semibold">{userNoShares.toFixed(2)}</span> {getOutcomeLabel('NO')} · ${(userNoShares * noPrice).toFixed(2)}
+              </span>
             )}
           </div>
         </div>
@@ -548,14 +556,23 @@ export function PolymarketTradingPanel({
         <div className="flex items-center gap-3">
           <span className="text-white/40 text-xl">$</span>
           <input
-            type="number"
+            type="text"
+            inputMode="decimal"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(e) => {
+              // Only allow valid numeric input
+              const val = e.target.value
+              if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                setAmount(val)
+              }
+            }}
+            // CRITICAL: Prevent scroll wheel from changing amount
+            onWheel={(e) => e.currentTarget.blur()}
             placeholder="0.00"
             disabled={isLoading}
             className="flex-1 bg-transparent text-white text-2xl font-medium outline-none placeholder:text-white/20 disabled:opacity-50"
           />
-          <span className="text-white/40 text-sm">{tradeAction === 'BUY' ? 'USDC' : 'value'}</span>
+          <span className="text-white/40 text-sm">{tradeAction === 'BUY' ? 'USDC' : 'shares'}</span>
         </div>
 
         {/* Quick amounts */}
@@ -593,37 +610,54 @@ export function PolymarketTradingPanel({
         )}
       </div>
 
-      {/* Trade Estimate */}
+      {/* Trade Estimate - Compact, no scroll */}
       {estimate && amountNum > 0 && (
-        <div className={`rounded-2xl p-4 mb-4 ${
-          selectedOutcome === 'YES'
-            ? 'bg-green-500/10 border border-green-500/20'
-            : 'bg-red-500/10 border border-red-500/20'
-        }`}>
-          <div className="flex items-center justify-between mb-2">
-            <span className={selectedOutcome === 'YES' ? 'text-green-400/60' : 'text-red-400/60'}>
-              Est. Shares
-            </span>
-            <span className={`font-semibold ${selectedOutcome === 'YES' ? 'text-green-400' : 'text-red-400'}`}>
-              {estimate.shares}
-            </span>
-          </div>
-          <div className="flex items-center justify-between mb-2">
-            <span className={selectedOutcome === 'YES' ? 'text-green-400/60' : 'text-red-400/60'}>
-              Payout if {selectedOutcome}
-            </span>
-            <span className={`font-semibold ${selectedOutcome === 'YES' ? 'text-green-400' : 'text-red-400'}`}>
-              ${estimate.potentialPayout}
-            </span>
-          </div>
-          <div className="flex items-center justify-between pt-2 border-t border-white/[0.05]">
-            <span className={selectedOutcome === 'YES' ? 'text-green-400/60' : 'text-red-400/60'}>
-              Potential Profit
-            </span>
-            <span className={`font-semibold ${selectedOutcome === 'YES' ? 'text-green-400' : 'text-red-400'}`}>
-              +${estimate.potentialProfit} ({((parseFloat(estimate.potentialProfit) / amountNum) * 100).toFixed(0)}%)
-            </span>
-          </div>
+        <div 
+          className="rounded-xl p-3 mb-3 border"
+          style={{ 
+            backgroundColor: `${getOutcomeColor(selectedOutcome)}10`,
+            borderColor: `${getOutcomeColor(selectedOutcome)}30`,
+          }}
+        >
+          {tradeAction === 'BUY' ? (
+            // BUY MODE: Show shares + payout + profit
+            <>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-white/50 text-sm">Est. Shares</span>
+                <span className="font-semibold text-white">{estimate.shares}</span>
+              </div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-white/50 text-sm">Payout if {getOutcomeLabel(selectedOutcome)} wins</span>
+                <span className="font-semibold text-white">${estimate.potentialPayout}</span>
+              </div>
+              <div className="flex items-center justify-between pt-1.5 border-t border-white/[0.08]">
+                <span className="text-white/50 text-sm">Potential Profit</span>
+                <span 
+                  className="font-semibold"
+                  style={{ color: getOutcomeColor(selectedOutcome) }}
+                >
+                  +${estimate.potentialProfit} ({((parseFloat(estimate.potentialProfit) / amountNum) * 100).toFixed(0)}%)
+                </span>
+              </div>
+            </>
+          ) : (
+            // SELL MODE: Show receive amount (best bid value), NOT "Payout if YES"
+            <>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-white/50 text-sm">Shares to sell</span>
+                <span className="font-semibold text-white">{estimate.shares}</span>
+              </div>
+              <div className="flex items-center justify-between pt-1.5 border-t border-white/[0.08]">
+                <span className="text-white/50 text-sm">You will receive</span>
+                <span 
+                  className="font-semibold"
+                  style={{ color: getOutcomeColor(selectedOutcome) }}
+                >
+                  ${(parseFloat(estimate.shares) * currentPrice).toFixed(2)}
+                </span>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -758,7 +792,7 @@ export function PolymarketTradingPanel({
   )
 }
 
-// Wrapper component - CENTERED CARD MODAL (not bottom sheet)
+// Wrapper component - CENTERED CARD MODAL (not bottom sheet, no scroll)
 function TradingPanelWrapper({ 
   children, 
   onClose 
@@ -767,7 +801,16 @@ function TradingPanelWrapper({
   onClose: () => void 
 }) {
   return (
-    <div className="w-full max-w-[400px] bg-[#1a1a1f] border border-white/[0.1] rounded-3xl max-h-[85vh] overflow-y-auto shadow-2xl">
+    <div 
+      className="w-full max-w-[400px] bg-[#1a1a1f] border border-white/[0.1] rounded-3xl shadow-2xl overflow-hidden"
+      // Prevent scroll wheel from affecting inputs even if scrollable
+      onWheel={(e) => {
+        const target = e.target as HTMLElement
+        if (target.tagName === 'INPUT') {
+          target.blur()
+        }
+      }}
+    >
       {/* Handle */}
       <div className="flex justify-center pt-3 pb-1">
         <div className="w-10 h-1 bg-white/20 rounded-full" />

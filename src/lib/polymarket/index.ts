@@ -65,6 +65,7 @@ export {
   type TradeRecord,
   type PositionsState,
   type TradeSnapshot,
+  type ResolvedOutcome,
   loadTokenMappings,
   saveTokenMappings,
   getMarketTokenMapping,
@@ -83,8 +84,10 @@ export {
   hasPositionInMarket,
   getKnownTokenIds,
   parseErc1155TransfersFromLogs,
-  // NEW: Trade debugging and validation
+  // Trade debugging and validation
   debugTradeSnapshot,
   verifySellableBalance,
   mapPolymarketError,
+  // Outcome resolution - SINGLE SOURCE OF TRUTH for tokenId -> team/outcome mapping
+  resolveOutcomeFromTokenId,
 } from './positions'

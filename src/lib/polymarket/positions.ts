@@ -88,6 +88,136 @@ export interface TradeRecord {
   price: number
   total: number
   timestamp: number
+  // Team info for sports markets (populated from market data at trade time)
+  teamName?: string
+  teamLogo?: string
+  teamColor?: string
+  league?: string
+}
+
+/**
+ * Resolved outcome info - maps a tokenId to the correct team/outcome
+ */
+export interface ResolvedOutcome {
+  outcome: 'YES' | 'NO'
+  label: string          // Team abbreviation or YES/NO
+  name: string           // Full team name or Yes/No
+  logoUrl?: string       // Team logo URL
+  color: string          // Team or outcome color
+  league?: string        // NFL, NBA, etc.
+}
+
+/**
+ * Resolve an outcome from tokenId using market data
+ * 
+ * CRITICAL: This is the SINGLE SOURCE OF TRUTH for mapping tokenId -> team/outcome
+ * 
+ * @param tokenId - The ERC-1155 token ID from positions/trades
+ * @param market - Market object with clobTokenIds and outcomes
+ * @param homeTeam - Optional home team info from sports service
+ * @param awayTeam - Optional away team info from sports service
+ */
+export function resolveOutcomeFromTokenId(
+  tokenId: string,
+  market: {
+    clobTokenIds?: string
+    outcomes?: string
+    question?: string
+  },
+  homeTeam?: { abbreviation?: string; name?: string; logo?: string; color?: string },
+  awayTeam?: { abbreviation?: string; name?: string; logo?: string; color?: string }
+): ResolvedOutcome | null {
+  if (!tokenId || !market) {
+    console.warn('[resolveOutcome] Missing tokenId or market')
+    return null
+  }
+
+  // Parse token IDs from market
+  let tokenIds: string[] = []
+  try {
+    if (typeof market.clobTokenIds === 'string') {
+      tokenIds = JSON.parse(market.clobTokenIds)
+    } else if (Array.isArray(market.clobTokenIds)) {
+      tokenIds = market.clobTokenIds
+    }
+  } catch {
+    console.warn('[resolveOutcome] Failed to parse clobTokenIds')
+    return null
+  }
+
+  // Parse outcome labels
+  let outcomeLabels: string[] = ['Yes', 'No']
+  try {
+    if (typeof market.outcomes === 'string') {
+      outcomeLabels = JSON.parse(market.outcomes)
+    } else if (Array.isArray(market.outcomes)) {
+      outcomeLabels = market.outcomes
+    }
+  } catch {
+    // Use defaults
+  }
+
+  // Find which index matches the tokenId
+  const tokenIndex = tokenIds.findIndex(t => t === tokenId)
+  
+  if (tokenIndex === -1) {
+    console.warn(`[resolveOutcome] TokenId ${tokenId} not found in market tokens:`, tokenIds)
+    return null
+  }
+
+  // Determine YES/NO based on index (0 = YES/home, 1 = NO/away)
+  const isYes = tokenIndex === 0
+  const outcome = isYes ? 'YES' : 'NO'
+  
+  // Get the outcome label from market data
+  const marketLabel = outcomeLabels[tokenIndex] || (isYes ? 'Yes' : 'No')
+  
+  // For sports markets with team info, use team data
+  if (homeTeam || awayTeam) {
+    const team = isYes ? homeTeam : awayTeam
+    if (team) {
+      return {
+        outcome,
+        label: team.abbreviation || marketLabel,
+        name: team.name || marketLabel,
+        logoUrl: team.logo,
+        color: team.color || (isYes ? '#22C55E' : '#EF4444'),
+        league: detectLeagueFromQuestion(market.question || ''),
+      }
+    }
+  }
+
+  // Fallback: try to extract team name from outcome label
+  const isSportsMarket = marketLabel !== 'Yes' && marketLabel !== 'No' && 
+                          marketLabel !== 'YES' && marketLabel !== 'NO'
+  
+  return {
+    outcome,
+    label: marketLabel,
+    name: marketLabel,
+    logoUrl: undefined,
+    color: isYes ? '#22C55E' : '#EF4444',
+    league: isSportsMarket ? detectLeagueFromQuestion(market.question || '') : undefined,
+  }
+}
+
+/**
+ * Detect league from question text
+ */
+function detectLeagueFromQuestion(question: string): string | undefined {
+  const q = question.toLowerCase()
+  if (q.includes('nfl') || q.includes('football') || q.includes('bowl') || 
+      q.includes('dolphins') || q.includes('rams') || q.includes('seahawks') || 
+      q.includes('steelers') || q.includes('falcons') || q.includes('cardinals') ||
+      q.includes('chiefs') || q.includes('titans') || q.includes('packers') ||
+      q.includes('eagles') || q.includes('cowboys') || q.includes('patriots')) return 'NFL'
+  if (q.includes('nba') || q.includes('basketball') || q.includes('lakers') || 
+      q.includes('celtics') || q.includes('warriors') || q.includes('heat') ||
+      q.includes('bucks') || q.includes('nuggets')) return 'NBA'
+  if (q.includes('nhl') || q.includes('hockey')) return 'NHL'
+  if (q.includes('mlb') || q.includes('baseball')) return 'MLB'
+  if (q.includes('ncaa') || q.includes('college')) return 'CFB'
+  return undefined
 }
 
 export interface PositionsState {
@@ -530,6 +660,23 @@ export async function syncPositionsForWallet(walletAddress: string): Promise<Pos
   const tokensWithBalance = allBalances.filter(b => b.balance > BigInt(0)).map(b => b.tokenId)
   const prices = await fetchMarketPrices(tokensWithBalance)
 
+  // Load trade history to get team info for positions
+  const tradeHistory = loadTradeHistory()
+  
+  // Build a map of tokenId -> most recent trade with team info
+  const tokenToTeamInfo = new Map<string, { teamName?: string; teamLogo?: string; teamColor?: string; league?: string }>()
+  for (const trade of tradeHistory) {
+    if (trade.tokenId && (trade.teamName || trade.teamLogo || trade.teamColor)) {
+      // Use the most recent trade's team info (later trades overwrite)
+      tokenToTeamInfo.set(trade.tokenId, {
+        teamName: trade.teamName,
+        teamLogo: trade.teamLogo,
+        teamColor: trade.teamColor,
+        league: trade.league,
+      })
+    }
+  }
+
   // Build position objects
   for (const balance of allBalances) {
     if (balance.balance === BigInt(0)) continue
@@ -553,6 +700,9 @@ export async function syncPositionsForWallet(walletAddress: string): Promise<Pos
       pnlPercent = (pnl / totalCost) * 100
     }
 
+    // Get team info from trade history (SINGLE SOURCE OF TRUTH)
+    const teamInfo = tokenToTeamInfo.get(balance.tokenId) || {}
+
     positions.push({
       marketId: mapping.marketId,
       conditionId: mapping.conditionId,
@@ -568,6 +718,11 @@ export async function syncPositionsForWallet(walletAddress: string): Promise<Pos
       pnl,
       pnlPercent,
       lastUpdated: Date.now(),
+      // Team info from trade records - CRITICAL for correct display
+      teamName: teamInfo.teamName,
+      teamLogo: teamInfo.teamLogo,
+      teamColor: teamInfo.teamColor,
+      league: teamInfo.league,
     })
 
     totalValue += value
@@ -629,6 +784,8 @@ export function loadCachedPositions(walletAddress: string): PositionsState | nul
  * Track a trade fill and sync positions
  * 
  * Called after a successful BUY/SELL order
+ * 
+ * CRITICAL: Pass teamName/teamLogo/teamColor for correct position attribution
  */
 export async function trackFillAndSyncPositions({
   marketId,
@@ -645,6 +802,11 @@ export async function trackFillAndSyncPositions({
   shares,
   price,
   total,
+  // Team info for sports markets - MUST be passed for correct attribution
+  teamName,
+  teamLogo,
+  teamColor,
+  league,
 }: {
   marketId: string
   conditionId: string
@@ -660,6 +822,11 @@ export async function trackFillAndSyncPositions({
   shares: number
   price: number
   total: number
+  // Team info for sports markets
+  teamName?: string
+  teamLogo?: string
+  teamColor?: string
+  league?: string
 }): Promise<PositionsState> {
   // 1. Store/update token mapping
   upsertMarketTokenMapping({
@@ -674,7 +841,7 @@ export async function trackFillAndSyncPositions({
     source: 'receipt',
   })
 
-  // 2. Record the trade
+  // 2. Record the trade with team info
   addTradeRecord({
     txHash: txHash || '',
     marketId,
@@ -686,6 +853,11 @@ export async function trackFillAndSyncPositions({
     price,
     total,
     timestamp: Date.now(),
+    // Store team info for correct display in portfolio/activity
+    teamName,
+    teamLogo,
+    teamColor,
+    league,
   })
 
   // 3. If we have a tx hash, verify the transfer actually happened

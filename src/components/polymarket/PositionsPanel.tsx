@@ -67,8 +67,11 @@ interface ActivityItem {
   id: string
   type: 'buy' | 'sell' | 'claim' | 'resolved'
   marketTitle: string
-  outcome: string
+  outcome: string           // "YES" / "NO" (raw)
+  outcomeLabel: string      // Team name or YES/NO for display
   teamLogo?: string
+  teamColor?: string
+  league?: string
   timestamp: number
   shares?: number
   price?: number
@@ -251,12 +254,18 @@ export function PositionsPanel({ isOpen, onClose }: PositionsPanelProps) {
     const items: ActivityItem[] = []
     
     // Add trade history (buys and sells)
+    // Use stored teamName from TradeRecord - this is the SINGLE SOURCE OF TRUTH
     for (const trade of tradeHistory) {
       items.push({
         id: `${trade.txHash}-${trade.marketId}`,
         type: trade.side === 'BUY' ? 'buy' : 'sell',
         marketTitle: trade.conditionId || trade.marketId,
         outcome: trade.outcome,
+        // CRITICAL: Use stored teamName, fallback to outcome if not available
+        outcomeLabel: trade.teamName || trade.outcome,
+        teamLogo: trade.teamLogo,
+        teamColor: trade.teamColor,
+        league: trade.league,
         timestamp: trade.timestamp,
         shares: trade.shares,
         price: trade.price,
@@ -273,7 +282,11 @@ export function PositionsPanel({ isOpen, onClose }: PositionsPanelProps) {
         type: 'resolved',
         marketTitle: pos.question,
         outcome: pos.outcome,
-        teamLogo: pos.imageUrl,
+        // Use stored team info from position
+        outcomeLabel: pos.teamName || pos.outcome,
+        teamLogo: pos.teamLogo || pos.imageUrl,
+        teamColor: pos.teamColor,
+        league: pos.league,
         timestamp: pos.lastUpdated,
         shares: pos.shares,
         amount: pos.didWin ? pos.shares : 0,
@@ -473,22 +486,20 @@ function PositionRow({ position, onClick }: { position: Position; onClick: () =>
   const isYes = position.outcome === 'YES'
   const hasPnl = position.pnl !== undefined
   
-  // Extract team name from position data or question
-  const teamName = position.teamName 
-    || (position.outcome !== 'YES' && position.outcome !== 'NO' ? position.outcome : null)
-    || position.question?.split(' vs ')?.[isYes ? 0 : 1]?.trim()?.split(' ').pop()
-    || position.outcome
+  // CRITICAL: Use stored team info from trade records (SINGLE SOURCE OF TRUTH)
+  // DO NOT guess from question text - this causes wrong team attribution
+  const teamName = position.teamName || position.outcome
   
-  // Get team logo - prefer position.teamLogo, fallback to imageUrl
+  // Get team logo - ONLY from stored teamLogo, not imageUrl (market image != team logo)
   const teamLogo = position.teamLogo
   
-  // Get team color or default based on outcome
+  // Get team color from stored data, fallback to generic outcome colors
   const teamColor = position.teamColor || (isYes ? '#22C55E' : '#EF4444')
   
-  // Detect league from question
+  // Use stored league, fallback to detection only if not stored
   const detectLeague = (question: string): string | null => {
     const q = question.toLowerCase()
-    if (q.includes('nfl') || q.includes('football') || q.includes('bowl') || q.includes('dolphins') || q.includes('rams') || q.includes('seahawks') || q.includes('steelers') || q.includes('falcons') || q.includes('cardinals')) return 'NFL'
+    if (q.includes('nfl') || q.includes('football') || q.includes('bowl') || q.includes('dolphins') || q.includes('rams') || q.includes('seahawks') || q.includes('steelers') || q.includes('falcons') || q.includes('cardinals') || q.includes('chiefs') || q.includes('titans')) return 'NFL'
     if (q.includes('nba') || q.includes('basketball') || q.includes('lakers') || q.includes('celtics') || q.includes('warriors')) return 'NBA'
     if (q.includes('nhl') || q.includes('hockey')) return 'NHL'
     if (q.includes('mlb') || q.includes('baseball')) return 'MLB'
@@ -498,6 +509,11 @@ function PositionRow({ position, onClick }: { position: Position; onClick: () =>
   
   const league = position.league || detectLeague(position.question || '')
   const leagueLogo = league ? LEAGUE_LOGOS[league] : null
+  
+  // Warn in console if we're missing team info (should not happen for sports trades)
+  if (!position.teamName && position.league) {
+    console.warn(`[PositionRow] Missing teamName for market ${position.marketId}, tokenId: ${position.tokenId}`)
+  }
 
   return (
     <button
@@ -596,13 +612,29 @@ function ActivityRow({ item }: { item: ActivityItem }) {
     resolved: 'Settled',
   }
 
+  // Get league logo for badge
+  const leagueLogo = item.league ? LEAGUE_LOGOS[item.league] : null
+  
+  // Default team color or use provided
+  const teamColor = item.teamColor || (item.outcome === 'YES' ? '#22C55E' : '#EF4444')
+
   return (
     <div className="bg-white/[0.02] border border-white/[0.04] rounded-xl p-3">
       <div className="flex items-center gap-3">
-        <div className="relative w-10 h-10 rounded-lg bg-white/[0.05] flex items-center justify-center">
+        {/* Team Logo with League Badge */}
+        <div className="relative w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden">
           {item.teamLogo ? (
-            <Image src={item.teamLogo} alt="" fill className="object-cover rounded-lg" unoptimized />
+            <Image src={item.teamLogo} alt={item.outcomeLabel} fill className="object-cover rounded-lg" unoptimized />
+          ) : item.outcomeLabel && item.outcomeLabel !== 'YES' && item.outcomeLabel !== 'NO' ? (
+            // Team abbreviation in team color as fallback
+            <div 
+              className="w-full h-full flex items-center justify-center text-white text-xs font-bold"
+              style={{ backgroundColor: teamColor }}
+            >
+              {item.outcomeLabel.slice(0, 3).toUpperCase()}
+            </div>
           ) : (
+            // Generic icons for non-sports markets
             <>
               {item.type === 'buy' && <TrendingUp className="w-5 h-5 text-green-400" />}
               {item.type === 'sell' && <TrendingDown className="w-5 h-5 text-red-400" />}
@@ -614,6 +646,12 @@ function ActivityRow({ item }: { item: ActivityItem }) {
               )}
             </>
           )}
+          {/* League badge overlay */}
+          {leagueLogo && (
+            <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-[#1a1a1f] overflow-hidden bg-white">
+              <Image src={leagueLogo} alt="" fill className="object-cover" unoptimized />
+            </div>
+          )}
         </div>
         
         <div className="flex-1 min-w-0">
@@ -621,7 +659,13 @@ function ActivityRow({ item }: { item: ActivityItem }) {
             <span className={`text-xs font-medium ${item.type === 'buy' ? 'text-green-400' : item.type === 'sell' ? 'text-red-400' : 'text-white/60'}`}>
               {typeLabels[item.type]}
             </span>
-            <span className="text-white text-sm font-medium line-clamp-1">{item.outcome}</span>
+            {/* CRITICAL: Show team name (outcomeLabel), NOT raw YES/NO */}
+            <span 
+              className="text-sm font-medium line-clamp-1"
+              style={{ color: teamColor }}
+            >
+              {item.outcomeLabel}
+            </span>
           </div>
           <div className="flex items-center gap-2 mt-0.5">
             {item.shares && (
