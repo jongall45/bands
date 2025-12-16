@@ -1,19 +1,16 @@
 'use client'
 
 import { useState, useMemo, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
-import { useAccount, useBalance } from 'wagmi'
+import { useBalance } from 'wagmi'
 import { polygon } from 'viem/chains'
 import { formatUnits } from 'viem'
 import { 
   ArrowLeft, Search, RefreshCw, Loader2, Trophy, Wallet
 } from 'lucide-react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { useQuery } from '@tanstack/react-query'
 
 import { BottomNav } from '@/components/ui/BottomNav'
-import { PolymarketTradingPanel } from '@/components/polymarket/PolymarketTradingPanel'
 import { PositionsPanel } from '@/components/polymarket/PositionsPanel'
 import { BridgeModal } from '@/components/bridge/BridgeModal'
 import { usePolymarketSetup } from '@/hooks/usePolymarketTrade'
@@ -71,14 +68,7 @@ function formatPriceCents(price: number): string {
 }
 
 export default function PolymarketPage() {
-  const { isConnected } = useAccount()
-  const router = useRouter()
-  
-  const { 
-    isReady: isPolymarketReady, 
-    tradingWallet,
-    enableTrading,
-  } = usePolymarketSetup()
+  const { tradingWallet } = usePolymarketSetup()
 
   const [selectedGame, setSelectedGame] = useState<MoneylineGame | null>(null)
   const [selectedOutcomeIndex, setSelectedOutcomeIndex] = useState<number>(0)
@@ -250,7 +240,7 @@ export default function PolymarketPage() {
             {searchQuery && Object.values(filteredByLeague).every(g => g.length === 0) && (
               <div className="text-center py-12">
                 <Search className="w-8 h-8 text-white/20 mx-auto mb-3" />
-                <p className="text-white/40">No games match "{searchQuery}"</p>
+                <p className="text-white/40">No games match &ldquo;{searchQuery}&rdquo;</p>
               </div>
             )}
           </div>
@@ -306,7 +296,7 @@ function GameCard({
   const outcome2 = game.outcomes[1]
   
   // Generate consistent team colors based on name
-  const getTeamColor = (name: string, fallback: string) => {
+  const getTeamColor = (name: string) => {
     // Common team colors
     const teamColors: Record<string, string> = {
       // NFL
@@ -348,8 +338,8 @@ function GameCard({
     return `hsl(${hue}, 55%, 45%)`
   }
 
-  const color1 = getTeamColor(outcome1?.name || '', '#3B82F6')
-  const color2 = getTeamColor(outcome2?.name || '', '#EF4444')
+  const color1 = getTeamColor(outcome1?.name || '')
+  const color2 = getTeamColor(outcome2?.name || '')
 
   return (
     <div className="flex-shrink-0 w-[280px] bg-[#1a1a1f] rounded-2xl p-4 border border-white/[0.06]">

@@ -239,7 +239,7 @@ function isMoneylineGame(market: PolymarketMarket, league: string): { valid: boo
     }
     
     return { valid: true }
-  } catch (e) {
+  } catch {
     return { valid: false, reason: 'EXCLUDE_PARSE_ERROR' }
   }
 }
