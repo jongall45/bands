@@ -457,3 +457,178 @@ export async function checkTradingStatus(wallet: string): Promise<{
     return { canTrade: false, message: 'Gateway unavailable' }
   }
 }
+
+// ============================================
+// VWAP-BASED ORDER PLACEMENT
+// Uses orderbook quoting engine for accurate pricing
+// ============================================
+
+import { 
+  fetchOrderbook as fetchVWAPOrderbook, 
+  getBuyQuote, 
+  getSellQuote,
+  getLimitPrice as calculateLimitPrice,
+  validateOrderbook,
+  validateExecution,
+} from './orderbook'
+
+export interface VWAPOrderParams {
+  tokenId: string
+  side: 'BUY' | 'SELL'
+  /** For BUY: USDC amount to spend. For SELL: shares to sell */
+  amount: number
+  /** Maximum slippage in basis points (default 200 = 2%) */
+  maxSlippageBps?: number
+  /** Extra buffer on limit price in basis points (default 50 = 0.5%) */
+  limitBufferBps?: number
+  tickSize?: TickSize
+  negRisk?: boolean
+}
+
+export interface VWAPOrderResult {
+  success: boolean
+  orderId?: string
+  /** Actual order parameters used */
+  orderParams?: {
+    side: 'BUY' | 'SELL'
+    limitPrice: number
+    estAvgPrice: number
+    size: number
+    tokenId: string
+  }
+  error?: string
+  details?: any
+}
+
+/**
+ * Place an order using VWAP pricing from the orderbook
+ * 
+ * This is the CORRECT way to place orders:
+ * 1. Fetch real-time orderbook
+ * 2. Calculate VWAP for the desired size
+ * 3. Set limit price with safety buffer
+ * 4. Execute GTC order
+ * 
+ * Prevents the "shows 78%, executes at 97%" bug by:
+ * - Using actual orderbook depth, not stale quotes
+ * - Walking the book to compute true fill price
+ * - Setting a limit price that protects against slippage
+ */
+export async function placeVWAPOrder(
+  clobClient: ClobClient,
+  params: VWAPOrderParams
+): Promise<VWAPOrderResult> {
+  const {
+    tokenId,
+    side,
+    amount,
+    maxSlippageBps = 200,
+    limitBufferBps = 50,
+    tickSize = '0.01',
+    negRisk = false,
+  } = params
+
+  console.log('[VWAP Order] Starting:', { tokenId, side, amount })
+
+  try {
+    // 1. Fetch fresh orderbook
+    const orderbook = await fetchVWAPOrderbook(tokenId)
+    const validation = validateOrderbook(orderbook)
+    
+    if (!validation.valid) {
+      console.error('[VWAP Order] Invalid orderbook:', validation.issues)
+      return {
+        success: false,
+        error: `Orderbook issues: ${validation.issues.join(', ')}`,
+      }
+    }
+
+    // 2. Get quote (size-aware VWAP)
+    let quote
+    let size: number
+    let limitPrice: number
+
+    if (side === 'BUY') {
+      quote = getBuyQuote(orderbook, amount, { maxSlippageBps })
+      if (!quote.canFill) {
+        return {
+          success: false,
+          error: quote.error || 'Insufficient liquidity',
+        }
+      }
+      size = quote.estShares
+      limitPrice = calculateLimitPrice('BUY', quote.worstFillPrice, limitBufferBps)
+      
+      console.log('[VWAP Order] BUY quote:', {
+        spendAmount: amount,
+        estShares: quote.estShares,
+        estAvgPrice: `${quote.estAvgPrice} (${quote.estPriceCents}¢)`,
+        worstFillPrice: quote.worstFillPrice,
+        limitPrice,
+      })
+    } else {
+      quote = getSellQuote(orderbook, amount, { maxSlippageBps })
+      if (!quote.canFill) {
+        return {
+          success: false,
+          error: quote.error || 'Insufficient liquidity',
+        }
+      }
+      size = amount  // For sell, size = shares
+      limitPrice = calculateLimitPrice('SELL', quote.worstFillPrice, limitBufferBps)
+      
+      console.log('[VWAP Order] SELL quote:', {
+        sharesToSell: amount,
+        estProceeds: quote.estProceeds,
+        estAvgPrice: `${quote.estAvgPrice} (${quote.estPriceCents}¢)`,
+        worstFillPrice: quote.worstFillPrice,
+        limitPrice,
+      })
+    }
+
+    // 3. Place GTC order at limit price
+    console.log('[VWAP Order] Placing GTC order:', {
+      tokenId,
+      side,
+      price: limitPrice,
+      size,
+    })
+
+    const result = await placeDirectOrder(clobClient, {
+      tokenId,
+      side,
+      price: limitPrice,
+      size,
+      tickSize,
+      negRisk,
+      orderType: 'GTC',
+    })
+
+    if (result.success) {
+      return {
+        success: true,
+        orderId: result.orderId,
+        orderParams: {
+          side,
+          limitPrice,
+          estAvgPrice: quote.estAvgPrice,
+          size,
+          tokenId,
+        },
+        details: result.details,
+      }
+    } else {
+      return {
+        success: false,
+        error: result.error || 'Order failed',
+        details: result.details,
+      }
+    }
+  } catch (error) {
+    console.error('[VWAP Order] Error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }
+  }
+}
