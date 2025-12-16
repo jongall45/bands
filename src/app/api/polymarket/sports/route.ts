@@ -1,6 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const GAMMA_API = 'https://gamma-api.polymarket.com'
+const CLOB_API = 'https://clob.polymarket.com'
+
+// Fetch live price from CLOB orderbook
+async function fetchLivePrice(tokenId: string): Promise<{ bestBid: number; bestAsk: number } | null> {
+  if (!tokenId) return null
+  
+  try {
+    const response = await fetch(`${CLOB_API}/book?token_id=${tokenId}`, {
+      headers: { 'Accept': 'application/json' },
+      cache: 'no-store', // Always fresh
+    })
+    
+    if (!response.ok) return null
+    
+    const book = await response.json()
+    
+    // Get best bid (highest buy order)
+    const bestBid = book.bids?.[0]?.price ? parseFloat(book.bids[0].price) : 0
+    // Get best ask (lowest sell order)  
+    const bestAsk = book.asks?.[0]?.price ? parseFloat(book.asks[0].price) : 0
+    
+    return { bestBid, bestAsk }
+  } catch {
+    return null
+  }
+}
 
 // League slugs used by Polymarket
 const LEAGUE_CONFIG: Record<string, { slugs: string[], sportName: string }> = {
@@ -126,9 +152,55 @@ interface MoneylineGame {
     name: string
     tokenId: string
     price: number
+    bestBid: number
+    bestAsk: number
   }[]
   // Include raw market for trading panel
   rawMarket: PolymarketMarket
+}
+
+// Fetch live prices for top games
+async function enrichWithLivePrices(games: MoneylineGame[]): Promise<MoneylineGame[]> {
+  // Only fetch live prices for first 10 games per league (performance)
+  const topGames = games.slice(0, 10)
+  
+  const enriched = await Promise.all(
+    topGames.map(async (game) => {
+      try {
+        // Fetch prices for both outcomes in parallel
+        const [price1, price2] = await Promise.all([
+          fetchLivePrice(game.outcomes[0]?.tokenId),
+          fetchLivePrice(game.outcomes[1]?.tokenId),
+        ])
+        
+        if (price1 || price2) {
+          return {
+            ...game,
+            outcomes: [
+              {
+                ...game.outcomes[0],
+                price: price1?.bestAsk || game.outcomes[0].price,
+                bestBid: price1?.bestBid || 0,
+                bestAsk: price1?.bestAsk || game.outcomes[0].price,
+              },
+              {
+                ...game.outcomes[1],
+                price: price2?.bestAsk || game.outcomes[1].price,
+                bestBid: price2?.bestBid || 0,
+                bestAsk: price2?.bestAsk || game.outcomes[1].price,
+              },
+            ],
+          }
+        }
+      } catch {
+        // Keep original prices on error
+      }
+      return game
+    })
+  )
+  
+  // Return enriched + remaining games
+  return [...enriched, ...games.slice(10)]
 }
 
 /**
@@ -290,6 +362,10 @@ async function fetchLeagueGames(league: string): Promise<MoneylineGame[]> {
               const prices = JSON.parse(market.outcomePrices || '[]')
               const tokenIds = JSON.parse(market.clobTokenIds || '[]')
               
+              // Use Gamma prices as fallback - will update with CLOB prices
+              const price1 = parseFloat(prices[0]) || 0
+              const price2 = parseFloat(prices[1]) || 0
+              
               games.push({
                 id: market.conditionId || market.id,
                 marketId: market.id,
@@ -300,8 +376,8 @@ async function fetchLeagueGames(league: string): Promise<MoneylineGame[]> {
                 startTime: event.startDate || market.endDate,
                 image: event.image || market.image,
                 outcomes: [
-                  { name: outcomes[0], tokenId: tokenIds[0], price: parseFloat(prices[0]) || 0 },
-                  { name: outcomes[1], tokenId: tokenIds[1], price: parseFloat(prices[1]) || 0 },
+                  { name: outcomes[0], tokenId: tokenIds[0], price: price1, bestBid: 0, bestAsk: price1 },
+                  { name: outcomes[1], tokenId: tokenIds[1], price: price2, bestBid: 0, bestAsk: price2 },
                 ],
                 rawMarket: market,
               })
@@ -336,6 +412,9 @@ async function fetchLeagueGames(league: string): Promise<MoneylineGame[]> {
             const prices = JSON.parse(market.outcomePrices || '[]')
             const tokenIds = JSON.parse(market.clobTokenIds || '[]')
             
+            const price1 = parseFloat(prices[0]) || 0
+            const price2 = parseFloat(prices[1]) || 0
+            
             games.push({
               id: market.conditionId || market.id,
               marketId: market.id,
@@ -346,8 +425,8 @@ async function fetchLeagueGames(league: string): Promise<MoneylineGame[]> {
               startTime: market.endDate,
               image: market.image,
               outcomes: [
-                { name: outcomes[0], tokenId: tokenIds[0], price: parseFloat(prices[0]) || 0 },
-                { name: outcomes[1], tokenId: tokenIds[1], price: parseFloat(prices[1]) || 0 },
+                { name: outcomes[0], tokenId: tokenIds[0], price: price1, bestBid: 0, bestAsk: price1 },
+                { name: outcomes[1], tokenId: tokenIds[1], price: price2, bestBid: 0, bestAsk: price2 },
               ],
               rawMarket: market,
             })
@@ -362,7 +441,10 @@ async function fetchLeagueGames(league: string): Promise<MoneylineGame[]> {
   // Sort by volume (most popular first)
   games.sort((a, b) => (b.volume || 0) - (a.volume || 0))
   
-  return games
+  // Enrich top games with live CLOB prices
+  const enrichedGames = await enrichWithLivePrices(games)
+  
+  return enrichedGames
 }
 
 export async function GET(request: NextRequest) {
@@ -422,4 +504,5 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export const revalidate = 60
+// Short revalidate for real-time price updates
+export const revalidate = 5

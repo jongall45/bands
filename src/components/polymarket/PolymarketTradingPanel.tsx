@@ -714,7 +714,7 @@ export function PolymarketTradingPanel({ market, onClose }: PolymarketTradingPan
   )
 }
 
-// Wrapper component for the modal
+// Wrapper component - CENTERED CARD MODAL (not bottom sheet)
 function TradingPanelWrapper({ 
   children, 
   onClose 
@@ -723,21 +723,14 @@ function TradingPanelWrapper({
   onClose: () => void 
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={onClose} />
-      
-      <div 
-        className="relative w-full max-w-[430px] bg-[#0a0a0a] border-t border-white/[0.1] rounded-t-3xl max-h-[85vh] overflow-y-auto"
-        style={{ paddingBottom: 'calc(100px + env(safe-area-inset-bottom, 0px))' }}
-      >
-        {/* Handle */}
-        <div className="flex justify-center pt-3 pb-2">
-          <div className="w-10 h-1 bg-white/20 rounded-full" />
-        </div>
+    <div className="w-full max-w-[400px] bg-[#1a1a1f] border border-white/[0.1] rounded-3xl max-h-[85vh] overflow-y-auto shadow-2xl">
+      {/* Handle */}
+      <div className="flex justify-center pt-3 pb-1">
+        <div className="w-10 h-1 bg-white/20 rounded-full" />
+      </div>
 
-        <div className="px-5 pb-6">
-          {children}
-        </div>
+      <div className="px-5 pb-6">
+        {children}
       </div>
     </div>
   )
