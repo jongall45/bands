@@ -127,6 +127,8 @@ interface MoneylineGame {
     tokenId: string
     price: number
   }[]
+  // Include raw market for trading panel
+  rawMarket: PolymarketMarket
 }
 
 /**
@@ -301,6 +303,7 @@ async function fetchLeagueGames(league: string): Promise<MoneylineGame[]> {
                   { name: outcomes[0], tokenId: tokenIds[0], price: parseFloat(prices[0]) || 0 },
                   { name: outcomes[1], tokenId: tokenIds[1], price: parseFloat(prices[1]) || 0 },
                 ],
+                rawMarket: market,
               })
             }
           }
@@ -346,6 +349,7 @@ async function fetchLeagueGames(league: string): Promise<MoneylineGame[]> {
                 { name: outcomes[0], tokenId: tokenIds[0], price: parseFloat(prices[0]) || 0 },
                 { name: outcomes[1], tokenId: tokenIds[1], price: parseFloat(prices[1]) || 0 },
               ],
+              rawMarket: market,
             })
           }
         }

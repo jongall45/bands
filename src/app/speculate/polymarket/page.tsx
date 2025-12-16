@@ -11,9 +11,11 @@ import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 
 import { BottomNav } from '@/components/ui/BottomNav'
+import { PolymarketTradingPanel } from '@/components/polymarket/PolymarketTradingPanel'
 import { PositionsPanel } from '@/components/polymarket/PositionsPanel'
 import { BridgeModal } from '@/components/bridge/BridgeModal'
 import { usePolymarketSetup } from '@/hooks/usePolymarketTrade'
+import type { PolymarketMarket } from '@/lib/polymarket/api'
 
 // USDC.e on Polygon (what Polymarket uses)
 const POLYGON_USDC_E = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'
@@ -45,6 +47,7 @@ interface MoneylineGame {
     tokenId: string
     price: number
   }[]
+  rawMarket?: PolymarketMarket
 }
 
 // Fetch all sports games (moneyline only)
@@ -74,8 +77,7 @@ function formatPriceCents(price: number | string | undefined): string {
 export default function PolymarketPage() {
   const { tradingWallet } = usePolymarketSetup()
 
-  const [selectedGame, setSelectedGame] = useState<MoneylineGame | null>(null)
-  const [selectedOutcomeIndex, setSelectedOutcomeIndex] = useState<number>(0)
+  const [selectedMarket, setSelectedMarket] = useState<PolymarketMarket | null>(null)
   const [showPositions, setShowPositions] = useState(false)
   const [showBridgeModal, setShowBridgeModal] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -116,16 +118,16 @@ export default function PolymarketPage() {
     return result
   }, [gamesByLeague, searchQuery])
 
-  // Handle clicking a team button
-  const handleTeamClick = useCallback((game: MoneylineGame, outcomeIndex: number) => {
-    setSelectedGame(game)
-    setSelectedOutcomeIndex(outcomeIndex)
+  // Handle clicking a team button - open trading panel with raw market
+  const handleTeamClick = useCallback((game: MoneylineGame) => {
+    if (game.rawMarket) {
+      setSelectedMarket(game.rawMarket)
+    }
   }, [])
 
   // Close trade panel
   const handleCloseTradePanel = useCallback(() => {
-    setSelectedGame(null)
-    setSelectedOutcomeIndex(0)
+    setSelectedMarket(null)
   }, [])
 
   // Count total games
@@ -251,13 +253,11 @@ export default function PolymarketPage() {
         )}
       </main>
 
-      {/* Trade Panel for selected game */}
-      {selectedGame && (
-        <TradePanel
-          game={selectedGame}
-          selectedOutcomeIndex={selectedOutcomeIndex}
+      {/* Trade Panel - use existing Polymarket trading panel */}
+      {selectedMarket && (
+        <PolymarketTradingPanel
+          market={selectedMarket}
           onClose={handleCloseTradePanel}
-          cashBalance={parseFloat(usdcBalance)}
         />
       )}
 
@@ -294,7 +294,7 @@ function GameCard({
   onTeamClick 
 }: { 
   game: MoneylineGame
-  onTeamClick: (game: MoneylineGame, outcomeIndex: number) => void 
+  onTeamClick: (game: MoneylineGame) => void 
 }) {
   const outcome1 = game.outcomes[0]
   const outcome2 = game.outcomes[1]
@@ -356,14 +356,14 @@ function GameCard({
       {/* Team Buttons */}
       <div className="flex gap-2">
         <button
-          onClick={() => onTeamClick(game, 0)}
+          onClick={() => onTeamClick(game)}
           className="flex-1 py-3 rounded-xl font-semibold text-sm text-white transition-all hover:opacity-90 active:scale-[0.98]"
           style={{ backgroundColor: color1 }}
         >
           {getTeamAbbrev(outcome1?.name || 'YES')} {formatPriceCents(outcome1?.price || 0)}
         </button>
         <button
-          onClick={() => onTeamClick(game, 1)}
+          onClick={() => onTeamClick(game)}
           className="flex-1 py-3 rounded-xl font-semibold text-sm text-white transition-all hover:opacity-90 active:scale-[0.98]"
           style={{ backgroundColor: color2 }}
         >
@@ -424,204 +424,3 @@ function getTeamAbbrev(name: string): string {
   return name.slice(0, 3).toUpperCase()
 }
 
-// ============================================
-// TRADE PANEL - Frens-style modal
-// ============================================
-
-function TradePanel({
-  game,
-  selectedOutcomeIndex,
-  onClose,
-  cashBalance,
-}: {
-  game: MoneylineGame
-  selectedOutcomeIndex: number
-  onClose: () => void
-  cashBalance: number
-}) {
-  const [mode, setMode] = useState<'buy' | 'sell'>('buy')
-  const [amount, setAmount] = useState('')
-  const [selectedSide, setSelectedSide] = useState(selectedOutcomeIndex)
-  
-  const selectedOutcome = game.outcomes[selectedSide]
-  const rawPrice = selectedOutcome?.price
-  const price = typeof rawPrice === 'string' ? parseFloat(rawPrice) : (rawPrice || 0)
-  const pricePercent = Math.round((isNaN(price) ? 0 : price) * 100)
-  
-  // Calculate estimates - ensure all values are numbers
-  const inputAmount = parseFloat(amount) || 0
-  const safePrice = isNaN(price) ? 0 : price
-  const estShares = mode === 'buy' 
-    ? (safePrice > 0 ? inputAmount / safePrice : 0)
-    : inputAmount
-  const estCost = mode === 'buy' ? inputAmount : estShares * safePrice
-  const estPayout = estShares * 1 // $1 per share if win
-  const estProfit = estPayout - estCost
-  
-  const presets = mode === 'buy' 
-    ? [1, 5, 10, 25]
-    : [25, 50, 75, 100] // percentages for sell
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      
-      {/* Modal */}
-      <div className="relative w-full max-w-[400px] bg-[#1a1a1f] rounded-3xl border border-white/[0.1] overflow-hidden shadow-2xl max-h-[85vh] overflow-y-auto">
-        {/* Header */}
-        <div className="sticky top-0 bg-[#1a1a1f] px-5 pt-5 pb-3 border-b border-white/[0.06]">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-white font-bold text-lg">{game.title}</h2>
-            <button 
-              onClick={onClose}
-              className="p-2 hover:bg-white/[0.05] rounded-full"
-            >
-              <svg className="w-5 h-5 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          
-          {/* Buy/Sell Toggle */}
-          <div className="flex gap-2 p-1 bg-white/[0.05] rounded-xl">
-            <button
-              onClick={() => setMode('buy')}
-              className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                mode === 'buy' 
-                  ? 'bg-green-500 text-white' 
-                  : 'text-white/60 hover:text-white'
-              }`}
-            >
-              Buy
-            </button>
-            <button
-              onClick={() => setMode('sell')}
-              className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                mode === 'sell' 
-                  ? 'bg-red-500 text-white' 
-                  : 'text-white/60 hover:text-white'
-              }`}
-            >
-              Sell
-            </button>
-          </div>
-        </div>
-        
-        {/* Content */}
-        <div className="p-5 space-y-5">
-          {/* Team Selection */}
-          <div className="space-y-2">
-            <label className="text-white/50 text-xs font-medium">Select Team</label>
-            <div className="flex gap-2">
-              {game.outcomes.map((outcome, idx) => (
-                <button
-                  key={outcome.tokenId}
-                  onClick={() => setSelectedSide(idx)}
-                  className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all border-2 ${
-                    selectedSide === idx
-                      ? 'border-white bg-white/[0.1] text-white'
-                      : 'border-transparent bg-white/[0.05] text-white/60 hover:bg-white/[0.08]'
-                  }`}
-                >
-                  {getTeamAbbrev(outcome.name)} • {Math.round((parseFloat(String(outcome.price)) || 0) * 100)}¢
-                </button>
-              ))}
-            </div>
-          </div>
-          
-          {/* Amount Input */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-white/50 text-xs font-medium">
-                {mode === 'buy' ? 'Amount (USD)' : 'Shares to Sell'}
-              </label>
-              <span className="text-white/40 text-xs">
-                Balance: ${(cashBalance || 0).toFixed(2)}
-              </span>
-            </div>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 font-semibold">
-                {mode === 'buy' ? '$' : ''}
-              </span>
-              <input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0"
-                className="w-full pl-8 pr-4 py-4 bg-white/[0.05] border border-white/[0.1] rounded-xl text-white text-2xl font-bold text-center outline-none focus:border-white/[0.2] transition-colors"
-              />
-            </div>
-          </div>
-          
-          {/* Quick Presets */}
-          <div className="flex gap-2">
-            {presets.map(preset => (
-              <button
-                key={preset}
-                onClick={() => {
-                  if (mode === 'buy') {
-                    setAmount(preset.toString())
-                  } else {
-                    // For sell, preset is percentage
-                    // TODO: Calculate from actual position
-                    setAmount('0')
-                  }
-                }}
-                className="flex-1 py-2 bg-white/[0.05] hover:bg-white/[0.1] rounded-lg text-white/60 text-sm font-medium transition-colors"
-              >
-                {mode === 'buy' ? `$${preset}` : `${preset}%`}
-              </button>
-            ))}
-          </div>
-          
-          {/* Estimate */}
-          <div className="space-y-2 bg-white/[0.03] rounded-xl p-4 border border-white/[0.06]">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-white/50">Est. Price</span>
-              <span className="text-white font-medium">{pricePercent}¢</span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-white/50">
-                {mode === 'buy' ? 'Est. Shares' : 'Est. Proceeds'}
-              </span>
-              <span className="text-white font-medium">
-                {mode === 'buy' 
-                  ? (isNaN(estShares) ? '0.00' : estShares.toFixed(2))
-                  : `$${isNaN(estCost) ? '0.00' : estCost.toFixed(2)}`
-                }
-              </span>
-            </div>
-            {mode === 'buy' && inputAmount > 0 && (
-              <>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-white/50">Payout if Win</span>
-                  <span className="text-white font-medium">${isNaN(estPayout) ? '0.00' : estPayout.toFixed(2)}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-white/50">Potential Profit</span>
-                  <span className="text-green-400 font-medium">+${isNaN(estProfit) ? '0.00' : estProfit.toFixed(2)}</span>
-                </div>
-              </>
-            )}
-          </div>
-          
-          {/* CTA Button */}
-          <button
-            disabled={inputAmount <= 0 || (mode === 'buy' && inputAmount > cashBalance)}
-            className={`w-full py-4 rounded-xl font-bold text-lg transition-all ${
-              mode === 'buy'
-                ? 'bg-green-500 hover:bg-green-600 text-white disabled:opacity-50'
-                : 'bg-red-500 hover:bg-red-600 text-white disabled:opacity-50'
-            }`}
-          >
-            {mode === 'buy' 
-              ? `Buy ${getTeamAbbrev(selectedOutcome?.name || '')}` 
-              : `Sell ${getTeamAbbrev(selectedOutcome?.name || '')}`
-            }
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
