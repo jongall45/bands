@@ -104,47 +104,47 @@ export interface MarketStats {
 }
 
 export async function getMarketStats(marketId: string, tokenId: string): Promise<MarketStats> {
-  // Try fetching orderbook directly via proxy first (more reliable)
-  // This uses the same proxy path as orders, which goes directly to Polymarket
-  try {
-    const proxyUrl = `/api/polymarket/proxy/book?token_id=${encodeURIComponent(tokenId)}`
-    console.log('[getMarketStats] Fetching orderbook via proxy:', proxyUrl)
-    
-    const response = await fetch(proxyUrl)
-    if (response.ok) {
-      const data = await response.json()
-      console.log('[getMarketStats] Proxy response:', {
-        hasBids: !!data?.bids,
-        bidsCount: data?.bids?.length || 0,
-        hasAsks: !!data?.asks,
-        asksCount: data?.asks?.length || 0,
-        bestBid: data?.bids?.[0]?.price,
-        bestAsk: data?.asks?.[0]?.price,
-      })
-      
-      // Format response to match MarketStats interface
-      return {
-        bids: data?.bids || [],
-        asks: data?.asks || [],
-        spread: data?.spread,
-        midPrice: data?.mid,
-      }
-    }
-    console.warn('[getMarketStats] Proxy fetch failed, falling back to gateway endpoint')
-  } catch (e) {
-    console.warn('[getMarketStats] Proxy fetch error:', e)
+  if (!tokenId) {
+    console.error('[getMarketStats] No tokenId provided!')
+    return { bids: [], asks: [] }
   }
-  
-  // Fallback to gateway endpoint
-  const data = await gatewayFetch<{ stats: MarketStats }>(
-    `/api/markets/${marketId}/stats?tokenId=${tokenId}`
-  )
-  console.log('[getMarketStats] Gateway response:', {
-    hasStats: !!data?.stats,
-    hasBids: !!data?.stats?.bids,
-    bidsCount: data?.stats?.bids?.length || 0,
-  })
-  return data.stats
+
+  // Use local proxy to CLOB API
+  const proxyUrl = `/api/polymarket/proxy/book?token_id=${encodeURIComponent(tokenId)}`
+  console.log('[getMarketStats] Fetching orderbook:', proxyUrl)
+
+  try {
+    const response = await fetch(proxyUrl, { cache: 'no-store' })
+    
+    if (!response.ok) {
+      console.error('[getMarketStats] Proxy error:', response.status)
+      return { bids: [], asks: [] }
+    }
+
+    const data = await response.json()
+    
+    if (data.error) {
+      console.error('[getMarketStats] API error:', data.error)
+      return { bids: [], asks: [] }
+    }
+
+    console.log('[getMarketStats] Success:', {
+      bidsCount: data?.bids?.length || 0,
+      asksCount: data?.asks?.length || 0,
+      bestBid: data?.bids?.[0]?.price,
+      bestAsk: data?.asks?.[0]?.price,
+    })
+
+    return {
+      bids: data?.bids || [],
+      asks: data?.asks || [],
+      spread: data?.spread,
+      midPrice: data?.mid,
+    }
+  } catch (e) {
+    console.error('[getMarketStats] Fetch error:', e)
+    return { bids: [], asks: [] }
+  }
 }
 
 // ============================================
@@ -289,29 +289,54 @@ export interface CLOBPositionsResponse {
 /**
  * Fetch CLOB positions for a wallet
  * 
- * Uses the Polymarket CLOB /positions endpoint via gateway proxy.
- * Returns positions with tokenId (asset) for proper SELL order submission.
+ * Uses our local positions endpoint which queries ERC-1155 balances.
  */
 export async function getCLOBPositions(address: string): Promise<CLOBPositionsResponse> {
+  if (!address) {
+    console.warn('[getCLOBPositions] No address provided')
+    return { positions: [] }
+  }
+
+  // Use local positions endpoint (queries ERC-1155 balances)
+  const url = `/api/polymarket/positions?address=${address}`
+  console.log('[getCLOBPositions] Fetching positions:', url)
+
   try {
-    // First try the gateway positions endpoint
-    const data = await gatewayFetch<CLOBPositionsResponse>(
-      `/api/polymarket/positions?address=${address}`
-    )
-    return data
-  } catch (e) {
-    console.warn('[getCLOBPositions] Gateway failed, trying proxy:', e)
-    
-    // Fallback: try direct proxy to CLOB
-    const proxyUrl = `/api/polymarket/proxy/positions?address=${address}`
-    const response = await fetch(proxyUrl, { credentials: 'include' })
-    
+    const response = await fetch(url, { cache: 'no-store' })
+
     if (!response.ok) {
-      throw new Error(`Failed to fetch positions: ${response.status}`)
+      console.error('[getCLOBPositions] Error:', response.status)
+      return { positions: [] }
     }
-    
+
     const data = await response.json()
-    return { positions: data || [] }
+    
+    if (data.error) {
+      console.error('[getCLOBPositions] API error:', data.error)
+      return { positions: [] }
+    }
+
+    console.log('[getCLOBPositions] Found', data.positions?.length || 0, 'positions')
+
+    // Map to expected format
+    const positions: CLOBPosition[] = (data.positions || []).map((p: any) => ({
+      asset: p.tokenId,
+      market: p.conditionId,
+      side: p.outcome,
+      size: p.shares,
+      avgPrice: p.currentPrice || '0',
+      curPrice: p.currentPrice,
+      question: p.question,
+      slug: p.marketSlug,
+    }))
+
+    return {
+      positions,
+      totalValue: data.totalValue,
+    }
+  } catch (e) {
+    console.error('[getCLOBPositions] Fetch error:', e)
+    return { positions: [] }
   }
 }
 

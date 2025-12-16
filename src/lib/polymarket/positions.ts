@@ -439,19 +439,31 @@ async function fetchMarketPrices(tokenIds: string[]): Promise<Map<string, number
   const prices = new Map<string, number>()
   
   try {
-    const response = await fetch('/api/polymarket/market?active=true&limit=100')
-    if (!response.ok) return prices
+    const response = await fetch('/api/polymarket/markets?active=true&limit=100')
+    if (!response.ok) {
+      console.warn('[fetchMarketPrices] API error:', response.status)
+      return prices
+    }
     
-    const markets = await response.json()
+    const data = await response.json()
+    const markets = data.markets || []
     
     for (const market of markets) {
       try {
-        const clobTokenIds = market.clobTokenIds ? JSON.parse(market.clobTokenIds) : []
-        const outcomePrices = market.outcomePrices ? JSON.parse(market.outcomePrices) : []
+        // Handle pre-parsed tokenIds from the API
+        const clobTokenIds = Array.isArray(market.tokenIds) 
+          ? market.tokenIds 
+          : (market.clobTokenIds ? JSON.parse(market.clobTokenIds) : [])
+        const outcomePrices = Array.isArray(market.parsedPrices)
+          ? market.parsedPrices
+          : (market.outcomePrices ? JSON.parse(market.outcomePrices) : [])
         
         for (let i = 0; i < clobTokenIds.length && i < outcomePrices.length; i++) {
           if (tokenIds.includes(clobTokenIds[i])) {
-            prices.set(clobTokenIds[i], parseFloat(outcomePrices[i]) || 0)
+            const price = typeof outcomePrices[i] === 'number' 
+              ? outcomePrices[i] 
+              : parseFloat(outcomePrices[i]) || 0
+            prices.set(clobTokenIds[i], price)
           }
         }
       } catch {
@@ -459,7 +471,7 @@ async function fetchMarketPrices(tokenIds: string[]): Promise<Map<string, number
       }
     }
   } catch (e) {
-    console.warn('Failed to fetch market prices:', e)
+    console.warn('[fetchMarketPrices] Failed to fetch:', e)
   }
   
   return prices

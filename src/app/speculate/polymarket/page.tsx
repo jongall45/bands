@@ -15,7 +15,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { PositionsPanel } from '@/components/polymarket/PositionsPanel'
 import { BridgeModal } from '@/components/bridge/BridgeModal'
-import { usePolymarketSetup, usePolymarketTrade } from '@/hooks/usePolymarketTrade'
+import { PolymarketTradingPanel } from '@/components/polymarket/PolymarketTradingPanel'
+import { usePolymarketSetup } from '@/hooks/usePolymarketTrade'
+import type { PolymarketMarket } from '@/lib/polymarket/api'
 
 // ==============================================
 // CONSTANTS
@@ -57,24 +59,8 @@ interface MoneylineGame {
   homeTeam: TeamInfo | null
   awayTeam: TeamInfo | null
   outcomes: [GameOutcome, GameOutcome]
-  rawMarket: Record<string, unknown>
+  rawMarket: PolymarketMarket
   lastPriceUpdate: number
-}
-
-interface Quote {
-  side: 'buy' | 'sell'
-  tokenId: string
-  inputAmount: number
-  avgFillPrice: number
-  estimatedShares: number
-  estimatedProceeds: number
-  estimatedCost: number
-  bestPrice: number
-  worstFillPrice: number
-  priceImpact: number
-  canFill: boolean
-  insufficientLiquidity: boolean
-  timestamp: number
 }
 
 // ==============================================
@@ -101,29 +87,6 @@ async function fetchSportsMarkets() {
   const response = await fetch('/api/sports/markets', { cache: 'no-store' })
   if (!response.ok) throw new Error('Failed to fetch sports markets')
   return response.json()
-}
-
-async function fetchQuote(
-  side: 'buy' | 'sell',
-  tokenId: string,
-  amount: number
-): Promise<Quote | null> {
-  if (!tokenId || amount <= 0) return null
-  
-  const params = new URLSearchParams({
-    side,
-    tokenId,
-    ...(side === 'buy' ? { amount: amount.toString() } : { shares: amount.toString() }),
-  })
-  
-  try {
-    const response = await fetch(`/api/sports/quote?${params}`, { cache: 'no-store' })
-    if (!response.ok) return null
-    const data = await response.json()
-    return data.quote
-  } catch {
-    return null
-  }
 }
 
 // ==============================================
@@ -396,19 +359,20 @@ export default function SportsPage() {
         />
       )}
 
-      {selectedGame && (
-        <TradeModal
-          game={selectedGame}
-          selectedOutcomeIdx={selectedOutcomeIdx}
-          cashBalance={parseFloat(usdcBalance)}
-          pricesStale={pricesStale}
-          onClose={closeTradeModal}
-          onSuccess={() => {
-            closeTradeModal()
-            refetchBalance()
-            refetch()
-          }}
-        />
+      {selectedGame && selectedGame.rawMarket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={closeTradeModal} />
+          <div className="relative w-full max-w-[420px]">
+            <PolymarketTradingPanel
+              market={selectedGame.rawMarket}
+              onClose={() => {
+                closeTradeModal()
+                refetchBalance()
+                refetch()
+              }}
+            />
+          </div>
+        </div>
       )}
 
       <PositionsPanel
@@ -648,322 +612,3 @@ function EnableTradingModal({
   )
 }
 
-// ==============================================
-// TRADE MODAL - Frens Style
-// ==============================================
-
-function TradeModal({
-  game,
-  selectedOutcomeIdx,
-  cashBalance,
-  pricesStale,
-  onClose,
-  onSuccess,
-}: {
-  game: MoneylineGame
-  selectedOutcomeIdx: 0 | 1
-  cashBalance: number
-  pricesStale: boolean
-  onClose: () => void
-  onSuccess: () => void
-}) {
-  const [mode, setMode] = useState<'buy' | 'sell'>('buy')
-  const [amount, setAmount] = useState('')
-  const [outcomeIdx, setOutcomeIdx] = useState<0 | 1>(selectedOutcomeIdx)
-  const [isExecuting, setIsExecuting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [quote, setQuote] = useState<Quote | null>(null)
-  const [quoteLoading, setQuoteLoading] = useState(false)
-  
-  const outcome = game.outcomes[outcomeIdx]
-  const team = outcomeIdx === 0 ? game.homeTeam : game.awayTeam
-  const otherTeam = outcomeIdx === 0 ? game.awayTeam : game.homeTeam
-  const teamName = team?.name?.split(' ').pop() || outcome.name || 'Team'
-  const teamColor = team?.color || '#3B82F6'
-  const otherColor = otherTeam?.color || '#EF4444'
-  
-  const inputAmount = parseFloat(amount) || 0
-
-  // Fetch quote when amount changes
-  useEffect(() => {
-    if (inputAmount <= 0) {
-      setQuote(null)
-      return
-    }
-    
-    const timer = setTimeout(async () => {
-      setQuoteLoading(true)
-      try {
-        const q = await fetchQuote(mode, outcome.tokenId, inputAmount)
-        setQuote(q)
-      } catch {
-        setQuote(null)
-      } finally {
-        setQuoteLoading(false)
-      }
-    }, 250)
-    
-    return () => clearTimeout(timer)
-  }, [inputAmount, mode, outcome.tokenId])
-
-  // Presets
-  const buyPresets = [1, 5, 10, 25]
-  const sellPresets = ['25%', '50%', 'Max']
-
-  // Execute trade
-  const executeTrade = async () => {
-    if (pricesStale) {
-      setError('Prices are stale. Please wait for refresh.')
-      return
-    }
-    
-    if (!quote?.canFill) {
-      setError('Unable to fill at current price')
-      return
-    }
-    
-    setIsExecuting(true)
-    setError(null)
-    
-    try {
-      // TODO: Connect to actual execution
-      await new Promise(r => setTimeout(r, 1500))
-      onSuccess()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Trade failed')
-    } finally {
-      setIsExecuting(false)
-    }
-  }
-
-  const canTrade = inputAmount > 0 && 
-    (mode !== 'buy' || inputAmount <= cashBalance) && 
-    !isExecuting && 
-    !pricesStale &&
-    (quote === null || quote.canFill)
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/85 backdrop-blur-md" onClick={onClose} />
-      
-      <div className="relative w-full max-w-[400px] bg-[#14141c] rounded-3xl border border-white/[0.08] shadow-2xl shadow-black/50 overflow-hidden">
-        {/* Header */}
-        <div className="relative px-5 pt-5 pb-4 border-b border-white/[0.06]">
-          {/* Close button */}
-          <button 
-            onClick={onClose} 
-            className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center hover:bg-white/[0.06] rounded-xl transition-colors"
-          >
-            <X className="w-5 h-5 text-white/50" />
-          </button>
-          
-          {/* Buy/Sell Toggle + Cash */}
-          <div className="flex items-center justify-between">
-            <div className="flex p-1 bg-white/[0.04] rounded-xl">
-              <button
-                onClick={() => setMode('buy')}
-                className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${
-                  mode === 'buy' 
-                    ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' 
-                    : 'text-white/50 hover:text-white'
-                }`}
-              >
-                Buy
-              </button>
-              <button
-                onClick={() => setMode('sell')}
-                className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${
-                  mode === 'sell' 
-                    ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' 
-                    : 'text-white/50 hover:text-white'
-                }`}
-              >
-                Sell
-              </button>
-            </div>
-            
-            <div className="text-right">
-              <p className="text-white/40 text-[10px] uppercase tracking-wide">Cash</p>
-              <p className="text-white font-bold">${cashBalance.toFixed(2)}</p>
-            </div>
-          </div>
-          
-          {/* Title */}
-          <h2 className="text-white font-semibold text-base mt-4 line-clamp-1">{game.title}</h2>
-        </div>
-        
-        {/* Content */}
-        <div className="p-5 space-y-4">
-          {/* Outcome Selector */}
-          <div className="flex gap-2">
-            {game.outcomes.map((o, idx) => {
-              const t = idx === 0 ? game.homeTeam : game.awayTeam
-              const c = t?.color || (idx === 0 ? '#3B82F6' : '#EF4444')
-              const abbr = t?.abbreviation || o.name?.split(' ').pop()?.slice(0, 3) || `T${idx + 1}`
-              const isSelected = outcomeIdx === idx
-              
-              return (
-                <button
-                  key={o.tokenId}
-                  onClick={() => setOutcomeIdx(idx as 0 | 1)}
-                  className={`flex-1 py-3.5 rounded-xl text-sm font-bold transition-all ${
-                    isSelected 
-                      ? 'text-white ring-2 ring-white/50' 
-                      : 'text-white/70 hover:text-white'
-                  }`}
-                  style={{ 
-                    backgroundColor: isSelected ? c : `${c}30`,
-                    boxShadow: isSelected ? `0 4px 12px ${c}40` : 'none',
-                  }}
-                >
-                  {abbr} {formatCents(o.midPrice)}
-                </button>
-              )
-            })}
-          </div>
-          
-          {/* Amount Input */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-white/50 text-xs uppercase tracking-wide">
-                {mode === 'buy' ? 'Amount' : 'Shares'}
-              </label>
-              <span className="text-white/40 text-xs">
-                {mode === 'buy' ? `Max: $${cashBalance.toFixed(2)}` : 'Enter shares'}
-              </span>
-            </div>
-            <div className="relative">
-              {mode === 'buy' && (
-                <span className="absolute left-5 top-1/2 -translate-y-1/2 text-white/60 font-semibold text-xl">
-                  $
-                </span>
-              )}
-              <input
-                type="number"
-                inputMode="decimal"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0"
-                className={`w-full ${mode === 'buy' ? 'pl-10' : 'pl-5'} pr-5 py-5 bg-white/[0.04] border border-white/[0.08] rounded-2xl text-white text-3xl font-bold text-center outline-none focus:border-white/[0.15] transition-all`}
-              />
-            </div>
-          </div>
-          
-          {/* Quick Presets */}
-          <div className="flex gap-2">
-            {mode === 'buy' ? (
-              buyPresets.map(preset => (
-                <button
-                  key={preset}
-                  onClick={() => setAmount(String(Math.min(preset, cashBalance)))}
-                  className="flex-1 py-2.5 bg-white/[0.04] hover:bg-white/[0.08] rounded-xl text-white/70 hover:text-white text-sm font-medium transition-all active:scale-[0.97]"
-                >
-                  ${preset}
-                </button>
-              ))
-            ) : (
-              sellPresets.map(preset => (
-                <button
-                  key={preset}
-                  onClick={() => {
-                    // TODO: Calculate based on position
-                    if (preset === 'Max') setAmount('10')
-                    else if (preset === '50%') setAmount('5')
-                    else setAmount('2.5')
-                  }}
-                  className="flex-1 py-2.5 bg-white/[0.04] hover:bg-white/[0.08] rounded-xl text-white/70 hover:text-white text-sm font-medium transition-all active:scale-[0.97]"
-                >
-                  {preset}
-                </button>
-              ))
-            )}
-          </div>
-          
-          {/* Quote Display */}
-          <div className="bg-white/[0.02] rounded-2xl border border-white/[0.05] overflow-hidden">
-            {quoteLoading ? (
-              <div className="flex items-center justify-center py-4">
-                <Loader2 className="w-5 h-5 text-white/30 animate-spin" />
-              </div>
-            ) : quote ? (
-              <div className="p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-white/50 text-sm">Est. Price</span>
-                  <span className="text-white font-semibold">
-                    {formatCents(quote.avgFillPrice)}
-                    {quote.priceImpact > 0.5 && (
-                      <span className="text-yellow-400 text-xs ml-1.5">
-                        +{quote.priceImpact.toFixed(1)}%
-                      </span>
-                    )}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-white/50 text-sm">
-                    {mode === 'buy' ? 'Est. Shares' : 'Est. Proceeds'}
-                  </span>
-                  <span className="text-white font-semibold">
-                    {mode === 'buy' 
-                      ? quote.estimatedShares.toFixed(2)
-                      : `$${quote.estimatedProceeds.toFixed(2)}`
-                    }
-                  </span>
-                </div>
-                {mode === 'buy' && quote.estimatedShares > 0 && (
-                  <>
-                    <div className="border-t border-white/[0.06] my-2" />
-                    <div className="flex items-center justify-between">
-                      <span className="text-white/50 text-sm">If {teamName} wins</span>
-                      <span className="text-green-400 font-bold">${quote.estimatedShares.toFixed(2)}</span>
-                    </div>
-                  </>
-                )}
-                {quote.insufficientLiquidity && (
-                  <div className="flex items-center gap-2 pt-2 border-t border-white/[0.06]">
-                    <div className="w-2 h-2 bg-yellow-400 rounded-full" />
-                    <span className="text-yellow-400 text-xs">Partial fill - insufficient liquidity</span>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-white/50 text-sm">Best {mode === 'buy' ? 'Ask' : 'Bid'}</span>
-                  <span className="text-white font-semibold">
-                    {formatCents(mode === 'buy' ? outcome.bestAsk : outcome.bestBid)}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-          
-          {/* Error */}
-          {error && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-              <p className="text-red-400 text-sm text-center">{error}</p>
-            </div>
-          )}
-          
-          {/* CTA Button */}
-          <button
-            onClick={executeTrade}
-            disabled={!canTrade}
-            className={`w-full py-4 rounded-2xl font-bold text-base transition-all flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 ${
-              mode === 'buy' 
-                ? 'bg-green-500 text-white shadow-lg shadow-green-500/25' 
-                : 'bg-red-500 text-white shadow-lg shadow-red-500/25'
-            }`}
-          >
-            {isExecuting ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <>
-                {mode === 'buy' ? 'Buy' : 'Sell'} {teamName}
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
