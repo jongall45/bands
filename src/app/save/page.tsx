@@ -11,6 +11,7 @@ import { DepositModal } from '@/components/morpho/DepositModal'
 import { WithdrawModal } from '@/components/morpho/WithdrawModal'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
+import { IndustrialPage, GlassCard, GlassButton, GlassInner, TechBadge, SectionHeader } from '@/components/ui/IndustrialGlass'
 
 export default function SavePage() {
   const router = useRouter()
@@ -25,7 +26,7 @@ export default function SavePage() {
 
   // Fetch vaults
   const { data: vaults, isLoading: vaultsLoading, refetch } = useMorphoVaults()
-  
+
   // Fetch user positions
   const { data: positions, isLoading: positionsLoading } = useUserVaultPositions()
 
@@ -61,37 +62,25 @@ export default function SavePage() {
 
   if (!isConnected) {
     return (
-      <div className="save-page">
-        <div className="noise-overlay" />
-        <div className="aura aura-1" />
-        <div className="aura aura-2" />
+      <IndustrialPage>
         <div className="min-h-screen flex items-center justify-center">
-          <RefreshCw className="w-8 h-8 text-[#ef4444] animate-spin" />
+          <RefreshCw className="w-8 h-8 text-[#FF3B30] animate-spin" />
         </div>
-        <style jsx global>{saveStyles}</style>
-      </div>
+      </IndustrialPage>
     )
   }
 
   return (
-    <div className="save-page">
-      {/* Grain Texture Overlay */}
-      <div className="noise-overlay" />
-
-      {/* Atmospheric Red Auras */}
-      <div className="aura aura-1" />
-      <div className="aura aura-2" />
-      <div className="aura aura-3" />
-
+    <IndustrialPage>
       <div className="max-w-[430px] mx-auto relative z-10 pb-24">
         {/* Header */}
-        <header 
+        <header
           className="flex items-center justify-between px-5 py-4"
           style={{ paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))' }}
         >
           <div>
-            <h1 className="text-gray-900 font-semibold text-xl">Save</h1>
-            <p className="text-gray-500 text-sm">Earn yield on your USDC</p>
+            <h1 className="text-white font-extrabold text-xl" style={{ fontWeight: 800 }}>Yield Vaults</h1>
+            <p className="text-white/50 text-sm">Earn yield on your USDC</p>
           </div>
           <LogoInline size="sm" />
         </header>
@@ -99,24 +88,21 @@ export default function SavePage() {
         {/* Portfolio Summary - Only show if user has deposits */}
         {totalDeposited > 0 && (
           <div className="px-5 mb-4">
-            <div className="bg-[#111111] border border-white/[0.06] rounded-3xl p-5 relative overflow-hidden">
-              {/* Red gradient accent */}
-              <div className="absolute inset-0 bg-gradient-to-br from-[#ef4444]/15 via-transparent to-transparent pointer-events-none" />
-              
-              <div className="relative z-10">
-                <div className="flex items-center gap-2 mb-3">
-                  <PiggyBank className="w-5 h-5 text-[#ef4444]" />
-                  <span className="text-[#ef4444] text-sm font-medium">Your Savings</span>
-                </div>
-                
-                <div className="mb-4">
-                  <span className="text-white text-3xl font-bold">
-                    ${totalDeposited.toFixed(2)}
-                  </span>
-                  <span className="text-white/40 text-sm ml-2">deposited</span>
-                </div>
+            <GlassCard variant="red">
+              <div className="flex items-center gap-2 mb-3">
+                <PiggyBank className="w-5 h-5 text-[#FF3B30]" />
+                <span className="text-[#FF3B30] text-sm font-medium">Your Savings</span>
+              </div>
 
-                <div className="flex items-center justify-between bg-white/[0.03] rounded-xl p-3">
+              <div className="mb-4">
+                <span className="text-white text-3xl font-extrabold" style={{ fontWeight: 800 }}>
+                  ${totalDeposited.toFixed(2)}
+                </span>
+                <span className="text-white/40 text-sm ml-2">deposited</span>
+              </div>
+
+              <GlassInner>
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <TrendingUp className="w-4 h-4 text-green-400" />
                     <span className="text-white/60 text-sm">Projected yearly</span>
@@ -125,55 +111,54 @@ export default function SavePage() {
                     +${totalYearlyEarnings.toFixed(2)}
                   </span>
                 </div>
-              </div>
-            </div>
+              </GlassInner>
+            </GlassCard>
           </div>
         )}
 
         {/* APY Summary Card - Show when no deposits */}
         {totalDeposited === 0 && (
           <div className="px-5 mb-4">
-            <div className="bg-[#111111] border border-white/[0.06] rounded-3xl p-5 relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 via-transparent to-transparent pointer-events-none" />
-              
-              <div className="relative z-10">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 bg-green-500/20 rounded-xl flex items-center justify-center">
-                    <TrendingUp className="w-5 h-5 text-green-400" />
-                  </div>
-                  <div>
-                    <p className="text-white/50 text-sm">Earn up to</p>
-                    <p className="text-green-400 text-2xl font-bold">{highestApy.toFixed(1)}% APY</p>
-                  </div>
+            <GlassCard variant="green">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 bg-green-500/20 rounded-xl flex items-center justify-center border border-green-500/30">
+                  <TrendingUp className="w-5 h-5 text-green-400" />
                 </div>
-                <p className="text-white/40 text-sm">
-                  Deposit USDC into curated Morpho vaults to earn yield from overcollateralized lending.
-                </p>
+                <div>
+                  <p className="text-white/50 text-sm">Earn up to</p>
+                  <p className="text-green-400 text-2xl font-extrabold" style={{ fontWeight: 800 }}>{highestApy.toFixed(1)}% APY</p>
+                </div>
+                <div className="ml-auto">
+                  <TechBadge color="rgba(46, 184, 92, 0.7)">Morpho Optimized</TechBadge>
+                </div>
               </div>
-            </div>
+              <p className="text-white/40 text-sm">
+                Deposit USDC into curated vaults to earn yield from overcollateralized lending.
+              </p>
+            </GlassCard>
           </div>
         )}
 
         {/* Info Banner */}
         <div className="px-5 mb-4">
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-3 flex items-start gap-3">
+          <GlassInner className="flex items-start gap-3 border-blue-500/20 bg-blue-500/5">
             <Info className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
             <p className="text-blue-400 text-sm">
               Deposit USDC into high-yield vaults to earn passive income.
             </p>
-          </div>
+          </GlassInner>
         </div>
 
         {/* Your Positions */}
         {positions && positions.length > 0 && (
           <div className="px-5 mb-6">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-gray-900 font-semibold">Your Positions</h2>
-              <button 
+              <h2 className="text-white font-extrabold" style={{ fontWeight: 800 }}>Your Positions</h2>
+              <button
                 onClick={() => refetch()}
-                className="p-2 hover:bg-black/5 rounded-full transition-colors"
+                className="p-2 hover:bg-white/5 rounded-full transition-colors"
               >
-                <RefreshCw className="w-4 h-4 text-gray-400" />
+                <RefreshCw className="w-4 h-4 text-white/40" />
               </button>
             </div>
 
@@ -185,38 +170,36 @@ export default function SavePage() {
                 if (!vault) return null
 
                 return (
-                  <div
-                    key={position.vault.address}
-                    className="bg-[#111] border border-white/[0.06] rounded-2xl p-4"
-                  >
+                  <GlassCard key={position.vault.address} className="!p-4">
                     <div className="flex items-center justify-between mb-3">
                       <div>
-                        <h3 className="text-white font-medium text-sm">{position.vault.name}</h3>
+                        <h3 className="text-white font-semibold text-sm">{position.vault.name}</h3>
                         <p className="text-green-400 text-xs">
                           {(vault.state.netApy * 100).toFixed(2)}% APY
                         </p>
                       </div>
-                      <span className="text-white font-semibold">
+                      <span className="text-white font-bold">
                         ${position.assetsUsd?.toFixed(2) || '0.00'}
                       </span>
                     </div>
 
                     <div className="flex gap-2">
-                      <button
+                      <GlassButton
+                        primary
                         onClick={() => handleSelectVault(vault)}
-                        className="flex-1 py-2 bg-[#ef4444] hover:bg-[#dc2626] text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-1"
+                        className="!py-2 !text-xs"
                       >
-                        <Plus className="w-4 h-4" />
+                        <Plus className="w-3 h-3" />
                         Add
-                      </button>
-                      <button
+                      </GlassButton>
+                      <GlassButton
                         onClick={() => handleWithdraw(vault)}
-                        className="flex-1 py-2 bg-white/[0.05] hover:bg-white/[0.08] text-white/80 text-sm font-medium rounded-xl transition-colors"
+                        className="!py-2 !text-xs"
                       >
                         Withdraw
-                      </button>
+                      </GlassButton>
                     </div>
-                  </div>
+                  </GlassCard>
                 )
               })}
             </div>
@@ -226,12 +209,12 @@ export default function SavePage() {
         {/* Available Vaults */}
         <div className="px-5">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-gray-900 font-semibold">Earn Yield</h2>
+            <h2 className="text-white font-extrabold" style={{ fontWeight: 800 }}>Earn Yield</h2>
             <a
               href="https://app.morpho.org/base?type=vault"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1 text-gray-500 text-xs hover:text-gray-700"
+              className="flex items-center gap-1 text-white/40 text-xs hover:text-white/60 transition-colors"
             >
               View all <ExternalLink className="w-3 h-3" />
             </a>
@@ -239,7 +222,7 @@ export default function SavePage() {
 
           {vaultsLoading ? (
             <div className="flex items-center justify-center h-40">
-              <RefreshCw className="w-6 h-6 text-gray-400 animate-spin" />
+              <RefreshCw className="w-6 h-6 text-white/40 animate-spin" />
             </div>
           ) : vaults && vaults.length > 0 ? (
             <div className="space-y-3">
@@ -247,7 +230,7 @@ export default function SavePage() {
                 const position = positions?.find(
                   p => p.vault.address.toLowerCase() === vault.address.toLowerCase()
                 )
-                
+
                 return (
                   <VaultCard
                     key={vault.address}
@@ -263,27 +246,27 @@ export default function SavePage() {
               })}
             </div>
           ) : (
-            <div className="bg-[#111] border border-white/[0.06] rounded-2xl p-6 text-center">
-              <p className="text-white/40 text-sm">No vaults available at this time</p>
-            </div>
+            <GlassCard>
+              <p className="text-white/40 text-sm text-center">No vaults available at this time</p>
+            </GlassCard>
           )}
         </div>
 
         {/* Safety Info */}
         <div className="px-5 mt-6">
-          <div className="bg-white/[0.5] backdrop-blur-lg border border-white/[0.1] rounded-2xl p-4">
+          <GlassCard>
             <div className="flex items-center gap-2 mb-2">
-              <Shield className="w-4 h-4 text-gray-700" />
-              <h4 className="text-gray-800 font-medium text-sm">Protocol Security</h4>
+              <Shield className="w-4 h-4 text-white/60" />
+              <h4 className="text-white font-semibold text-sm">Protocol Security</h4>
             </div>
-            <p className="text-gray-600 text-sm">
+            <p className="text-white/40 text-sm">
               Morpho vaults use overcollateralized lending. Curators like Spark, Gauntlet, and Steakhouse manage risk. Withdraw anytime.
             </p>
-          </div>
+          </GlassCard>
         </div>
 
         {/* Powered By */}
-        <div className="flex items-center justify-center gap-2 text-gray-500 text-xs mt-6">
+        <div className="flex items-center justify-center gap-2 text-white/30 text-xs mt-6">
           Powered by Morpho Protocol
         </div>
       </div>
@@ -309,79 +292,6 @@ export default function SavePage() {
 
       {/* Bottom Navigation */}
       <BottomNav />
-
-      <style jsx global>{saveStyles}</style>
-    </div>
+    </IndustrialPage>
   )
 }
-
-const saveStyles = `
-  .save-page {
-    min-height: 100vh;
-    width: 100%;
-    background: #F4F4F5;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
-    overflow-x: hidden;
-    position: relative;
-  }
-
-  /* Grain texture */
-  .save-page .noise-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 10000;
-    opacity: 0.08;
-    mix-blend-mode: overlay;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-  }
-
-  /* Red auras */
-  .save-page .aura {
-    position: fixed;
-    border-radius: 50%;
-    z-index: 0;
-    animation: aura-float 20s ease-in-out infinite;
-  }
-
-  .save-page .aura-1 {
-    width: 800px;
-    height: 800px;
-    top: -250px;
-    left: -200px;
-    background: #FF3B30;
-    filter: blur(150px);
-    opacity: 0.5;
-  }
-
-  .save-page .aura-2 {
-    width: 700px;
-    height: 700px;
-    bottom: -200px;
-    right: -150px;
-    background: #D70015;
-    filter: blur(140px);
-    opacity: 0.45;
-    animation-delay: 7s;
-  }
-
-  .save-page .aura-3 {
-    width: 400px;
-    height: 400px;
-    top: 40%;
-    right: 20%;
-    background: #FF6B35;
-    filter: blur(120px);
-    opacity: 0.3;
-    animation-delay: 14s;
-  }
-
-  @keyframes aura-float {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    33% { transform: translate(50px, -40px) scale(1.05); }
-    66% { transform: translate(-30px, 40px) scale(0.95); }
-  }
-`
