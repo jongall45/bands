@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAccount } from 'wagmi'
 import { PiggyBank, TrendingUp, RefreshCw, Plus, ExternalLink, Shield, Info } from 'lucide-react'
 import { useMorphoVaults, useUserVaultPositions } from '@/hooks/useMorphoVaults'
 import { calculateProjectedEarnings, type MorphoVault } from '@/lib/morpho/api'
@@ -12,17 +11,22 @@ import { WithdrawModal } from '@/components/morpho/WithdrawModal'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
 import { IndustrialPage, GlassCard, GlassButton, GlassInner, TechBadge, SectionHeader } from '@/components/ui/IndustrialGlass'
+import { useAuth } from '@/hooks/useAuth'
+
+// USDC Logo URL
+const USDC_LOGO = 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png'
 
 export default function SavePage() {
   const router = useRouter()
-  const { address, isConnected } = useAccount()
+  // Use smart wallet address from useAuth (not EOA from useAccount)
+  const { address, isAuthenticated, isSmartWalletReady, balances } = useAuth()
   const [selectedVault, setSelectedVault] = useState<MorphoVault | null>(null)
   const [modalType, setModalType] = useState<'deposit' | 'withdraw' | null>(null)
 
-  // Redirect if not connected
+  // Redirect if not authenticated
   useEffect(() => {
-    if (!isConnected) router.push('/')
-  }, [isConnected, router])
+    if (!isAuthenticated) router.push('/')
+  }, [isAuthenticated, router])
 
   // Fetch vaults
   const { data: vaults, isLoading: vaultsLoading, refetch } = useMorphoVaults()
@@ -45,6 +49,9 @@ export default function SavePage() {
   // Get highest APY
   const highestApy = vaults?.reduce((max, v) => Math.max(max, v.state.netApy * 100), 0) || 0
 
+  // Get user's USDC balance on Base
+  const usdcBalance = parseFloat(balances.usdcBase || '0')
+
   const handleSelectVault = (vault: MorphoVault) => {
     setSelectedVault(vault)
     setModalType('deposit')
@@ -60,7 +67,7 @@ export default function SavePage() {
     setModalType(null)
   }
 
-  if (!isConnected) {
+  if (!isAuthenticated) {
     return (
       <IndustrialPage>
         <div className="min-h-screen flex items-center justify-center">
@@ -121,8 +128,19 @@ export default function SavePage() {
           <div className="px-5 mb-4">
             <GlassCard variant="green">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 bg-green-500/20 rounded-xl flex items-center justify-center border border-green-500/30">
-                  <TrendingUp className="w-5 h-5 text-green-400" />
+                {/* USDC Logo with % overlay */}
+                <div className="relative w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center border border-green-500/30 overflow-hidden">
+                  <img
+                    src={USDC_LOGO}
+                    alt="USDC"
+                    className="w-8 h-8"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none'
+                    }}
+                  />
+                  <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                    <span className="text-[8px] font-bold text-white">%</span>
+                  </div>
                 </div>
                 <div>
                   <p className="text-white/50 text-sm">Earn up to</p>
@@ -136,6 +154,19 @@ export default function SavePage() {
                 Deposit USDC into curated vaults to earn yield from overcollateralized lending.
               </p>
             </GlassCard>
+          </div>
+        )}
+
+        {/* Available USDC Balance */}
+        {usdcBalance > 0 && (
+          <div className="px-5 mb-4">
+            <GlassInner className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <img src={USDC_LOGO} alt="USDC" className="w-5 h-5" />
+                <span className="text-white/60 text-sm">Available USDC</span>
+              </div>
+              <span className="text-white font-semibold">${usdcBalance.toFixed(2)}</span>
+            </GlassInner>
           </div>
         )}
 
@@ -172,11 +203,14 @@ export default function SavePage() {
                 return (
                   <GlassCard key={position.vault.address} className="!p-4">
                     <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <h3 className="text-white font-semibold text-sm">{position.vault.name}</h3>
-                        <p className="text-green-400 text-xs">
-                          {(vault.state.netApy * 100).toFixed(2)}% APY
-                        </p>
+                      <div className="flex items-center gap-3">
+                        <img src={USDC_LOGO} alt="USDC" className="w-8 h-8" />
+                        <div>
+                          <h3 className="text-white font-semibold text-sm">{position.vault.name}</h3>
+                          <p className="text-green-400 text-xs">
+                            {(vault.state.netApy * 100).toFixed(2)}% APY
+                          </p>
+                        </div>
                       </div>
                       <span className="text-white font-bold">
                         ${position.assetsUsd?.toFixed(2) || '0.00'}

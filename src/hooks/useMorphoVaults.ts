@@ -1,12 +1,13 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useAccount, useReadContract } from 'wagmi'
+import { useReadContract } from 'wagmi'
 import { formatUnits, parseUnits } from 'viem'
 import { fetchBaseUSDCVaults, fetchUserVaultPositions, type MorphoVault } from '@/lib/morpho/api'
 import { ERC4626_ABI, MORPHO_ERC20_ABI } from '@/lib/morpho/abi'
 import { USDC_BASE } from '@/lib/morpho/constants'
 import { base } from 'viem/chains'
+import { useAuth } from '@/hooks/useAuth'
 
 // Hook to fetch all USDC vaults
 export function useMorphoVaults() {
@@ -18,22 +19,24 @@ export function useMorphoVaults() {
   })
 }
 
-// Hook to fetch user's vault positions
+// Hook to fetch user's vault positions - uses smart wallet address
 export function useUserVaultPositions() {
-  const { address } = useAccount()
+  // Use smart wallet address from useAuth (not EOA from useAccount)
+  const { address, isSmartWalletReady } = useAuth()
 
   return useQuery({
     queryKey: ['user-vault-positions', address],
     queryFn: () => fetchUserVaultPositions(address!),
-    enabled: !!address,
+    // Only fetch if we have an address and smart wallet is ready
+    enabled: !!address && isSmartWalletReady,
     staleTime: 30000, // 30 seconds
     refetchInterval: 30000,
   })
 }
 
-// Hook to get user's share balance in a specific vault
+// Hook to get user's share balance in a specific vault - uses smart wallet address
 export function useVaultBalance(vaultAddress: `0x${string}`) {
-  const { address } = useAccount()
+  const { address } = useAuth()
 
   const { data: shares } = useReadContract({
     address: vaultAddress,
@@ -64,9 +67,9 @@ export function useVaultBalance(vaultAddress: `0x${string}`) {
   }
 }
 
-// Hook to get USDC allowance for a vault
+// Hook to get USDC allowance for a vault - uses smart wallet address
 export function useUSDCAllowance(vaultAddress: `0x${string}`) {
-  const { address } = useAccount()
+  const { address } = useAuth()
 
   const { data: allowance, refetch } = useReadContract({
     address: USDC_BASE,
@@ -118,4 +121,3 @@ export function usePreviewRedeem(vaultAddress: `0x${string}`, shares: bigint) {
 
   return assets || BigInt(0)
 }
-
