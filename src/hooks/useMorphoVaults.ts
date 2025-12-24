@@ -9,24 +9,24 @@ import { USDC_BASE } from '@/lib/morpho/constants'
 import { base } from 'viem/chains'
 import { useAuth } from '@/hooks/useAuth'
 
-// Hook to fetch all USDC vaults
-export function useMorphoVaults() {
+// Hook to fetch all USDC vaults for a specific chain
+export function useMorphoVaults(chainId: number = 8453) {
   return useQuery({
-    queryKey: ['morpho-vaults'],
-    queryFn: fetchBaseUSDCVaults,
+    queryKey: ['morpho-vaults', chainId],
+    queryFn: () => fetchBaseUSDCVaults(chainId),
     staleTime: 60000, // 1 minute
     refetchInterval: 60000,
   })
 }
 
 // Hook to fetch user's vault positions - uses smart wallet address
-export function useUserVaultPositions() {
+export function useUserVaultPositions(chainId: number = 8453) {
   // Use smart wallet address from useAuth (not EOA from useAccount)
   const { address, isSmartWalletReady } = useAuth()
 
   return useQuery({
-    queryKey: ['user-vault-positions', address],
-    queryFn: () => fetchUserVaultPositions(address!),
+    queryKey: ['user-vault-positions', address, chainId],
+    queryFn: () => fetchUserVaultPositions(address!, chainId),
     // Only fetch if we have an address and smart wallet is ready
     enabled: !!address && isSmartWalletReady,
     staleTime: 30000, // 30 seconds

@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { PiggyBank, TrendingUp, RefreshCw, Plus, ExternalLink, Shield, Info } from 'lucide-react'
+import { PiggyBank, TrendingUp, RefreshCw, Plus, ExternalLink, Shield, ChevronDown } from 'lucide-react'
 import { useMorphoVaults, useUserVaultPositions } from '@/hooks/useMorphoVaults'
 import { calculateProjectedEarnings, type MorphoVault } from '@/lib/morpho/api'
+import { MORPHO_CHAINS } from '@/lib/morpho/constants'
+import { base } from 'viem/chains'
 import { VaultCard } from '@/components/morpho/VaultCard'
 import { DepositModal } from '@/components/morpho/DepositModal'
 import { WithdrawModal } from '@/components/morpho/WithdrawModal'
@@ -22,17 +24,22 @@ export default function SavePage() {
   const { address, isAuthenticated, isSmartWalletReady, balances } = useAuth()
   const [selectedVault, setSelectedVault] = useState<MorphoVault | null>(null)
   const [modalType, setModalType] = useState<'deposit' | 'withdraw' | null>(null)
+  const [selectedChainId, setSelectedChainId] = useState<number>(base.id)
+  const [isChainDropdownOpen, setIsChainDropdownOpen] = useState(false)
+
+  // Get current selected chain info
+  const selectedChain = MORPHO_CHAINS.find(c => c.id === selectedChainId) || MORPHO_CHAINS[0]
 
   // Redirect if not authenticated
   useEffect(() => {
     if (!isAuthenticated) router.push('/')
   }, [isAuthenticated, router])
 
-  // Fetch vaults
-  const { data: vaults, isLoading: vaultsLoading, refetch } = useMorphoVaults()
+  // Fetch vaults for selected chain
+  const { data: vaults, isLoading: vaultsLoading, refetch } = useMorphoVaults(selectedChainId)
 
-  // Fetch user positions
-  const { data: positions, isLoading: positionsLoading } = useUserVaultPositions()
+  // Fetch user positions for selected chain
+  const { data: positions, isLoading: positionsLoading } = useUserVaultPositions(selectedChainId)
 
   // Calculate total deposited
   const totalDeposited = positions?.reduce((sum, pos) => sum + (pos.assetsUsd || 0), 0) || 0
@@ -92,6 +99,45 @@ export default function SavePage() {
           <LogoInline size="sm" />
         </header>
 
+        {/* Chain Selector */}
+        <div className="px-5 mb-4">
+          <div className="relative">
+            <button
+              onClick={() => setIsChainDropdownOpen(!isChainDropdownOpen)}
+              className="w-full flex items-center justify-between bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-3 hover:bg-white/[0.06] transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg">{selectedChain.icon}</span>
+                <span className="text-white font-medium">{selectedChain.name}</span>
+              </div>
+              <ChevronDown className={`w-4 h-4 text-white/40 transition-transform ${isChainDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isChainDropdownOpen && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-[#0a0a0a] border border-white/[0.1] rounded-xl overflow-hidden z-50 shadow-xl">
+                {MORPHO_CHAINS.map((chain) => (
+                  <button
+                    key={chain.id}
+                    onClick={() => {
+                      setSelectedChainId(chain.id)
+                      setIsChainDropdownOpen(false)
+                    }}
+                    className={`w-full flex items-center gap-2 px-4 py-3 hover:bg-white/[0.05] transition-colors ${
+                      chain.id === selectedChainId ? 'bg-white/[0.03]' : ''
+                    }`}
+                  >
+                    <span className="text-lg">{chain.icon}</span>
+                    <span className="text-white">{chain.name}</span>
+                    {chain.id === selectedChainId && (
+                      <span className="ml-auto text-[#FF3B30] text-sm">✓</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Portfolio Summary - Only show if user has deposits */}
         {totalDeposited > 0 && (
           <div className="px-5 mb-4">
@@ -147,7 +193,11 @@ export default function SavePage() {
                   <p className="text-green-400 text-2xl font-extrabold" style={{ fontWeight: 800 }}>{highestApy.toFixed(1)}% APY</p>
                 </div>
                 <div className="ml-auto">
-                  <TechBadge color="rgba(46, 184, 92, 0.7)">Morpho Optimized</TechBadge>
+                  <img
+                    src="https://pbs.twimg.com/profile_images/1930600293915410432/dgTU7UNU_400x400.jpg"
+                    alt="Morpho"
+                    className="w-8 h-8 rounded-full border border-white/20"
+                  />
                 </div>
               </div>
               <p className="text-white/40 text-sm">
@@ -170,15 +220,6 @@ export default function SavePage() {
           </div>
         )}
 
-        {/* Info Banner */}
-        <div className="px-5 mb-4">
-          <GlassInner className="flex items-start gap-3 border-blue-500/20 bg-blue-500/5">
-            <Info className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
-            <p className="text-blue-400 text-sm">
-              Deposit USDC into high-yield vaults to earn passive income.
-            </p>
-          </GlassInner>
-        </div>
 
         {/* Your Positions */}
         {positions && positions.length > 0 && (
