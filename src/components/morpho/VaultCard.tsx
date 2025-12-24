@@ -3,6 +3,9 @@
 import { TrendingUp, Shield, ChevronRight } from 'lucide-react'
 import type { MorphoVault } from '@/lib/morpho/api'
 
+// USDC Logo URL
+const USDC_LOGO = 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png'
+
 interface VaultCardProps {
   vault: MorphoVault
   userBalance?: {
@@ -21,20 +24,32 @@ export function VaultCard({ vault, userBalance, onSelect }: VaultCardProps) {
   return (
     <button
       onClick={() => onSelect(vault)}
-      className="w-full bg-[#111] hover:bg-[#1a1a1a] border border-white/[0.06] rounded-2xl p-4 transition-all text-left group"
+      className="w-full bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.08] rounded-2xl p-4 transition-all text-left group backdrop-blur-sm"
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
-          {/* Vault Icon */}
-          <div className="w-10 h-10 bg-[#ef4444]/10 rounded-xl flex items-center justify-center">
-            <span className="text-[#ef4444] font-bold">$</span>
+          {/* USDC Logo */}
+          <div className="w-10 h-10 bg-black/30 rounded-xl flex items-center justify-center border border-white/10 overflow-hidden">
+            <img
+              src={USDC_LOGO}
+              alt="USDC"
+              className="w-7 h-7"
+              onError={(e) => {
+                // Fallback to text if image fails to load
+                (e.target as HTMLImageElement).style.display = 'none'
+                const parent = (e.target as HTMLImageElement).parentElement
+                if (parent) {
+                  parent.innerHTML = '<span class="text-[#2775CA] font-bold text-sm">USDC</span>'
+                }
+              }}
+            />
           </div>
           <div>
-            <h3 className="text-white font-medium text-sm">{vault.name}</h3>
+            <h3 className="text-white font-semibold text-sm">{vault.name}</h3>
             <p className="text-white/40 text-xs">{vault.symbol}</p>
           </div>
         </div>
-        
+
         <ChevronRight className="w-5 h-5 text-white/20 group-hover:text-white/40 transition-colors" />
       </div>
 
@@ -42,10 +57,10 @@ export function VaultCard({ vault, userBalance, onSelect }: VaultCardProps) {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-1.5">
           <TrendingUp className="w-4 h-4 text-green-400" />
-          <span className="text-green-400 font-semibold text-lg">{apyPercent}%</span>
+          <span className="text-green-400 font-bold text-lg">{apyPercent}%</span>
           <span className="text-white/40 text-xs">APY</span>
         </div>
-        
+
         <div className="flex items-center gap-1.5">
           <Shield className="w-3.5 h-3.5 text-white/30" />
           <span className="text-white/40 text-xs">${tvlFormatted}M TVL</span>
@@ -73,4 +88,3 @@ export function VaultCard({ vault, userBalance, onSelect }: VaultCardProps) {
     </button>
   )
 }
-
