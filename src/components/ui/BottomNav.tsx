@@ -1,6 +1,6 @@
 'use client'
 
-import { Home, TrendingUp, PiggyBank, Settings, ArrowUpDown } from 'lucide-react'
+import { Home, PiggyBank, Settings, ArrowUpDown } from 'lucide-react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 
@@ -8,7 +8,7 @@ const navItems = [
   { href: '/dashboard', icon: Home, label: 'Home' },
   { href: '/save', icon: PiggyBank, label: 'Save' },
   { href: '/swap', icon: ArrowUpDown, label: 'Swap' },
-  { href: '/speculate', icon: TrendingUp, label: 'Trade' },
+  // Trade (Polymarket/Ostium) hidden for US regulatory compliance - code preserved in /app/speculate/
   { href: '/settings', icon: Settings, label: 'Settings' },
 ]
 
