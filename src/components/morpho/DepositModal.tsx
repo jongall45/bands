@@ -1,13 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { useAccount, useBalance } from 'wagmi'
+import { useAuth } from '@/hooks/useAuth'
 import { X, Loader2, TrendingUp, AlertCircle, Check } from 'lucide-react'
 import { useMorphoActions } from '@/hooks/useMorphoActions'
 import { useVaultBalance } from '@/hooks/useMorphoVaults'
 import { calculateProjectedEarnings, type MorphoVault } from '@/lib/morpho/api'
-import { USDC_BASE } from '@/lib/morpho/constants'
-import { base } from 'viem/chains'
 
 interface DepositModalProps {
   vault: MorphoVault
@@ -16,17 +14,20 @@ interface DepositModalProps {
   onSuccess?: () => void
 }
 
+// USDC Logo URL
+const USDC_LOGO = 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png'
+
 export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModalProps) {
-  const { address } = useAccount()
+  // Use smart wallet address from useAuth (not EOA from useAccount)
+  const { address, balances, rawBalances } = useAuth()
   const [amount, setAmount] = useState('')
   const [isSuccess, setIsSuccess] = useState(false)
 
-  // Get USDC balance
-  const { data: usdcBalance } = useBalance({
-    address,
-    token: USDC_BASE,
-    chainId: base.id,
-  })
+  // Get USDC balance from useAuth (already fetches for smart wallet)
+  const usdcBalance = {
+    formatted: balances.usdcBase,
+    value: rawBalances.usdcBase,
+  }
 
   // Get current vault position
   const vaultBalance = useVaultBalance(vault.address as `0x${string}`)
@@ -63,8 +64,8 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
     await deposit(amount)
   }
 
-  const canDeposit = amount && parseFloat(amount) > 0 && 
-    usdcBalance && parseFloat(amount) <= parseFloat(usdcBalance.formatted)
+  const canDeposit = amount && parseFloat(amount) > 0 &&
+    parseFloat(amount) <= parseFloat(usdcBalance.formatted)
 
   if (!isOpen) return null
 
@@ -106,11 +107,11 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
             <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4 mb-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-white/40 text-sm">Amount</span>
-                <button 
+                <button
                   onClick={handleMax}
                   className="text-[#ef4444] text-xs font-medium hover:underline"
                 >
-                  Max: {usdcBalance ? parseFloat(usdcBalance.formatted).toFixed(2) : '0'} USDC
+                  Max: {parseFloat(usdcBalance.formatted).toFixed(2)} USDC
                 </button>
               </div>
               
@@ -122,8 +123,8 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
                   placeholder="0.00"
                   className="flex-1 min-w-0 bg-transparent text-white text-3xl font-medium outline-none placeholder:text-white/20"
                 />
-                <div className="bg-[#ef4444] rounded-xl px-3 py-2 flex items-center gap-1.5 flex-shrink-0">
-                  <span className="text-white font-bold text-sm">$</span>
+                <div className="bg-[#2775CA]/20 border border-[#2775CA]/30 rounded-xl px-3 py-2 flex items-center gap-1.5 flex-shrink-0">
+                  <img src={USDC_LOGO} alt="USDC" className="w-5 h-5" />
                   <span className="text-white font-semibold text-sm">USDC</span>
                 </div>
               </div>

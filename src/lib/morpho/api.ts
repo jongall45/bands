@@ -39,14 +39,14 @@ export interface UserVaultPosition {
   assetsUsd: number
 }
 
-// Fetch USDC vaults on Base
-export async function fetchBaseUSDCVaults(): Promise<MorphoVault[]> {
+// Fetch USDC vaults on a specific chain (default: Base)
+export async function fetchBaseUSDCVaults(chainId: number = 8453): Promise<MorphoVault[]> {
   const query = gql`
-    query GetBaseUSDCVaults {
+    query GetUSDCVaults($chainId: Int!) {
       vaults(
         first: 20
-        where: { 
-          chainId_in: [8453]
+        where: {
+          chainId_in: [$chainId]
           assetSymbol_in: ["USDC"]
         }
         orderBy: TotalAssetsUsd
@@ -79,12 +79,12 @@ export async function fetchBaseUSDCVaults(): Promise<MorphoVault[]> {
   `
 
   try {
-    const data = await client.request<{ vaults: { items: MorphoVault[] } }>(query)
+    const data = await client.request<{ vaults: { items: MorphoVault[] } }>(query, { chainId })
     return data.vaults.items || []
   } catch (error) {
     console.error('Error fetching Morpho vaults:', error)
-    // Return fallback data if API fails
-    return getFallbackVaults()
+    // Return fallback data if API fails (only for Base)
+    return chainId === 8453 ? getFallbackVaults() : []
   }
 }
 
@@ -128,13 +128,14 @@ export async function fetchVaultDetails(vaultAddress: string): Promise<MorphoVau
   }
 }
 
-// Fetch user's vault positions
+// Fetch user's vault positions on a specific chain
 export async function fetchUserVaultPositions(
-  userAddress: string
+  userAddress: string,
+  chainId: number = 8453
 ): Promise<UserVaultPosition[]> {
   const query = gql`
-    query GetUserPositions($address: String!) {
-      userByAddress(address: $address, chainId: 8453) {
+    query GetUserPositions($address: String!, $chainId: Int!) {
+      userByAddress(address: $address, chainId: $chainId) {
         vaultPositions {
           vault {
             address
@@ -152,7 +153,7 @@ export async function fetchUserVaultPositions(
   try {
     const data = await client.request<{
       userByAddress: { vaultPositions: UserVaultPosition[] }
-    }>(query, { address: userAddress })
+    }>(query, { address: userAddress, chainId })
 
     return data.userByAddress?.vaultPositions || []
   } catch (error) {

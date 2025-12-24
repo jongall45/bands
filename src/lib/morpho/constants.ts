@@ -1,9 +1,35 @@
-import { base } from 'viem/chains'
+import { base, arbitrum, polygon } from 'viem/chains'
 
 export const MORPHO_CHAIN_ID = base.id // 8453
 
-// USDC on Base
+// USDC addresses per chain
 export const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
+export const USDC_ARBITRUM = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as const
+export const USDC_POLYGON = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' as const
+
+// Supported chains for Morpho vaults
+export const MORPHO_CHAINS = [
+  {
+    id: base.id,
+    name: 'Base',
+    icon: '🔵',
+    usdcAddress: USDC_BASE,
+  },
+  {
+    id: arbitrum.id,
+    name: 'Arbitrum',
+    icon: '🔷',
+    usdcAddress: USDC_ARBITRUM,
+  },
+  {
+    id: polygon.id,
+    name: 'Polygon',
+    icon: '🟣',
+    usdcAddress: USDC_POLYGON,
+  },
+] as const
+
+export type MorphoChain = typeof MORPHO_CHAINS[number]
 
 // Featured USDC vaults on Base (curated selection)
 export const FEATURED_VAULTS = [
