@@ -1,78 +1,73 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useAccount, useWalletClient, usePublicClient } from 'wagmi'
 import { parseUnits, encodeFunctionData } from 'viem'
-import { useSendCalls } from 'wagmi/experimental'
 import { ERC4626_ABI, MORPHO_ERC20_ABI } from '@/lib/morpho/abi'
 import { USDC_BASE } from '@/lib/morpho/constants'
+import { useAuth } from '@/hooks/useAuth'
+import { base } from 'viem/chains'
 
 interface UseMorphoActionsProps {
   vaultAddress: `0x${string}`
-  onSuccess?: (callsId: string) => void
+  onSuccess?: (txHash: string) => void
   onError?: (error: Error) => void
 }
 
 export function useMorphoActions({ vaultAddress, onSuccess, onError }: UseMorphoActionsProps) {
-  const { address } = useAccount()
-  const { data: walletClient } = useWalletClient()
-  const publicClient = usePublicClient()
+  // Use smart wallet from useAuth for ERC-4337 transactions
+  const { address, smartWalletClient, getClientForChain, isSmartWalletReady } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
 
-  // Use batched transactions
-  const { sendCallsAsync } = useSendCalls()
-
-  // Deposit USDC into vault
+  // Deposit USDC into vault using smart wallet batched transactions
   const deposit = useCallback(async (amount: string) => {
-    if (!address || !walletClient) {
-      throw new Error('Wallet not connected')
+    if (!address || !isSmartWalletReady) {
+      throw new Error('Smart wallet not ready')
     }
 
     setIsLoading(true)
 
     try {
       const amountBigInt = parseUnits(amount, 6) // USDC has 6 decimals
+      const smartWalletAddress = address as `0x${string}`
 
-      // Check current allowance
-      const allowance = await publicClient?.readContract({
-        address: USDC_BASE,
-        abi: MORPHO_ERC20_ABI,
-        functionName: 'allowance',
-        args: [address, vaultAddress],
-      })
+      // Get smart wallet client for Base chain
+      const client = await getClientForChain({ chainId: base.id })
 
-      const calls: { to: `0x${string}`; data: `0x${string}` }[] = []
+      if (!client) {
+        throw new Error('Could not get smart wallet client for Base')
+      }
 
-      // If allowance is insufficient, add approve call
-      if (!allowance || allowance < amountBigInt) {
-        calls.push({
-          to: USDC_BASE,
+      // Build batched transaction calls for smart wallet
+      // ERC-4337 smart wallets can execute multiple calls atomically
+      const calls = [
+        // 1. Approve vault to spend USDC
+        {
+          to: USDC_BASE as `0x${string}`,
           data: encodeFunctionData({
             abi: MORPHO_ERC20_ABI,
             functionName: 'approve',
             args: [vaultAddress, amountBigInt],
           }),
-        })
-      }
+        },
+        // 2. Deposit USDC into vault
+        {
+          to: vaultAddress,
+          data: encodeFunctionData({
+            abi: ERC4626_ABI,
+            functionName: 'deposit',
+            args: [amountBigInt, smartWalletAddress],
+          }),
+        },
+      ]
 
-      // Add deposit call
-      calls.push({
-        to: vaultAddress,
-        data: encodeFunctionData({
-          abi: ERC4626_ABI,
-          functionName: 'deposit',
-          args: [amountBigInt, address],
-        }),
-      })
-
-      // Send batched transaction
-      const result = await sendCallsAsync({
+      // Send batched transaction via Privy smart wallet
+      const txHash = await client.sendTransaction({
         calls,
       })
 
-      // result is { id: string, capabilities?: {...} }
-      onSuccess?.(result.id)
-      return result
+      console.log('Deposit transaction sent:', txHash)
+      onSuccess?.(txHash)
+      return { id: txHash }
     } catch (error) {
       console.error('Deposit error:', error)
       onError?.(error as Error)
@@ -80,32 +75,42 @@ export function useMorphoActions({ vaultAddress, onSuccess, onError }: UseMorpho
     } finally {
       setIsLoading(false)
     }
-  }, [address, walletClient, publicClient, vaultAddress, sendCallsAsync, onSuccess, onError])
+  }, [address, isSmartWalletReady, getClientForChain, vaultAddress, onSuccess, onError])
 
   // Withdraw USDC from vault (redeem shares)
   const withdraw = useCallback(async (shares: bigint) => {
-    if (!address || !walletClient) {
-      throw new Error('Wallet not connected')
+    if (!address || !isSmartWalletReady) {
+      throw new Error('Smart wallet not ready')
     }
 
     setIsLoading(true)
 
     try {
-      const result = await sendCallsAsync({
+      const smartWalletAddress = address as `0x${string}`
+
+      // Get smart wallet client for Base chain
+      const client = await getClientForChain({ chainId: base.id })
+
+      if (!client) {
+        throw new Error('Could not get smart wallet client for Base')
+      }
+
+      const txHash = await client.sendTransaction({
         calls: [
           {
             to: vaultAddress,
             data: encodeFunctionData({
               abi: ERC4626_ABI,
               functionName: 'redeem',
-              args: [shares, address, address],
+              args: [shares, smartWalletAddress, smartWalletAddress],
             }),
           },
         ],
       })
 
-      onSuccess?.(result.id)
-      return result
+      console.log('Withdraw transaction sent:', txHash)
+      onSuccess?.(txHash)
+      return { id: txHash }
     } catch (error) {
       console.error('Withdraw error:', error)
       onError?.(error as Error)
@@ -113,34 +118,43 @@ export function useMorphoActions({ vaultAddress, onSuccess, onError }: UseMorpho
     } finally {
       setIsLoading(false)
     }
-  }, [address, walletClient, vaultAddress, sendCallsAsync, onSuccess, onError])
+  }, [address, isSmartWalletReady, getClientForChain, vaultAddress, onSuccess, onError])
 
   // Withdraw specific amount of assets
   const withdrawAssets = useCallback(async (amount: string) => {
-    if (!address || !walletClient) {
-      throw new Error('Wallet not connected')
+    if (!address || !isSmartWalletReady) {
+      throw new Error('Smart wallet not ready')
     }
 
     setIsLoading(true)
 
     try {
       const amountBigInt = parseUnits(amount, 6)
+      const smartWalletAddress = address as `0x${string}`
 
-      const result = await sendCallsAsync({
+      // Get smart wallet client for Base chain
+      const client = await getClientForChain({ chainId: base.id })
+
+      if (!client) {
+        throw new Error('Could not get smart wallet client for Base')
+      }
+
+      const txHash = await client.sendTransaction({
         calls: [
           {
             to: vaultAddress,
             data: encodeFunctionData({
               abi: ERC4626_ABI,
               functionName: 'withdraw',
-              args: [amountBigInt, address, address],
+              args: [amountBigInt, smartWalletAddress, smartWalletAddress],
             }),
           },
         ],
       })
 
-      onSuccess?.(result.id)
-      return result
+      console.log('Withdraw transaction sent:', txHash)
+      onSuccess?.(txHash)
+      return { id: txHash }
     } catch (error) {
       console.error('Withdraw error:', error)
       onError?.(error as Error)
@@ -148,7 +162,7 @@ export function useMorphoActions({ vaultAddress, onSuccess, onError }: UseMorpho
     } finally {
       setIsLoading(false)
     }
-  }, [address, walletClient, vaultAddress, sendCallsAsync, onSuccess, onError])
+  }, [address, isSmartWalletReady, getClientForChain, vaultAddress, onSuccess, onError])
 
   return {
     deposit,
