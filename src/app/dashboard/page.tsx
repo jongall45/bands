@@ -271,9 +271,9 @@ export default function Dashboard() {
           <div className="flex justify-end mb-2">
             <Link
               href="/fund"
-              className="flex items-center gap-1.5 px-4 py-2 bg-[#FF3B30]/20 hover:bg-[#FF3B30]/40 border border-[#FF3B30]/40 hover:border-[#FF3B30]/60 text-[#FF3B30] text-xs font-bold rounded-xl transition-all active:scale-[0.98] uppercase tracking-wide backdrop-blur-md"
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-[#FF3B30]/15 hover:bg-[#FF3B30]/30 border border-[#FF3B30]/30 hover:border-[#FF3B30]/50 text-[#FF3B30] text-[10px] font-bold rounded-lg transition-all active:scale-[0.98] uppercase tracking-wide backdrop-blur-md"
             >
-              <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
+              <Plus className="w-3 h-3" strokeWidth={2.5} />
               <span>Add Cash</span>
             </Link>
           </div>
@@ -395,38 +395,38 @@ export default function Dashboard() {
               {portfolio.tokens.slice(0, 10).map((token: PortfolioToken, index: number) => (
                 <div
                   key={`${token.chainId}-${token.address}-${index}`}
-                  className="flex items-center justify-between p-3 bg-black/30 border border-white/5 rounded-xl transition-all hover:bg-[#FF3B30]/10 hover:border-[#FF3B30]/20"
+                  className="relative rounded-xl p-[1px] bg-gradient-to-br from-white/5 via-transparent to-transparent transition-all hover:from-white/10 hover:to-[#FF3B30]/25 group"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <img
-                        src={token.logoURI || `https://api.dicebear.com/7.x/shapes/svg?seed=${token.symbol}`}
-                        alt={token.symbol}
-                        className="w-9 h-9 rounded-full bg-white/10"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/shapes/svg?seed=${token.symbol}`
-                        }}
-                      />
-                      <img
-                        src={CHAIN_CONFIG[token.chainId]?.logo || CHAIN_CONFIG[8453].logo}
-                        alt={CHAIN_CONFIG[token.chainId]?.name || 'Chain'}
-                        className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-[#050505]"
-                      />
+                  <div className="flex items-center justify-between p-3 bg-[#0a0a0a]/90 rounded-[11px] transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <img
+                          src={token.logoURI || `https://api.dicebear.com/7.x/shapes/svg?seed=${token.symbol}`}
+                          alt={token.symbol}
+                          className="w-9 h-9 rounded-full bg-white/10"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/shapes/svg?seed=${token.symbol}`
+                          }}
+                        />
+                        <img
+                          src={CHAIN_CONFIG[token.chainId]?.logo || CHAIN_CONFIG[8453].logo}
+                          alt={CHAIN_CONFIG[token.chainId]?.name || 'Chain'}
+                          className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-[#050505]"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-white font-semibold text-sm">{token.symbol}</p>
+                        <p className="text-white/40 text-xs">{CHAIN_CONFIG[token.chainId]?.name || 'Unknown'}</p>
+                      </div>
                     </div>
-
-                    <div>
-                      <p className="text-white font-semibold text-sm">{token.symbol}</p>
-                      <p className="text-white/40 text-xs">{CHAIN_CONFIG[token.chainId]?.name || 'Unknown'}</p>
+                    <div className="text-right">
+                      <p className="text-white font-mono text-sm">
+                        {formatTokenBalance(token.balance)}
+                      </p>
+                      <p className="text-white/40 text-xs">
+                        {token.balanceUsd > 0 ? formatUsdValue(token.balanceUsd) : '-'}
+                      </p>
                     </div>
-                  </div>
-
-                  <div className="text-right">
-                    <p className="text-white font-mono text-sm">
-                      {formatTokenBalance(token.balance)}
-                    </p>
-                    <p className="text-white/40 text-xs">
-                      {token.balanceUsd > 0 ? formatUsdValue(token.balanceUsd) : '-'}
-                    </p>
                   </div>
                 </div>
               ))}

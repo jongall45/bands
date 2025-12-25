@@ -111,22 +111,24 @@ interface GlassButtonProps {
 }
 
 export const GlassButton = ({ children, onClick, primary = false, className = "", disabled = false, type = 'button' }: GlassButtonProps) => (
-  <button
-    type={type}
-    onClick={onClick}
-    disabled={disabled}
-    className={`relative w-full py-4 rounded-full font-bold uppercase tracking-wider text-sm flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 ${className}`}
-    style={{
-      background: primary
-        ? "linear-gradient(135deg, rgba(255, 59, 48, 0.9) 0%, rgba(255, 59, 48, 0.7) 100%)"
-        : "rgba(255,255,255,0.05)",
-      border: primary ? "1px solid #FF3B30" : "1px solid rgba(255,255,255,0.1)",
-      color: "white",
-      backdropFilter: "blur(12px)"
-    }}
-  >
-    {children}
-  </button>
+  <div className={`relative rounded-full p-[1px] transition-all ${primary ? '' : 'bg-gradient-to-br from-white/10 via-transparent to-transparent hover:from-white/15 hover:to-[#FF3B30]/25'}`}>
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className={`relative w-full py-4 rounded-full font-bold uppercase tracking-wider text-sm flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 ${className}`}
+      style={{
+        background: primary
+          ? "linear-gradient(135deg, rgba(255, 59, 48, 0.9) 0%, rgba(255, 59, 48, 0.7) 100%)"
+          : "rgba(10,10,10,0.9)",
+        border: primary ? "1px solid #FF3B30" : "none",
+        color: "white",
+        backdropFilter: "blur(12px)"
+      }}
+    >
+      {children}
+    </button>
+  </div>
 )
 
 // 4. INNER CARD (For nested sections within a GlassCard)
