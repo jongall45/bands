@@ -13,6 +13,12 @@ interface CustomSwapWidgetProps {
   onSuccess?: (result: { txHash: string; fromAmount: string; toAmount: string }) => void
   onError?: (error: string) => void
   onStateChange?: (state: SwapState) => void
+  // Allow external setting of buy token (for chart integration)
+  buyToken?: {
+    address: string
+    symbol: string
+    chainId: number
+  } | null
 }
 
 // Chain explorer URLs
@@ -45,7 +51,7 @@ const getExplorerName = (chainId: number): string => {
 // ============================================
 // COMPONENT
 // ============================================
-export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSwapWidgetProps) {
+export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }: CustomSwapWidgetProps) {
   // Relay swap hook
   const {
     state,
@@ -77,6 +83,32 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
   const [isFromModalOpen, setIsFromModalOpen] = useState(false)
   const [isToModalOpen, setIsToModalOpen] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
+
+  // Handle external token selection from chart
+  useEffect(() => {
+    if (buyToken) {
+      // Try to find in common tokens first
+      const chainTokens = COMMON_TOKENS[buyToken.chainId] || []
+      const existingToken = chainTokens.find(
+        t => t.address.toLowerCase() === buyToken.address.toLowerCase()
+      )
+
+      if (existingToken) {
+        setToToken(existingToken)
+      } else {
+        // Create a new token object for tokens not in common list
+        const newToken: Token = {
+          symbol: buyToken.symbol,
+          name: buyToken.symbol, // Use symbol as name fallback
+          address: buyToken.address,
+          chainId: buyToken.chainId,
+          decimals: 18, // Default, will be fetched
+          logoURI: undefined,
+        }
+        setToToken(newToken)
+      }
+    }
+  }, [buyToken])
 
   // Notify parent of state changes
   useEffect(() => {
@@ -275,23 +307,31 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
                 step="any"
               />
               
-              {/* Token Selector Button */}
+              {/* Token Selector Button - Frosted Glass */}
               <button
                 onClick={() => setIsFromModalOpen(true)}
-                className="flex items-center gap-2 bg-[#ef4444] pl-1.5 pr-3 py-1.5 rounded-full shadow-lg hover:bg-[#dc2626] transition-all min-w-[130px]"
+                className="relative flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full min-w-[130px] overflow-hidden group transition-all duration-200 hover:scale-[1.02]"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.9) 0%, rgba(220, 38, 38, 0.9) 100%)',
+                  boxShadow: '0 4px 20px rgba(239, 68, 68, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+                }}
               >
+                {/* Glass highlight */}
+                <div className="absolute inset-0 bg-gradient-to-b from-white/15 to-transparent h-1/2 pointer-events-none" />
+                {/* Hover glow */}
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-br from-white/10 to-transparent" />
                 {fromToken.logoURI ? (
-                  <img src={fromToken.logoURI} className="w-8 h-8 rounded-full" alt={fromToken.symbol} />
+                  <img src={fromToken.logoURI} className="w-8 h-8 rounded-full relative z-10" alt={fromToken.symbol} />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold">
+                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold relative z-10">
                     {fromToken.symbol.charAt(0)}
                   </div>
                 )}
-                <div className="flex flex-col items-start mr-auto leading-none gap-0.5">
+                <div className="flex flex-col items-start mr-auto leading-none gap-0.5 relative z-10">
                   <span className="text-sm font-bold text-white">{fromToken.symbol}</span>
                   <span className="text-[10px] font-bold text-white/70">{getChainName(fromToken.chainId)}</span>
                 </div>
-                <ChevronDown size={16} className="text-white/70" />
+                <ChevronDown size={16} className="text-white/70 relative z-10" />
               </button>
             </div>
 
@@ -301,12 +341,12 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
               </span>
               <div className="flex items-center gap-2 text-xs font-semibold text-white/40">
                 <span>Balance: {parseFloat(fromBalance).toFixed(4)}</span>
-                <div className="flex gap-1 ml-1">
+                <div className="flex gap-1.5 ml-1">
                   {[20, 50, 100].map(p => (
                     <button
                       key={p}
                       onClick={() => handlePercentage(p)}
-                      className="bg-[#ef4444] hover:bg-[#dc2626] px-2 py-0.5 rounded text-white text-[10px] font-bold transition"
+                      className="btn-frosted-red px-2.5 py-1 text-white text-[10px] tracking-wide"
                     >
                       {p === 100 ? 'MAX' : `${p}%`}
                     </button>
@@ -349,23 +389,31 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
                 className="w-full bg-transparent text-[40px] font-semibold text-white placeholder-white/20 outline-none"
               />
               
-              {/* Token Selector Button */}
+              {/* Token Selector Button - Frosted Glass */}
               <button
                 onClick={() => setIsToModalOpen(true)}
-                className="flex items-center gap-2 bg-[#ef4444] pl-1.5 pr-3 py-1.5 rounded-full shadow-lg hover:bg-[#dc2626] transition-all min-w-[130px]"
+                className="relative flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full min-w-[130px] overflow-hidden group transition-all duration-200 hover:scale-[1.02]"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.9) 0%, rgba(220, 38, 38, 0.9) 100%)',
+                  boxShadow: '0 4px 20px rgba(239, 68, 68, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+                }}
               >
+                {/* Glass highlight */}
+                <div className="absolute inset-0 bg-gradient-to-b from-white/15 to-transparent h-1/2 pointer-events-none" />
+                {/* Hover glow */}
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-br from-white/10 to-transparent" />
                 {toToken.logoURI ? (
-                  <img src={toToken.logoURI} className="w-8 h-8 rounded-full" alt={toToken.symbol} />
+                  <img src={toToken.logoURI} className="w-8 h-8 rounded-full relative z-10" alt={toToken.symbol} />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold">
+                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold relative z-10">
                     {toToken.symbol.charAt(0)}
                   </div>
                 )}
-                <div className="flex flex-col items-start mr-auto leading-none gap-0.5">
+                <div className="flex flex-col items-start mr-auto leading-none gap-0.5 relative z-10">
                   <span className="text-sm font-bold text-white">{toToken.symbol}</span>
                   <span className="text-[10px] font-bold text-white/70">{getChainName(toToken.chainId)}</span>
                 </div>
-                <ChevronDown size={16} className="text-white/70" />
+                <ChevronDown size={16} className="text-white/70 relative z-10" />
               </button>
             </div>
 
@@ -418,21 +466,34 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange }: CustomSw
             </div>
           )}
 
-          {/* ACTION BUTTON */}
-          <button
-            onClick={handleSwap}
-            disabled={isButtonDisabled}
-            className={`w-full py-4 rounded-[18px] font-bold text-lg flex justify-center items-center gap-2 transition-all ${
-              isButtonDisabled
-                ? 'bg-white/10 text-white/40 cursor-not-allowed'
-                : 'bg-[#ef4444] hover:bg-[#dc2626] active:scale-[0.99] text-white shadow-lg shadow-[#ef4444]/20'
-            }`}
-          >
-            {(state === 'fetching_quote' || state === 'confirming' || state === 'sending' || state === 'pending') && (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            )}
-            {buttonText}
-          </button>
+          {/* ACTION BUTTON - Frosted Glass */}
+          <div className={`relative rounded-[18px] ${isButtonDisabled ? '' : 'p-[1px] bg-gradient-to-br from-white/20 via-transparent to-[#ef4444]/40'}`}>
+            <button
+              onClick={handleSwap}
+              disabled={isButtonDisabled}
+              className={`relative w-full py-4 rounded-[17px] font-bold text-lg flex justify-center items-center gap-2 transition-all overflow-hidden ${
+                isButtonDisabled
+                  ? 'bg-white/5 text-white/40 cursor-not-allowed'
+                  : 'text-white hover:scale-[1.01] active:scale-[0.99]'
+              }`}
+              style={isButtonDisabled ? {} : {
+                background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                boxShadow: '0 4px 30px rgba(239, 68, 68, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+              }}
+            >
+              {/* Glass highlight overlay */}
+              {!isButtonDisabled && (
+                <div className="absolute inset-0 bg-gradient-to-b from-white/15 to-transparent h-1/2 pointer-events-none" />
+              )}
+              {/* Content */}
+              <span className="relative z-10 flex items-center gap-2">
+                {(state === 'fetching_quote' || state === 'confirming' || state === 'sending' || state === 'pending') && (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                )}
+                {buttonText}
+              </span>
+            </button>
+          </div>
         </div>
       </div>
 
