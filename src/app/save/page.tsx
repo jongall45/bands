@@ -76,20 +76,42 @@ export default function SavePage() {
     }
   }, [positions, vaults])
 
-  // Sort and filter vaults by APY (descending)
+  // Minimum liquidity threshold ($1M)
+  const MIN_LIQUIDITY_USD = 1_000_000
+
+  // Sort and filter vaults by APY (descending), with minimum liquidity
   const sortedVaults = useMemo(() => {
     if (!vaults) return []
     return [...vaults]
       .filter(v => v.state.netApy <= MAX_REALISTIC_APY)
-      .sort((a, b) => b.state.netApy - a.state.netApy)
+      .filter(v => v.state.totalAssetsUsd >= MIN_LIQUIDITY_USD) // Minimum $1M liquidity
+      .sort((a, b) => {
+        // Sort by APY first, but favor vaults with more liquidity
+        // Score = APY * log10(liquidity) to balance yield and safety
+        const scoreA = a.state.netApy * Math.log10(a.state.totalAssetsUsd + 1)
+        const scoreB = b.state.netApy * Math.log10(b.state.totalAssetsUsd + 1)
+        return scoreB - scoreA
+      })
       .slice(0, 5)
   }, [vaults])
 
   // Get highest APY
   const highestApy = sortedVaults.length > 0 ? sortedVaults[0].state.netApy * 100 : 0
 
-  // Get user's USDC balance
-  const usdcBalance = parseFloat(balances.usdcBase || '0')
+  // Get user's USDC balance for selected chain
+  const getUsdcBalanceForChain = (chainId: number) => {
+    switch (chainId) {
+      case base.id:
+        return balances.usdcBase
+      case 42161: // Arbitrum
+        return balances.usdcArb
+      case 137: // Polygon
+        return balances.usdcPolygon
+      default:
+        return '0'
+    }
+  }
+  const usdcBalance = parseFloat(getUsdcBalanceForChain(selectedChainId) || '0')
 
   const handleSelectVault = (vault: MorphoVault) => {
     setSelectedVault(vault)
@@ -138,7 +160,14 @@ export default function SavePage() {
               onClick={() => setIsSavingsExpanded(!isSavingsExpanded)}
               className="w-full text-left"
             >
-              <GlassCard variant="red" className="!p-4">
+              {/* Subtle red-tinted card - more transparent */}
+              <div
+                className="relative overflow-hidden rounded-3xl border border-[#FF3B30]/20 shadow-2xl p-4"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(255, 59, 48, 0.08) 0%, rgba(255, 59, 48, 0.03) 100%)',
+                  backdropFilter: 'blur(20px)',
+                }}
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-[#FF3B30]/20 rounded-xl flex items-center justify-center">
@@ -212,7 +241,7 @@ export default function SavePage() {
                     avgApy={avgApy}
                   />
                 </div>
-              </GlassCard>
+              </div>
             </button>
           </div>
         )}
@@ -247,13 +276,13 @@ export default function SavePage() {
           </div>
         )}
 
-        {/* Available USDC Balance */}
+        {/* Available USDC Balance for selected chain */}
         {usdcBalance > 0 && (
           <div className="px-5 mb-4">
             <GlassInner className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <img src={USDC_LOGO} alt="USDC" className="w-5 h-5" />
-                <span className="text-white/60 text-sm">Available USDC</span>
+                <span className="text-white/60 text-sm">Available on {selectedChain.name}</span>
               </div>
               <span className="text-white font-semibold">${usdcBalance.toFixed(2)}</span>
             </GlassInner>
