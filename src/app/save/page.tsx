@@ -1,15 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { PiggyBank, TrendingUp, RefreshCw, Plus, ExternalLink, Shield, ChevronDown } from 'lucide-react'
 import { useMorphoVaults, useUserVaultPositions } from '@/hooks/useMorphoVaults'
 import { calculateProjectedEarnings, type MorphoVault } from '@/lib/morpho/api'
-import { MORPHO_CHAINS } from '@/lib/morpho/constants'
+import { MORPHO_CHAINS, MAX_REALISTIC_APY } from '@/lib/morpho/constants'
 import { base } from 'viem/chains'
 import { VaultCard } from '@/components/morpho/VaultCard'
 import { DepositModal } from '@/components/morpho/DepositModal'
 import { WithdrawModal } from '@/components/morpho/WithdrawModal'
+import { SavingsProjectionChart } from '@/components/morpho/SavingsProjectionChart'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
 import { IndustrialPage, GlassCard, GlassButton, GlassInner, TechBadge, SectionHeader } from '@/components/ui/IndustrialGlass'
@@ -36,25 +37,52 @@ export default function SavePage() {
   }, [isAuthenticated, router])
 
   // Fetch vaults for selected chain
-  const { data: vaults, isLoading: vaultsLoading, refetch } = useMorphoVaults(selectedChainId)
+  const { data: vaults, isLoading: vaultsLoading, refetch: refetchVaults } = useMorphoVaults(selectedChainId)
 
   // Fetch user positions for selected chain
-  const { data: positions, isLoading: positionsLoading } = useUserVaultPositions(selectedChainId)
+  const { data: positions, isLoading: positionsLoading, refetch: refetchPositions } = useUserVaultPositions(selectedChainId)
+
+  // Refetch all data
+  const refetch = async () => {
+    await Promise.all([refetchVaults(), refetchPositions()])
+  }
 
   // Calculate total deposited
   const totalDeposited = positions?.reduce((sum, pos) => sum + (pos.assetsUsd || 0), 0) || 0
 
-  // Calculate total projected yearly earnings
-  const totalYearlyEarnings = positions?.reduce((sum, pos) => {
-    const vault = vaults?.find(v => v.address.toLowerCase() === pos.vault.address.toLowerCase())
-    if (vault) {
-      return sum + calculateProjectedEarnings(pos.assetsUsd || 0, vault.state.netApy * 100, 365)
+  // Calculate total projected yearly earnings and average APY
+  const { totalYearlyEarnings, avgApy } = useMemo(() => {
+    if (!positions || !vaults || positions.length === 0) {
+      return { totalYearlyEarnings: 0, avgApy: 0 }
     }
-    return sum
-  }, 0) || 0
 
-  // Get highest APY
-  const highestApy = vaults?.reduce((max, v) => Math.max(max, v.state.netApy * 100), 0) || 0
+    let totalEarnings = 0
+    let weightedApySum = 0
+    let totalWeight = 0
+
+    positions.forEach(pos => {
+      const vault = vaults.find(v => v.address.toLowerCase() === pos.vault.address.toLowerCase())
+      if (vault && pos.assetsUsd) {
+        const apy = Math.min(vault.state.netApy, MAX_REALISTIC_APY) // Cap unrealistic APY
+        totalEarnings += calculateProjectedEarnings(pos.assetsUsd, apy * 100, 365)
+        weightedApySum += apy * pos.assetsUsd
+        totalWeight += pos.assetsUsd
+      }
+    })
+
+    return {
+      totalYearlyEarnings: totalEarnings,
+      avgApy: totalWeight > 0 ? weightedApySum / totalWeight : 0,
+    }
+  }, [positions, vaults])
+
+  // Get highest APY (filter out unrealistic values)
+  const highestApy = vaults?.reduce((max, v) => {
+    const apy = v.state.netApy
+    // Filter out unrealistic APY values (likely bad data)
+    if (apy > MAX_REALISTIC_APY) return max
+    return Math.max(max, apy * 100)
+  }, 0) || 0
 
   // Get user's USDC balance on Base
   const usdcBalance = parseFloat(balances.usdcBase || '0')
@@ -107,7 +135,7 @@ export default function SavePage() {
               className="w-full flex items-center justify-between bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-3 hover:bg-white/[0.06] transition-colors"
             >
               <div className="flex items-center gap-2">
-                <span className="text-lg">{selectedChain.icon}</span>
+                <img src={selectedChain.icon} alt={selectedChain.name} className="w-5 h-5 rounded-full" />
                 <span className="text-white font-medium">{selectedChain.name}</span>
               </div>
               <ChevronDown className={`w-4 h-4 text-white/40 transition-transform ${isChainDropdownOpen ? 'rotate-180' : ''}`} />
@@ -126,7 +154,7 @@ export default function SavePage() {
                       chain.id === selectedChainId ? 'bg-white/[0.03]' : ''
                     }`}
                   >
-                    <span className="text-lg">{chain.icon}</span>
+                    <img src={chain.icon} alt={chain.name} className="w-5 h-5 rounded-full" />
                     <span className="text-white">{chain.name}</span>
                     {chain.id === selectedChainId && (
                       <span className="ml-auto text-[#FF3B30] text-sm">✓</span>
@@ -140,7 +168,7 @@ export default function SavePage() {
 
         {/* Portfolio Summary - Only show if user has deposits */}
         {totalDeposited > 0 && (
-          <div className="px-5 mb-4">
+          <div className="px-5 mb-4 space-y-3">
             <GlassCard variant="red">
               <div className="flex items-center gap-2 mb-3">
                 <PiggyBank className="w-5 h-5 text-[#FF3B30]" />
@@ -166,6 +194,12 @@ export default function SavePage() {
                 </div>
               </GlassInner>
             </GlassCard>
+
+            {/* Projection Chart */}
+            <SavingsProjectionChart
+              totalDeposited={totalDeposited}
+              avgApy={avgApy}
+            />
           </div>
         )}
 
@@ -301,7 +335,10 @@ export default function SavePage() {
             </div>
           ) : vaults && vaults.length > 0 ? (
             <div className="space-y-3">
-              {vaults.slice(0, 5).map((vault) => {
+              {vaults
+                .filter(v => v.state.netApy <= MAX_REALISTIC_APY) // Filter unrealistic APY
+                .slice(0, 5)
+                .map((vault) => {
                 const position = positions?.find(
                   p => p.vault.address.toLowerCase() === vault.address.toLowerCase()
                 )
