@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { createChart, IChartApi, ISeriesApi, CandlestickData, Time, ColorType } from 'lightweight-charts'
+import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { Search, Copy, Check, TrendingUp, TrendingDown, Droplets, DollarSign, BarChart3, ExternalLink, X, Loader2 } from 'lucide-react'
 
 // ============================================
@@ -57,8 +56,8 @@ interface TokenPair {
 }
 
 interface TokenChartProps {
-  onBuy?: (tokenAddress: string, tokenSymbol: string, chainId: string) => void
-  onSell?: (tokenAddress: string, tokenSymbol: string, chainId: string) => void
+  onBuy?: (tokenAddress: string, tokenSymbol: string, chainId: string, logoUrl?: string) => void
+  onSell?: (tokenAddress: string, tokenSymbol: string, chainId: string, logoUrl?: string) => void
   defaultToken?: string
   className?: string
 }
@@ -72,30 +71,107 @@ const CHAIN_NAMES: Record<string, string> = {
   'polygon': 'Polygon',
 }
 
-const CHAIN_IDS: Record<string, number> = {
-  'base': 8453,
-  'ethereum': 1,
-  'arbitrum': 42161,
-  'optimism': 10,
-  'polygon': 137,
+// ============================================
+// TRADINGVIEW WIDGET COMPONENT
+// ============================================
+interface TradingViewChartProps {
+  chainId: string
+  pairAddress: string
 }
 
+const TradingViewChart = memo(function TradingViewChart({ chainId, pairAddress }: TradingViewChartProps) {
+  const container = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!container.current) return
+
+    // Clear any existing content
+    container.current.innerHTML = ''
+
+    // Create the script element for TradingView widget
+    const script = document.createElement('script')
+    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js'
+    script.type = 'text/javascript'
+    script.async = true
+
+    // Use DexScreener symbol format for DEX pairs
+    // Format: DEXSCREENER:{SYMBOL}{QUOTESYMBOL}
+    const symbol = `DEXSCREENER:${chainId.toUpperCase()}${pairAddress.toUpperCase()}`
+
+    script.innerHTML = JSON.stringify({
+      autosize: true,
+      symbol: symbol,
+      interval: '60',
+      timezone: 'Etc/UTC',
+      theme: 'dark',
+      style: '1',
+      locale: 'en',
+      backgroundColor: 'rgba(10, 10, 10, 1)',
+      gridColor: 'rgba(255, 255, 255, 0.03)',
+      hide_top_toolbar: false,
+      hide_legend: false,
+      hide_volume: false,
+      hide_side_toolbar: true,
+      allow_symbol_change: false,
+      save_image: false,
+      calendar: false,
+      hotlist: false,
+      details: false,
+      withdateranges: false,
+      support_host: 'https://www.tradingview.com',
+    })
+
+    container.current.appendChild(script)
+
+    return () => {
+      if (container.current) {
+        container.current.innerHTML = ''
+      }
+    }
+  }, [chainId, pairAddress])
+
+  return (
+    <div className="tradingview-widget-container" ref={container} style={{ height: '100%', width: '100%' }}>
+      <div className="tradingview-widget-container__widget" style={{ height: '100%', width: '100%' }} />
+    </div>
+  )
+})
+
 // ============================================
-// COMPONENT
+// DEXSCREENER EMBED CHART (More reliable for DEX tokens)
+// ============================================
+interface DexScreenerChartProps {
+  chainId: string
+  pairAddress: string
+}
+
+const DexScreenerChart = memo(function DexScreenerChart({ chainId, pairAddress }: DexScreenerChartProps) {
+  // DexScreener embed URL
+  const embedUrl = `https://dexscreener.com/${chainId}/${pairAddress}?embed=1&loadChartSettings=0&trades=0&info=0&chartLeftToolbar=0&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=60`
+
+  return (
+    <iframe
+      src={embedUrl}
+      className="w-full h-full border-0 rounded-xl"
+      title="DexScreener Chart"
+      allow="clipboard-write"
+      loading="lazy"
+    />
+  )
+})
+
+// ============================================
+// MAIN COMPONENT
 // ============================================
 export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: TokenChartProps) {
-  const chartContainerRef = useRef<HTMLDivElement>(null)
-  const chartRef = useRef<IChartApi | null>(null)
-  const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
-
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<TokenPair[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const [selectedToken, setSelectedToken] = useState<TokenPair | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [selectedTimeframe, setSelectedTimeframe] = useState<'5m' | '1h' | '6h' | '24h'>('24h')
+  const [chartLoaded, setChartLoaded] = useState(false)
 
   // Search for tokens
   const searchTokens = useCallback(async (query: string) => {
@@ -132,155 +208,14 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
     return () => clearTimeout(timer)
   }, [searchQuery, searchTokens])
 
-  // Generate simulated candlestick data from price changes
-  const generateCandlestickData = useCallback((token: TokenPair): CandlestickData[] => {
-    const now = Math.floor(Date.now() / 1000)
-    const currentPrice = parseFloat(token.priceUsd) || 0
-    if (currentPrice <= 0) return []
-
-    const data: CandlestickData[] = []
-    const points = 50
-    const timeInterval = 3600 // 1 hour in seconds
-
-    // Calculate historical prices based on 24h change
-    const priceChange24h = token.priceChange?.h24 || 0
-    const startPrice = currentPrice / (1 + priceChange24h / 100)
-
-    // Generate realistic candles
-    let seed = token.pairAddress.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-    const random = () => {
-      seed = (seed * 1664525 + 1013904223) % 2147483648
-      return seed / 2147483648
-    }
-
-    let price = startPrice
-    const volatility = Math.abs(priceChange24h) / 100 * 0.1 || 0.02
-
-    for (let i = 0; i < points; i++) {
-      const time = (now - (points - i) * timeInterval) as Time
-      const change = (random() - 0.5) * volatility * price
-      const trendBias = (currentPrice - startPrice) / points
-
-      // Calculate OHLC
-      const open = price
-      price += change + trendBias
-
-      // Converge to current price in last few candles
-      if (i > points - 5) {
-        const factor = (i - (points - 5)) / 5
-        price = price + (currentPrice - price) * factor * 0.5
-      }
-
-      const high = Math.max(open, price) * (1 + random() * volatility * 0.3)
-      const low = Math.min(open, price) * (1 - random() * volatility * 0.3)
-      const close = price
-
-      data.push({
-        time,
-        open,
-        high,
-        low,
-        close: i === points - 1 ? currentPrice : close,
-      })
-    }
-
-    return data
-  }, [])
-
-  // Initialize chart
-  useEffect(() => {
-    if (!chartContainerRef.current || chartRef.current) return
-
-    const chart = createChart(chartContainerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: 'rgba(255, 255, 255, 0.5)',
-      },
-      grid: {
-        vertLines: { color: 'rgba(255, 255, 255, 0.03)' },
-        horzLines: { color: 'rgba(255, 255, 255, 0.03)' },
-      },
-      crosshair: {
-        mode: 1,
-        vertLine: {
-          color: 'rgba(239, 68, 68, 0.3)',
-          width: 1,
-          style: 2,
-        },
-        horzLine: {
-          color: 'rgba(239, 68, 68, 0.3)',
-          width: 1,
-          style: 2,
-        },
-      },
-      rightPriceScale: {
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        scaleMargins: {
-          top: 0.1,
-          bottom: 0.1,
-        },
-      },
-      timeScale: {
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        timeVisible: true,
-        secondsVisible: false,
-      },
-      handleScale: {
-        axisPressedMouseMove: {
-          time: true,
-          price: true,
-        },
-      },
-    })
-
-    const candlestickSeries = chart.addCandlestickSeries({
-      upColor: '#22c55e',
-      downColor: '#ef4444',
-      borderUpColor: '#22c55e',
-      borderDownColor: '#ef4444',
-      wickUpColor: '#22c55e',
-      wickDownColor: '#ef4444',
-    })
-
-    chartRef.current = chart
-    candlestickSeriesRef.current = candlestickSeries
-
-    // Handle resize
-    const handleResize = () => {
-      if (chartContainerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: chartContainerRef.current.clientHeight,
-        })
-      }
-    }
-
-    window.addEventListener('resize', handleResize)
-    handleResize()
-
-    return () => {
-      window.removeEventListener('resize', handleResize)
-      if (chartRef.current) {
-        chartRef.current.remove()
-        chartRef.current = null
-      }
-    }
-  }, [])
-
-  // Update chart when token changes
-  useEffect(() => {
-    if (!selectedToken || !candlestickSeriesRef.current) return
-
-    const data = generateCandlestickData(selectedToken)
-    candlestickSeriesRef.current.setData(data)
-    chartRef.current?.timeScale().fitContent()
-  }, [selectedToken, generateCandlestickData])
-
   // Select token
   const handleSelectToken = (token: TokenPair) => {
     setSelectedToken(token)
     setSearchQuery('')
     setShowResults(false)
+    setChartLoaded(false)
+    // Give the chart time to load
+    setTimeout(() => setChartLoaded(true), 500)
   }
 
   // Copy contract address
@@ -331,6 +266,28 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
 
   const priceChange = getPriceChange()
   const isPositive = priceChange.value >= 0
+
+  // Handle buy with logo URL
+  const handleBuy = () => {
+    if (!selectedToken) return
+    onBuy?.(
+      selectedToken.baseToken.address,
+      selectedToken.baseToken.symbol,
+      selectedToken.chainId,
+      selectedToken.info?.imageUrl
+    )
+  }
+
+  // Handle sell with logo URL
+  const handleSell = () => {
+    if (!selectedToken) return
+    onSell?.(
+      selectedToken.baseToken.address,
+      selectedToken.baseToken.symbol,
+      selectedToken.chainId,
+      selectedToken.info?.imageUrl
+    )
+  }
 
   return (
     <div className={`relative ${className}`}>
@@ -482,11 +439,18 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
                   </a>
                 </div>
 
-                {/* Chart */}
-                <div
-                  ref={chartContainerRef}
-                  className="w-full h-[200px] rounded-xl overflow-hidden bg-black/20"
-                />
+                {/* DexScreener Chart Embed */}
+                <div className="w-full h-[300px] rounded-xl overflow-hidden bg-black/40 relative">
+                  {!chartLoaded && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-10">
+                      <Loader2 className="w-6 h-6 animate-spin text-white/50" />
+                    </div>
+                  )}
+                  <DexScreenerChart
+                    chainId={selectedToken.chainId}
+                    pairAddress={selectedToken.pairAddress}
+                  />
+                </div>
 
                 {/* Timeframe Selector */}
                 <div className="flex justify-center gap-2 mt-3 mb-4">
@@ -549,7 +513,7 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
                 {/* Buy/Sell Buttons */}
                 <div className="grid grid-cols-2 gap-3">
                   <button
-                    onClick={() => onBuy?.(selectedToken.baseToken.address, selectedToken.baseToken.symbol, selectedToken.chainId)}
+                    onClick={handleBuy}
                     className="relative group overflow-hidden rounded-xl"
                   >
                     <div className="absolute inset-0 bg-gradient-to-br from-green-500/20 to-green-600/20 group-hover:from-green-500/30 group-hover:to-green-600/30 transition-all" />
@@ -560,7 +524,7 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
                     </div>
                   </button>
                   <button
-                    onClick={() => onSell?.(selectedToken.baseToken.address, selectedToken.baseToken.symbol, selectedToken.chainId)}
+                    onClick={handleSell}
                     className="relative group overflow-hidden rounded-xl"
                   >
                     <div className="absolute inset-0 bg-gradient-to-br from-[#ef4444]/20 to-[#dc2626]/20 group-hover:from-[#ef4444]/30 group-hover:to-[#dc2626]/30 transition-all" />

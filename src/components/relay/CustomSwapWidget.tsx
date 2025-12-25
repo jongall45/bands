@@ -18,6 +18,7 @@ interface CustomSwapWidgetProps {
     address: string
     symbol: string
     chainId: number
+    logoURI?: string
   } | null
 }
 
@@ -94,7 +95,11 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
       )
 
       if (existingToken) {
-        setToToken(existingToken)
+        // Use common token but override with provided logo if available
+        setToToken({
+          ...existingToken,
+          logoURI: buyToken.logoURI || existingToken.logoURI,
+        })
       } else {
         // Create a new token object for tokens not in common list
         const newToken: Token = {
@@ -103,7 +108,7 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
           address: buyToken.address,
           chainId: buyToken.chainId,
           decimals: 18, // Default, will be fetched
-          logoURI: undefined,
+          logoURI: buyToken.logoURI, // Use logo from DexScreener
         }
         setToToken(newToken)
       }

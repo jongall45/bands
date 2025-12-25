@@ -29,6 +29,7 @@ export default function SwapPage() {
     address: string
     symbol: string
     chainId: number
+    logoURI?: string
   } | null>(null)
 
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
@@ -74,17 +75,18 @@ export default function SwapPage() {
   }, [])
 
   // Handle buy from chart - set the token as the "to" token in swap
-  const handleChartBuy = useCallback((tokenAddress: string, tokenSymbol: string, chainId: string) => {
+  const handleChartBuy = useCallback((tokenAddress: string, tokenSymbol: string, chainId: string, logoUrl?: string) => {
     const numericChainId = DEXSCREENER_CHAIN_IDS[chainId] || 8453
     setSelectedBuyToken({
       address: tokenAddress,
       symbol: tokenSymbol,
       chainId: numericChainId,
+      logoURI: logoUrl,
     })
   }, [])
 
   // Handle sell from chart - we could swap the direction, but for now just set as buy
-  const handleChartSell = useCallback((tokenAddress: string, tokenSymbol: string, chainId: string) => {
+  const handleChartSell = useCallback((tokenAddress: string, tokenSymbol: string, chainId: string, logoUrl?: string) => {
     // For sell, we're selling this token to get USDC, but our widget always has USDC as from
     // So we just set it as the buy token and let user swap if needed
     const numericChainId = DEXSCREENER_CHAIN_IDS[chainId] || 8453
@@ -92,6 +94,7 @@ export default function SwapPage() {
       address: tokenAddress,
       symbol: tokenSymbol,
       chainId: numericChainId,
+      logoURI: logoUrl,
     })
   }, [])
 
