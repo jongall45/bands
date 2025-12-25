@@ -183,14 +183,15 @@ export const IndustrialPage = ({ children, className = "", ...props }: Industria
 interface SectionHeaderProps {
   children: React.ReactNode
   badge?: string
+  badgeColor?: string
   className?: string
 }
 
-export const SectionHeader = ({ children, badge, className = "" }: SectionHeaderProps) => (
+export const SectionHeader = ({ children, badge, badgeColor, className = "" }: SectionHeaderProps) => (
   <div className={`flex items-center justify-between mb-4 ${className}`}>
     <h2 className="text-white font-extrabold text-lg tracking-tight" style={{ fontWeight: 800 }}>
       {children}
     </h2>
-    {badge && <TechBadge>{badge}</TechBadge>}
+    {badge && <TechBadge color={badgeColor}>{badge}</TechBadge>}
   </div>
 )
