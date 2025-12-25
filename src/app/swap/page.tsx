@@ -129,7 +129,7 @@ export default function SwapPage() {
               onClick={() => setShowChart(!showChart)}
               className="w-full flex items-center justify-between px-4 py-2 mb-2 rounded-xl bg-white/5 hover:bg-white/8 transition-colors"
             >
-              <span className="text-white/60 text-sm font-medium">Token Research</span>
+              <span className="text-white/60 text-sm font-medium">Search Token</span>
               {showChart ? (
                 <ChevronUp className="w-4 h-4 text-white/40" />
               ) : (
