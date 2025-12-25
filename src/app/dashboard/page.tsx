@@ -267,20 +267,20 @@ export default function Dashboard() {
 
         {/* Balance Card */}
         <GlassCard variant="redAccent" className="mb-4">
-          {/* Add Money Button - Top Right */}
+          {/* Add Money Button - Top Right - Frosted Glass Style */}
           <div className="flex justify-end mb-2">
             <Link
               href="/fund"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FF3B30] hover:bg-[#D70015] text-white text-xs font-bold rounded-lg transition-all active:scale-[0.98] uppercase tracking-wide"
+              className="flex items-center gap-1.5 px-4 py-2 bg-[#FF3B30]/20 hover:bg-[#FF3B30]/40 border border-[#FF3B30]/40 hover:border-[#FF3B30]/60 text-[#FF3B30] text-xs font-bold rounded-xl transition-all active:scale-[0.98] uppercase tracking-wide backdrop-blur-md"
             >
-              <Plus className="w-3 h-3" strokeWidth={2.5} />
+              <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
               <span>Add Cash</span>
             </Link>
           </div>
 
           {/* Balance Display */}
           <div className="text-center pb-6">
-            <p className="text-white/40 text-xs font-mono uppercase tracking-widest mb-2">Total_Liquidity</p>
+            <p className="text-white/40 text-xs font-mono uppercase tracking-widest mb-2">Total Balance</p>
             {portfolioLoading || balanceLoading ? (
               <div className="h-14 w-48 mx-auto bg-white/5 rounded-xl animate-pulse" />
             ) : (
@@ -383,10 +383,10 @@ export default function Dashboard() {
         {portfolio && portfolio.tokens && portfolio.tokens.length > 0 && (
           <GlassCard noPadding variant="redAccent" className="mb-4">
             <div className="p-4 pb-0">
-              <SectionHeader badge={`${portfolio.tokens.length} assets`}>
+              <SectionHeader badge={`${portfolio.tokens.length} assets`} badgeColor="#FF3B30">
                 <span className="flex items-center gap-2">
-                  <Coins className="w-4 h-4 text-white/60" />
-                  Holdings //
+                  <Coins className="w-4 h-4 text-[#FF3B30]" />
+                  Holdings
                 </span>
               </SectionHeader>
             </div>
@@ -395,7 +395,7 @@ export default function Dashboard() {
               {portfolio.tokens.slice(0, 10).map((token: PortfolioToken, index: number) => (
                 <div
                   key={`${token.chainId}-${token.address}-${index}`}
-                  className="flex items-center justify-between p-3 bg-black/30 border border-white/5 rounded-xl hover:border-white/10 transition-colors"
+                  className="flex items-center justify-between p-3 bg-black/30 border border-white/5 rounded-xl transition-all hover:bg-[#FF3B30]/10 hover:border-[#FF3B30]/20"
                 >
                   <div className="flex items-center gap-3">
                     <div className="relative">
@@ -441,7 +441,7 @@ export default function Dashboard() {
         )}
 
         {/* Recent Activity Card */}
-        <GlassCard>
+        <GlassCard variant="redAccent">
           <SectionHeader>Recent Activity</SectionHeader>
           <TransactionList address={address} limit={5} />
         </GlassCard>

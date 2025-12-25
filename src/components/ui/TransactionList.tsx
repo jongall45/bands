@@ -756,7 +756,7 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
       href={explorerUrl}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center justify-between p-3 bg-white/[0.02] hover:bg-white/[0.04] rounded-2xl transition-colors group"
+      className="flex items-center justify-between p-3 bg-black/30 border border-white/5 rounded-2xl transition-all group hover:bg-[#FF3B30]/10 hover:border-[#FF3B30]/20"
     >
       <div className="flex items-center gap-3">
         {/* Icon with chain indicator */}
