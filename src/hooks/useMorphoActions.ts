@@ -31,7 +31,7 @@ export function useMorphoActions({ vaultAddress, onSuccess, onError }: UseMorpho
       const smartWalletAddress = address as `0x${string}`
 
       // Get smart wallet client for Base chain
-      const client = await getClientForChain({ chainId: base.id })
+      const client = await getClientForChain({ id: base.id })
 
       if (!client) {
         throw new Error('Could not get smart wallet client for Base')
@@ -89,7 +89,7 @@ export function useMorphoActions({ vaultAddress, onSuccess, onError }: UseMorpho
       const smartWalletAddress = address as `0x${string}`
 
       // Get smart wallet client for Base chain
-      const client = await getClientForChain({ chainId: base.id })
+      const client = await getClientForChain({ id: base.id })
 
       if (!client) {
         throw new Error('Could not get smart wallet client for Base')
@@ -133,7 +133,7 @@ export function useMorphoActions({ vaultAddress, onSuccess, onError }: UseMorpho
       const smartWalletAddress = address as `0x${string}`
 
       // Get smart wallet client for Base chain
-      const client = await getClientForChain({ chainId: base.id })
+      const client = await getClientForChain({ id: base.id })
 
       if (!client) {
         throw new Error('Could not get smart wallet client for Base')
