@@ -146,8 +146,8 @@ interface DexScreenerChartProps {
 }
 
 const DexScreenerChart = memo(function DexScreenerChart({ chainId, pairAddress }: DexScreenerChartProps) {
-  // DexScreener embed URL
-  const embedUrl = `https://dexscreener.com/${chainId}/${pairAddress}?embed=1&loadChartSettings=0&trades=0&info=0&chartLeftToolbar=0&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=60`
+  // DexScreener embed URL with minimal UI - hide as much as possible
+  const embedUrl = `https://dexscreener.com/${chainId}/${pairAddress}?embed=1&loadChartSettings=0&trades=0&info=0&chartLeftToolbar=0&chartTopToolbar=0&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=60`
 
   return (
     <iframe
@@ -170,7 +170,6 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
   const [showResults, setShowResults] = useState(false)
   const [selectedToken, setSelectedToken] = useState<TokenPair | null>(null)
   const [copied, setCopied] = useState(false)
-  const [selectedTimeframe, setSelectedTimeframe] = useState<'5m' | '1h' | '6h' | '24h'>('24h')
   const [chartLoaded, setChartLoaded] = useState(false)
 
   // Search for tokens
@@ -253,19 +252,8 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
 
-  const getPriceChange = () => {
-    if (!selectedToken) return { value: 0, timeframe: '24h' }
-    const changes: Record<string, number> = {
-      '5m': selectedToken.priceChange?.m5 || 0,
-      '1h': selectedToken.priceChange?.h1 || 0,
-      '6h': selectedToken.priceChange?.h6 || 0,
-      '24h': selectedToken.priceChange?.h24 || 0,
-    }
-    return { value: changes[selectedTimeframe], timeframe: selectedTimeframe }
-  }
-
-  const priceChange = getPriceChange()
-  const isPositive = priceChange.value >= 0
+  const priceChange24h = selectedToken?.priceChange?.h24 || 0
+  const isPositive = priceChange24h >= 0
 
   // Handle buy with logo URL
   const handleBuy = () => {
@@ -408,9 +396,9 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
                     <div className={`flex items-center gap-1 justify-end ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
                       {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                       <span className="text-sm font-medium">
-                        {isPositive ? '+' : ''}{priceChange.value.toFixed(2)}%
+                        {isPositive ? '+' : ''}{priceChange24h.toFixed(2)}%
                       </span>
-                      <span className="text-white/30 text-xs">({priceChange.timeframe})</span>
+                      <span className="text-white/30 text-xs">(24h)</span>
                     </div>
                   </div>
                 </div>
@@ -440,7 +428,7 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
                 </div>
 
                 {/* DexScreener Chart Embed */}
-                <div className="w-full h-[300px] rounded-xl overflow-hidden bg-black/40 relative">
+                <div className="w-full h-[350px] rounded-xl overflow-hidden bg-black/40 relative mb-4">
                   {!chartLoaded && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-10">
                       <Loader2 className="w-6 h-6 animate-spin text-white/50" />
@@ -450,23 +438,6 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
                     chainId={selectedToken.chainId}
                     pairAddress={selectedToken.pairAddress}
                   />
-                </div>
-
-                {/* Timeframe Selector */}
-                <div className="flex justify-center gap-2 mt-3 mb-4">
-                  {(['5m', '1h', '6h', '24h'] as const).map((tf) => (
-                    <button
-                      key={tf}
-                      onClick={() => setSelectedTimeframe(tf)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                        selectedTimeframe === tf
-                          ? 'bg-[#ef4444] text-white shadow-lg shadow-[#ef4444]/20'
-                          : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/60'
-                      }`}
-                    >
-                      {tf.toUpperCase()}
-                    </button>
-                  ))}
                 </div>
 
                 {/* Stats Grid */}
