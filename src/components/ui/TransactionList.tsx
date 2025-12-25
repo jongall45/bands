@@ -752,12 +752,13 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
   const display = getDisplayInfo()
 
   return (
-    <a
-      href={explorerUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center justify-between p-3 bg-black/30 border border-white/5 rounded-2xl transition-all group hover:bg-[#FF3B30]/10 hover:border-[#FF3B30]/20"
-    >
+    <div className="relative rounded-2xl p-[1px] bg-gradient-to-br from-white/5 via-transparent to-transparent transition-all hover:from-white/10 hover:to-[#FF3B30]/25 group">
+      <a
+        href={explorerUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-between p-3 bg-[#0a0a0a]/90 rounded-[15px] transition-all block"
+      >
       <div className="flex items-center gap-3">
         {/* Icon with chain indicator */}
         <div className="relative">
@@ -818,7 +819,8 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
         </div>
         <ExternalLink className="w-3.5 h-3.5 text-white/20 group-hover:text-white/40 transition-colors" />
       </div>
-    </a>
+      </a>
+    </div>
   )
 }
 
