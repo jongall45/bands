@@ -7,11 +7,11 @@ export const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
 export const USDC_ARBITRUM = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as const
 export const USDC_POLYGON = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' as const
 
-// Chain logo URLs
+// Chain logo URLs (using cryptologos CDN)
 const CHAIN_LOGOS = {
-  base: 'https://assets.coingecko.com/coins/images/34494/standard/base.png',
-  arbitrum: 'https://assets.coingecko.com/coins/images/16547/standard/arb.png',
-  polygon: 'https://assets.coingecko.com/coins/images/4713/standard/polygon.png',
+  base: 'https://s2.coinmarketcap.com/static/img/coins/64x64/27716.png',
+  arbitrum: 'https://s2.coinmarketcap.com/static/img/coins/64x64/11841.png',
+  polygon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/3890.png',
 } as const
 
 // Supported chains for Morpho vaults
