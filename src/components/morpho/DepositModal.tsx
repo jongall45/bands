@@ -19,9 +19,10 @@ const USDC_LOGO = 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png'
 
 export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModalProps) {
   // Use smart wallet address from useAuth (not EOA from useAccount)
-  const { address, balances, rawBalances } = useAuth()
+  const { address, balances, rawBalances, isSmartWalletReady } = useAuth()
   const [amount, setAmount] = useState('')
   const [isSuccess, setIsSuccess] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Get USDC balance from useAuth (already fetches for smart wallet)
   const usdcBalance = {
@@ -37,12 +38,16 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
     vaultAddress: vault.address as `0x${string}`,
     onSuccess: () => {
       setIsSuccess(true)
+      setError(null)
       setTimeout(() => {
         onSuccess?.()
         onClose()
         setIsSuccess(false)
         setAmount('')
       }, 2000)
+    },
+    onError: (err) => {
+      setError(err.message || 'Deposit failed')
     },
   })
 
@@ -61,24 +66,31 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
 
   const handleDeposit = async () => {
     if (!amount || parseFloat(amount) <= 0) return
-    await deposit(amount)
+    setError(null)
+    try {
+      await deposit(amount)
+    } catch (err) {
+      // Error is already handled by onError callback
+      console.error('Deposit failed:', err)
+    }
   }
 
-  const canDeposit = amount && parseFloat(amount) > 0 &&
-    parseFloat(amount) <= parseFloat(usdcBalance.formatted)
+  // Check if deposit is possible
+  const hasEnoughBalance = parseFloat(amount || '0') <= parseFloat(usdcBalance.formatted)
+  const canDeposit = isSmartWalletReady && amount && parseFloat(amount) > 0 && hasEnoughBalance
 
   if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
       {/* Backdrop */}
-      <div 
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+      <div
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm z-0"
         onClick={onClose}
       />
 
       {/* Modal */}
-      <div className="relative w-full max-w-[430px] bg-[#0a0a0a] border border-white/[0.1] rounded-t-3xl sm:rounded-3xl p-6 max-h-[90vh] overflow-y-auto">
+      <div className="relative z-10 w-full max-w-[430px] bg-[#0a0a0a] border border-white/[0.1] rounded-t-3xl sm:rounded-3xl p-6 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-white font-semibold text-lg">Deposit to {vault.name}</h2>
@@ -172,13 +184,30 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
             )}
 
             {/* Info Notice */}
-            <div className="flex items-start gap-2 mb-6">
+            <div className="flex items-start gap-2 mb-4">
               <AlertCircle className="w-4 h-4 text-white/30 mt-0.5 flex-shrink-0" />
               <p className="text-white/30 text-xs">
-                Deposits earn variable yield from overcollateralized lending. 
+                Deposits earn variable yield from overcollateralized lending.
                 You can withdraw anytime when liquidity is available.
               </p>
             </div>
+
+            {/* Error Display */}
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-4">
+                <p className="text-red-400 text-sm">{error}</p>
+              </div>
+            )}
+
+            {/* Smart Wallet Status */}
+            {!isSmartWalletReady && (
+              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />
+                  <p className="text-yellow-400 text-sm">Initializing smart wallet...</p>
+                </div>
+              </div>
+            )}
 
             {/* Deposit Button */}
             <button
@@ -191,6 +220,8 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
                   <Loader2 className="w-5 h-5 animate-spin" />
                   Depositing...
                 </>
+              ) : !isSmartWalletReady ? (
+                'Waiting for wallet...'
               ) : !amount || parseFloat(amount) <= 0 ? (
                 'Enter amount'
               ) : (
