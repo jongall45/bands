@@ -266,7 +266,7 @@ export default function Dashboard() {
       <main className="flex-1 flex flex-col px-4 pb-24 max-w-[430px] mx-auto w-full">
 
         {/* Balance Card */}
-        <GlassCard className="mb-4">
+        <GlassCard variant="redAccent" className="mb-4">
           {/* Add Money Button - Top Right */}
           <div className="flex justify-end mb-2">
             <Link
@@ -381,7 +381,7 @@ export default function Dashboard() {
 
         {/* Holdings/Portfolio Card */}
         {portfolio && portfolio.tokens && portfolio.tokens.length > 0 && (
-          <GlassCard noPadding className="mb-4">
+          <GlassCard noPadding variant="redAccent" className="mb-4">
             <div className="p-4 pb-0">
               <SectionHeader badge={`${portfolio.tokens.length} assets`}>
                 <span className="flex items-center gap-2">

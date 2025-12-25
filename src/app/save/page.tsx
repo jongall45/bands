@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { PiggyBank, TrendingUp, RefreshCw, Plus, ExternalLink, Shield, ChevronDown, Minus } from 'lucide-react'
 import { useMorphoVaults, useUserVaultPositions } from '@/hooks/useMorphoVaults'
 import { calculateProjectedEarnings, type MorphoVault } from '@/lib/morpho/api'
@@ -21,7 +22,8 @@ const USDC_LOGO = 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png'
 
 export default function SavePage() {
   const router = useRouter()
-  const { address, isAuthenticated, isSmartWalletReady, balances } = useAuth()
+  const queryClient = useQueryClient()
+  const { address, isAuthenticated, isSmartWalletReady, balances, refetchBalances } = useAuth()
   const [selectedVault, setSelectedVault] = useState<MorphoVault | null>(null)
   const [modalType, setModalType] = useState<'deposit' | 'withdraw' | null>(null)
   const [selectedChainId, setSelectedChainId] = useState<number>(base.id)
@@ -42,7 +44,33 @@ export default function SavePage() {
   // Fetch user positions for selected chain
   const { data: positions, isLoading: positionsLoading, refetch: refetchPositions } = useUserVaultPositions(selectedChainId)
 
-  // Refetch all data
+  // Aggressive refetch after transaction - invalidate cache and refetch
+  const refetchAfterTransaction = useCallback(async () => {
+    // Invalidate all position queries to force fresh fetch
+    await queryClient.invalidateQueries({ queryKey: ['user-vault-positions'] })
+
+    // Refetch balances immediately
+    refetchBalances()
+
+    // First refetch attempt immediately
+    await Promise.all([refetchVaults(), refetchPositions()])
+
+    // Second refetch after short delay (on-chain state propagation)
+    setTimeout(async () => {
+      await queryClient.invalidateQueries({ queryKey: ['user-vault-positions'] })
+      refetchBalances()
+      await Promise.all([refetchVaults(), refetchPositions()])
+    }, 2000)
+
+    // Third refetch after longer delay for safety
+    setTimeout(async () => {
+      await queryClient.invalidateQueries({ queryKey: ['user-vault-positions'] })
+      refetchBalances()
+      await Promise.all([refetchVaults(), refetchPositions()])
+    }, 5000)
+  }, [queryClient, refetchVaults, refetchPositions, refetchBalances])
+
+  // Simple refetch all data
   const refetch = async () => {
     await Promise.all([refetchVaults(), refetchPositions()])
   }
@@ -390,9 +418,9 @@ export default function SavePage() {
 
         {/* Safety Info */}
         <div className="px-5 mt-6">
-          <GlassCard>
+          <GlassCard variant="redAccent">
             <div className="flex items-center gap-2 mb-2">
-              <Shield className="w-4 h-4 text-white/60" />
+              <Shield className="w-4 h-4 text-[#FF3B30]/60" />
               <h4 className="text-white font-semibold text-sm">Protocol Security</h4>
             </div>
             <p className="text-white/40 text-sm">
@@ -413,7 +441,7 @@ export default function SavePage() {
           vault={selectedVault}
           isOpen={true}
           onClose={handleCloseModal}
-          onSuccess={() => refetch()}
+          onSuccess={refetchAfterTransaction}
         />
       )}
 
@@ -422,7 +450,7 @@ export default function SavePage() {
           vault={selectedVault}
           isOpen={true}
           onClose={handleCloseModal}
-          onSuccess={() => refetch()}
+          onSuccess={refetchAfterTransaction}
         />
       )}
 
