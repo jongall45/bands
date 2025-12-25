@@ -39,8 +39,9 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
     onSuccess: () => {
       setIsSuccess(true)
       setError(null)
+      // Call onSuccess immediately to trigger refetch
+      onSuccess?.()
       setTimeout(() => {
-        onSuccess?.()
         onClose()
         setIsSuccess(false)
         setAmount('')
