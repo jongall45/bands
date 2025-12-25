@@ -3,12 +3,13 @@
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { useAccount, useBalance, useWalletClient, usePublicClient, useSwitchChain } from 'wagmi'
-import { base, arbitrum } from 'viem/chains'
+import { base, arbitrum, polygon } from 'viem/chains'
 import { formatUnits } from 'viem'
 
 // USDC addresses
 const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
 const USDC_ARBITRUM = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'
+const USDC_POLYGON = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'
 
 export function useAuth() {
   // Privy hooks
@@ -58,10 +59,15 @@ export function useAuth() {
     chainId: base.id,
     token: USDC_BASE as `0x${string}`,
   })
-  const { data: usdcBalanceArb, refetch: refetchUsdcArb } = useBalance({ 
-    address, 
+  const { data: usdcBalanceArb, refetch: refetchUsdcArb } = useBalance({
+    address,
     chainId: arbitrum.id,
     token: USDC_ARBITRUM as `0x${string}`,
+  })
+  const { data: usdcBalancePolygon, refetch: refetchUsdcPolygon } = useBalance({
+    address,
+    chainId: polygon.id,
+    token: USDC_POLYGON as `0x${string}`,
   })
   
   // Helper to switch chains
@@ -96,6 +102,7 @@ export function useAuth() {
     refetchEthArb()
     refetchUsdcBase()
     refetchUsdcArb()
+    refetchUsdcPolygon()
   }
   
   // Format display values
@@ -139,6 +146,7 @@ export function useAuth() {
       ethArb: ethBalanceArb ? formatUnits(ethBalanceArb.value, 18) : '0',
       usdcBase: usdcBalanceBase ? formatUnits(usdcBalanceBase.value, 6) : '0',
       usdcArb: usdcBalanceArb ? formatUnits(usdcBalanceArb.value, 6) : '0',
+      usdcPolygon: usdcBalancePolygon ? formatUnits(usdcBalancePolygon.value, 6) : '0',
     },
 
     // Raw balances
@@ -147,6 +155,7 @@ export function useAuth() {
       ethArb: ethBalanceArb?.value ?? BigInt(0),
       usdcBase: usdcBalanceBase?.value ?? BigInt(0),
       usdcArb: usdcBalanceArb?.value ?? BigInt(0),
+      usdcPolygon: usdcBalancePolygon?.value ?? BigInt(0),
     },
 
     // Actions
