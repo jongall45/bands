@@ -13,7 +13,7 @@ interface GlassCardProps {
   children: React.ReactNode
   className?: string
   noPadding?: boolean
-  variant?: 'default' | 'green' | 'red'
+  variant?: 'default' | 'green' | 'red' | 'redAccent'
 }
 
 export const GlassCard = ({ children, className = "", noPadding = false, variant = 'default' }: GlassCardProps) => {
@@ -21,6 +21,37 @@ export const GlassCard = ({ children, className = "", noPadding = false, variant
     default: "linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%)",
     green: "linear-gradient(145deg, rgba(46, 184, 92, 0.15) 0%, rgba(46, 184, 92, 0.05) 100%)",
     red: "linear-gradient(145deg, rgba(255, 59, 48, 0.15) 0%, rgba(255, 59, 48, 0.05) 100%)",
+    redAccent: "linear-gradient(145deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)",
+  }
+
+  // Red accent variant uses gradient border wrapper
+  if (variant === 'redAccent') {
+    return (
+      <div className={`relative rounded-3xl p-[1px] bg-gradient-to-br from-white/15 via-white/5 to-[#FF3B30]/25 shadow-2xl ${className}`}>
+        <div
+          className="relative overflow-hidden rounded-[calc(1.5rem-1px)] bg-[#0a0a0a]/95"
+          style={{
+            backdropFilter: "blur(20px)",
+            WebkitBackdropFilter: "blur(20px)",
+            padding: noPadding ? 0 : "24px"
+          }}
+        >
+          {/* Noise Texture Overlay */}
+          <div
+            className="absolute inset-0 pointer-events-none opacity-50 mix-blend-overlay z-0"
+            style={{ backgroundImage: noiseBg }}
+          />
+
+          {/* Top "Cut Glass" Edge Highlight */}
+          <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/15 to-[#FF3B30]/30 z-10" />
+
+          {/* Content */}
+          <div className="relative z-20 text-white">
+            {children}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
