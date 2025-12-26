@@ -305,7 +305,7 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
                   }}
                   onFocus={() => setShowResults(true)}
                   placeholder="Search any token..."
-                  className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white text-sm placeholder-white/30 focus:border-[#ef4444]/50 focus:outline-none transition-all"
+                  className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-white text-sm placeholder-white/30 focus:border-[#ef4444]/50 focus:outline-none transition-all"
                 />
                 {searchQuery && (
                   <button
@@ -505,12 +505,12 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
               </>
             ) : (
               /* Placeholder when no token selected */
-              <div className="text-center py-12">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/5 flex items-center justify-center">
-                  <Search className="w-8 h-8 text-white/20" />
+              <div className="text-center py-6">
+                <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-white/5 flex items-center justify-center">
+                  <Search className="w-5 h-5 text-white/20" />
                 </div>
-                <h3 className="text-white/60 font-semibold mb-2">Search for a Token</h3>
-                <p className="text-white/30 text-sm max-w-[250px] mx-auto">
+                <h3 className="text-white/60 font-semibold text-sm mb-1">Search for a Token</h3>
+                <p className="text-white/30 text-xs max-w-[200px] mx-auto">
                   Enter a token name, symbol, or contract address to view charts and trading data
                 </p>
               </div>
