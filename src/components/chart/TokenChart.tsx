@@ -440,43 +440,39 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
                   />
                 </div>
 
-                {/* Stats Grid */}
-                <div className="grid grid-cols-3 gap-2 mb-4">
-                  <div className="bg-white/5 rounded-xl p-3 text-center">
-                    <div className="flex items-center justify-center gap-1 text-white/40 text-[10px] mb-1">
-                      <Droplets className="w-3 h-3" />
-                      LIQUIDITY
+                {/* Stats Grid - Compact */}
+                <div className="grid grid-cols-5 gap-1.5 mb-3">
+                  <div className="bg-white/5 rounded-lg px-2 py-1.5 text-center">
+                    <div className="flex items-center justify-center gap-0.5 text-white/40 text-[8px] mb-0.5">
+                      <Droplets className="w-2.5 h-2.5" />
+                      LIQ
                     </div>
-                    <div className="text-white font-bold text-sm">{formatLargeNumber(selectedToken.liquidity?.usd || 0)}</div>
+                    <div className="text-white font-bold text-xs">{formatLargeNumber(selectedToken.liquidity?.usd || 0)}</div>
                   </div>
-                  <div className="bg-white/5 rounded-xl p-3 text-center">
-                    <div className="flex items-center justify-center gap-1 text-white/40 text-[10px] mb-1">
-                      <DollarSign className="w-3 h-3" />
+                  <div className="bg-white/5 rounded-lg px-2 py-1.5 text-center">
+                    <div className="flex items-center justify-center gap-0.5 text-white/40 text-[8px] mb-0.5">
+                      <DollarSign className="w-2.5 h-2.5" />
                       FDV
                     </div>
-                    <div className="text-white font-bold text-sm">{formatLargeNumber(selectedToken.fdv || 0)}</div>
+                    <div className="text-white font-bold text-xs">{formatLargeNumber(selectedToken.fdv || 0)}</div>
                   </div>
-                  <div className="bg-white/5 rounded-xl p-3 text-center">
-                    <div className="flex items-center justify-center gap-1 text-white/40 text-[10px] mb-1">
-                      <BarChart3 className="w-3 h-3" />
+                  <div className="bg-white/5 rounded-lg px-2 py-1.5 text-center">
+                    <div className="flex items-center justify-center gap-0.5 text-white/40 text-[8px] mb-0.5">
+                      <BarChart3 className="w-2.5 h-2.5" />
                       MCAP
                     </div>
-                    <div className="text-white font-bold text-sm">{formatLargeNumber(selectedToken.marketCap || 0)}</div>
+                    <div className="text-white font-bold text-xs">{formatLargeNumber(selectedToken.marketCap || 0)}</div>
                   </div>
-                </div>
-
-                {/* 24h Volume & Txns */}
-                <div className="flex gap-2 mb-4">
-                  <div className="flex-1 bg-white/5 rounded-xl p-3">
-                    <div className="text-white/40 text-[10px] mb-1">24H VOLUME</div>
-                    <div className="text-white font-bold text-sm">{formatLargeNumber(selectedToken.volume?.h24 || 0)}</div>
+                  <div className="bg-white/5 rounded-lg px-2 py-1.5 text-center">
+                    <div className="text-white/40 text-[8px] mb-0.5">24H VOL</div>
+                    <div className="text-white font-bold text-xs">{formatLargeNumber(selectedToken.volume?.h24 || 0)}</div>
                   </div>
-                  <div className="flex-1 bg-white/5 rounded-xl p-3">
-                    <div className="text-white/40 text-[10px] mb-1">24H TXNS</div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-green-400 font-bold text-sm">{selectedToken.txns?.h24?.buys || 0}</span>
-                      <span className="text-white/20">/</span>
-                      <span className="text-red-400 font-bold text-sm">{selectedToken.txns?.h24?.sells || 0}</span>
+                  <div className="bg-white/5 rounded-lg px-2 py-1.5 text-center">
+                    <div className="text-white/40 text-[8px] mb-0.5">24H TXN</div>
+                    <div className="flex items-center justify-center gap-1">
+                      <span className="text-green-400 font-bold text-xs">{selectedToken.txns?.h24?.buys || 0}</span>
+                      <span className="text-white/20 text-[10px]">/</span>
+                      <span className="text-red-400 font-bold text-xs">{selectedToken.txns?.h24?.sells || 0}</span>
                     </div>
                   </div>
                 </div>

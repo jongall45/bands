@@ -235,68 +235,64 @@ const TokenModal: React.FC<TokenModalProps> = ({
       <div
         key={`${token.chainId}-${token.address}`}
         onClick={() => handleSelect(token)}
-        className="px-6 py-3.5 hover:bg-white/5 cursor-pointer flex justify-between items-center group transition-colors"
+        className="px-4 py-2 hover:bg-white/5 cursor-pointer flex justify-between items-center group transition-colors"
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {/* Token Icon with Chain Badge */}
-          <div className="relative w-10 h-10">
+          <div className="relative w-7 h-7">
             {/* Token Logo */}
-            <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center overflow-hidden">
+            <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center overflow-hidden">
               {token.logoURI ? (
                 <img
                   src={token.logoURI}
                   alt={tokenSymbol}
-                  className="w-10 h-10 rounded-full object-cover"
+                  className="w-7 h-7 rounded-full object-cover"
                   onError={(e) => {
                     (e.target as HTMLImageElement).style.display = 'none'
                   }}
                 />
               ) : (
-                <span className="text-lg font-bold text-white/60">
+                <span className="text-sm font-bold text-white/60">
                   {tokenSymbol.charAt(0)}
                 </span>
               )}
             </div>
-            {/* Chain Badge - positioned outside the overflow:hidden container */}
-            <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#0f0f0f] border-2 border-[#0f0f0f] flex items-center justify-center">
-              <ChainIcon chainId={token.chainId} size={16} />
+            {/* Chain Badge */}
+            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[#0f0f0f] border border-[#0f0f0f] flex items-center justify-center">
+              <ChainIcon chainId={token.chainId} size={12} />
             </div>
           </div>
 
           <div className="flex flex-col">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-white text-[15px]">{tokenSymbol}</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-white text-xs">{tokenSymbol}</span>
               {isLegacyBridged && (
-                <span className="text-[9px] font-bold bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded">
+                <span className="text-[7px] font-bold bg-orange-500/20 text-orange-400 px-1 py-0.5 rounded">
                   LEGACY
                 </span>
               )}
             </div>
-            <span className="text-xs font-medium text-white/40 flex items-center gap-1">
+            <span className="text-[10px] font-medium text-white/40">
               {getChainName(token.chainId)}
-              <span className="text-white/20">|</span>
-              {token.address === '0x0000000000000000000000000000000000000000'
-                ? 'Native'
-                : `${token.address.slice(0, 6)}...${token.address.slice(-4)}`}
             </span>
           </div>
         </div>
 
         {/* Balance & Value */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {hasBalance && showBalance && (
             <div className="flex flex-col items-end">
-              <span className="font-bold text-white">
+              <span className="font-bold text-white text-xs">
                 {formatBalance(token.balance)}
               </span>
               {token.balanceUsd && token.balanceUsd > 0 && (
-                <span className="text-xs font-medium text-white/40">
+                <span className="text-[10px] font-medium text-white/40">
                   {formatUsd(token.balanceUsd)}
                 </span>
               )}
             </div>
           )}
-          <ChevronRight className="w-4 h-4 text-white/20 group-hover:text-white/40 transition" />
+          <ChevronRight className="w-3 h-3 text-white/20 group-hover:text-white/40 transition" />
         </div>
       </div>
     )
@@ -310,50 +306,41 @@ const TokenModal: React.FC<TokenModalProps> = ({
       onClick={onClose}
     >
       <div 
-        className="bg-[#0f0f0f] w-full max-w-[800px] h-[600px] rounded-[24px] shadow-2xl flex overflow-hidden border border-white/10"
+        className="bg-[#0f0f0f] w-full max-w-[600px] h-[350px] rounded-[20px] shadow-2xl flex overflow-hidden border border-white/10"
         onClick={e => e.stopPropagation()}
       >
         {/* SIDEBAR - Chain Selection */}
-        <div className="w-[240px] bg-[#0a0a0a] border-r border-white/10 flex flex-col p-4">
-          {/* Chain Search */}
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-2.5 text-white/40" size={18} />
-            <input
-              className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-[14px] text-sm font-medium outline-none focus:ring-2 ring-[#ef4444]/30 placeholder-white/40 text-white"
-              placeholder="Search chains"
-            />
-          </div>
-
+        <div className="w-[160px] bg-[#0a0a0a] border-r border-white/10 flex flex-col p-2">
           {/* Chain List */}
-          <div className="space-y-1 overflow-y-auto flex-1">
+          <div className="space-y-0.5 overflow-y-auto flex-1">
             {/* All Chains */}
             <button
               onClick={() => setActiveChainId(null)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-[12px] text-sm font-bold transition-colors ${
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors ${
                 activeChainId === null
                   ? 'bg-[#ef4444]/20 text-[#ef4444]'
                   : 'text-white/70 hover:bg-white/5'
               }`}
             >
-              <AllChainsIcon size={20} />
+              <AllChainsIcon size={16} />
               All Chains
             </button>
 
-            <div className="mt-4 mb-2 px-3 flex items-center gap-1.5 text-[11px] font-bold text-white/40 uppercase tracking-wide">
-              <Star size={10} fill="currentColor" /> Supported Chains
+            <div className="mt-2 mb-1 px-2 flex items-center gap-1 text-[9px] font-bold text-white/40 uppercase tracking-wide">
+              <Star size={8} fill="currentColor" /> Chains
             </div>
 
             {SUPPORTED_CHAINS.map(chain => (
               <button
                 key={chain.id}
                 onClick={() => setActiveChainId(chain.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-[12px] text-sm font-bold transition-colors ${
+                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors ${
                   activeChainId === chain.id
                     ? 'bg-[#ef4444]/20 text-[#ef4444]'
                     : 'text-white/70 hover:bg-white/5'
                 }`}
               >
-                <ChainIcon chainId={chain.id} size={20} />
+                <ChainIcon chainId={chain.id} size={16} />
                 {chain.name}
               </button>
             ))}
@@ -363,22 +350,22 @@ const TokenModal: React.FC<TokenModalProps> = ({
         {/* MAIN CONTENT - Token List */}
         <div className="flex-1 flex flex-col bg-[#0f0f0f]">
           {/* Header */}
-          <div className="p-4 border-b border-white/5 flex items-center gap-4">
+          <div className="p-3 border-b border-white/5 flex items-center gap-3">
             <div className="relative flex-1">
-              <Search className="absolute left-0 top-1 text-white/30" size={22} />
+              <Search className="absolute left-0 top-0.5 text-white/30" size={18} />
               <input
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-9 py-1 text-lg font-medium placeholder-white/30 outline-none text-white bg-transparent"
-                placeholder="Search for a token or paste address"
+                className="w-full pl-7 py-0.5 text-sm font-medium placeholder-white/30 outline-none text-white bg-transparent"
+                placeholder="Search any token..."
                 autoFocus
               />
             </div>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-white/5 rounded-full text-white/40 transition"
+              className="p-1.5 hover:bg-white/5 rounded-full text-white/40 transition"
             >
-              <X size={24} />
+              <X size={18} />
             </button>
           </div>
 
@@ -387,15 +374,15 @@ const TokenModal: React.FC<TokenModalProps> = ({
             {/* Your Tokens Section */}
             {(tokensWithBalance.length > 0 || isLoadingUserTokens) && (
               <>
-                <div className="px-6 py-3 text-xs font-bold text-white/40 uppercase tracking-wide flex items-center gap-2">
-                  <Wallet size={12} />
+                <div className="px-4 py-2 text-[10px] font-bold text-white/40 uppercase tracking-wide flex items-center gap-1.5">
+                  <Wallet size={10} />
                   Your Tokens
-                  {isLoadingUserTokens && <Loader2 size={12} className="animate-spin" />}
+                  {isLoadingUserTokens && <Loader2 size={10} className="animate-spin" />}
                 </div>
 
                 {isLoadingUserTokens && tokensWithBalance.length === 0 ? (
-                  <div className="px-6 py-4 flex items-center justify-center">
-                    <Loader2 size={20} className="animate-spin text-white/40" />
+                  <div className="px-4 py-3 flex items-center justify-center">
+                    <Loader2 size={16} className="animate-spin text-white/40" />
                   </div>
                 ) : (
                   tokensWithBalance.map(token => renderTokenRow(token, true))
@@ -403,7 +390,7 @@ const TokenModal: React.FC<TokenModalProps> = ({
 
                 {/* Divider */}
                 {commonTokens.length > 0 && (
-                  <div className="mx-6 my-2 border-t border-white/5" />
+                  <div className="mx-4 my-1 border-t border-white/5" />
                 )}
               </>
             )}
@@ -411,17 +398,17 @@ const TokenModal: React.FC<TokenModalProps> = ({
             {/* Search Results Section */}
             {searchResults.length > 0 && !isContractAddress(searchQuery) && (
               <>
-                <div className="px-6 py-3 text-xs font-bold text-white/40 uppercase tracking-wide flex items-center gap-2">
-                  <Search size={12} />
+                <div className="px-4 py-2 text-[10px] font-bold text-white/40 uppercase tracking-wide flex items-center gap-1.5">
+                  <Search size={10} />
                   Search Results
-                  {isSearching && <Loader2 size={12} className="animate-spin" />}
+                  {isSearching && <Loader2 size={10} className="animate-spin" />}
                 </div>
 
                 {searchResults.map(token => renderTokenRow(token, false))}
 
                 {/* Divider */}
                 {commonTokens.length > 0 && (
-                  <div className="mx-6 my-2 border-t border-white/5" />
+                  <div className="mx-4 my-1 border-t border-white/5" />
                 )}
               </>
             )}
@@ -429,8 +416,8 @@ const TokenModal: React.FC<TokenModalProps> = ({
             {/* Popular Tokens Section */}
             {commonTokens.length > 0 && searchResults.length === 0 && !isContractAddress(searchQuery) && (
               <>
-                <div className="px-6 py-3 text-xs font-bold text-white/40 uppercase tracking-wide flex items-center gap-2">
-                  <Star size={12} fill="currentColor" />
+                <div className="px-4 py-2 text-[10px] font-bold text-white/40 uppercase tracking-wide flex items-center gap-1.5">
+                  <Star size={10} fill="currentColor" />
                   {activeChainId ? `Popular on ${getChainName(activeChainId)}` : 'Popular Tokens'}
                 </div>
 
@@ -441,23 +428,23 @@ const TokenModal: React.FC<TokenModalProps> = ({
             {/* Contract Address Lookup Result */}
             {isContractAddress(searchQuery) && (
               <>
-                <div className="px-6 py-3 text-xs font-bold text-white/40 uppercase tracking-wide flex items-center gap-2">
-                  <Search size={12} />
+                <div className="px-4 py-2 text-[10px] font-bold text-white/40 uppercase tracking-wide flex items-center gap-1.5">
+                  <Search size={10} />
                   Token Lookup
                 </div>
 
                 {isLookingUp && (
-                  <div className="px-6 py-4 flex items-center justify-center">
-                    <Loader2 size={20} className="animate-spin text-white/40" />
-                    <span className="ml-2 text-white/40">Looking up token...</span>
+                  <div className="px-4 py-3 flex items-center justify-center">
+                    <Loader2 size={14} className="animate-spin text-white/40" />
+                    <span className="ml-2 text-white/40 text-xs">Looking up token...</span>
                   </div>
                 )}
 
                 {lookupToken && !isLookingUp && renderTokenRow(lookupToken, false)}
 
                 {lookupError && !isLookingUp && (
-                  <div className="px-6 py-4 flex items-center justify-center gap-2 text-yellow-500">
-                    <AlertTriangle size={16} />
+                  <div className="px-4 py-3 flex items-center justify-center gap-1.5 text-yellow-500 text-xs">
+                    <AlertTriangle size={12} />
                     <span>{lookupError} on {activeChainId ? getChainName(activeChainId) : 'Base'}</span>
                   </div>
                 )}
@@ -466,7 +453,7 @@ const TokenModal: React.FC<TokenModalProps> = ({
 
             {/* No results */}
             {tokensWithBalance.length === 0 && commonTokens.length === 0 && !isLoadingUserTokens && !isContractAddress(searchQuery) && (
-              <div className="px-6 py-8 text-center text-white/40">
+              <div className="px-4 py-6 text-center text-white/40 text-xs">
                 No tokens found
               </div>
             )}
