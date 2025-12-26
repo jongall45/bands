@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
-import { ArrowLeft, Copy, Check, QrCode } from 'lucide-react'
+import { ArrowLeft, Copy, Check, QrCode, CreditCard, Zap } from 'lucide-react'
 import Link from 'next/link'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { OnrampModal } from '@/components/onramp/OnrampModal'
@@ -23,19 +23,6 @@ const BaseBadge = ({ className = "w-4 h-4" }: { className?: string }) => (
   <svg className={className} viewBox="0 0 111 111" fill="none" xmlns="http://www.w3.org/2000/svg">
     <circle cx="55.5" cy="55.5" r="55.5" fill="#0052FF"/>
     <path d="M55.4 93.8C76.6 93.8 93.8 76.6 93.8 55.4C93.8 34.2 76.6 17 55.4 17C35.2 17 18.6 32.6 17.1 52.4H69.9V58.4H17.1C18.6 78.2 35.2 93.8 55.4 93.8Z" fill="white"/>
-  </svg>
-)
-
-// Apple Pay Mark (official Apple Pay button mark)
-const ApplePayMark = ({ className = "h-6" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 165.521 105.965" xmlns="http://www.w3.org/2000/svg">
-    <path fill="currentColor" d="M150.698 0H14.823c-.566 0-1.133 0-1.698.003-.477.004-.953.009-1.43.022-1.039.028-2.087.09-3.113.274a10.51 10.51 0 0 0-2.958.975 9.932 9.932 0 0 0-4.35 4.35 10.463 10.463 0 0 0-.975 2.96C.113 9.611.052 10.658.024 11.696a69.755 69.755 0 0 0-.022 1.43C0 13.69 0 14.256 0 14.823v76.318c0 .567 0 1.132.002 1.699.003.476.009.953.022 1.43.028 1.036.09 2.084.275 3.11a10.46 10.46 0 0 0 .974 2.96 9.897 9.897 0 0 0 1.83 2.52 9.874 9.874 0 0 0 2.52 1.83c.947.483 1.917.79 2.96.977 1.025.183 2.073.245 3.112.273.477.011.953.017 1.43.02.565.004 1.132.004 1.698.004h135.875c.565 0 1.132 0 1.697-.004.476-.002.952-.009 1.431-.02 1.037-.028 2.085-.09 3.113-.273a10.478 10.478 0 0 0 2.958-.977 9.955 9.955 0 0 0 4.35-4.35c.483-.947.789-1.917.974-2.96.186-1.026.246-2.074.274-3.11.013-.477.02-.954.022-1.43.004-.567.004-1.132.004-1.699V14.824c0-.567 0-1.133-.004-1.699a63.067 63.067 0 0 0-.022-1.429c-.028-1.038-.088-2.085-.274-3.112a10.4 10.4 0 0 0-.974-2.96 9.94 9.94 0 0 0-4.35-4.35A10.52 10.52 0 0 0 156.939.3c-1.028-.185-2.076-.246-3.113-.274a71.417 71.417 0 0 0-1.431-.022C151.83 0 151.263 0 150.698 0z"/>
-    <path fill="#FFF" d="M150.698 3.532l1.672.003c.452.003.905.008 1.36.02.793.022 1.719.065 2.583.22.75.135 1.38.34 1.984.648a6.392 6.392 0 0 1 2.804 2.807c.306.6.51 1.226.645 1.983.154.854.197 1.783.218 2.58.013.45.019.9.02 1.36.005.557.005 1.113.005 1.671v76.318c0 .558 0 1.114-.004 1.682-.002.45-.008.9-.02 1.35-.022.796-.065 1.725-.221 2.589a6.855 6.855 0 0 1-.645 1.975 6.397 6.397 0 0 1-2.808 2.807c-.6.306-1.228.512-1.971.644-.881.157-1.847.2-2.574.22-.457.01-.912.017-1.379.019-.555.004-1.113.004-1.669.004H14.801c-.55 0-1.1 0-1.66-.004a74.993 74.993 0 0 1-1.35-.018c-.744-.02-1.71-.064-2.584-.22a6.938 6.938 0 0 1-1.986-.65 6.337 6.337 0 0 1-1.622-1.18 6.355 6.355 0 0 1-1.178-1.623 6.935 6.935 0 0 1-.646-1.985c-.156-.863-.2-1.788-.22-2.578a66.088 66.088 0 0 1-.02-1.355l-.003-1.327V14.474l.002-1.325a66.7 66.7 0 0 1 .02-1.357c.022-.792.065-1.717.222-2.587a6.924 6.924 0 0 1 .646-1.981c.304-.598.7-1.144 1.18-1.623a6.386 6.386 0 0 1 1.624-1.18 6.96 6.96 0 0 1 1.98-.646c.865-.155 1.792-.198 2.586-.22.468-.012.935-.018 1.4-.02l1.319-.003h135.875"/>
-    <path fill="#000" d="M43.508 35.77c1.404-1.755 2.356-4.112 2.105-6.52-2.054.102-4.56 1.355-6.012 3.112-1.303 1.504-2.456 3.959-2.156 6.266 2.306.2 4.61-1.152 6.063-2.858"/>
-    <path fill="#000" d="M45.587 39.079c-3.35-.2-6.196 1.9-7.795 1.9-1.6 0-4.049-1.8-6.698-1.751-3.447.05-6.645 2-8.395 5.1-3.598 6.2-.95 15.4 2.55 20.45 1.699 2.5 3.747 5.25 6.445 5.151 2.55-.1 3.549-1.65 6.647-1.65 3.097 0 3.997 1.65 6.696 1.6 2.798-.05 4.548-2.5 6.247-5 1.95-2.85 2.747-5.6 2.797-5.75-.05-.05-5.396-2.101-5.446-8.251-.05-5.15 4.198-7.6 4.398-7.751-2.399-3.548-6.147-3.948-7.447-4.048"/>
-    <path fill="#000" d="M78.973 32.11c7.278 0 12.347 5.017 12.347 12.321 0 7.33-5.173 12.373-12.529 12.373h-8.058V69.62h-5.822V32.11h14.062zm-8.24 19.807h6.68c5.07 0 7.954-2.729 7.954-7.46 0-4.73-2.885-7.434-7.928-7.434h-6.706v14.894z"/>
-    <path fill="#000" d="M92.764 61.847c0-4.809 3.665-7.564 10.423-7.98l7.252-.442v-2.08c0-3.04-2.001-4.704-5.562-4.704-2.938 0-5.07 1.507-5.51 3.82h-5.252c.286-5.096 4.625-8.793 10.918-8.793 6.812 0 10.996 3.485 10.996 9.074v19.078h-5.38v-4.55h-.13c-1.586 3.119-4.964 5.043-8.474 5.043-5.64 0-9.281-3.432-9.281-8.466zm17.675-2.417v-2.106l-6.472.416c-3.64.234-5.536 1.585-5.536 3.95 0 2.288 1.975 3.82 5.017 3.82 3.978 0 6.991-2.73 6.991-6.08z"/>
-    <path fill="#000" d="M124.099 80.512v-4.496c.39.078 1.3.078 1.716.078 2.573 0 4.029-1.09 4.913-3.898l.52-1.742-9.962-27.576h6.137l6.994 22.461h.104l6.994-22.461h5.98l-10.32 29.058c-2.573 7.226-5.46 9.412-11.596 9.412-.416 0-1.352-.052-1.48-.078v-.758z"/>
   </svg>
 )
 
@@ -101,20 +88,23 @@ export default function FundPage() {
               </div>
           </div>
 
-            {/* Option 1: Apple Pay */}
+            {/* Option 1: Buy with Card */}
             <button
               onClick={() => setShowOnrampModal(true)}
-              className="w-full flex items-center justify-between p-4 bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] rounded-xl mb-3 transition-all active:scale-[0.99]"
+              className="w-full flex items-center justify-between p-4 bg-[#ef4444]/10 hover:bg-[#ef4444]/15 border border-[#ef4444]/20 rounded-xl mb-3 transition-all active:scale-[0.99] group"
             >
-              <div>
+              <div className="text-left">
                 <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-white font-medium">Apple Pay</span>
-                  <span className="px-1.5 py-0.5 bg-[#5856D6] text-white text-[10px] font-semibold rounded">New</span>
+                  <span className="text-white font-medium">Buy with Card</span>
+                  <div className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/20 rounded">
+                    <Zap className="w-2.5 h-2.5 text-emerald-400" />
+                    <span className="text-emerald-400 text-[10px] font-semibold">Instant</span>
+                  </div>
                 </div>
-                <p className="text-white/40 text-sm">Buy USDC instantly with card</p>
-                </div>
-              <div className="bg-white rounded-lg px-3 py-2">
-                <ApplePayMark className="h-5" />
+                <p className="text-white/40 text-sm">Apple Pay, Google Pay & card</p>
+              </div>
+              <div className="w-10 h-10 bg-[#ef4444] rounded-xl flex items-center justify-center group-hover:bg-[#dc2626] transition-colors">
+                <CreditCard className="w-5 h-5 text-white" />
               </div>
             </button>
 
