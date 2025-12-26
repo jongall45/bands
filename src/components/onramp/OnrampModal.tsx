@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '@/hooks/useAuth'
-import { X, ChevronDown, ChevronUp, Zap, Check } from 'lucide-react'
-import { CrossmintProvider, CrossmintEmbeddedCheckout } from '@crossmint/client-sdk-react-ui'
+import { useFundWallet } from '@privy-io/react-auth'
+import { X, ChevronDown, ChevronUp, Zap, Check, CreditCard } from 'lucide-react'
+import { base } from 'viem/chains'
 
 interface OnrampModalProps {
   isOpen: boolean
@@ -13,19 +14,16 @@ interface OnrampModalProps {
 }
 
 const PRESET_AMOUNTS = [25, 50, 100, 250]
-const FEE_RATE = 0.025 // 2.5%
+const FEE_RATE = 0.025 // 2.5% MoonPay fee estimate
 
-type FlowStep = 'amount' | 'confirm' | 'checkout' | 'processing' | 'success'
-
-const CLIENT_API_KEY = process.env.NEXT_PUBLIC_CROSSMINT_CLIENT_SIDE_API_KEY || ''
+type FlowStep = 'amount' | 'confirm' | 'processing' | 'success'
 
 export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: OnrampModalProps) {
-  const { address } = useAuth()
+  const { address, refetchBalances } = useAuth()
+  const { fundWallet } = useFundWallet()
   const [amount, setAmount] = useState(initialAmount || '50')
   const [step, setStep] = useState<FlowStep>('amount')
   const [error, setError] = useState<string | null>(null)
-  const [orderId, setOrderId] = useState<string | null>(null)
-  const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [feeExpanded, setFeeExpanded] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -42,8 +40,6 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
       const timer = setTimeout(() => {
         setStep('amount')
         setError(null)
-        setOrderId(null)
-        setClientSecret(null)
         setFeeExpanded(false)
         setIsTyping(false)
       }, 300)
@@ -68,7 +64,7 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
     setAmount(value)
     setError(null)
     setIsTyping(true)
-    
+
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current)
     }
@@ -97,7 +93,7 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
     setStep('confirm')
   }, [amountNum])
 
-  // Create order and proceed to checkout
+  // Initiate MoonPay funding via Privy
   const handleConfirmPay = useCallback(async () => {
     if (!address) {
       setError('Please connect your wallet')
@@ -107,46 +103,40 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
     setStep('processing')
 
     try {
-      const response = await fetch('/api/crossmint/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          walletAddress: address,
-          amountUsd: amount,
-        }),
+      // Call Privy's fundWallet which opens MoonPay
+      await fundWallet({
+        address,
+        options: {
+          chain: base,
+          amount: amount,
+          asset: 'USDC',
+        },
       })
 
-      const data = await response.json()
+      // MoonPay flow completed - show success
+      setStep('success')
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Something went wrong')
-      }
+      // Refetch balances after a delay to allow for processing
+      setTimeout(() => {
+        refetchBalances()
+      }, 2000)
 
-      setOrderId(data.orderId)
-      setClientSecret(data.clientSecret)
-      setStep('checkout')
+      // Auto-dismiss after delay
+      setTimeout(() => {
+        onSuccess?.()
+        onClose()
+      }, 3000)
     } catch (err) {
-      console.error('Order creation error:', err)
-      setError(err instanceof Error ? err.message : 'Something went wrong')
+      console.error('Fund wallet error:', err)
+      // User may have closed the MoonPay modal - go back to confirm
+      setError(err instanceof Error ? err.message : 'Payment cancelled or failed')
       setStep('confirm')
     }
-  }, [address, amount])
-
-  // Handle checkout success - optimistic
-  const handleCheckoutSuccess = useCallback(() => {
-    setStep('success')
-    
-    // Auto-dismiss after delay
-    setTimeout(() => {
-      onSuccess?.()
-      onClose()
-    }, 2500)
-  }, [onSuccess, onClose])
+  }, [address, amount, fundWallet, refetchBalances, onSuccess, onClose])
 
   // Back navigation
   const handleBack = useCallback(() => {
     if (step === 'confirm') setStep('amount')
-    if (step === 'checkout') setStep('confirm')
   }, [step])
 
   if (!isOpen) return null
@@ -181,7 +171,7 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
           {/* Header - minimal */}
           <div className="flex items-center justify-between px-6 pt-5 pb-2">
             <div className="flex items-center gap-3">
-              {(step === 'confirm' || step === 'checkout') && (
+              {step === 'confirm' && (
                 <button
                   onClick={handleBack}
                   className="p-1 -ml-1 text-white/40 hover:text-white/60 transition-colors"
@@ -192,16 +182,16 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
               <h2 className="text-white/90 font-semibold text-[17px]">
                 {step === 'success' ? '' : 'Add Money'}
               </h2>
-          </div>
+            </div>
             {step !== 'success' && step !== 'processing' && (
-          <button 
-            onClick={onClose}
+              <button
+                onClick={onClose}
                 className="p-2 -mr-2 text-white/30 hover:text-white/50 transition-colors"
-          >
+              >
                 <X className="w-5 h-5" />
-          </button>
+              </button>
             )}
-        </div>
+          </div>
 
           {/* Step: Amount Entry */}
           {step === 'amount' && (
@@ -352,67 +342,37 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
                 </div>
               )}
 
-              {/* Commit CTA - Apple Pay style */}
+              {/* Primary CTA - Pay with Card */}
               <button
                 onClick={handleConfirmPay}
                 className="
-                  w-full py-5 rounded-2xl font-semibold text-[17px]
-                  bg-black text-white border border-white/[0.15]
-                  shadow-xl shadow-black/30
+                  w-full py-4 rounded-2xl font-semibold text-[17px]
+                  bg-[#ef4444] text-white
+                  shadow-lg shadow-red-500/25
                   transition-all duration-150 active:scale-[0.98]
-                  hover:bg-gray-900
+                  hover:bg-[#dc2626]
                   flex items-center justify-center gap-3
                 "
               >
-                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current">
-                  <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
-                </svg>
-                Pay with Apple Pay
+                <CreditCard className="w-5 h-5" />
+                Pay with Card
               </button>
 
               <p className="text-white/25 text-xs text-center mt-3">
-                Card & Google Pay also available
+                Apple Pay, Google Pay & card supported
               </p>
             </div>
           )}
 
-          {/* Step: Processing (before checkout loads) */}
+          {/* Step: Processing (MoonPay loading) */}
           {step === 'processing' && (
             <div className="px-6 pb-8 pt-4">
               <div className="flex flex-col items-center justify-center py-12">
                 <div className="w-12 h-12 border-2 border-white/10 border-t-[#ef4444] rounded-full animate-spin mb-4" />
-                <p className="text-white/60 text-sm">Preparing checkout...</p>
+                <p className="text-white/60 text-sm">Opening payment...</p>
               </div>
-          </div>
-        )}
-
-          {/* Step: Checkout (Crossmint Embedded) */}
-          {step === 'checkout' && orderId && clientSecret && CLIENT_API_KEY && (
-            <div className="px-4 pb-4">
-              {/* Glass container for checkout */}
-              <div className="bg-white/[0.02] backdrop-blur-sm border border-white/[0.06] rounded-2xl overflow-hidden mb-4">
-                <CrossmintProvider apiKey={CLIENT_API_KEY}>
-                  <CrossmintEmbeddedCheckout
-                    orderId={orderId}
-                    clientSecret={clientSecret}
-                    payment={{
-                      fiat: { enabled: true },
-                      crypto: { enabled: false },
-                      defaultMethod: 'fiat',
-                    }}
-                  />
-                </CrossmintProvider>
-              </div>
-              
-              {/* Done button - for after completing payment in the widget */}
-              <button
-                onClick={handleCheckoutSuccess}
-                className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-2xl transition-all active:scale-[0.98]"
-              >
-                I&apos;ve completed payment
-              </button>
-          </div>
-        )}
+            </div>
+          )}
 
           {/* Step: Success - Optimistic */}
           {step === 'success' && (
