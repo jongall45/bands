@@ -289,33 +289,33 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
         <div className="bg-[#0a0a0a] rounded-[24px] p-2 relative border border-white/10">
           
           {/* SELL INPUT */}
-          <div className="bg-[#141414] hover:bg-[#1a1a1a] transition-colors rounded-[20px] p-4 border border-transparent hover:border-white/10 group">
-            <div className="flex justify-between items-center mb-3">
-              <label className="text-white/50 font-semibold text-sm">Sell</label>
+          <div className="bg-[#141414] hover:bg-[#1a1a1a] transition-colors rounded-[16px] p-3 border border-transparent hover:border-white/10 group">
+            <div className="flex justify-between items-center mb-2">
+              <label className="text-white/50 font-semibold text-xs">Sell</label>
               {walletAddress && (
-                <div className="flex items-center gap-1.5 bg-[#ef4444]/10 hover:bg-[#ef4444]/20 text-[#ef4444] px-2 py-1 rounded-full text-xs font-bold cursor-pointer transition">
-                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                <div className="flex items-center gap-1 bg-[#ef4444]/10 hover:bg-[#ef4444]/20 text-[#ef4444] px-1.5 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
                   {formatAddress(walletAddress)}
-                  <ChevronDown size={12} strokeWidth={3} />
+                  <ChevronDown size={10} strokeWidth={3} />
                 </div>
               )}
             </div>
 
-            <div className="flex items-center justify-between h-14 relative z-10">
+            <div className="flex items-center justify-between h-10 relative z-10">
               <input
                 value={sellAmount}
                 onChange={e => setSellAmount(e.target.value)}
-                className="w-full bg-transparent text-[40px] font-semibold text-white placeholder-white/20 outline-none"
+                className="w-full bg-transparent text-[28px] font-semibold text-white placeholder-white/20 outline-none"
                 placeholder="0"
                 type="number"
                 min="0"
                 step="any"
               />
-              
+
               {/* Token Selector Button - Frosted Glass */}
               <button
                 onClick={() => setIsFromModalOpen(true)}
-                className="relative flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full min-w-[130px] overflow-hidden group transition-all duration-200 hover:scale-[1.02]"
+                className="relative flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-full min-w-[110px] overflow-hidden group transition-all duration-200 hover:scale-[1.02]"
                 style={{
                   background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.9) 0%, rgba(220, 38, 38, 0.9) 100%)',
                   boxShadow: '0 4px 20px rgba(239, 68, 68, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
@@ -326,32 +326,32 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
                 {/* Hover glow */}
                 <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-br from-white/10 to-transparent" />
                 {fromToken.logoURI ? (
-                  <img src={fromToken.logoURI} className="w-8 h-8 rounded-full relative z-10" alt={fromToken.symbol} />
+                  <img src={fromToken.logoURI} className="w-6 h-6 rounded-full relative z-10" alt={fromToken.symbol} />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold relative z-10">
+                  <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-white text-xs font-bold relative z-10">
                     {fromToken.symbol.charAt(0)}
                   </div>
                 )}
-                <div className="flex flex-col items-start mr-auto leading-none gap-0.5 relative z-10">
-                  <span className="text-sm font-bold text-white">{fromToken.symbol}</span>
-                  <span className="text-[10px] font-bold text-white/70">{getChainName(fromToken.chainId)}</span>
+                <div className="flex flex-col items-start mr-auto leading-none gap-0 relative z-10">
+                  <span className="text-xs font-bold text-white">{fromToken.symbol}</span>
+                  <span className="text-[9px] font-bold text-white/70">{getChainName(fromToken.chainId)}</span>
                 </div>
-                <ChevronDown size={16} className="text-white/70 relative z-10" />
+                <ChevronDown size={12} className="text-white/70 relative z-10" />
               </button>
             </div>
 
-            <div className="flex justify-between items-center mt-3">
-              <span className="text-sm text-white/40 font-medium">
+            <div className="flex justify-between items-center mt-2">
+              <span className="text-xs text-white/40 font-medium">
                 ${fromUsd.toFixed(2)}
               </span>
-              <div className="flex items-center gap-2 text-xs font-semibold text-white/40">
+              <div className="flex items-center gap-1.5 text-[10px] font-semibold text-white/40">
                 <span>Balance: {parseFloat(fromBalance).toFixed(4)}</span>
-                <div className="flex gap-1.5 ml-1">
+                <div className="flex gap-1 ml-0.5">
                   {[20, 50, 100].map(p => (
                     <button
                       key={p}
                       onClick={() => handlePercentage(p)}
-                      className="btn-frosted-red px-2.5 py-1 text-white text-[10px] tracking-wide"
+                      className="btn-frosted-red px-2 py-0.5 text-white text-[9px] tracking-wide"
                     >
                       {p === 100 ? 'MAX' : `${p}%`}
                     </button>
@@ -362,42 +362,42 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
           </div>
 
           {/* FLOATING ARROW */}
-          <div className="relative h-2 z-20">
-            <div className="absolute left-1/2 -translate-x-1/2 -top-5">
+          <div className="relative h-1 z-20">
+            <div className="absolute left-1/2 -translate-x-1/2 -top-4">
               <button
                 onClick={handleSwapTokens}
-                className="bg-[#ef4444] p-2.5 rounded-[14px] border-[3px] border-[#0a0a0a] shadow-lg hover:bg-[#dc2626] hover:scale-105 transition-all"
+                className="bg-[#ef4444] p-2 rounded-[12px] border-[3px] border-[#0a0a0a] shadow-lg hover:bg-[#dc2626] hover:scale-105 transition-all"
               >
-                <ArrowDown size={18} className="text-white" strokeWidth={2.5} />
+                <ArrowDown size={14} className="text-white" strokeWidth={2.5} />
               </button>
             </div>
           </div>
 
           {/* BUY INPUT */}
-          <div className="bg-[#141414] hover:bg-[#1a1a1a] transition-colors rounded-[20px] p-4 mt-1 border border-transparent hover:border-white/10">
-            <div className="flex justify-between items-center mb-3">
-              <label className="text-white/50 font-semibold text-sm">Buy</label>
+          <div className="bg-[#141414] hover:bg-[#1a1a1a] transition-colors rounded-[16px] p-3 mt-1 border border-transparent hover:border-white/10">
+            <div className="flex justify-between items-center mb-2">
+              <label className="text-white/50 font-semibold text-xs">Buy</label>
               {walletAddress && (
-                <div className="flex items-center gap-1.5 bg-[#ef4444]/10 hover:bg-[#ef4444]/20 text-[#ef4444] px-2 py-1 rounded-full text-xs font-bold cursor-pointer transition">
-                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                <div className="flex items-center gap-1 bg-[#ef4444]/10 hover:bg-[#ef4444]/20 text-[#ef4444] px-1.5 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
                   {formatAddress(walletAddress)}
-                  <ChevronDown size={12} strokeWidth={3} />
+                  <ChevronDown size={10} strokeWidth={3} />
                 </div>
               )}
             </div>
 
-            <div className="flex items-center justify-between h-14">
+            <div className="flex items-center justify-between h-10">
               <input
                 readOnly
                 value={quote ? quote.toAmount : ''}
                 placeholder="0"
-                className="w-full bg-transparent text-[40px] font-semibold text-white placeholder-white/20 outline-none"
+                className="w-full bg-transparent text-[28px] font-semibold text-white placeholder-white/20 outline-none"
               />
-              
+
               {/* Token Selector Button - Frosted Glass */}
               <button
                 onClick={() => setIsToModalOpen(true)}
-                className="relative flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full min-w-[130px] overflow-hidden group transition-all duration-200 hover:scale-[1.02]"
+                className="relative flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-full min-w-[110px] overflow-hidden group transition-all duration-200 hover:scale-[1.02]"
                 style={{
                   background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.9) 0%, rgba(220, 38, 38, 0.9) 100%)',
                   boxShadow: '0 4px 20px rgba(239, 68, 68, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
@@ -408,22 +408,22 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
                 {/* Hover glow */}
                 <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-br from-white/10 to-transparent" />
                 {toToken.logoURI ? (
-                  <img src={toToken.logoURI} className="w-8 h-8 rounded-full relative z-10" alt={toToken.symbol} />
+                  <img src={toToken.logoURI} className="w-6 h-6 rounded-full relative z-10" alt={toToken.symbol} />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold relative z-10">
+                  <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-white text-xs font-bold relative z-10">
                     {toToken.symbol.charAt(0)}
                   </div>
                 )}
-                <div className="flex flex-col items-start mr-auto leading-none gap-0.5 relative z-10">
-                  <span className="text-sm font-bold text-white">{toToken.symbol}</span>
-                  <span className="text-[10px] font-bold text-white/70">{getChainName(toToken.chainId)}</span>
+                <div className="flex flex-col items-start mr-auto leading-none gap-0 relative z-10">
+                  <span className="text-xs font-bold text-white">{toToken.symbol}</span>
+                  <span className="text-[9px] font-bold text-white/70">{getChainName(toToken.chainId)}</span>
                 </div>
-                <ChevronDown size={16} className="text-white/70 relative z-10" />
+                <ChevronDown size={12} className="text-white/70 relative z-10" />
               </button>
             </div>
 
-            <div className="flex justify-between items-center mt-3">
-              <span className="text-sm text-white/40 font-medium flex gap-1">
+            <div className="flex justify-between items-center mt-2">
+              <span className="text-xs text-white/40 font-medium flex gap-1">
                 ${toUsd.toFixed(2)}
                 {priceImpact > 0.1 && (
                   <span className={priceImpact > 1 ? 'text-red-500' : 'text-yellow-500'}>
@@ -431,7 +431,7 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
                   </span>
                 )}
               </span>
-              <span className="text-xs font-semibold text-white/40">
+              <span className="text-[10px] font-semibold text-white/40">
                 Balance: {parseFloat(toBalance).toFixed(4)}
               </span>
             </div>
@@ -439,24 +439,24 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
 
           {/* QUOTE INFO */}
           {quote && (
-            <div className="px-4 py-4 space-y-3">
-              <div className="flex justify-between text-sm">
+            <div className="px-3 py-2 space-y-1.5">
+              <div className="flex justify-between text-xs">
                 <span className="text-white/50 font-medium">Max Slippage</span>
-                <div className="flex gap-2">
+                <div className="flex gap-1.5">
                   <span className="text-white/50 font-medium">Auto</span>
                   <span className="text-white/40 font-medium">0.5%</span>
                 </div>
               </div>
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between text-xs">
                 <span className="text-white/50 font-medium">
                   1 {fromToken.symbol} = {rate.toFixed(6)} {toToken.symbol}
                 </span>
-                <div className="flex gap-4 items-center">
-                  <span className="flex items-center gap-1 text-green-500 bg-green-500/10 px-1.5 py-0.5 rounded text-xs font-bold">
-                    <Zap size={10} /> ~ {quote.estimatedTime}s
+                <div className="flex gap-2 items-center">
+                  <span className="flex items-center gap-0.5 text-green-500 bg-green-500/10 px-1 py-0.5 rounded text-[10px] font-bold">
+                    <Zap size={8} /> ~{quote.estimatedTime}s
                   </span>
-                  <span className="flex items-center gap-1 text-white/40 text-xs font-semibold">
-                    <Fuel size={12} /> ${gasFeeUsd.toFixed(4)} <ChevronDown size={10} />
+                  <span className="flex items-center gap-0.5 text-white/40 text-[10px] font-semibold">
+                    <Fuel size={10} /> ${gasFeeUsd.toFixed(4)}
                   </span>
                 </div>
               </div>
@@ -465,18 +465,18 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
 
           {/* ERROR MESSAGE */}
           {error && state === 'error' && (
-            <div className="mx-4 mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-500 text-sm">
-              <AlertCircle size={16} />
+            <div className="mx-3 mb-2 p-2 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-1.5 text-red-500 text-xs">
+              <AlertCircle size={12} />
               {error}
             </div>
           )}
 
           {/* ACTION BUTTON - Frosted Glass */}
-          <div className={`relative rounded-[18px] ${isButtonDisabled ? '' : 'p-[1px] bg-gradient-to-br from-white/20 via-transparent to-[#ef4444]/40'}`}>
+          <div className={`relative rounded-[14px] ${isButtonDisabled ? '' : 'p-[1px] bg-gradient-to-br from-white/20 via-transparent to-[#ef4444]/40'}`}>
             <button
               onClick={handleSwap}
               disabled={isButtonDisabled}
-              className={`relative w-full py-4 rounded-[17px] font-bold text-lg flex justify-center items-center gap-2 transition-all overflow-hidden ${
+              className={`relative w-full py-3 rounded-[13px] font-bold text-sm flex justify-center items-center gap-2 transition-all overflow-hidden ${
                 isButtonDisabled
                   ? 'bg-white/5 text-white/40 cursor-not-allowed'
                   : 'text-white hover:scale-[1.01] active:scale-[0.99]'
@@ -491,9 +491,9 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
                 <div className="absolute inset-0 bg-gradient-to-b from-white/15 to-transparent h-1/2 pointer-events-none" />
               )}
               {/* Content */}
-              <span className="relative z-10 flex items-center gap-2">
+              <span className="relative z-10 flex items-center gap-1.5">
                 {(state === 'fetching_quote' || state === 'confirming' || state === 'sending' || state === 'pending') && (
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                 )}
                 {buttonText}
               </span>
