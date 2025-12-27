@@ -49,33 +49,26 @@ export default function FundPage() {
   if (!isConnected || !address) return null
 
   return (
-    <div className="fund-page">
-      {/* Grain Texture Overlay */}
-      <div className="noise-overlay" />
-
-      {/* Lava Lamp Blobs */}
-      <div className="lava-container">
-        <div className="lava lava-1" />
-        <div className="lava lava-2" />
-        <div className="lava lava-3" />
-      </div>
-
+    <div className="min-h-screen bg-black">
       <div className="max-w-[430px] mx-auto relative z-10 pb-24">
         {/* Header */}
-        <header 
+        <header
           className="px-5 py-4 flex items-center gap-4"
           style={{ paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))' }}
         >
-          <Link href="/dashboard" className="text-gray-600 hover:text-gray-900 p-1 -ml-1 transition-colors">
+          <Link href="/dashboard" className="text-white/50 hover:text-white p-1 -ml-1 transition-colors">
             <ArrowLeft className="w-6 h-6" />
           </Link>
         </header>
 
         <div className="px-5">
           {/* Combined Card */}
-          <div className="main-card">
+          <div className="bg-[#111111] border border-white/[0.06] rounded-[20px] p-5 relative overflow-hidden">
+            {/* Subtle red glow */}
+            <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-[#ef4444]/[0.08] via-transparent to-transparent pointer-events-none" />
+
             {/* Header Row */}
-            <div className="flex items-center gap-3 pb-4 mb-4 border-b border-white/[0.06]">
+            <div className="relative flex items-center gap-3 pb-4 mb-4 border-b border-white/[0.06]">
               <div className="relative">
                 <USDCLogo className="w-10 h-10" />
                 <div className="absolute -bottom-0.5 -right-0.5">
@@ -86,12 +79,12 @@ export default function FundPage() {
                 <h1 className="text-white text-lg font-semibold">Deposit USDC</h1>
                 <p className="text-white/40 text-xs">On Base network</p>
               </div>
-          </div>
+            </div>
 
             {/* Option 1: Buy with Card */}
             <button
               onClick={() => setShowOnrampModal(true)}
-              className="w-full flex items-center justify-between p-4 bg-[#ef4444]/10 hover:bg-[#ef4444]/15 border border-[#ef4444]/20 rounded-xl mb-3 transition-all active:scale-[0.99] group"
+              className="relative w-full flex items-center justify-between p-4 bg-[#ef4444]/10 hover:bg-[#ef4444]/15 border border-[#ef4444]/20 rounded-xl mb-3 transition-all active:scale-[0.99] group"
             >
               <div className="text-left">
                 <div className="flex items-center gap-2 mb-0.5">
@@ -109,7 +102,7 @@ export default function FundPage() {
             </button>
 
             {/* Option 2: Crypto / External Wallet */}
-            <div className="p-4 bg-white/[0.03] border border-white/[0.06] rounded-xl">
+            <div className="relative p-4 bg-white/[0.03] border border-white/[0.06] rounded-xl">
               <div className="flex items-center justify-between mb-4">
                     <div>
                   <span className="text-white font-medium">Crypto</span>
@@ -159,7 +152,7 @@ export default function FundPage() {
             </div>
 
             {/* Network Warning */}
-            <p className="text-white/25 text-[11px] text-center mt-4">
+            <p className="relative text-white/25 text-[11px] text-center mt-4">
               Only send <span className="text-white/40">USDC on Base</span>. Other tokens or networks may be lost.
             </p>
           </div>
@@ -178,122 +171,6 @@ export default function FundPage() {
           router.push('/dashboard')
         }}
       />
-
-      <style jsx global>{`
-        .fund-page {
-          min-height: 100vh;
-          width: 100%;
-          background: #F4F4F5;
-          font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
-          overflow-x: hidden;
-          position: relative;
-        }
-
-        .fund-page .noise-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          pointer-events: none;
-          z-index: 10000;
-          opacity: 0.08;
-          mix-blend-mode: overlay;
-          background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-        }
-
-        .fund-page .lava-container {
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          overflow: hidden;
-          z-index: 0;
-          filter: blur(60px);
-        }
-
-        .fund-page .lava {
-          position: absolute;
-          will-change: transform, border-radius;
-        }
-
-        .fund-page .lava-1 {
-          width: 70vmax;
-          height: 70vmax;
-          background: radial-gradient(circle at 30% 30%, #FF3B30 0%, #FF6B6B 40%, rgba(255, 107, 107, 0.3) 70%, transparent 100%);
-          top: -20%;
-          left: -20%;
-          opacity: 0.6;
-          animation: lava1 35s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-        }
-
-        .fund-page .lava-2 {
-          width: 60vmax;
-          height: 60vmax;
-          background: radial-gradient(circle at 70% 70%, #D70015 0%, #FF4444 40%, rgba(255, 68, 68, 0.3) 70%, transparent 100%);
-          bottom: -15%;
-          right: -15%;
-          opacity: 0.5;
-          animation: lava2 40s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-        }
-
-        .fund-page .lava-3 {
-          width: 45vmax;
-          height: 45vmax;
-          background: radial-gradient(circle at 50% 50%, #FF6B35 0%, #FFAA88 45%, rgba(255, 170, 136, 0.2) 75%, transparent 100%);
-          top: 30%;
-          right: 10%;
-          opacity: 0.4;
-          animation: lava3 28s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-        }
-
-        @keyframes lava1 {
-          0%, 100% { transform: translate(0, 0) scale(1); border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
-          50% { transform: translate(5vw, 10vh) scale(1.1); border-radius: 40% 60% 60% 40% / 40% 60% 40% 60%; }
-        }
-
-        @keyframes lava2 {
-          0%, 100% { transform: translate(0, 0) scale(1); border-radius: 40% 60% 60% 40% / 70% 30% 50% 60%; }
-          50% { transform: translate(-5vw, -10vh) scale(1.15); border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
-        }
-
-        @keyframes lava3 {
-          0%, 100% { transform: translate(0, 0) scale(1); border-radius: 50% 60% 30% 60% / 30% 70% 40% 50%; }
-          50% { transform: translate(-10vw, 5vh) scale(1.2); border-radius: 60% 40% 70% 30% / 40% 60% 50% 70%; }
-        }
-
-        .fund-page .main-card {
-          background: #111111;
-          border: 1px solid rgba(255, 255, 255, 0.06);
-          border-radius: 20px;
-          padding: 20px;
-          position: relative;
-          overflow: hidden;
-        }
-
-        .fund-page .main-card::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background: radial-gradient(
-            ellipse at 0% 0%,
-            rgba(255, 59, 48, 0.12) 0%,
-            rgba(255, 59, 48, 0.04) 30%,
-            transparent 60%
-          );
-          pointer-events: none;
-          z-index: 0;
-        }
-
-        .fund-page .main-card > * {
-          position: relative;
-          z-index: 1;
-        }
-      `}</style>
     </div>
   )
 }
