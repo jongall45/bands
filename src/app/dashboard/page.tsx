@@ -324,12 +324,11 @@ export default function Dashboard() {
                   ))}
                   {/* Solana indicator */}
                   {hasSolanaWallet && (
-                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#9945FF] to-[#14F195] border border-white/10 flex items-center justify-center">
-                      <svg viewBox="0 0 101 88" className="w-2.5 h-2.5">
-                        <path fill="#fff" d="M100.48 69.38L83.11 87.25c-.8.81-1.87 1.27-3.01 1.27H3.89c-1.91 0-2.87-2.31-1.52-3.67l17.37-17.87c.8-.81 1.87-1.27 3.01-1.27h76.21c1.91 0 2.87 2.31 1.52 3.67z"/>
-                        <path fill="#fff" d="M100.48 1.27L83.11 19.15c-.8.81-1.87 1.27-3.01 1.27H3.89c-1.91 0-2.87 2.31-1.52 3.67l17.37 17.87c.8.81 1.87 1.27 3.01 1.27h76.21c1.91 0 2.87-2.31 1.52-3.67L83.11 21.69c-.8-.81-1.87-1.27-3.01-1.27H3.89c-1.91 0-2.87-2.31-1.52-3.67L19.74 1.27c.8-.81 1.87-1.27 3.01-1.27h76.21c1.91 0 2.87 2.31 1.52 3.67z"/>
-                      </svg>
-                    </div>
+                    <img
+                      src="https://cryptologos.cc/logos/solana-sol-logo.png"
+                      alt="Solana"
+                      className="w-5 h-5 rounded-full border border-white/10"
+                    />
                   )}
                   {portfolioChains.length > 3 && (
                     <span className="text-white/40 text-xs">+{portfolioChains.length - 3}</span>
@@ -349,84 +348,68 @@ export default function Dashboard() {
             </button>
           </div>
 
-          {/* Wallet Addresses - EVM & Solana */}
-          <div className="space-y-2 mb-4">
+          {/* Wallet Addresses - Compact Row */}
+          <div className="flex items-center justify-center gap-3 mb-4">
             {/* EVM Wallet */}
-            <GlassInner>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded-full bg-[#627EEA] flex items-center justify-center">
-                    <svg viewBox="0 0 256 417" className="w-3 h-3">
-                      <path fill="#fff" d="M127.961 0l-2.795 9.5v275.668l2.795 2.79 127.962-75.638z"/>
-                      <path fill="#fff" opacity="0.8" d="M127.962 0L0 212.32l127.962 75.639V154.158z"/>
-                      <path fill="#fff" d="M127.961 312.187l-1.575 1.92v98.199l1.575 4.6 128.038-180.32z"/>
-                      <path fill="#fff" opacity="0.8" d="M127.962 416.905v-104.72L0 236.585z"/>
-                    </svg>
-                  </div>
-                  <span className="text-white/60 text-sm font-mono">
-                    {address?.slice(0, 6)}...{address?.slice(-4)}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <a
-                    href={`https://basescan.org/address/${address}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-white/40 text-xs hover:text-white/60 transition-colors flex items-center gap-1"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                  <button
-                    onClick={copyAddress}
-                    className="p-1.5 text-white/40 hover:text-white/60 transition-colors"
-                  >
-                    {copied ? (
-                      <Check className="w-4 h-4 text-green-400" />
-                    ) : (
-                      <Copy className="w-4 h-4" strokeWidth={1.5} />
-                    )}
-                  </button>
-                </div>
-              </div>
-            </GlassInner>
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/[0.03] rounded-xl border border-white/[0.06] hover:border-white/10 transition-colors">
+              <img
+                src="https://cryptologos.cc/logos/ethereum-eth-logo.png"
+                alt="ETH"
+                className="w-4 h-4 rounded-full"
+              />
+              <span className="text-white/50 text-xs font-mono">
+                {address?.slice(0, 6)}...{address?.slice(-4)}
+              </span>
+              <a
+                href={`https://basescan.org/address/${address}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-white/30 hover:text-white/50 transition-colors"
+              >
+                <ExternalLink className="w-3 h-3" />
+              </a>
+              <button
+                onClick={copyAddress}
+                className="text-white/30 hover:text-white/50 transition-colors"
+              >
+                {copied ? (
+                  <Check className="w-3 h-3 text-green-400" />
+                ) : (
+                  <Copy className="w-3 h-3" />
+                )}
+              </button>
+            </div>
 
             {/* Solana Wallet */}
             {hasSolanaWallet && solanaAddress && (
-              <GlassInner>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#9945FF] to-[#14F195] flex items-center justify-center">
-                      <svg viewBox="0 0 101 88" className="w-3 h-3">
-                        <path fill="#fff" d="M100.48 69.38L83.11 87.25c-.8.81-1.87 1.27-3.01 1.27H3.89c-1.91 0-2.87-2.31-1.52-3.67l17.37-17.87c.8-.81 1.87-1.27 3.01-1.27h76.21c1.91 0 2.87 2.31 1.52 3.67z"/>
-                        <path fill="#fff" d="M100.48 1.27L83.11 19.15c-.8.81-1.87 1.27-3.01 1.27H3.89c-1.91 0-2.87 2.31-1.52 3.67l17.37 17.87c.8.81 1.87 1.27 3.01 1.27h76.21c1.91 0 2.87-2.31 1.52-3.67L83.11 21.69c-.8-.81-1.87-1.27-3.01-1.27H3.89c-1.91 0-2.87-2.31-1.52-3.67L19.74 1.27c.8-.81 1.87-1.27 3.01-1.27h76.21c1.91 0 2.87 2.31 1.52 3.67z"/>
-                      </svg>
-                    </div>
-                    <span className="text-white/60 text-sm font-mono">
-                      {solanaAddress?.slice(0, 4)}...{solanaAddress?.slice(-4)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={`https://solscan.io/account/${solanaAddress}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-white/40 text-xs hover:text-white/60 transition-colors flex items-center gap-1"
-                    >
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                    <button
-                      onClick={copySolanaAddress}
-                      className="p-1.5 text-white/40 hover:text-white/60 transition-colors"
-                    >
-                      {copiedSolana ? (
-                        <Check className="w-4 h-4 text-green-400" />
-                      ) : (
-                        <Copy className="w-4 h-4" strokeWidth={1.5} />
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </GlassInner>
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/[0.03] rounded-xl border border-white/[0.06] hover:border-white/10 transition-colors">
+                <img
+                  src="https://cryptologos.cc/logos/solana-sol-logo.png"
+                  alt="SOL"
+                  className="w-4 h-4 rounded-full"
+                />
+                <span className="text-white/50 text-xs font-mono">
+                  {solanaAddress?.slice(0, 4)}...{solanaAddress?.slice(-4)}
+                </span>
+                <a
+                  href={`https://solscan.io/account/${solanaAddress}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-white/30 hover:text-white/50 transition-colors"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+                <button
+                  onClick={copySolanaAddress}
+                  className="text-white/30 hover:text-white/50 transition-colors"
+                >
+                  {copiedSolana ? (
+                    <Check className="w-3 h-3 text-green-400" />
+                  ) : (
+                    <Copy className="w-3 h-3" />
+                  )}
+                </button>
+              </div>
             )}
           </div>
 

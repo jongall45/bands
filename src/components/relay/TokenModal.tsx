@@ -14,6 +14,9 @@ interface TokenModalProps {
   side: 'from' | 'to'
 }
 
+// Solana chain ID for Relay
+const SOLANA_CHAIN_ID = 792703809
+
 // Chain logo URLs - using reliable CDN sources
 const CHAIN_LOGOS: Record<number, string> = {
   8453: 'https://raw.githubusercontent.com/base-org/brand-kit/001c0e9b40a67799ebe0418671ac4e02a0c683ce/logo/symbol/Base_Symbol_Blue.svg',
@@ -21,6 +24,7 @@ const CHAIN_LOGOS: Record<number, string> = {
   1: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png',
   10: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/optimism/info/logo.png',
   137: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png',
+  [SOLANA_CHAIN_ID]: 'https://cryptologos.cc/logos/solana-sol-logo.png',
 }
 
 // Chain icon component with proper logos
