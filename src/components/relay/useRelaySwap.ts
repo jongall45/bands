@@ -98,6 +98,43 @@ const chainMap: Record<number, Chain> = {
 // Solana chain ID for Relay API
 export const SOLANA_CHAIN_ID = 792703809
 
+// Multiple Solana RPC endpoints for reliability (fallback order)
+const SOLANA_RPC_ENDPOINTS = [
+  'https://solana-mainnet.g.alchemy.com/v2/demo', // Alchemy demo (more reliable)
+  'https://rpc.ankr.com/solana', // Ankr public RPC
+  'https://api.mainnet-beta.solana.com', // Solana public RPC (often rate-limited)
+]
+
+// Helper to fetch from Solana RPC with fallback
+async function fetchSolanaRpc(body: object, timeout = 8000): Promise<any> {
+  for (const rpcUrl of SOLANA_RPC_ENDPOINTS) {
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeout)
+
+      const response = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      })
+
+      clearTimeout(timeoutId)
+      const data = await response.json()
+
+      // Check if we got a valid response
+      if (data.result !== undefined) {
+        console.log('[Solana RPC] Success from:', rpcUrl)
+        return data
+      }
+    } catch (error) {
+      console.warn(`[Solana RPC] ${rpcUrl} failed:`, error)
+      // Continue to next RPC
+    }
+  }
+  throw new Error('All Solana RPC endpoints failed')
+}
+
 // Supported chains with metadata
 export const SUPPORTED_CHAINS = [
   { id: 8453, name: 'Base', logo: 'https://raw.githubusercontent.com/base-org/brand-kit/001c0e9b40a67799ebe0418671ac4e02a0c683ce/logo/symbol/Base_Symbol_Blue.svg' },
@@ -322,46 +359,36 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
       if (!solanaWalletAddress) return '0'
 
       try {
-        // Use the Solana RPC to fetch balance
-        const rpcUrl = 'https://api.mainnet-beta.solana.com'
-
         if (token.address === '11111111111111111111111111111111' || token.symbol === 'SOL') {
-          // Native SOL balance
-          const response = await fetch(rpcUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              method: 'getBalance',
-              params: [solanaWalletAddress],
-            }),
+          // Native SOL balance - use fallback RPC
+          const data = await fetchSolanaRpc({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'getBalance',
+            params: [solanaWalletAddress],
           })
-          const data = await response.json()
           if (data.result?.value !== undefined) {
             // Convert lamports to SOL (9 decimals)
-            return (data.result.value / 1e9).toString()
+            const balance = (data.result.value / 1e9).toString()
+            console.log('[useRelaySwap] Solana SOL balance:', balance)
+            return balance
           }
         } else {
-          // SPL Token balance - fetch token accounts
-          const response = await fetch(rpcUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              method: 'getTokenAccountsByOwner',
-              params: [
-                solanaWalletAddress,
-                { mint: token.address },
-                { encoding: 'jsonParsed' },
-              ],
-            }),
+          // SPL Token balance - use fallback RPC
+          const data = await fetchSolanaRpc({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'getTokenAccountsByOwner',
+            params: [
+              solanaWalletAddress,
+              { mint: token.address },
+              { encoding: 'jsonParsed' },
+            ],
           })
-          const data = await response.json()
           if (data.result?.value?.length > 0) {
             const tokenAccount = data.result.value[0]
             const amount = tokenAccount.account.data.parsed.info.tokenAmount.uiAmount
+            console.log('[useRelaySwap] Solana SPL token balance:', amount)
             return amount?.toString() || '0'
           }
         }
