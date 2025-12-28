@@ -11,7 +11,7 @@ import { usePrivy, useWallets } from '@privy-io/react-auth'
 export default function SettingsPage() {
   const { address, isConnected } = useAccount()
   const { disconnect } = useDisconnect()
-  const { logout, exportWallet, ready } = usePrivy()
+  const { logout, exportWallet, ready, authenticated } = usePrivy()
   const { wallets } = useWallets()
   const router = useRouter()
   const [copied, setCopied] = useState(false)
@@ -22,13 +22,14 @@ export default function SettingsPage() {
   // Get the embedded wallet
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
 
-  // Only redirect after auth is ready to prevent flash/glitch on refresh
+  // Only redirect after auth is ready AND user is not authenticated
+  // Use authenticated (not wallet/connection state) to avoid timing issues on refresh
   useEffect(() => {
-    if (ready && !isConnected && !hasNavigatedRef.current) {
+    if (ready && !authenticated && !hasNavigatedRef.current) {
       hasNavigatedRef.current = true
       router.push('/')
     }
-  }, [isConnected, ready, router])
+  }, [authenticated, ready, router])
 
   const copyAddress = () => {
     if (address) {
@@ -62,8 +63,8 @@ export default function SettingsPage() {
     }
   }
 
-  // Show loading spinner while auth is initializing
-  if (!ready) {
+  // Show loading spinner while auth is initializing or not authenticated
+  if (!ready || !authenticated) {
     return (
       <div className="min-h-screen bg-[#F4F4F5] flex items-center justify-center">
         <div className="w-10 h-10 border-2 border-[#ef4444] border-t-transparent rounded-full animate-spin" />

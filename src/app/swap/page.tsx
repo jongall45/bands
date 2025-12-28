@@ -23,7 +23,7 @@ const DEXSCREENER_CHAIN_IDS: Record<string, number> = {
 export default function SwapPage() {
   const router = useRouter()
   const { wallets } = useWallets()
-  const { ready } = usePrivy()
+  const { ready, authenticated } = usePrivy()
   const [swapState, setSwapState] = useState<SwapState>('idle')
   const [showChart, setShowChart] = useState(true)
   const [selectedBuyToken, setSelectedBuyToken] = useState<{
@@ -37,13 +37,14 @@ export default function SwapPage() {
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
   const isConnected = !!embeddedWallet
 
-  // Only redirect after auth is ready to prevent flash/glitch on refresh
+  // Only redirect after auth is ready AND user is not authenticated
+  // Use authenticated (not wallet presence) to avoid timing issues on refresh
   useEffect(() => {
-    if (ready && !isConnected && !hasNavigatedRef.current) {
+    if (ready && !authenticated && !hasNavigatedRef.current) {
       hasNavigatedRef.current = true
       router.push('/')
     }
-  }, [isConnected, ready, router])
+  }, [authenticated, ready, router])
 
   // Cleanup body class on unmount
   useEffect(() => {
@@ -99,8 +100,8 @@ export default function SwapPage() {
     })
   }, [])
 
-  // Show loading while auth is initializing or user is not connected
-  if (!ready || !isConnected) {
+  // Show loading while auth is initializing or user is not authenticated
+  if (!ready || !authenticated) {
     return (
       <IndustrialPage>
         <div className="min-h-screen flex items-center justify-center">
