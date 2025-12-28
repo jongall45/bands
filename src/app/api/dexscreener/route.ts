@@ -60,10 +60,10 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json()
 
-    // Filter for Base chain pairs if searching
+    // Filter for supported chain pairs if searching
     if (action === 'search' && data.pairs) {
       data.pairs = data.pairs.filter((pair: any) =>
-        pair.chainId === 'base' || pair.chainId === 'ethereum' || pair.chainId === 'arbitrum'
+        ['base', 'ethereum', 'arbitrum', 'optimism', 'polygon', 'solana'].includes(pair.chainId)
       )
     }
 

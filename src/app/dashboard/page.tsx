@@ -56,6 +56,7 @@ export default function Dashboard() {
   const [selectedToken, setSelectedToken] = useState<PortfolioToken | null>(null)
   const [showTokenSelect, setShowTokenSelect] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
+  const [receiveWallet, setReceiveWallet] = useState<'evm' | 'solana'>('evm')
 
   // Cross-chain portfolio from Dune API
   const { data: portfolio, refetch: refetchPortfolio, isLoading: portfolioLoading } = usePortfolio(address)
@@ -732,18 +733,53 @@ export default function Dashboard() {
       {/* Receive Modal */}
       <Modal isOpen={showReceive} onClose={() => setShowReceive(false)} title="Receive">
         <div className="text-center">
-          {isSmartWalletReady && (
+          {/* Wallet Selector Tabs */}
+          {hasSolanaWallet && solanaAddress && (
+            <div className="flex bg-white/[0.03] rounded-xl p-1 border border-white/[0.06] mb-4">
+              <button
+                onClick={() => setReceiveWallet('evm')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
+                  receiveWallet === 'evm'
+                    ? 'bg-[#FF3B30] text-white'
+                    : 'text-white/50 hover:text-white/70'
+                }`}
+              >
+                <img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" className="w-4 h-4 rounded-full" />
+                EVM
+              </button>
+              <button
+                onClick={() => setReceiveWallet('solana')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
+                  receiveWallet === 'solana'
+                    ? 'bg-[#FF3B30] text-white'
+                    : 'text-white/50 hover:text-white/70'
+                }`}
+              >
+                <img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" className="w-4 h-4 rounded-full" />
+                Solana
+              </button>
+            </div>
+          )}
+
+          {/* Wallet badge */}
+          {receiveWallet === 'evm' && isSmartWalletReady && (
             <div className="flex items-center justify-center gap-1.5 mb-4 px-3 py-1.5 mx-auto w-fit bg-green-500/10 rounded-full border border-green-500/20">
               <Shield className="w-3.5 h-3.5 text-green-400" />
               <span className="text-green-400 text-xs font-medium">Smart Wallet</span>
             </div>
           )}
+          {receiveWallet === 'solana' && (
+            <div className="flex items-center justify-center gap-1.5 mb-4 px-3 py-1.5 mx-auto w-fit bg-[#9945FF]/10 rounded-full border border-[#9945FF]/20">
+              <img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" className="w-3.5 h-3.5 rounded-full" />
+              <span className="text-[#9945FF] text-xs font-medium">Solana Wallet</span>
+            </div>
+          )}
 
           <GlassInner className="w-48 h-48 mx-auto mb-6 flex items-center justify-center p-2">
             <div className="w-full h-full bg-white rounded-xl flex items-center justify-center p-2">
-              {address ? (
+              {(receiveWallet === 'evm' ? address : solanaAddress) ? (
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${address}&bgcolor=ffffff&color=111111`}
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${receiveWallet === 'evm' ? address : solanaAddress}&bgcolor=ffffff&color=111111`}
                   alt="Wallet QR Code"
                   className="w-full h-full"
                 />
@@ -756,31 +792,42 @@ export default function Dashboard() {
           <p className="text-white/40 text-sm mb-4">Share your address to receive tokens</p>
 
           <GlassInner className="mb-4">
-            <p className="font-mono text-xs text-white/60 break-all">{address}</p>
+            <p className="font-mono text-xs text-white/60 break-all">
+              {receiveWallet === 'evm' ? address : solanaAddress}
+            </p>
           </GlassInner>
 
           <GlassButton
             primary
-            onClick={() => { copyAddress(); setShowReceive(false); }}
+            onClick={() => {
+              receiveWallet === 'evm' ? copyAddress() : copySolanaAddress()
+              setShowReceive(false)
+            }}
           >
             <Copy className="w-4 h-4" />
             Copy Address
           </GlassButton>
 
           <div className="mt-5">
-            <p className="text-white/30 text-xs mb-3">Works on</p>
+            <p className="text-white/30 text-xs mb-3">
+              {receiveWallet === 'evm' ? 'Works on' : 'Solana Network'}
+            </p>
             <div className="flex items-center justify-center gap-2">
-              {SEND_CHAINS.map((chain) => (
-                <div key={chain.id} className="flex flex-col items-center gap-1" title={chain.name}>
+              {receiveWallet === 'evm' ? (
+                SEND_CHAINS.map((chain) => (
+                  <div key={chain.id} className="flex flex-col items-center gap-1" title={chain.name}>
+                    <div className="w-8 h-8 bg-white/[0.05] rounded-full border border-white/[0.1] flex items-center justify-center">
+                      <img src={chain.logo} alt={chain.name} className="w-5 h-5 rounded-full" />
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="flex flex-col items-center gap-1">
                   <div className="w-8 h-8 bg-white/[0.05] rounded-full border border-white/[0.1] flex items-center justify-center">
-                    <img
-                      src={chain.logo}
-                      alt={chain.name}
-                      className="w-5 h-5 rounded-full"
-                    />
+                    <img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="Solana" className="w-5 h-5 rounded-full" />
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
