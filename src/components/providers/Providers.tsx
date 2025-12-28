@@ -9,6 +9,7 @@ import { http } from 'viem'
 import { base, arbitrum, optimism, mainnet, polygon, zora, blast } from 'viem/chains'
 import { PWALayout } from '@/components/layout/PWALayout'
 import { ErrorBoundary } from './ErrorBoundary'
+import { createSolanaRpc, createSolanaRpcSubscriptions } from '@solana/kit'
 
 // Wagmi config for Privy - supports all chains for cross-chain swaps
 const wagmiConfig = createConfig({
@@ -79,9 +80,26 @@ export function Providers({ children }: { children: React.ReactNode }) {
             ethereum: {
               createOnLogin: 'all-users',
             },
+            solana: {
+              createOnLogin: 'all-users',
+            },
             // CRITICAL: Hide wallet UIs for "no prompt" experience
             // This prevents confirmation modals from appearing
             showWalletUIs: false,
+          },
+
+          // Solana RPC configuration for embedded wallet UIs
+          solana: {
+            rpcs: {
+              'solana:mainnet': {
+                rpc: createSolanaRpc('https://api.mainnet-beta.solana.com'),
+                rpcSubscriptions: createSolanaRpcSubscriptions('wss://api.mainnet-beta.solana.com'),
+              },
+              'solana:devnet': {
+                rpc: createSolanaRpc('https://api.devnet.solana.com'),
+                rpcSubscriptions: createSolanaRpcSubscriptions('wss://api.devnet.solana.com'),
+              },
+            },
           },
 
           // Chain config - default to Base, support multiple chains
