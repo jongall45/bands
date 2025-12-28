@@ -207,10 +207,11 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
 
-  // Determine which wallet to show for each side
-  const fromWalletAddress = walletAddress // Always EVM for selling
-  const toWalletAddress = toToken.chainId === SOLANA_CHAIN_ID ? solanaAddress : walletAddress
+  // Determine which wallet to show for each side based on chain
+  const isFromSolana = fromToken.chainId === SOLANA_CHAIN_ID
+  const fromWalletAddress = isFromSolana ? solanaAddress : walletAddress
   const isToSolana = toToken.chainId === SOLANA_CHAIN_ID
+  const toWalletAddress = isToSolana ? solanaAddress : walletAddress
 
   // Handle percentage buttons
   const handlePercentage = (percent: number) => {
@@ -302,7 +303,7 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
             <div className="flex justify-between items-center mb-2">
               <label className="text-white/50 font-semibold text-xs">Sell</label>
               {fromWalletAddress && (
-                <div className="flex items-center gap-1 bg-[#ef4444]/10 hover:bg-[#ef4444]/20 text-[#ef4444] px-1.5 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition">
+                <div className={`flex items-center gap-1 ${isFromSolana ? 'bg-[#9945FF]/10 hover:bg-[#9945FF]/20 text-[#9945FF]' : 'bg-[#ef4444]/10 hover:bg-[#ef4444]/20 text-[#ef4444]'} px-1.5 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition`}>
                   <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
                   {formatAddress(fromWalletAddress)}
                   <ChevronDown size={10} strokeWidth={3} />

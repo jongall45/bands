@@ -9,6 +9,9 @@ import { formatUnits, parseUnits, isAddress, encodeFunctionData } from 'viem'
 import { base, arbitrum, optimism, mainnet, polygon } from 'wagmi/chains'
 import { useAuth } from '@/hooks/useAuth'
 import { usePortfolio, formatUsdValue, formatTokenBalance, CHAIN_CONFIG, type PortfolioToken } from '@/hooks/usePortfolio'
+import { useSolanaAuth, SOLANA_TOKENS } from '@/hooks/useSolanaAuth'
+import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js'
+import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import { USDC_ADDRESS, USDC_DECIMALS, ERC20_ABI } from '@/lib/wagmi'
 import {
   ArrowUpRight, ArrowDownLeft, Copy, Check, LogOut,
@@ -22,17 +25,22 @@ import { TransactionList } from '@/components/ui/TransactionList'
 import { InstallPrompt } from '@/components/pwa/InstallPrompt'
 import { IndustrialPage, GlassCard, GlassButton, GlassInner, TechBadge, SectionHeader } from '@/components/ui/IndustrialGlass'
 
+// Solana chain ID (used for Relay API, but we use 'solana' as a special case for native transfers)
+const SOLANA_CHAIN_ID = 792703809
+
 // Supported chains for sending
 const SEND_CHAINS = [
-  { id: 8453, name: 'Base', logo: CHAIN_CONFIG[8453]?.logo },
-  { id: 42161, name: 'Arbitrum', logo: CHAIN_CONFIG[42161]?.logo },
-  { id: 10, name: 'Optimism', logo: CHAIN_CONFIG[10]?.logo },
-  { id: 1, name: 'Ethereum', logo: CHAIN_CONFIG[1]?.logo },
-  { id: 137, name: 'Polygon', logo: CHAIN_CONFIG[137]?.logo },
+  { id: 8453, name: 'Base', logo: CHAIN_CONFIG[8453]?.logo, isSolana: false },
+  { id: 42161, name: 'Arbitrum', logo: CHAIN_CONFIG[42161]?.logo, isSolana: false },
+  { id: 10, name: 'Optimism', logo: CHAIN_CONFIG[10]?.logo, isSolana: false },
+  { id: 1, name: 'Ethereum', logo: CHAIN_CONFIG[1]?.logo, isSolana: false },
+  { id: 137, name: 'Polygon', logo: CHAIN_CONFIG[137]?.logo, isSolana: false },
+  { id: SOLANA_CHAIN_ID, name: 'Solana', logo: 'https://cryptologos.cc/logos/solana-sol-logo.png', isSolana: true },
 ]
 
 export default function Dashboard() {
   const { isAuthenticated, isConnected, address, isSmartWalletReady, logout, getClientForChain, isReady, solanaAddress, hasSolanaWallet, balances } = useAuth()
+  const { sendTransaction, getConnection, fetchBalances: fetchSolanaBalances } = useSolanaAuth()
   const router = useRouter()
   const queryClient = useQueryClient()
   const [copied, setCopied] = useState(false)
@@ -61,8 +69,39 @@ export default function Dashboard() {
   // Cross-chain portfolio from Dune API
   const { data: portfolio, refetch: refetchPortfolio, isLoading: portfolioLoading } = usePortfolio(address)
 
+  // Create Solana tokens for the token selector
+  const solPrice = 180 // Approximate SOL price
+  const solanaTokensForSelector: PortfolioToken[] = hasSolanaWallet ? [
+    {
+      chainId: SOLANA_CHAIN_ID,
+      chain: 'solana',
+      address: 'native',
+      symbol: 'SOL',
+      name: 'Solana',
+      decimals: 9,
+      balance: balances.sol || '0',
+      balanceUsd: parseFloat(balances.sol || '0') * solPrice,
+      price: solPrice,
+      logoURI: 'https://cryptologos.cc/logos/solana-sol-logo.png',
+    },
+    {
+      chainId: SOLANA_CHAIN_ID,
+      chain: 'solana',
+      address: SOLANA_TOKENS.USDC.address,
+      symbol: 'USDC',
+      name: 'USD Coin',
+      decimals: 6,
+      balance: balances.usdcSolana || '0',
+      balanceUsd: parseFloat(balances.usdcSolana || '0'),
+      price: 1,
+      logoURI: 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png',
+    },
+  ] : []
+
   // Filter tokens by selected chain
-  const tokensOnSelectedChain = portfolio?.tokens?.filter(t => t.chainId === selectedChain.id) || []
+  const tokensOnSelectedChain = selectedChain.isSolana
+    ? solanaTokensForSelector
+    : (portfolio?.tokens?.filter(t => t.chainId === selectedChain.id) || [])
 
   // Update selected token when chain changes
   useEffect(() => {
@@ -74,7 +113,11 @@ export default function Dashboard() {
     } else {
       setSelectedToken(null)
     }
-  }, [selectedChain.id, portfolio])
+    // Clear and re-validate address when switching chains
+    if (sendTo) {
+      validateAddress(sendTo)
+    }
+  }, [selectedChain.id, portfolio, solanaTokensForSelector])
 
   // Fallback to on-chain USDC balance for Base
   const { data: usdcBalance, refetch: refetchBalance, isLoading: balanceLoading } = useReadContract({
@@ -159,29 +202,145 @@ export default function Dashboard() {
     }
   }, [solanaAddress])
 
+  // Validate Solana address (base58 format, 32-44 characters)
+  const isValidSolanaAddress = (addr: string): boolean => {
+    try {
+      if (!addr || addr.length < 32 || addr.length > 44) return false
+      // Solana addresses use base58 encoding (no 0, O, I, l)
+      const base58Regex = /^[1-9A-HJ-NP-Za-km-z]+$/
+      if (!base58Regex.test(addr)) return false
+      // Try to create a PublicKey - this validates the checksum
+      new PublicKey(addr)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   const validateAddress = (addr: string) => {
     if (!addr) {
       setAddressError('')
       return
     }
-    if (!isAddress(addr)) {
-      setAddressError('Invalid address format')
+
+    if (selectedChain.isSolana) {
+      // Validate Solana address
+      if (!isValidSolanaAddress(addr)) {
+        setAddressError('Invalid Solana address format')
+      } else {
+        setAddressError('')
+      }
     } else {
-      setAddressError('')
+      // Validate EVM address
+      if (!isAddress(addr)) {
+        setAddressError('Invalid address format')
+      } else {
+        setAddressError('')
+      }
     }
   }
 
   const handleSend = async () => {
-    if (!sendTo || !sendAmount || addressError || !address || !selectedToken) return
-    if (!isAddress(sendTo)) {
-      setAddressError('Invalid address format')
-      return
+    if (!sendTo || !sendAmount || addressError || !selectedToken) return
+
+    // Validate address based on chain type
+    if (selectedChain.isSolana) {
+      if (!isValidSolanaAddress(sendTo)) {
+        setAddressError('Invalid Solana address format')
+        return
+      }
+    } else {
+      if (!address) return
+      if (!isAddress(sendTo)) {
+        setAddressError('Invalid address format')
+        return
+      }
     }
 
     setIsSending(true)
     setSendError(null)
 
     try {
+      // Handle Solana transfers
+      if (selectedChain.isSolana) {
+        if (!solanaAddress) {
+          throw new Error('Solana wallet not available')
+        }
+
+        const connection = getConnection('mainnet')
+        const fromPubkey = new PublicKey(solanaAddress)
+        const toPubkey = new PublicKey(sendTo)
+        const decimals = selectedToken.decimals || 9
+        const amountInSmallestUnit = Math.floor(parseFloat(sendAmount) * Math.pow(10, decimals))
+
+        let transaction: Transaction
+
+        if (selectedToken.address === 'native' || selectedToken.symbol === 'SOL') {
+          // Native SOL transfer
+          transaction = new Transaction().add(
+            SystemProgram.transfer({
+              fromPubkey,
+              toPubkey,
+              lamports: amountInSmallestUnit,
+            })
+          )
+        } else {
+          // SPL Token transfer (e.g., USDC)
+          const mintPubkey = new PublicKey(selectedToken.address)
+
+          // Get the associated token accounts
+          const fromAta = await getAssociatedTokenAddress(mintPubkey, fromPubkey)
+          const toAta = await getAssociatedTokenAddress(mintPubkey, toPubkey)
+
+          // Check if recipient's ATA exists
+          const toAtaInfo = await connection.getAccountInfo(toAta)
+
+          transaction = new Transaction()
+
+          // Create the recipient's ATA if it doesn't exist
+          if (!toAtaInfo) {
+            transaction.add(
+              createAssociatedTokenAccountInstruction(
+                fromPubkey, // payer
+                toAta, // associated token account
+                toPubkey, // owner
+                mintPubkey // mint
+              )
+            )
+          }
+
+          // Add the transfer instruction
+          transaction.add(
+            createTransferInstruction(
+              fromAta, // source
+              toAta, // destination
+              fromPubkey, // owner
+              BigInt(amountInSmallestUnit) // amount
+            )
+          )
+        }
+
+        // Get recent blockhash
+        const { blockhash } = await connection.getLatestBlockhash()
+        transaction.recentBlockhash = blockhash
+        transaction.feePayer = fromPubkey
+
+        // Sign and send the transaction
+        const result = await sendTransaction(transaction)
+        console.log('Solana transaction sent:', result)
+
+        // Refresh Solana balances after successful send
+        setTimeout(() => fetchSolanaBalances(), 2000)
+
+        // Close modal and reset
+        setShowSend(false)
+        setSendTo('')
+        setSendAmount('')
+        refetchPortfolio()
+        return
+      }
+
+      // Handle EVM transfers
       const chainConfig = {
         8453: base,
         42161: arbitrum,
@@ -568,7 +727,7 @@ export default function Dashboard() {
                   setSendTo(e.target.value)
                   validateAddress(e.target.value)
                 }}
-                placeholder="0x..."
+                placeholder={selectedChain.isSolana ? "Solana address..." : "0x..."}
                 disabled={isSending || isConfirming}
                 className="w-full bg-transparent px-5 py-4 text-white font-mono text-sm placeholder:text-white/30 focus:outline-none"
               />
@@ -717,7 +876,7 @@ export default function Dashboard() {
           </GlassButton>
 
           <p className="text-white/30 text-xs text-center">
-            Gas sponsored • No ETH needed
+            {selectedChain.isSolana ? 'Requires SOL for transaction fees' : 'Gas sponsored • No ETH needed'}
           </p>
 
           {sendError && (
