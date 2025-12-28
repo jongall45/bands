@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { ArrowLeft, Copy, Check, QrCode, CreditCard, Zap } from 'lucide-react'
@@ -28,15 +28,18 @@ const BaseBadge = ({ className = "w-4 h-4" }: { className?: string }) => (
 
 export default function FundPage() {
   const router = useRouter()
-  const { address, isConnected } = useAuth()
+  const { address, isConnected, isReady } = useAuth()
   const [copied, setCopied] = useState(false)
   const [showOnrampModal, setShowOnrampModal] = useState(false)
+  const hasNavigatedRef = useRef(false)
 
+  // Only redirect after auth is ready to prevent flash/glitch
   useEffect(() => {
-    if (!isConnected) {
+    if (isReady && !isConnected && !hasNavigatedRef.current) {
+      hasNavigatedRef.current = true
       router.push('/')
     }
-  }, [isConnected, router])
+  }, [isConnected, isReady, router])
 
   const copyAddress = () => {
     if (address) {
@@ -46,6 +49,16 @@ export default function FundPage() {
     }
   }
 
+  // Show loading spinner while auth is initializing
+  if (!isReady) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="w-10 h-10 border-2 border-[#ef4444] border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  // Don't render if not connected (redirect will happen in useEffect)
   if (!isConnected || !address) return null
 
   return (

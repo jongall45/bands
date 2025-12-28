@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { PiggyBank, TrendingUp, RefreshCw, Plus, ExternalLink, Shield, ChevronDown, Minus } from 'lucide-react'
@@ -23,20 +23,24 @@ const USDC_LOGO = 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png'
 export default function SavePage() {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { address, isAuthenticated, isSmartWalletReady, balances, refetchBalances } = useAuth()
+  const { address, isAuthenticated, isSmartWalletReady, balances, refetchBalances, isReady } = useAuth()
   const [selectedVault, setSelectedVault] = useState<MorphoVault | null>(null)
   const [modalType, setModalType] = useState<'deposit' | 'withdraw' | null>(null)
   const [selectedChainId, setSelectedChainId] = useState<number>(base.id)
   const [isChainDropdownOpen, setIsChainDropdownOpen] = useState(false)
   const [isSavingsExpanded, setIsSavingsExpanded] = useState(false)
+  const hasNavigatedRef = useRef(false)
 
   // Get current selected chain info
   const selectedChain = MORPHO_CHAINS.find(c => c.id === selectedChainId) || MORPHO_CHAINS[0]
 
-  // Redirect if not authenticated
+  // Redirect if not authenticated (only after auth is ready)
   useEffect(() => {
-    if (!isAuthenticated) router.push('/')
-  }, [isAuthenticated, router])
+    if (isReady && !isAuthenticated && !hasNavigatedRef.current) {
+      hasNavigatedRef.current = true
+      router.push('/')
+    }
+  }, [isAuthenticated, isReady, router])
 
   // Fetch vaults for selected chain
   const { data: vaults, isLoading: vaultsLoading, refetch: refetchVaults } = useMorphoVaults(selectedChainId)
@@ -156,7 +160,8 @@ export default function SavePage() {
     setModalType(null)
   }
 
-  if (!isAuthenticated) {
+  // Show loading while auth is initializing or user is not authenticated
+  if (!isReady || !isAuthenticated) {
     return (
       <IndustrialPage>
         <div className="min-h-screen flex items-center justify-center">

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { useWallets } from '@privy-io/react-auth'
+import { useWallets, usePrivy } from '@privy-io/react-auth'
 import { Repeat, RefreshCw, ChevronUp, ChevronDown } from 'lucide-react'
 import { CustomSwapWidget } from '@/components/relay/CustomSwapWidget'
 import type { SwapState } from '@/components/relay/useRelaySwap'
@@ -23,6 +23,7 @@ const DEXSCREENER_CHAIN_IDS: Record<string, number> = {
 export default function SwapPage() {
   const router = useRouter()
   const { wallets } = useWallets()
+  const { ready } = usePrivy()
   const [swapState, setSwapState] = useState<SwapState>('idle')
   const [showChart, setShowChart] = useState(true)
   const [selectedBuyToken, setSelectedBuyToken] = useState<{
@@ -31,18 +32,18 @@ export default function SwapPage() {
     chainId: number
     logoURI?: string
   } | null>(null)
+  const hasNavigatedRef = useRef(false)
 
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
   const isConnected = !!embeddedWallet
 
+  // Only redirect after auth is ready to prevent flash/glitch on refresh
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (!isConnected) {
-        router.push('/')
-      }
-    }, 1500)
-    return () => clearTimeout(timer)
-  }, [isConnected, router])
+    if (ready && !isConnected && !hasNavigatedRef.current) {
+      hasNavigatedRef.current = true
+      router.push('/')
+    }
+  }, [isConnected, ready, router])
 
   // Cleanup body class on unmount
   useEffect(() => {
@@ -98,7 +99,8 @@ export default function SwapPage() {
     })
   }, [])
 
-  if (!isConnected) {
+  // Show loading while auth is initializing or user is not connected
+  if (!ready || !isConnected) {
     return (
       <IndustrialPage>
         <div className="min-h-screen flex items-center justify-center">

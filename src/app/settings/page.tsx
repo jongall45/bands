@@ -2,7 +2,7 @@
 
 import { useAccount, useDisconnect } from 'wagmi'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { ArrowLeft, LogOut, ExternalLink, Copy, Check, Shield, Smartphone, Globe, Key, AlertTriangle, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { BottomNav } from '@/components/ui/BottomNav'
@@ -11,21 +11,24 @@ import { usePrivy, useWallets } from '@privy-io/react-auth'
 export default function SettingsPage() {
   const { address, isConnected } = useAccount()
   const { disconnect } = useDisconnect()
-  const { logout, exportWallet } = usePrivy()
+  const { logout, exportWallet, ready } = usePrivy()
   const { wallets } = useWallets()
   const router = useRouter()
   const [copied, setCopied] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const [showExportWarning, setShowExportWarning] = useState(false)
+  const hasNavigatedRef = useRef(false)
 
   // Get the embedded wallet
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
 
+  // Only redirect after auth is ready to prevent flash/glitch on refresh
   useEffect(() => {
-    if (!isConnected) {
+    if (ready && !isConnected && !hasNavigatedRef.current) {
+      hasNavigatedRef.current = true
       router.push('/')
     }
-  }, [isConnected, router])
+  }, [isConnected, ready, router])
 
   const copyAddress = () => {
     if (address) {
@@ -59,6 +62,16 @@ export default function SettingsPage() {
     }
   }
 
+  // Show loading spinner while auth is initializing
+  if (!ready) {
+    return (
+      <div className="min-h-screen bg-[#F4F4F5] flex items-center justify-center">
+        <div className="w-10 h-10 border-2 border-[#ef4444] border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  // Don't render if not connected (redirect will happen in useEffect)
   if (!isConnected || !address) return null
 
   return (

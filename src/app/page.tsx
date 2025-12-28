@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { ConnectButton } from '@/components/auth/ConnectButton'
@@ -9,16 +9,18 @@ import { LogoInline } from '@/components/ui/Logo'
 import { Mail, Shield, Zap, Globe } from 'lucide-react'
 
 export default function Home() {
-  const { isAuthenticated, address } = useAuth()
+  const { isAuthenticated, address, isReady } = useAuth()
   const router = useRouter()
+  const hasNavigatedRef = useRef(false)
 
-  // Redirect to dashboard when connected
+  // Redirect to dashboard when connected (only after auth is ready)
   useEffect(() => {
-    if (isAuthenticated && address) {
+    if (isReady && isAuthenticated && address && !hasNavigatedRef.current) {
+      hasNavigatedRef.current = true
       console.log('Landing page: User connected, redirecting to dashboard')
       router.replace('/dashboard')
     }
-  }, [isAuthenticated, address, router])
+  }, [isAuthenticated, address, isReady, router])
 
   return (
     <div className="landing-page">
