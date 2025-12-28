@@ -11,6 +11,9 @@ import { LogoInline } from '@/components/ui/Logo'
 import { IndustrialPage, GlassCard, TechBadge } from '@/components/ui/IndustrialGlass'
 import { TokenChart } from '@/components/chart/TokenChart'
 
+// Solana chain ID for Relay API
+const SOLANA_CHAIN_ID = 792703809
+
 // Chain ID mapping from DexScreener chain names
 const DEXSCREENER_CHAIN_IDS: Record<string, number> = {
   'base': 8453,
@@ -18,6 +21,7 @@ const DEXSCREENER_CHAIN_IDS: Record<string, number> = {
   'arbitrum': 42161,
   'optimism': 10,
   'polygon': 137,
+  'solana': SOLANA_CHAIN_ID,
 }
 
 export default function SwapPage() {
