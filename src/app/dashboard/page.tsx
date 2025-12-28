@@ -9,6 +9,9 @@ import { formatUnits, parseUnits, isAddress, encodeFunctionData } from 'viem'
 import { base, arbitrum, optimism, mainnet, polygon } from 'wagmi/chains'
 import { useAuth } from '@/hooks/useAuth'
 import { usePortfolio, formatUsdValue, formatTokenBalance, CHAIN_CONFIG, type PortfolioToken } from '@/hooks/usePortfolio'
+import { useSolanaAuth, SOLANA_TOKENS } from '@/hooks/useSolanaAuth'
+import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js'
+import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import { USDC_ADDRESS, USDC_DECIMALS, ERC20_ABI } from '@/lib/wagmi'
 import {
   ArrowUpRight, ArrowDownLeft, Copy, Check, LogOut,
@@ -22,17 +25,22 @@ import { TransactionList } from '@/components/ui/TransactionList'
 import { InstallPrompt } from '@/components/pwa/InstallPrompt'
 import { IndustrialPage, GlassCard, GlassButton, GlassInner, TechBadge, SectionHeader } from '@/components/ui/IndustrialGlass'
 
+// Solana chain ID (used for Relay API, but we use 'solana' as a special case for native transfers)
+const SOLANA_CHAIN_ID = 792703809
+
 // Supported chains for sending
 const SEND_CHAINS = [
-  { id: 8453, name: 'Base', logo: CHAIN_CONFIG[8453]?.logo },
-  { id: 42161, name: 'Arbitrum', logo: CHAIN_CONFIG[42161]?.logo },
-  { id: 10, name: 'Optimism', logo: CHAIN_CONFIG[10]?.logo },
-  { id: 1, name: 'Ethereum', logo: CHAIN_CONFIG[1]?.logo },
-  { id: 137, name: 'Polygon', logo: CHAIN_CONFIG[137]?.logo },
+  { id: 8453, name: 'Base', logo: CHAIN_CONFIG[8453]?.logo, isSolana: false },
+  { id: 42161, name: 'Arbitrum', logo: CHAIN_CONFIG[42161]?.logo, isSolana: false },
+  { id: 10, name: 'Optimism', logo: CHAIN_CONFIG[10]?.logo, isSolana: false },
+  { id: 1, name: 'Ethereum', logo: CHAIN_CONFIG[1]?.logo, isSolana: false },
+  { id: 137, name: 'Polygon', logo: CHAIN_CONFIG[137]?.logo, isSolana: false },
+  { id: SOLANA_CHAIN_ID, name: 'Solana', logo: 'https://cryptologos.cc/logos/solana-sol-logo.png', isSolana: true },
 ]
 
 export default function Dashboard() {
   const { isAuthenticated, isConnected, address, isSmartWalletReady, logout, getClientForChain, isReady, solanaAddress, hasSolanaWallet, balances } = useAuth()
+  const { sendTransaction, getConnection, fetchBalances: fetchSolanaBalances } = useSolanaAuth()
   const router = useRouter()
   const queryClient = useQueryClient()
   const [copied, setCopied] = useState(false)
@@ -56,12 +64,44 @@ export default function Dashboard() {
   const [selectedToken, setSelectedToken] = useState<PortfolioToken | null>(null)
   const [showTokenSelect, setShowTokenSelect] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
+  const [receiveWallet, setReceiveWallet] = useState<'evm' | 'solana'>('evm')
 
   // Cross-chain portfolio from Dune API
   const { data: portfolio, refetch: refetchPortfolio, isLoading: portfolioLoading } = usePortfolio(address)
 
+  // Create Solana tokens for the token selector
+  const solPrice = 180 // Approximate SOL price
+  const solanaTokensForSelector: PortfolioToken[] = hasSolanaWallet ? [
+    {
+      chainId: SOLANA_CHAIN_ID,
+      chain: 'solana',
+      address: 'native',
+      symbol: 'SOL',
+      name: 'Solana',
+      decimals: 9,
+      balance: balances.sol || '0',
+      balanceUsd: parseFloat(balances.sol || '0') * solPrice,
+      price: solPrice,
+      logoURI: 'https://cryptologos.cc/logos/solana-sol-logo.png',
+    },
+    {
+      chainId: SOLANA_CHAIN_ID,
+      chain: 'solana',
+      address: SOLANA_TOKENS.USDC.address,
+      symbol: 'USDC',
+      name: 'USD Coin',
+      decimals: 6,
+      balance: balances.usdcSolana || '0',
+      balanceUsd: parseFloat(balances.usdcSolana || '0'),
+      price: 1,
+      logoURI: 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png',
+    },
+  ] : []
+
   // Filter tokens by selected chain
-  const tokensOnSelectedChain = portfolio?.tokens?.filter(t => t.chainId === selectedChain.id) || []
+  const tokensOnSelectedChain = selectedChain.isSolana
+    ? solanaTokensForSelector
+    : (portfolio?.tokens?.filter(t => t.chainId === selectedChain.id) || [])
 
   // Update selected token when chain changes
   useEffect(() => {
@@ -73,7 +113,11 @@ export default function Dashboard() {
     } else {
       setSelectedToken(null)
     }
-  }, [selectedChain.id, portfolio])
+    // Clear and re-validate address when switching chains
+    if (sendTo) {
+      validateAddress(sendTo)
+    }
+  }, [selectedChain.id, portfolio, solanaTokensForSelector])
 
   // Fallback to on-chain USDC balance for Base
   const { data: usdcBalance, refetch: refetchBalance, isLoading: balanceLoading } = useReadContract({
@@ -158,29 +202,145 @@ export default function Dashboard() {
     }
   }, [solanaAddress])
 
+  // Validate Solana address (base58 format, 32-44 characters)
+  const isValidSolanaAddress = (addr: string): boolean => {
+    try {
+      if (!addr || addr.length < 32 || addr.length > 44) return false
+      // Solana addresses use base58 encoding (no 0, O, I, l)
+      const base58Regex = /^[1-9A-HJ-NP-Za-km-z]+$/
+      if (!base58Regex.test(addr)) return false
+      // Try to create a PublicKey - this validates the checksum
+      new PublicKey(addr)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   const validateAddress = (addr: string) => {
     if (!addr) {
       setAddressError('')
       return
     }
-    if (!isAddress(addr)) {
-      setAddressError('Invalid address format')
+
+    if (selectedChain.isSolana) {
+      // Validate Solana address
+      if (!isValidSolanaAddress(addr)) {
+        setAddressError('Invalid Solana address format')
+      } else {
+        setAddressError('')
+      }
     } else {
-      setAddressError('')
+      // Validate EVM address
+      if (!isAddress(addr)) {
+        setAddressError('Invalid address format')
+      } else {
+        setAddressError('')
+      }
     }
   }
 
   const handleSend = async () => {
-    if (!sendTo || !sendAmount || addressError || !address || !selectedToken) return
-    if (!isAddress(sendTo)) {
-      setAddressError('Invalid address format')
-      return
+    if (!sendTo || !sendAmount || addressError || !selectedToken) return
+
+    // Validate address based on chain type
+    if (selectedChain.isSolana) {
+      if (!isValidSolanaAddress(sendTo)) {
+        setAddressError('Invalid Solana address format')
+        return
+      }
+    } else {
+      if (!address) return
+      if (!isAddress(sendTo)) {
+        setAddressError('Invalid address format')
+        return
+      }
     }
 
     setIsSending(true)
     setSendError(null)
 
     try {
+      // Handle Solana transfers
+      if (selectedChain.isSolana) {
+        if (!solanaAddress) {
+          throw new Error('Solana wallet not available')
+        }
+
+        const connection = getConnection('mainnet')
+        const fromPubkey = new PublicKey(solanaAddress)
+        const toPubkey = new PublicKey(sendTo)
+        const decimals = selectedToken.decimals || 9
+        const amountInSmallestUnit = Math.floor(parseFloat(sendAmount) * Math.pow(10, decimals))
+
+        let transaction: Transaction
+
+        if (selectedToken.address === 'native' || selectedToken.symbol === 'SOL') {
+          // Native SOL transfer
+          transaction = new Transaction().add(
+            SystemProgram.transfer({
+              fromPubkey,
+              toPubkey,
+              lamports: amountInSmallestUnit,
+            })
+          )
+        } else {
+          // SPL Token transfer (e.g., USDC)
+          const mintPubkey = new PublicKey(selectedToken.address)
+
+          // Get the associated token accounts
+          const fromAta = await getAssociatedTokenAddress(mintPubkey, fromPubkey)
+          const toAta = await getAssociatedTokenAddress(mintPubkey, toPubkey)
+
+          // Check if recipient's ATA exists
+          const toAtaInfo = await connection.getAccountInfo(toAta)
+
+          transaction = new Transaction()
+
+          // Create the recipient's ATA if it doesn't exist
+          if (!toAtaInfo) {
+            transaction.add(
+              createAssociatedTokenAccountInstruction(
+                fromPubkey, // payer
+                toAta, // associated token account
+                toPubkey, // owner
+                mintPubkey // mint
+              )
+            )
+          }
+
+          // Add the transfer instruction
+          transaction.add(
+            createTransferInstruction(
+              fromAta, // source
+              toAta, // destination
+              fromPubkey, // owner
+              BigInt(amountInSmallestUnit) // amount
+            )
+          )
+        }
+
+        // Get recent blockhash
+        const { blockhash } = await connection.getLatestBlockhash()
+        transaction.recentBlockhash = blockhash
+        transaction.feePayer = fromPubkey
+
+        // Sign and send the transaction
+        const result = await sendTransaction(transaction)
+        console.log('Solana transaction sent:', result)
+
+        // Refresh Solana balances after successful send
+        setTimeout(() => fetchSolanaBalances(), 2000)
+
+        // Close modal and reset
+        setShowSend(false)
+        setSendTo('')
+        setSendAmount('')
+        refetchPortfolio()
+        return
+      }
+
+      // Handle EVM transfers
       const chainConfig = {
         8453: base,
         42161: arbitrum,
@@ -567,7 +727,7 @@ export default function Dashboard() {
                   setSendTo(e.target.value)
                   validateAddress(e.target.value)
                 }}
-                placeholder="0x..."
+                placeholder={selectedChain.isSolana ? "Solana address..." : "0x..."}
                 disabled={isSending || isConfirming}
                 className="w-full bg-transparent px-5 py-4 text-white font-mono text-sm placeholder:text-white/30 focus:outline-none"
               />
@@ -716,7 +876,7 @@ export default function Dashboard() {
           </GlassButton>
 
           <p className="text-white/30 text-xs text-center">
-            Gas sponsored • No ETH needed
+            {selectedChain.isSolana ? 'Requires SOL for transaction fees' : 'Gas sponsored • No ETH needed'}
           </p>
 
           {sendError && (
@@ -732,18 +892,53 @@ export default function Dashboard() {
       {/* Receive Modal */}
       <Modal isOpen={showReceive} onClose={() => setShowReceive(false)} title="Receive">
         <div className="text-center">
-          {isSmartWalletReady && (
+          {/* Wallet Selector Tabs */}
+          {hasSolanaWallet && solanaAddress && (
+            <div className="flex bg-white/[0.03] rounded-xl p-1 border border-white/[0.06] mb-4">
+              <button
+                onClick={() => setReceiveWallet('evm')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
+                  receiveWallet === 'evm'
+                    ? 'bg-[#FF3B30] text-white'
+                    : 'text-white/50 hover:text-white/70'
+                }`}
+              >
+                <img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" className="w-4 h-4 rounded-full" />
+                EVM
+              </button>
+              <button
+                onClick={() => setReceiveWallet('solana')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
+                  receiveWallet === 'solana'
+                    ? 'bg-[#FF3B30] text-white'
+                    : 'text-white/50 hover:text-white/70'
+                }`}
+              >
+                <img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" className="w-4 h-4 rounded-full" />
+                Solana
+              </button>
+            </div>
+          )}
+
+          {/* Wallet badge */}
+          {receiveWallet === 'evm' && isSmartWalletReady && (
             <div className="flex items-center justify-center gap-1.5 mb-4 px-3 py-1.5 mx-auto w-fit bg-green-500/10 rounded-full border border-green-500/20">
               <Shield className="w-3.5 h-3.5 text-green-400" />
               <span className="text-green-400 text-xs font-medium">Smart Wallet</span>
             </div>
           )}
+          {receiveWallet === 'solana' && (
+            <div className="flex items-center justify-center gap-1.5 mb-4 px-3 py-1.5 mx-auto w-fit bg-[#9945FF]/10 rounded-full border border-[#9945FF]/20">
+              <img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" className="w-3.5 h-3.5 rounded-full" />
+              <span className="text-[#9945FF] text-xs font-medium">Solana Wallet</span>
+            </div>
+          )}
 
           <GlassInner className="w-48 h-48 mx-auto mb-6 flex items-center justify-center p-2">
             <div className="w-full h-full bg-white rounded-xl flex items-center justify-center p-2">
-              {address ? (
+              {(receiveWallet === 'evm' ? address : solanaAddress) ? (
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${address}&bgcolor=ffffff&color=111111`}
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${receiveWallet === 'evm' ? address : solanaAddress}&bgcolor=ffffff&color=111111`}
                   alt="Wallet QR Code"
                   className="w-full h-full"
                 />
@@ -756,31 +951,42 @@ export default function Dashboard() {
           <p className="text-white/40 text-sm mb-4">Share your address to receive tokens</p>
 
           <GlassInner className="mb-4">
-            <p className="font-mono text-xs text-white/60 break-all">{address}</p>
+            <p className="font-mono text-xs text-white/60 break-all">
+              {receiveWallet === 'evm' ? address : solanaAddress}
+            </p>
           </GlassInner>
 
           <GlassButton
             primary
-            onClick={() => { copyAddress(); setShowReceive(false); }}
+            onClick={() => {
+              receiveWallet === 'evm' ? copyAddress() : copySolanaAddress()
+              setShowReceive(false)
+            }}
           >
             <Copy className="w-4 h-4" />
             Copy Address
           </GlassButton>
 
           <div className="mt-5">
-            <p className="text-white/30 text-xs mb-3">Works on</p>
+            <p className="text-white/30 text-xs mb-3">
+              {receiveWallet === 'evm' ? 'Works on' : 'Solana Network'}
+            </p>
             <div className="flex items-center justify-center gap-2">
-              {SEND_CHAINS.map((chain) => (
-                <div key={chain.id} className="flex flex-col items-center gap-1" title={chain.name}>
+              {receiveWallet === 'evm' ? (
+                SEND_CHAINS.map((chain) => (
+                  <div key={chain.id} className="flex flex-col items-center gap-1" title={chain.name}>
+                    <div className="w-8 h-8 bg-white/[0.05] rounded-full border border-white/[0.1] flex items-center justify-center">
+                      <img src={chain.logo} alt={chain.name} className="w-5 h-5 rounded-full" />
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="flex flex-col items-center gap-1">
                   <div className="w-8 h-8 bg-white/[0.05] rounded-full border border-white/[0.1] flex items-center justify-center">
-                    <img
-                      src={chain.logo}
-                      alt={chain.name}
-                      className="w-5 h-5 rounded-full"
-                    />
+                    <img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="Solana" className="w-5 h-5 rounded-full" />
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>

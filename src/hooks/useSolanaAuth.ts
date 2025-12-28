@@ -125,6 +125,23 @@ export function useSolanaAuth() {
     })
   }, [solanaAddress, fundWallet])
 
+  // Send a Solana transaction (wrapper for signAndSendTransaction)
+  const sendTransaction = useCallback(async (transaction: import('@solana/web3.js').Transaction) => {
+    if (!solanaWallet) {
+      throw new Error('Solana wallet not available')
+    }
+
+    // Serialize the transaction to a Uint8Array as expected by Privy
+    const serializedTransaction = transaction.serialize({ requireAllSignatures: false })
+
+    const result = await signAndSendTransaction({
+      transaction: serializedTransaction,
+      wallet: solanaWallet,
+    })
+
+    return result
+  }, [solanaWallet, signAndSendTransaction])
+
 
   // Format display address
   const displayAddress = solanaAddress
@@ -150,6 +167,7 @@ export function useSolanaAuth() {
     // Actions
     signMessage,
     signAndSendTransaction,
+    sendTransaction, // Wrapper that handles wallet context
     fundSolanaWallet,
 
     // Utilities

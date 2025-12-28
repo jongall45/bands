@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Settings, ChevronDown, ArrowDown, Fuel, Loader2, Zap, CheckCircle, X, AlertCircle } from 'lucide-react'
-import { useRelaySwap, useUserTokens, SUPPORTED_CHAINS, COMMON_TOKENS, type Token, type SwapState } from './useRelaySwap'
+import { useRelaySwap, useUserTokens, SUPPORTED_CHAINS, COMMON_TOKENS, SOLANA_CHAIN_ID, type Token, type SwapState } from './useRelaySwap'
 import TokenModal from './TokenModal'
 import { saveSwapRecord } from '@/lib/swapHistory'
+import { useSolanaAuth } from '@/hooks/useSolanaAuth'
 
 // ============================================
 // TYPES
@@ -68,9 +69,12 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
     reset,
   } = useRelaySwap()
 
+  // Solana wallet hook
+  const { solanaAddress } = useSolanaAuth()
+
   // Fetch user tokens from Sim API
-  const { 
-    tokens: userTokens, 
+  const {
+    tokens: userTokens,
     isLoading: isLoadingUserTokens,
     refetch: refetchUserTokens,
   } = useUserTokens(walletAddress)
@@ -203,6 +207,12 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
 
+  // Determine which wallet to show for each side based on chain
+  const isFromSolana = fromToken.chainId === SOLANA_CHAIN_ID
+  const fromWalletAddress = isFromSolana ? solanaAddress : walletAddress
+  const isToSolana = toToken.chainId === SOLANA_CHAIN_ID
+  const toWalletAddress = isToSolana ? solanaAddress : walletAddress
+
   // Handle percentage buttons
   const handlePercentage = (percent: number) => {
     const balance = parseFloat(fromBalance)
@@ -292,10 +302,10 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
           <div className="bg-[#141414] hover:bg-[#1a1a1a] transition-colors rounded-[16px] p-3 border border-transparent hover:border-white/10 group">
             <div className="flex justify-between items-center mb-2">
               <label className="text-white/50 font-semibold text-xs">Sell</label>
-              {walletAddress && (
-                <div className="flex items-center gap-1 bg-[#ef4444]/10 hover:bg-[#ef4444]/20 text-[#ef4444] px-1.5 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition">
+              {fromWalletAddress && (
+                <div className={`flex items-center gap-1 ${isFromSolana ? 'bg-[#9945FF]/10 hover:bg-[#9945FF]/20 text-[#9945FF]' : 'bg-[#ef4444]/10 hover:bg-[#ef4444]/20 text-[#ef4444]'} px-1.5 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition`}>
                   <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                  {formatAddress(walletAddress)}
+                  {formatAddress(fromWalletAddress)}
                   <ChevronDown size={10} strokeWidth={3} />
                 </div>
               )}
@@ -377,10 +387,10 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
           <div className="bg-[#141414] hover:bg-[#1a1a1a] transition-colors rounded-[16px] p-3 mt-1 border border-transparent hover:border-white/10">
             <div className="flex justify-between items-center mb-2">
               <label className="text-white/50 font-semibold text-xs">Buy</label>
-              {walletAddress && (
-                <div className="flex items-center gap-1 bg-[#ef4444]/10 hover:bg-[#ef4444]/20 text-[#ef4444] px-1.5 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition">
+              {toWalletAddress && (
+                <div className={`flex items-center gap-1 ${isToSolana ? 'bg-[#9945FF]/10 hover:bg-[#9945FF]/20 text-[#9945FF]' : 'bg-[#ef4444]/10 hover:bg-[#ef4444]/20 text-[#ef4444]'} px-1.5 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition`}>
                   <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                  {formatAddress(walletAddress)}
+                  {formatAddress(toWalletAddress)}
                   <ChevronDown size={10} strokeWidth={3} />
                 </div>
               )}
