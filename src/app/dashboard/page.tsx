@@ -32,10 +32,11 @@ const SEND_CHAINS = [
 ]
 
 export default function Dashboard() {
-  const { isAuthenticated, isConnected, address, isSmartWalletReady, logout, getClientForChain, isReady } = useAuth()
+  const { isAuthenticated, isConnected, address, isSmartWalletReady, logout, getClientForChain, isReady, solanaAddress, hasSolanaWallet, balances } = useAuth()
   const router = useRouter()
   const queryClient = useQueryClient()
   const [copied, setCopied] = useState(false)
+  const [copiedSolana, setCopiedSolana] = useState(false)
   const [showSend, setShowSend] = useState(false)
   const [showReceive, setShowReceive] = useState(false)
   const [sendTo, setSendTo] = useState('')
@@ -106,8 +107,14 @@ export default function Dashboard() {
     }
   }, [isSuccess, refetchBalance, refetchPortfolio, queryClient])
 
-  // Use portfolio total if available, fallback to USDC balance
-  const totalValue = portfolio?.totalValueUsd || 0
+  // Calculate Solana value (approximate - SOL ~$180, USDC = $1)
+  const solValueUsd = parseFloat(balances.sol || '0') * 180 // Approximate SOL price
+  const usdcSolanaValueUsd = parseFloat(balances.usdcSolana || '0')
+  const solanaTotal = solValueUsd + usdcSolanaValueUsd
+
+  // Use portfolio total if available, fallback to USDC balance, add Solana
+  const evmTotal = portfolio?.totalValueUsd || 0
+  const totalValue = evmTotal + solanaTotal
   const formattedBalance = totalValue > 0
     ? totalValue.toLocaleString('en-US', {
         minimumFractionDigits: 2,
@@ -142,6 +149,14 @@ export default function Dashboard() {
       setTimeout(() => setCopied(false), 2000)
     }
   }, [address])
+
+  const copySolanaAddress = useCallback(() => {
+    if (solanaAddress) {
+      navigator.clipboard.writeText(solanaAddress)
+      setCopiedSolana(true)
+      setTimeout(() => setCopiedSolana(false), 2000)
+    }
+  }, [solanaAddress])
 
   const validateAddress = (addr: string) => {
     if (!addr) {
@@ -297,9 +312,9 @@ export default function Dashboard() {
 
             {/* Multi-chain indicator */}
             <div className="flex items-center justify-center gap-2 mt-3">
-              {portfolioChains.length > 0 ? (
+              {portfolioChains.length > 0 || hasSolanaWallet ? (
                 <div className="flex items-center gap-1">
-                  {portfolioChains.slice(0, 4).map(chainId => (
+                  {portfolioChains.slice(0, 3).map(chainId => (
                     <img
                       key={chainId}
                       src={CHAIN_CONFIG[chainId]?.logo || CHAIN_CONFIG[8453].logo}
@@ -307,8 +322,17 @@ export default function Dashboard() {
                       className="w-5 h-5 rounded-full border border-white/10"
                     />
                   ))}
-                  {portfolioChains.length > 4 && (
-                    <span className="text-white/40 text-xs">+{portfolioChains.length - 4}</span>
+                  {/* Solana indicator */}
+                  {hasSolanaWallet && (
+                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#9945FF] to-[#14F195] border border-white/10 flex items-center justify-center">
+                      <svg viewBox="0 0 101 88" className="w-2.5 h-2.5">
+                        <path fill="#fff" d="M100.48 69.38L83.11 87.25c-.8.81-1.87 1.27-3.01 1.27H3.89c-1.91 0-2.87-2.31-1.52-3.67l17.37-17.87c.8-.81 1.87-1.27 3.01-1.27h76.21c1.91 0 2.87 2.31 1.52 3.67z"/>
+                        <path fill="#fff" d="M100.48 1.27L83.11 19.15c-.8.81-1.87 1.27-3.01 1.27H3.89c-1.91 0-2.87 2.31-1.52 3.67l17.37 17.87c.8.81 1.87 1.27 3.01 1.27h76.21c1.91 0 2.87-2.31 1.52-3.67L83.11 21.69c-.8-.81-1.87-1.27-3.01-1.27H3.89c-1.91 0-2.87-2.31-1.52-3.67L19.74 1.27c.8-.81 1.87-1.27 3.01-1.27h76.21c1.91 0 2.87 2.31 1.52 3.67z"/>
+                      </svg>
+                    </div>
+                  )}
+                  {portfolioChains.length > 3 && (
+                    <span className="text-white/40 text-xs">+{portfolioChains.length - 3}</span>
                   )}
                 </div>
               ) : (
@@ -325,45 +349,86 @@ export default function Dashboard() {
             </button>
           </div>
 
-          {/* Wallet Address Row */}
-          <GlassInner className="mb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {isSmartWalletReady ? (
-                  <div className="flex items-center gap-1 px-2 py-1 bg-green-500/10 rounded-lg border border-green-500/20">
-                    <Shield className="w-3 h-3 text-green-400" />
-                    <span className="text-green-400 text-xs font-medium">Smart</span>
+          {/* Wallet Addresses - EVM & Solana */}
+          <div className="space-y-2 mb-4">
+            {/* EVM Wallet */}
+            <GlassInner>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-full bg-[#627EEA] flex items-center justify-center">
+                    <svg viewBox="0 0 256 417" className="w-3 h-3">
+                      <path fill="#fff" d="M127.961 0l-2.795 9.5v275.668l2.795 2.79 127.962-75.638z"/>
+                      <path fill="#fff" opacity="0.8" d="M127.962 0L0 212.32l127.962 75.639V154.158z"/>
+                      <path fill="#fff" d="M127.961 312.187l-1.575 1.92v98.199l1.575 4.6 128.038-180.32z"/>
+                      <path fill="#fff" opacity="0.8" d="M127.962 416.905v-104.72L0 236.585z"/>
+                    </svg>
                   </div>
-                ) : (
-                  <div className="w-4 h-4 bg-[#FF3B30] rounded" />
-                )}
-                <span className="text-white/60 text-sm font-mono">
-                  {address?.slice(0, 6)}...{address?.slice(-4)}
-                </span>
+                  <span className="text-white/60 text-sm font-mono">
+                    {address?.slice(0, 6)}...{address?.slice(-4)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`https://basescan.org/address/${address}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-white/40 text-xs hover:text-white/60 transition-colors flex items-center gap-1"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <button
+                    onClick={copyAddress}
+                    className="p-1.5 text-white/40 hover:text-white/60 transition-colors"
+                  >
+                    {copied ? (
+                      <Check className="w-4 h-4 text-green-400" />
+                    ) : (
+                      <Copy className="w-4 h-4" strokeWidth={1.5} />
+                    )}
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <a
-                  href={`https://basescan.org/address/${address}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-white/40 text-xs hover:text-white/60 transition-colors flex items-center gap-1"
-                >
-                  BaseScan
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-                <button
-                  onClick={copyAddress}
-                  className="p-1.5 text-white/40 hover:text-white/60 transition-colors"
-                >
-                  {copied ? (
-                    <Check className="w-4 h-4 text-green-400" />
-                  ) : (
-                    <Copy className="w-4 h-4" strokeWidth={1.5} />
-                  )}
-                </button>
-              </div>
-            </div>
-          </GlassInner>
+            </GlassInner>
+
+            {/* Solana Wallet */}
+            {hasSolanaWallet && solanaAddress && (
+              <GlassInner>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#9945FF] to-[#14F195] flex items-center justify-center">
+                      <svg viewBox="0 0 101 88" className="w-3 h-3">
+                        <path fill="#fff" d="M100.48 69.38L83.11 87.25c-.8.81-1.87 1.27-3.01 1.27H3.89c-1.91 0-2.87-2.31-1.52-3.67l17.37-17.87c.8-.81 1.87-1.27 3.01-1.27h76.21c1.91 0 2.87 2.31 1.52 3.67z"/>
+                        <path fill="#fff" d="M100.48 1.27L83.11 19.15c-.8.81-1.87 1.27-3.01 1.27H3.89c-1.91 0-2.87 2.31-1.52 3.67l17.37 17.87c.8.81 1.87 1.27 3.01 1.27h76.21c1.91 0 2.87-2.31 1.52-3.67L83.11 21.69c-.8-.81-1.87-1.27-3.01-1.27H3.89c-1.91 0-2.87-2.31-1.52-3.67L19.74 1.27c.8-.81 1.87-1.27 3.01-1.27h76.21c1.91 0 2.87 2.31 1.52 3.67z"/>
+                      </svg>
+                    </div>
+                    <span className="text-white/60 text-sm font-mono">
+                      {solanaAddress?.slice(0, 4)}...{solanaAddress?.slice(-4)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={`https://solscan.io/account/${solanaAddress}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-white/40 text-xs hover:text-white/60 transition-colors flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                    <button
+                      onClick={copySolanaAddress}
+                      className="p-1.5 text-white/40 hover:text-white/60 transition-colors"
+                    >
+                      {copiedSolana ? (
+                        <Check className="w-4 h-4 text-green-400" />
+                      ) : (
+                        <Copy className="w-4 h-4" strokeWidth={1.5} />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </GlassInner>
+            )}
+          </div>
 
           {/* Action Buttons Row */}
           <div className="grid grid-cols-2 gap-3">

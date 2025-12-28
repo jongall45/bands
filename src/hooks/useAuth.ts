@@ -2,9 +2,11 @@
 
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
+import { useWallets as useSolanaWallets } from '@privy-io/react-auth/solana'
 import { useAccount, useBalance, useWalletClient, usePublicClient, useSwitchChain } from 'wagmi'
 import { base, arbitrum, polygon } from 'viem/chains'
 import { formatUnits } from 'viem'
+import { useSolanaAuth } from './useSolanaAuth'
 
 // USDC addresses
 const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
@@ -27,6 +29,9 @@ export function useAuth() {
 
   // Smart wallet hook - ERC-4337 account abstraction
   const { client: smartWalletClient, getClientForChain } = useSmartWallets()
+
+  // Solana wallet hook
+  const solana = useSolanaAuth()
 
   // Wagmi hooks
   const { address: eoaAddress, isConnected, chain } = useAccount()
@@ -96,13 +101,14 @@ export function useAuth() {
     }
   }
   
-  // Refetch all balances
+  // Refetch all balances (EVM + Solana)
   const refetchBalances = () => {
     refetchEthBase()
     refetchEthArb()
     refetchUsdcBase()
     refetchUsdcArb()
     refetchUsdcPolygon()
+    solana.fetchBalances()
   }
   
   // Format display values
@@ -132,6 +138,11 @@ export function useAuth() {
     chain,
     chainId: chain?.id,
 
+    // Solana
+    solanaAddress: solana.solanaAddress,
+    hasSolanaWallet: solana.hasSolanaWallet,
+    solana, // Full Solana hook for advanced usage
+
     // Wallets
     walletClient,
     publicClient,
@@ -140,13 +151,17 @@ export function useAuth() {
     smartWalletClient,
     getClientForChain,
 
-    // Balances (formatted)
+    // Balances (formatted) - EVM + Solana
     balances: {
+      // EVM
       ethBase: ethBalanceBase ? formatUnits(ethBalanceBase.value, 18) : '0',
       ethArb: ethBalanceArb ? formatUnits(ethBalanceArb.value, 18) : '0',
       usdcBase: usdcBalanceBase ? formatUnits(usdcBalanceBase.value, 6) : '0',
       usdcArb: usdcBalanceArb ? formatUnits(usdcBalanceArb.value, 6) : '0',
       usdcPolygon: usdcBalancePolygon ? formatUnits(usdcBalancePolygon.value, 6) : '0',
+      // Solana
+      sol: solana.balances.sol,
+      usdcSolana: solana.balances.usdc,
     },
 
     // Raw balances

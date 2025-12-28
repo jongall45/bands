@@ -5,28 +5,35 @@ import { useWallets } from '@privy-io/react-auth'
 import { usePublicClient, useChainId } from 'wagmi'
 import { formatUnits, parseUnits, encodeFunctionData } from 'viem'
 import { base, arbitrum, optimism, mainnet } from 'viem/chains'
-import { 
-  Loader2, 
-  ArrowDown, 
-  AlertCircle, 
+import {
+  Loader2,
+  ArrowDown,
+  AlertCircle,
   Check,
   ChevronDown,
   Wallet,
   ArrowRightLeft,
   ExternalLink
 } from 'lucide-react'
+import { useSolanaAuth } from '@/hooks/useSolanaAuth'
 
 // ============================================
 // CONSTANTS
 // ============================================
+
+// Solana chain ID for Relay API
+const SOLANA_CHAIN_ID = 792703809 // Relay uses this ID for Solana mainnet
+
 const CHAINS = [
-  { id: base.id, name: 'Base', icon: '🔵', chain: base },
-  { id: arbitrum.id, name: 'Arbitrum', icon: '🔷', chain: arbitrum },
-  { id: optimism.id, name: 'Optimism', icon: '🔴', chain: optimism },
-  { id: mainnet.id, name: 'Ethereum', icon: '⟠', chain: mainnet },
+  { id: base.id, name: 'Base', icon: '🔵', chain: base, isSolana: false },
+  { id: arbitrum.id, name: 'Arbitrum', icon: '🔷', chain: arbitrum, isSolana: false },
+  { id: optimism.id, name: 'Optimism', icon: '🔴', chain: optimism, isSolana: false },
+  { id: mainnet.id, name: 'Ethereum', icon: '⟠', chain: mainnet, isSolana: false },
+  { id: SOLANA_CHAIN_ID, name: 'Solana', icon: '◎', chain: null, isSolana: true },
 ]
 
-const TOKENS: Record<string, Record<number, { address: string; decimals: number; symbol: string; name: string }>> = {
+// EVM tokens
+const EVM_TOKENS: Record<string, Record<number, { address: string; decimals: number; symbol: string; name: string }>> = {
   USDC: {
     [base.id]: { address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', decimals: 6, symbol: 'USDC', name: 'USD Coin' },
     [arbitrum.id]: { address: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', decimals: 6, symbol: 'USDC', name: 'USD Coin' },
@@ -38,6 +45,26 @@ const TOKENS: Record<string, Record<number, { address: string; decimals: number;
     [arbitrum.id]: { address: '0x0000000000000000000000000000000000000000', decimals: 18, symbol: 'ETH', name: 'Ethereum' },
     [optimism.id]: { address: '0x0000000000000000000000000000000000000000', decimals: 18, symbol: 'ETH', name: 'Ethereum' },
     [mainnet.id]: { address: '0x0000000000000000000000000000000000000000', decimals: 18, symbol: 'ETH', name: 'Ethereum' },
+  },
+}
+
+// Solana tokens
+const SOLANA_TOKENS: Record<string, { address: string; decimals: number; symbol: string; name: string }> = {
+  SOL: { address: '11111111111111111111111111111111', decimals: 9, symbol: 'SOL', name: 'Solana' },
+  USDC: { address: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', decimals: 6, symbol: 'USDC', name: 'USD Coin' },
+}
+
+// Combined tokens helper
+const TOKENS: Record<string, Record<number, { address: string; decimals: number; symbol: string; name: string }>> = {
+  USDC: {
+    ...EVM_TOKENS.USDC,
+    [SOLANA_CHAIN_ID]: SOLANA_TOKENS.USDC,
+  },
+  ETH: {
+    ...EVM_TOKENS.ETH,
+  },
+  SOL: {
+    [SOLANA_CHAIN_ID]: SOLANA_TOKENS.SOL,
   },
 }
 
@@ -81,10 +108,18 @@ interface Quote {
 interface PrivyRelaySwapProps {
   defaultFromChain?: number
   defaultToChain?: number
-  defaultFromToken?: 'USDC' | 'ETH'
-  defaultToToken?: 'USDC' | 'ETH'
+  defaultFromToken?: 'USDC' | 'ETH' | 'SOL'
+  defaultToToken?: 'USDC' | 'ETH' | 'SOL'
   onSuccess?: (txHash: string) => void
   onError?: (error: string) => void
+}
+
+// Helper to get available tokens for a chain
+const getTokensForChain = (chainId: number): string[] => {
+  if (chainId === SOLANA_CHAIN_ID) {
+    return ['SOL', 'USDC']
+  }
+  return ['USDC', 'ETH']
 }
 
 // ============================================
@@ -101,6 +136,9 @@ export function PrivyRelaySwap({
   const { wallets } = useWallets()
   const publicClient = usePublicClient({ chainId: base.id })
 
+  // Solana wallet hook
+  const { solanaAddress, hasSolanaWallet } = useSolanaAuth()
+
   // Get the embedded wallet (Privy)
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
   const address = embeddedWallet?.address as `0x${string}` | undefined
@@ -113,8 +151,15 @@ export function PrivyRelaySwap({
   // Form state
   const [fromChainId, setFromChainId] = useState(defaultFromChain)
   const [toChainId, setToChainId] = useState(defaultToChain)
-  const [fromToken, setFromToken] = useState<'USDC' | 'ETH'>(defaultFromToken)
-  const [toToken, setToToken] = useState<'USDC' | 'ETH'>(defaultToToken)
+  const [fromToken, setFromToken] = useState<'USDC' | 'ETH' | 'SOL'>(defaultFromToken)
+  const [toToken, setToToken] = useState<'USDC' | 'ETH' | 'SOL'>(defaultToToken)
+
+  // Check if destination is Solana
+  const isToSolana = toChainId === SOLANA_CHAIN_ID
+  const isFromSolana = fromChainId === SOLANA_CHAIN_ID
+
+  // Get the appropriate recipient address based on destination chain
+  const recipientAddress = isToSolana ? solanaAddress : address
   const [amount, setAmount] = useState('')
   const [quote, setQuote] = useState<Quote | null>(null)
 
@@ -127,6 +172,21 @@ export function PrivyRelaySwap({
   const [showToChainSelect, setShowToChainSelect] = useState(false)
   const [showFromTokenSelect, setShowFromTokenSelect] = useState(false)
   const [showToTokenSelect, setShowToTokenSelect] = useState(false)
+
+  // Reset tokens when chain changes to ensure valid combinations
+  useEffect(() => {
+    const availableTokens = getTokensForChain(toChainId)
+    if (!availableTokens.includes(toToken)) {
+      setToToken(availableTokens[0] as 'USDC' | 'ETH' | 'SOL')
+    }
+  }, [toChainId, toToken])
+
+  useEffect(() => {
+    const availableTokens = getTokensForChain(fromChainId)
+    if (!availableTokens.includes(fromToken)) {
+      setFromToken(availableTokens[0] as 'USDC' | 'ETH' | 'SOL')
+    }
+  }, [fromChainId, fromToken])
 
   // ============================================
   // FETCH BALANCES
@@ -211,8 +271,19 @@ export function PrivyRelaySwap({
   // FETCH QUOTE FROM RELAY
   // ============================================
   const fetchQuote = useCallback(async () => {
-    if (!address || !amount || parseFloat(amount) <= 0) {
+    // For Solana destination, we need both EVM and Solana addresses
+    const userAddress = address
+    const destAddress = isToSolana ? solanaAddress : address
+
+    if (!userAddress || !amount || parseFloat(amount) <= 0) {
       setQuote(null)
+      return
+    }
+
+    // Check if swapping to Solana but no Solana wallet
+    if (isToSolana && !solanaAddress) {
+      setErrorMessage('Solana wallet not available. Please log in again.')
+      setState('error')
       return
     }
 
@@ -220,8 +291,8 @@ export function PrivyRelaySwap({
     setErrorMessage(null)
 
     try {
-      const fromTokenInfo = TOKENS[fromToken][fromChainId]
-      const toTokenInfo = TOKENS[toToken][toChainId]
+      const fromTokenInfo = TOKENS[fromToken]?.[fromChainId]
+      const toTokenInfo = TOKENS[toToken]?.[toChainId]
 
       if (!fromTokenInfo || !toTokenInfo) {
         throw new Error('Invalid token configuration')
@@ -231,9 +302,10 @@ export function PrivyRelaySwap({
       const isSameChain = fromChainId === toChainId
 
       // Build request - different params for same-chain vs cross-chain
+      // IMPORTANT: For Solana destination, recipient must be the Solana wallet address
       const requestBody: Record<string, any> = {
-        user: address,
-        recipient: address,
+        user: userAddress,
+        recipient: destAddress, // Use Solana address for Solana destination
         originChainId: fromChainId,
         destinationChainId: toChainId,
         originCurrency: fromTokenInfo.address,
@@ -246,12 +318,13 @@ export function PrivyRelaySwap({
       // Only use deposit address for CROSS-CHAIN (Relay doesn't support it for same-chain)
       if (!isSameChain) {
         requestBody.useDepositAddress = true
-        requestBody.refundTo = address
+        requestBody.refundTo = userAddress // Refund to EVM wallet
         requestBody.usePermit = false
         requestBody.useExternalLiquidity = false
       }
 
-      console.log(`🔍 Fetching ${isSameChain ? 'same-chain' : 'cross-chain'} quote:`, requestBody)
+      console.log(`🔍 Fetching ${isSameChain ? 'same-chain' : 'cross-chain'}${isToSolana ? ' (to Solana)' : ''} quote:`, requestBody)
+      console.log(`📍 Recipient address: ${destAddress} (${isToSolana ? 'Solana' : 'EVM'})`)
 
       const response = await fetch('https://api.relay.link/quote', {
         method: 'POST',
@@ -297,7 +370,7 @@ export function PrivyRelaySwap({
       setState('error')
       setQuote(null)
     }
-  }, [address, amount, fromChainId, toChainId, fromToken, toToken])
+  }, [address, amount, fromChainId, toChainId, fromToken, toToken, isToSolana, solanaAddress])
 
   // ============================================
   // CHECK BRIDGE STATUS (for cross-chain via deposit address)
@@ -552,6 +625,11 @@ export function PrivyRelaySwap({
   }
 
   const swapDirection = () => {
+    // Don't allow swapping if source would become Solana (not supported yet)
+    if (toChainId === SOLANA_CHAIN_ID) {
+      console.log('Swapping from Solana is not yet supported')
+      return
+    }
     setFromChainId(toChainId)
     setToChainId(fromChainId)
     setFromToken(toToken)
@@ -559,6 +637,9 @@ export function PrivyRelaySwap({
     setQuote(null)
     setState('idle')
   }
+
+  // Check if swap direction is allowed
+  const canSwapDirection = toChainId !== SOLANA_CHAIN_ID
 
   const hasInsufficientBalance = parseFloat(amount || '0') > parseFloat(fromBalance)
   const amountNum = parseFloat(amount || '0')
@@ -584,11 +665,31 @@ export function PrivyRelaySwap({
           <span className="text-white/60 text-xs font-mono">
             {address.slice(0, 6)}...{address.slice(-4)}
           </span>
+          {/* Show Solana wallet if swapping to Solana */}
+          {isToSolana && solanaAddress && (
+            <>
+              <span className="text-white/30">→</span>
+              <div className="w-2 h-2 bg-gradient-to-br from-[#9945FF] to-[#14F195] rounded-full" />
+              <span className="text-white/60 text-xs font-mono">
+                {solanaAddress.slice(0, 4)}...{solanaAddress.slice(-4)}
+              </span>
+            </>
+          )}
         </div>
         <span className="text-green-400 text-xs font-medium">
           Privy Wallet
         </span>
       </div>
+
+      {/* Warning if Solana selected but no Solana wallet */}
+      {isToSolana && !solanaAddress && (
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-3 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+          <span className="text-yellow-400 text-xs">
+            Solana wallet not found. Please log out and log in again to create one.
+          </span>
+        </div>
+      )}
 
       {/* FROM Section */}
       <div className="bg-[#111] border border-white/[0.06] rounded-3xl p-5 relative overflow-hidden">
@@ -609,7 +710,8 @@ export function PrivyRelaySwap({
           {/* Chain selector dropdown */}
           {showFromChainSelect && (
             <div className="absolute top-12 right-4 bg-[#1a1a1a] border border-white/10 rounded-xl p-2 z-20 min-w-[140px]">
-              {CHAINS.map(chain => (
+              {/* Filter out Solana from source chains - only EVM -> Solana supported */}
+              {CHAINS.filter(c => !c.isSolana).map(chain => (
                 <button
                   key={chain.id}
                   onClick={() => {
@@ -648,11 +750,11 @@ export function PrivyRelaySwap({
           {/* Token selector dropdown */}
           {showFromTokenSelect && (
             <div className="absolute top-24 right-4 bg-[#1a1a1a] border border-white/10 rounded-xl p-2 z-20 min-w-[120px]">
-              {Object.keys(TOKENS).map(token => (
+              {getTokensForChain(fromChainId).map(token => (
                 <button
                   key={token}
                   onClick={() => {
-                    setFromToken(token as 'USDC' | 'ETH')
+                    setFromToken(token as 'USDC' | 'ETH' | 'SOL')
                     setShowFromTokenSelect(false)
                     setQuote(null)
                   }}
@@ -684,7 +786,13 @@ export function PrivyRelaySwap({
       <div className="flex justify-center -my-1 relative z-10">
         <button
           onClick={swapDirection}
-          className="w-12 h-12 bg-[#7C3AED] hover:bg-[#6D28D9] border-4 border-[#F4F4F5] rounded-2xl flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+          disabled={!canSwapDirection}
+          className={`w-12 h-12 border-4 border-[#F4F4F5] rounded-2xl flex items-center justify-center transition-all ${
+            canSwapDirection
+              ? 'bg-[#7C3AED] hover:bg-[#6D28D9] hover:scale-105 active:scale-95'
+              : 'bg-[#7C3AED]/30 cursor-not-allowed'
+          }`}
+          title={!canSwapDirection ? 'Swapping from Solana is not yet supported' : 'Swap direction'}
         >
           <ArrowDown className="w-5 h-5 text-white" />
         </button>
@@ -751,11 +859,11 @@ export function PrivyRelaySwap({
           {/* Token selector dropdown */}
           {showToTokenSelect && (
             <div className="absolute top-24 right-4 bg-[#1a1a1a] border border-white/10 rounded-xl p-2 z-20 min-w-[120px]">
-              {Object.keys(TOKENS).map(token => (
+              {getTokensForChain(toChainId).map(token => (
                 <button
                   key={token}
                   onClick={() => {
-                    setToToken(token as 'USDC' | 'ETH')
+                    setToToken(token as 'USDC' | 'ETH' | 'SOL')
                     setShowToTokenSelect(false)
                     setQuote(null)
                   }}
@@ -771,7 +879,7 @@ export function PrivyRelaySwap({
 
           <div className="mt-3">
             <span className="text-white/40 text-sm">
-              ${quote ? (parseFloat(quote.amountOutFormatted) * (toToken === 'USDC' ? 1 : 3500)).toFixed(2) : '0.00'}
+              ${quote ? (parseFloat(quote.amountOutFormatted) * (toToken === 'USDC' ? 1 : toToken === 'SOL' ? 180 : 3500)).toFixed(2) : '0.00'}
             </span>
           </div>
         </div>

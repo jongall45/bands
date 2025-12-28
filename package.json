@@ -25,6 +25,8 @@
     "@solana-program/system": "^0.10.0",
     "@solana-program/token": "^0.9.0",
     "@solana/kit": "^5.0.0",
+    "@solana/web3.js": "^1.98.0",
+    "bs58": "^6.0.0",
     "@tanstack/react-query": "^5.90.11",
     "clsx": "^2.1.1",
     "decimal.js": "^10.6.0",
