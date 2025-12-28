@@ -23,9 +23,9 @@ export const SOLANA_TOKENS = {
 
 // Multiple Solana RPC endpoints for reliability (fallback order)
 const SOLANA_RPC_ENDPOINTS = [
-  'https://solana-mainnet.g.alchemy.com/v2/demo', // Alchemy demo (more reliable)
+  'https://mainnet.helius-rpc.com/?api-key=adfbe4d1-c717-41c2-8962-0723246cbeda', // Helius (premium, most reliable)
   'https://rpc.ankr.com/solana', // Ankr public RPC
-  'https://api.mainnet-beta.solana.com', // Solana public RPC (often rate-limited)
+  'https://api.mainnet-beta.solana.com', // Solana public RPC (fallback)
 ]
 
 // Helper to fetch with timeout
