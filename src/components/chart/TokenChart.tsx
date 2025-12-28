@@ -69,6 +69,7 @@ const CHAIN_NAMES: Record<string, string> = {
   'arbitrum': 'Arbitrum',
   'optimism': 'Optimism',
   'polygon': 'Polygon',
+  'solana': 'Solana',
 }
 
 // ============================================
@@ -185,9 +186,9 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
       const data = await response.json()
 
       if (data.pairs) {
-        // Sort by liquidity and filter for supported chains
+        // Sort by liquidity and filter for supported chains (including Solana)
         const sorted = data.pairs
-          .filter((p: TokenPair) => ['base', 'ethereum', 'arbitrum'].includes(p.chainId))
+          .filter((p: TokenPair) => ['base', 'ethereum', 'arbitrum', 'optimism', 'polygon', 'solana'].includes(p.chainId))
           .sort((a: TokenPair, b: TokenPair) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))
           .slice(0, 10)
         setSearchResults(sorted)

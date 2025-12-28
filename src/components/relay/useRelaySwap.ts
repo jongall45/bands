@@ -95,6 +95,9 @@ const chainMap: Record<number, Chain> = {
   [blast.id]: blast,
 }
 
+// Solana chain ID for Relay API
+export const SOLANA_CHAIN_ID = 792703809
+
 // Supported chains with metadata
 export const SUPPORTED_CHAINS = [
   { id: 8453, name: 'Base', logo: 'https://raw.githubusercontent.com/base-org/brand-kit/001c0e9b40a67799ebe0418671ac4e02a0c683ce/logo/symbol/Base_Symbol_Blue.svg' },
@@ -102,6 +105,7 @@ export const SUPPORTED_CHAINS = [
   { id: 1, name: 'Ethereum', logo: 'https://cryptologos.cc/logos/ethereum-eth-logo.png' },
   { id: 10, name: 'Optimism', logo: 'https://cryptologos.cc/logos/optimism-ethereum-op-logo.png' },
   { id: 137, name: 'Polygon', logo: 'https://cryptologos.cc/logos/polygon-matic-logo.png' },
+  { id: SOLANA_CHAIN_ID, name: 'Solana', logo: 'https://cryptologos.cc/logos/solana-sol-logo.png', isSolana: true },
 ]
 
 // Known USDC.e (bridged USDC) addresses - NOT native USDC
@@ -155,6 +159,10 @@ export const COMMON_TOKENS: Record<number, Token[]> = {
     { symbol: 'USDC', name: 'USD Coin', address: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', chainId: 137, decimals: 6, logoURI: 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png' },
     { symbol: 'USDC.e', name: 'Bridged USDC', address: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', chainId: 137, decimals: 6, logoURI: 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png' },
     { symbol: 'WMATIC', name: 'Wrapped MATIC', address: '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270', chainId: 137, decimals: 18, logoURI: 'https://cryptologos.cc/logos/polygon-matic-logo.png' },
+  ],
+  [SOLANA_CHAIN_ID]: [ // Solana
+    { symbol: 'SOL', name: 'Solana', address: '11111111111111111111111111111111', chainId: SOLANA_CHAIN_ID, decimals: 9, logoURI: 'https://cryptologos.cc/logos/solana-sol-logo.png' },
+    { symbol: 'USDC', name: 'USD Coin', address: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', chainId: SOLANA_CHAIN_ID, decimals: 6, logoURI: 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png' },
   ],
 }
 
