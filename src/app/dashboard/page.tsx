@@ -175,11 +175,12 @@ export default function Dashboard() {
     ? parseFloat(formatUnits(usdcBalance, USDC_DECIMALS))
     : 0
 
-  // Refresh all balances
+  // Refresh all balances including Solana
   const handleRefresh = useCallback(() => {
     refetchBalance()
     refetchPortfolio()
-  }, [refetchBalance, refetchPortfolio])
+    fetchSolanaBalances()
+  }, [refetchBalance, refetchPortfolio, fetchSolanaBalances])
 
   // Get unique chains in portfolio
   const portfolioChains = portfolio?.tokens
@@ -594,65 +595,82 @@ export default function Dashboard() {
         </GlassCard>
 
         {/* Holdings/Portfolio Card */}
-        {portfolio && portfolio.tokens && portfolio.tokens.length > 0 && (
-          <GlassCard noPadding variant="redAccent" className="mb-4">
-            <div className="p-4 pb-0">
-              <SectionHeader badge={`${portfolio.tokens.length} assets`} badgeColor="#FF3B30">
-                <span className="flex items-center gap-2">
-                  <Coins className="w-4 h-4 text-[#FF3B30]" />
-                  Holdings
-                </span>
-              </SectionHeader>
-            </div>
+        {(() => {
+          // Combine EVM tokens with Solana tokens for display
+          const evmTokens = portfolio?.tokens || []
+          const solanaDisplayTokens = solanaTokensForSelector.filter(t => parseFloat(t.balance) > 0)
+          const allTokens = [...solanaDisplayTokens, ...evmTokens]
 
-            <div className="px-4 pb-4 space-y-2 max-h-[280px] overflow-y-auto">
-              {portfolio.tokens.slice(0, 10).map((token: PortfolioToken, index: number) => (
-                <div
-                  key={`${token.chainId}-${token.address}-${index}`}
-                  className="relative rounded-xl p-[1px] bg-gradient-to-br from-white/5 via-transparent to-transparent transition-all hover:from-white/10 hover:to-[#FF3B30]/25 group"
-                >
-                  <div className="flex items-center justify-between p-3 bg-[#0a0a0a]/90 rounded-[11px] transition-all">
-                    <div className="flex items-center gap-3">
-                      <div className="relative">
-                        <img
-                          src={token.logoURI || `https://api.dicebear.com/7.x/shapes/svg?seed=${token.symbol}`}
-                          alt={token.symbol}
-                          className="w-9 h-9 rounded-full bg-white/10"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/shapes/svg?seed=${token.symbol}`
-                          }}
-                        />
-                        <img
-                          src={CHAIN_CONFIG[token.chainId]?.logo || CHAIN_CONFIG[8453].logo}
-                          alt={CHAIN_CONFIG[token.chainId]?.name || 'Chain'}
-                          className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-[#050505]"
-                        />
-                      </div>
-                      <div>
-                        <p className="text-white font-semibold text-sm">{token.symbol}</p>
-                        <p className="text-white/40 text-xs">{CHAIN_CONFIG[token.chainId]?.name || 'Unknown'}</p>
+          if (allTokens.length === 0) return null
+
+          return (
+            <GlassCard noPadding variant="redAccent" className="mb-4">
+              <div className="p-4 pb-0">
+                <SectionHeader badge={`${allTokens.length} assets`} badgeColor="#FF3B30">
+                  <span className="flex items-center gap-2">
+                    <Coins className="w-4 h-4 text-[#FF3B30]" />
+                    Holdings
+                  </span>
+                </SectionHeader>
+              </div>
+
+              <div className="px-4 pb-4 space-y-2 max-h-[280px] overflow-y-auto">
+                {allTokens.slice(0, 10).map((token: PortfolioToken, index: number) => {
+                  const isSolanaToken = token.chainId === SOLANA_CHAIN_ID
+                  const chainLogo = isSolanaToken
+                    ? 'https://cryptologos.cc/logos/solana-sol-logo.png'
+                    : (CHAIN_CONFIG[token.chainId]?.logo || CHAIN_CONFIG[8453].logo)
+                  const chainName = isSolanaToken ? 'Solana' : (CHAIN_CONFIG[token.chainId]?.name || 'Unknown')
+
+                  return (
+                    <div
+                      key={`${token.chainId}-${token.address}-${index}`}
+                      className="relative rounded-xl p-[1px] bg-gradient-to-br from-white/5 via-transparent to-transparent transition-all hover:from-white/10 hover:to-[#FF3B30]/25 group"
+                    >
+                      <div className="flex items-center justify-between p-3 bg-[#0a0a0a]/90 rounded-[11px] transition-all">
+                        <div className="flex items-center gap-3">
+                          <div className="relative">
+                            <img
+                              src={token.logoURI || `https://api.dicebear.com/7.x/shapes/svg?seed=${token.symbol}`}
+                              alt={token.symbol}
+                              className="w-9 h-9 rounded-full bg-white/10"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/shapes/svg?seed=${token.symbol}`
+                              }}
+                            />
+                            <img
+                              src={chainLogo}
+                              alt={chainName}
+                              className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-[#050505]"
+                            />
+                          </div>
+                          <div>
+                            <p className="text-white font-semibold text-sm">{token.symbol}</p>
+                            <p className="text-white/40 text-xs">{chainName}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-white font-mono text-sm">
+                            {formatTokenBalance(token.balance)}
+                          </p>
+                          <p className="text-white/40 text-xs">
+                            {token.balanceUsd > 0 ? formatUsdValue(token.balanceUsd) : '-'}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-white font-mono text-sm">
-                        {formatTokenBalance(token.balance)}
-                      </p>
-                      <p className="text-white/40 text-xs">
-                        {token.balanceUsd > 0 ? formatUsdValue(token.balanceUsd) : '-'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                  )
+                })}
+              </div>
 
-            {portfolio.tokens.length > 10 && (
-              <p className="text-white/40 text-xs text-center pb-4">
-                +{portfolio.tokens.length - 10} more assets
-              </p>
-            )}
-          </GlassCard>
-        )}
+              {allTokens.length > 10 && (
+                <p className="text-white/40 text-xs text-center pb-4">
+                  +{allTokens.length - 10} more assets
+                </p>
+              )}
+            </GlassCard>
+          )
+        })()}
 
         {/* Recent Activity Card */}
         <GlassCard variant="redAccent">

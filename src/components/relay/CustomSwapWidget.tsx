@@ -55,7 +55,7 @@ const getExplorerName = (chainId: number): string => {
 // ============================================
 export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }: CustomSwapWidgetProps) {
   // Solana wallet hook - get address first to pass to useRelaySwap
-  const { solanaAddress } = useSolanaAuth()
+  const { solanaAddress, fetchBalances: fetchSolanaBalances } = useSolanaAuth()
 
   // Relay swap hook - pass Solana address for cross-chain swaps
   const {
@@ -153,10 +153,13 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
           logoURI: result.toToken.logoURI,
         },
       })
-      // Refetch user tokens after successful swap
-      setTimeout(() => refetchUserTokens(), 2000)
+      // Refetch user tokens and Solana balances after successful swap
+      setTimeout(() => {
+        refetchUserTokens()
+        fetchSolanaBalances()
+      }, 2000)
     }
-  }, [result, state, onSuccess, refetchUserTokens])
+  }, [result, state, onSuccess, refetchUserTokens, fetchSolanaBalances])
 
   // Update balances from user tokens or fetch directly
   useEffect(() => {

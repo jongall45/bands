@@ -288,7 +288,7 @@ export function useUserTokens(walletAddress: string | undefined) {
 // ============================================
 // HOOK: Main Swap Hook
 // ============================================
-export function useRelaySwap(solanaWalletAddress?: string) {
+export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: any) {
   const { login, authenticated } = usePrivy()
   const { wallets } = useWallets()
   const { client: smartWalletClient, getClientForChain } = useSmartWallets()
@@ -317,6 +317,62 @@ export function useRelaySwap(solanaWalletAddress?: string) {
   // FETCH BALANCE
   // ============================================
   const fetchBalance = useCallback(async (token: Token): Promise<string> => {
+    // Handle Solana tokens
+    if (token.chainId === SOLANA_CHAIN_ID) {
+      if (!solanaWalletAddress) return '0'
+
+      try {
+        // Use the Solana RPC to fetch balance
+        const rpcUrl = 'https://api.mainnet-beta.solana.com'
+
+        if (token.address === '11111111111111111111111111111111' || token.symbol === 'SOL') {
+          // Native SOL balance
+          const response = await fetch(rpcUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'getBalance',
+              params: [solanaWalletAddress],
+            }),
+          })
+          const data = await response.json()
+          if (data.result?.value !== undefined) {
+            // Convert lamports to SOL (9 decimals)
+            return (data.result.value / 1e9).toString()
+          }
+        } else {
+          // SPL Token balance - fetch token accounts
+          const response = await fetch(rpcUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'getTokenAccountsByOwner',
+              params: [
+                solanaWalletAddress,
+                { mint: token.address },
+                { encoding: 'jsonParsed' },
+              ],
+            }),
+          })
+          const data = await response.json()
+          if (data.result?.value?.length > 0) {
+            const tokenAccount = data.result.value[0]
+            const amount = tokenAccount.account.data.parsed.info.tokenAmount.uiAmount
+            return amount?.toString() || '0'
+          }
+        }
+        return '0'
+      } catch (err) {
+        console.error('[useRelaySwap] fetchBalance Solana error:', err)
+        return '0'
+      }
+    }
+
+    // Handle EVM tokens
     if (!smartWalletAddress) return '0'
 
     try {
@@ -340,7 +396,7 @@ export function useRelaySwap(solanaWalletAddress?: string) {
       console.error('[useRelaySwap] fetchBalance error:', err)
       return '0'
     }
-  }, [smartWalletAddress, publicClient])
+  }, [smartWalletAddress, solanaWalletAddress, publicClient])
 
   // ============================================
   // FETCH QUOTE
