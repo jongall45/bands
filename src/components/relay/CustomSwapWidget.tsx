@@ -54,7 +54,10 @@ const getExplorerName = (chainId: number): string => {
 // COMPONENT
 // ============================================
 export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }: CustomSwapWidgetProps) {
-  // Relay swap hook
+  // Solana wallet hook - get address first to pass to useRelaySwap
+  const { solanaAddress } = useSolanaAuth()
+
+  // Relay swap hook - pass Solana address for cross-chain swaps
   const {
     state,
     quote,
@@ -67,10 +70,7 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
     fetchBalance,
     executeSwap,
     reset,
-  } = useRelaySwap()
-
-  // Solana wallet hook
-  const { solanaAddress } = useSolanaAuth()
+  } = useRelaySwap(solanaAddress)
 
   // Fetch user tokens from Sim API
   const {

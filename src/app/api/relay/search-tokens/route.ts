@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+// Solana chain ID for Relay API
+const SOLANA_CHAIN_ID = 792703809
+
 // DexScreener chain ID mapping
 const DEXSCREENER_CHAINS: Record<string, number> = {
   'base': 8453,
@@ -7,6 +10,7 @@ const DEXSCREENER_CHAINS: Record<string, number> = {
   'ethereum': 1,
   'optimism': 10,
   'polygon': 137,
+  'solana': SOLANA_CHAIN_ID,
 }
 
 // Reverse mapping for filtering
@@ -16,6 +20,7 @@ const CHAIN_TO_DEXSCREENER: Record<number, string> = {
   1: 'ethereum',
   10: 'optimism',
   137: 'polygon',
+  [SOLANA_CHAIN_ID]: 'solana',
 }
 
 export async function GET(request: NextRequest) {
@@ -64,12 +69,17 @@ export async function GET(request: NextRequest) {
         const tokenKey = `${mappedChainId}:${baseToken.address.toLowerCase()}`
         if (!seenTokens.has(tokenKey)) {
           seenTokens.add(tokenKey)
+          // Solana tokens typically have 9 decimals (except USDC which has 6)
+          const isSolana = mappedChainId === SOLANA_CHAIN_ID
+          const isStablecoin = ['USDC', 'USDT'].includes(baseToken.symbol?.toUpperCase())
+          const decimals = isSolana ? (isStablecoin ? 6 : 9) : 18
+
           tokens.push({
             symbol: baseToken.symbol,
             name: baseToken.name,
             address: baseToken.address,
             chainId: mappedChainId,
-            decimals: 18, // DexScreener doesn't provide decimals, default to 18
+            decimals,
             logoURI: pair.info?.imageUrl || null,
           })
         }
@@ -83,12 +93,17 @@ export async function GET(request: NextRequest) {
         const tokenKey = `${mappedChainId}:${quoteToken.address.toLowerCase()}`
         if (!seenTokens.has(tokenKey)) {
           seenTokens.add(tokenKey)
+          // Solana tokens typically have 9 decimals (except USDC which has 6)
+          const isSolana = mappedChainId === SOLANA_CHAIN_ID
+          const isStablecoin = ['USDC', 'USDT'].includes(quoteToken.symbol?.toUpperCase())
+          const decimals = isSolana ? (isStablecoin ? 6 : 9) : 18
+
           tokens.push({
             symbol: quoteToken.symbol,
             name: quoteToken.name,
             address: quoteToken.address,
             chainId: mappedChainId,
-            decimals: 18,
+            decimals,
             logoURI: null,
           })
         }

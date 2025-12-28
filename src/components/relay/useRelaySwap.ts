@@ -288,7 +288,7 @@ export function useUserTokens(walletAddress: string | undefined) {
 // ============================================
 // HOOK: Main Swap Hook
 // ============================================
-export function useRelaySwap() {
+export function useRelaySwap(solanaWalletAddress?: string) {
   const { login, authenticated } = usePrivy()
   const { wallets } = useWallets()
   const { client: smartWalletClient, getClientForChain } = useSmartWallets()
@@ -304,6 +304,14 @@ export function useRelaySwap() {
 
   // Get wallet address
   const smartWalletAddress = smartWalletClient?.account?.address as `0x${string}` | undefined
+
+  // Helper to get the correct wallet address based on chain
+  const getWalletForChain = useCallback((chainId: number): string | undefined => {
+    if (chainId === SOLANA_CHAIN_ID) {
+      return solanaWalletAddress
+    }
+    return smartWalletAddress
+  }, [smartWalletAddress, solanaWalletAddress])
 
   // ============================================
   // FETCH BALANCE
@@ -342,8 +350,19 @@ export function useRelaySwap() {
     toToken: Token,
     amount: string,
   ): Promise<Quote | null> => {
-    if (!smartWalletAddress) {
-      setError('Wallet not connected')
+    // Get the appropriate wallet addresses based on chain
+    const originWallet = getWalletForChain(fromToken.chainId)
+    const destinationWallet = getWalletForChain(toToken.chainId)
+
+    if (!originWallet) {
+      const chainName = fromToken.chainId === SOLANA_CHAIN_ID ? 'Solana' : 'EVM'
+      setError(`${chainName} wallet not connected`)
+      return null
+    }
+
+    if (!destinationWallet) {
+      const chainName = toToken.chainId === SOLANA_CHAIN_ID ? 'Solana' : 'EVM'
+      setError(`${chainName} wallet not connected`)
       return null
     }
 
@@ -371,14 +390,15 @@ export function useRelaySwap() {
       const destinationCurrency = toRelayCurrency(toToken)
 
       // Build request body per Relay API spec
+      // Use appropriate wallet addresses based on origin/destination chains
       const requestBody = {
-        user: smartWalletAddress,
+        user: originWallet,
         originChainId: fromToken.chainId,
         destinationChainId: toToken.chainId,
         originCurrency,
         destinationCurrency,
         amount: amountInWei,
-        recipient: smartWalletAddress,
+        recipient: destinationWallet,
         tradeType: 'EXACT_INPUT',
         referrer: 'bands.cash',
       }
@@ -387,6 +407,8 @@ export function useRelaySwap() {
         from: `${fromToken.symbol} (${originCurrency}) on chain ${fromToken.chainId}`,
         to: `${toToken.symbol} (${destinationCurrency}) on chain ${toToken.chainId}`,
         amount: amountInWei,
+        originWallet,
+        destinationWallet,
         requestBody,
       })
 
@@ -448,7 +470,7 @@ export function useRelaySwap() {
       setState('error')
       return null
     }
-  }, [smartWalletAddress])
+  }, [getWalletForChain])
 
   // ============================================
   // EXECUTE SWAP - Use getClientForChain to get chain-specific smart wallet client
