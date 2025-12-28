@@ -527,7 +527,10 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
       const toAmountUsd = parseFloat(data.details?.currencyOut?.amountUsd) || 0
       const gasFeeUsd = parseFloat(data.fees?.gas?.amountUsd) || 0
       const toAmountRaw = data.details?.currencyOut?.amount || '0'
-      const toAmountFormatted = formatUnits(BigInt(toAmountRaw), toToken.decimals)
+      // Use decimals from Relay API response if available, fall back to token decimals
+      // This is important for Solana tokens where we may not know the decimals upfront
+      const toDecimals = data.details?.currencyOut?.currency?.decimals ?? toToken.decimals
+      const toAmountFormatted = formatUnits(BigInt(toAmountRaw), toDecimals)
       const toAmountNum = parseFloat(toAmountFormatted)
 
       const quoteData: Quote = {

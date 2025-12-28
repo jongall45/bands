@@ -82,7 +82,7 @@ export default function Dashboard() {
       balance: balances.sol || '0',
       balanceUsd: parseFloat(balances.sol || '0') * solPrice,
       price: solPrice,
-      logoURI: 'https://cryptologos.cc/logos/solana-sol-logo.png',
+      logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
     },
     {
       chainId: SOLANA_CHAIN_ID,
@@ -94,7 +94,7 @@ export default function Dashboard() {
       balance: balances.usdcSolana || '0',
       balanceUsd: parseFloat(balances.usdcSolana || '0'),
       price: 1,
-      logoURI: 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png',
+      logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png',
     },
   ] : []
 
