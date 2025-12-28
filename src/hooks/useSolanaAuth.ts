@@ -26,7 +26,9 @@ const SOLANA_MAINNET_RPC = 'https://api.mainnet-beta.solana.com'
 const SOLANA_DEVNET_RPC = 'https://api.devnet.solana.com'
 
 export function useSolanaAuth() {
-  const { wallets, createWallet } = useWallets()
+  // Note: createWallet is not available on Solana useWallets hook
+  // Solana wallets are automatically created on login via createOnLogin: 'all-users' config
+  const { wallets } = useWallets()
   const { signMessage } = useSignMessage()
   const { signAndSendTransaction } = useSignAndSendTransaction()
   const { fundWallet } = useFundWallet()
@@ -37,7 +39,9 @@ export function useSolanaAuth() {
   const [isLoadingBalances, setIsLoadingBalances] = useState(false)
 
   // Get embedded Solana wallet (Privy)
-  const solanaWallet = wallets.find(w => w.walletClientType === 'privy')
+  // With createOnLogin: 'all-users', the Privy embedded wallet is auto-created
+  // The first wallet in the array is typically the embedded one
+  const solanaWallet = wallets[0]
   const solanaAddress = solanaWallet?.address
 
   // Create Solana connection
@@ -113,30 +117,14 @@ export function useSolanaAuth() {
   }, [solanaAddress, fetchBalances])
 
   // Fund wallet with SOL (opens Privy funding modal)
-  const fundSolanaWallet = useCallback(async (amount?: string) => {
+  const fundSolanaWallet = useCallback(async () => {
     if (!solanaAddress) return
 
     await fundWallet({
       address: solanaAddress,
-      options: {
-        cluster: { name: 'mainnet-beta' },
-        amount: amount,
-      },
     })
   }, [solanaAddress, fundWallet])
 
-  // Create Solana wallet if it doesn't exist
-  const ensureSolanaWallet = useCallback(async () => {
-    if (solanaWallet) return solanaWallet
-
-    try {
-      const newWallet = await createWallet()
-      return newWallet
-    } catch (error) {
-      console.error('[Solana] Error creating wallet:', error)
-      throw error
-    }
-  }, [solanaWallet, createWallet])
 
   // Format display address
   const displayAddress = solanaAddress
@@ -160,8 +148,6 @@ export function useSolanaAuth() {
     fetchBalances,
 
     // Actions
-    createWallet,
-    ensureSolanaWallet,
     signMessage,
     signAndSendTransaction,
     fundSolanaWallet,
