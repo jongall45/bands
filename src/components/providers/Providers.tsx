@@ -8,6 +8,7 @@ import { WagmiProvider, createConfig } from '@privy-io/wagmi'
 import { http } from 'viem'
 import { base, arbitrum, optimism, mainnet, polygon, zora, blast } from 'viem/chains'
 import { PWALayout } from '@/components/layout/PWALayout'
+import { ErrorBoundary } from './ErrorBoundary'
 
 // Wagmi config for Privy - supports all chains for cross-chain swaps
 const wagmiConfig = createConfig({
@@ -58,46 +59,48 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <PrivyProvider
-      appId={privyAppId}
-      config={{
-        // Appearance - match bands.cash dark theme
-        appearance: {
-          theme: 'dark',
-          accentColor: '#ef4444', // Red accent to match bands.cash
-          logo: '/icons/icon.svg',
-          showWalletLoginFirst: false,
-        },
-
-        // Login methods
-        loginMethods: ['email', 'google', 'apple'],
-
-        // Embedded wallet config - creates EOA signer for smart wallet
-        embeddedWallets: {
-          ethereum: {
-            createOnLogin: 'all-users',
+    <ErrorBoundary>
+      <PrivyProvider
+        appId={privyAppId}
+        config={{
+          // Appearance - match bands.cash dark theme
+          appearance: {
+            theme: 'dark',
+            accentColor: '#ef4444', // Red accent to match bands.cash
+            logo: '/icons/icon.svg',
+            showWalletLoginFirst: false,
           },
-          // CRITICAL: Hide wallet UIs for "no prompt" experience
-          // This prevents confirmation modals from appearing
-          showWalletUIs: false,
-        },
 
-        // Chain config - default to Base, support multiple chains
-        defaultChain: base,
-        supportedChains: [base, arbitrum, optimism, mainnet, polygon, zora, blast],
-      }}
-    >
-      {/* SmartWalletsProvider enables ERC-4337 smart wallets via Pimlico */}
-      {/* Uses Privy's built-in gas sponsorship ($10 credits) - no custom policy needed */}
-      <SmartWalletsProvider>
-        <QueryClientProvider client={queryClient}>
-          <WagmiProvider config={wagmiConfig}>
-            <PWALayout>
-              {children}
-            </PWALayout>
-          </WagmiProvider>
-        </QueryClientProvider>
-      </SmartWalletsProvider>
-    </PrivyProvider>
+          // Login methods
+          loginMethods: ['email', 'google', 'apple'],
+
+          // Embedded wallet config - creates EOA signer for smart wallet
+          embeddedWallets: {
+            ethereum: {
+              createOnLogin: 'all-users',
+            },
+            // CRITICAL: Hide wallet UIs for "no prompt" experience
+            // This prevents confirmation modals from appearing
+            showWalletUIs: false,
+          },
+
+          // Chain config - default to Base, support multiple chains
+          defaultChain: base,
+          supportedChains: [base, arbitrum, optimism, mainnet, polygon, zora, blast],
+        }}
+      >
+        {/* SmartWalletsProvider enables ERC-4337 smart wallets via Pimlico */}
+        {/* Uses Privy's built-in gas sponsorship ($10 credits) - no custom policy needed */}
+        <SmartWalletsProvider>
+          <QueryClientProvider client={queryClient}>
+            <WagmiProvider config={wagmiConfig}>
+              <PWALayout>
+                {children}
+              </PWALayout>
+            </WagmiProvider>
+          </QueryClientProvider>
+        </SmartWalletsProvider>
+      </PrivyProvider>
+    </ErrorBoundary>
   )
 }

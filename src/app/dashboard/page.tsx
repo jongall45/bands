@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useWaitForTransactionReceipt } from 'wagmi'
 import { useReadContract } from 'wagmi'
@@ -32,7 +32,7 @@ const SEND_CHAINS = [
 ]
 
 export default function Dashboard() {
-  const { isAuthenticated, isConnected, address, isSmartWalletReady, logout, getClientForChain } = useAuth()
+  const { isAuthenticated, isConnected, address, isSmartWalletReady, logout, getClientForChain, isReady } = useAuth()
   const router = useRouter()
   const queryClient = useQueryClient()
   const [copied, setCopied] = useState(false)
@@ -43,6 +43,7 @@ export default function Dashboard() {
   const [addressError, setAddressError] = useState('')
   const [selectedChain, setSelectedChain] = useState(SEND_CHAINS[0])
   const [showChainSelect, setShowChainSelect] = useState(false)
+  const hasNavigatedRef = useRef(false)
 
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>(undefined)
   const [txChainId, setTxChainId] = useState<number | undefined>(undefined)
@@ -86,9 +87,13 @@ export default function Dashboard() {
     },
   })
 
+  // Only redirect after auth is ready to prevent flash/glitch on refresh
   useEffect(() => {
-    if (!isAuthenticated) router.push('/')
-  }, [isAuthenticated, router])
+    if (isReady && !isAuthenticated && !hasNavigatedRef.current) {
+      hasNavigatedRef.current = true
+      router.push('/')
+    }
+  }, [isAuthenticated, isReady, router])
 
   useEffect(() => {
     if (isSuccess) {
@@ -232,7 +237,8 @@ export default function Dashboard() {
     ? parseFloat(selectedToken.balance)
     : numericBalance
 
-  if (!isAuthenticated) {
+  // Show loading while auth is initializing or user is not authenticated
+  if (!isReady || !isAuthenticated) {
     return (
       <IndustrialPage>
         <div className="min-h-screen flex items-center justify-center">

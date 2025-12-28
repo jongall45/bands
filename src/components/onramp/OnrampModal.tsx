@@ -29,19 +29,48 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
   const inputRef = useRef<HTMLInputElement>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Refs to track mounted state and cleanup payment timeouts
+  const isMountedRef = useRef(true)
+  const balanceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const dismissTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
   // Calculated values
   const amountNum = parseFloat(amount) || 0
   const fee = amountNum * FEE_RATE
   const receiveAmount = amountNum - fee
 
-  // Reset on close
+  // Track mounted state and cleanup all timeouts
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+      // Clear all pending timeouts on unmount
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+      if (balanceTimeoutRef.current) clearTimeout(balanceTimeoutRef.current)
+      if (dismissTimeoutRef.current) clearTimeout(dismissTimeoutRef.current)
+    }
+  }, [])
+
+  // Reset on close and clear payment timeouts
   useEffect(() => {
     if (!isOpen) {
+      // Clear any pending payment timeouts when modal closes
+      if (balanceTimeoutRef.current) {
+        clearTimeout(balanceTimeoutRef.current)
+        balanceTimeoutRef.current = null
+      }
+      if (dismissTimeoutRef.current) {
+        clearTimeout(dismissTimeoutRef.current)
+        dismissTimeoutRef.current = null
+      }
+
       const timer = setTimeout(() => {
-        setStep('amount')
-        setError(null)
-        setFeeExpanded(false)
-        setIsTyping(false)
+        if (isMountedRef.current) {
+          setStep('amount')
+          setError(null)
+          setFeeExpanded(false)
+          setIsTyping(false)
+        }
       }, 300)
       return () => clearTimeout(timer)
     }
@@ -113,21 +142,38 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
         },
       })
 
+      // Check if component is still mounted before updating state
+      if (!isMountedRef.current) return
+
       // MoonPay flow completed - show success
       setStep('success')
 
+      // Clear any existing timeouts before setting new ones
+      if (balanceTimeoutRef.current) clearTimeout(balanceTimeoutRef.current)
+      if (dismissTimeoutRef.current) clearTimeout(dismissTimeoutRef.current)
+
       // Refetch balances after a delay to allow for processing
-      setTimeout(() => {
-        refetchBalances()
+      balanceTimeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          try {
+            refetchBalances()
+          } catch (e) {
+            console.error('Failed to refetch balances:', e)
+          }
+        }
       }, 2000)
 
       // Auto-dismiss after delay
-      setTimeout(() => {
-        onSuccess?.()
-        onClose()
+      dismissTimeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          onSuccess?.()
+          onClose()
+        }
       }, 3000)
     } catch (err) {
       console.error('Fund wallet error:', err)
+      // Check if component is still mounted before updating state
+      if (!isMountedRef.current) return
       // User may have closed the MoonPay modal - go back to confirm
       setError(err instanceof Error ? err.message : 'Payment cancelled or failed')
       setStep('confirm')
