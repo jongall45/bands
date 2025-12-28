@@ -21,9 +21,26 @@ export const SOLANA_TOKENS = {
   },
 } as const
 
-// Solana RPC endpoints
-const SOLANA_MAINNET_RPC = 'https://api.mainnet-beta.solana.com'
-const SOLANA_DEVNET_RPC = 'https://api.devnet.solana.com'
+// Multiple Solana RPC endpoints for reliability (fallback order)
+const SOLANA_RPC_ENDPOINTS = [
+  'https://solana-mainnet.g.alchemy.com/v2/demo', // Alchemy demo (more reliable)
+  'https://rpc.ankr.com/solana', // Ankr public RPC
+  'https://api.mainnet-beta.solana.com', // Solana public RPC (often rate-limited)
+]
+
+// Helper to fetch with timeout
+async function fetchWithTimeout(url: string, options: RequestInit, timeout = 10000): Promise<Response> {
+  const controller = new AbortController()
+  const id = setTimeout(() => controller.abort(), timeout)
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal })
+    clearTimeout(id)
+    return response
+  } catch (error) {
+    clearTimeout(id)
+    throw error
+  }
+}
 
 export function useSolanaAuth() {
   // Note: createWallet is not available on Solana useWallets hook
@@ -44,58 +61,103 @@ export function useSolanaAuth() {
   const solanaWallet = wallets[0]
   const solanaAddress = solanaWallet?.address
 
-  // Create Solana connection
+  // Create Solana connection (uses first available RPC)
   const getConnection = useCallback((cluster: 'mainnet' | 'devnet' = 'mainnet') => {
-    const rpcUrl = cluster === 'mainnet' ? SOLANA_MAINNET_RPC : SOLANA_DEVNET_RPC
+    const rpcUrl = cluster === 'mainnet' ? SOLANA_RPC_ENDPOINTS[0] : 'https://api.devnet.solana.com'
     return new Connection(rpcUrl, 'confirmed')
   }, [])
 
-  // Fetch SOL balance
+  // Fetch SOL balance using direct RPC with fallback
   const fetchSolBalance = useCallback(async () => {
     if (!solanaAddress) {
       setSolBalance('0')
       return
     }
 
-    try {
-      const connection = getConnection('mainnet')
-      const publicKey = new PublicKey(solanaAddress)
-      const balance = await connection.getBalance(publicKey)
-      setSolBalance((balance / LAMPORTS_PER_SOL).toString())
-    } catch (error) {
-      console.error('[Solana] Error fetching SOL balance:', error)
-      setSolBalance('0')
-    }
-  }, [solanaAddress, getConnection])
+    console.log('[Solana] Fetching SOL balance for:', solanaAddress)
 
-  // Fetch USDC balance (SPL Token)
+    // Try each RPC endpoint until one works
+    for (const rpcUrl of SOLANA_RPC_ENDPOINTS) {
+      try {
+        const response = await fetchWithTimeout(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'getBalance',
+            params: [solanaAddress],
+          }),
+        }, 8000)
+
+        const data = await response.json()
+
+        if (data.result?.value !== undefined) {
+          const balanceInSol = (data.result.value / LAMPORTS_PER_SOL).toString()
+          console.log('[Solana] SOL balance fetched:', balanceInSol, 'from', rpcUrl)
+          setSolBalance(balanceInSol)
+          return // Success, exit the loop
+        }
+      } catch (error) {
+        console.warn(`[Solana] RPC ${rpcUrl} failed:`, error)
+        // Continue to next RPC
+      }
+    }
+
+    console.error('[Solana] All RPC endpoints failed for SOL balance')
+    setSolBalance('0')
+  }, [solanaAddress])
+
+  // Fetch USDC balance (SPL Token) using direct RPC with fallback
   const fetchUsdcBalance = useCallback(async () => {
     if (!solanaAddress) {
       setUsdcBalance('0')
       return
     }
 
-    try {
-      const connection = getConnection('mainnet')
-      const publicKey = new PublicKey(solanaAddress)
-      const usdcMint = new PublicKey(SOLANA_TOKENS.USDC.address)
+    console.log('[Solana] Fetching USDC balance for:', solanaAddress)
 
-      // Get token accounts for USDC
-      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
-        mint: usdcMint,
-      })
+    // Try each RPC endpoint until one works
+    for (const rpcUrl of SOLANA_RPC_ENDPOINTS) {
+      try {
+        const response = await fetchWithTimeout(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'getTokenAccountsByOwner',
+            params: [
+              solanaAddress,
+              { mint: SOLANA_TOKENS.USDC.address },
+              { encoding: 'jsonParsed' },
+            ],
+          }),
+        }, 8000)
 
-      if (tokenAccounts.value.length > 0) {
-        const balance = tokenAccounts.value[0].account.data.parsed.info.tokenAmount.uiAmount
-        setUsdcBalance(balance?.toString() || '0')
-      } else {
-        setUsdcBalance('0')
+        const data = await response.json()
+
+        if (data.result?.value?.length > 0) {
+          const tokenAccount = data.result.value[0]
+          const amount = tokenAccount.account.data.parsed.info.tokenAmount.uiAmount
+          console.log('[Solana] USDC balance fetched:', amount, 'from', rpcUrl)
+          setUsdcBalance(amount?.toString() || '0')
+          return // Success
+        } else if (data.result?.value !== undefined) {
+          // No token account = 0 balance
+          console.log('[Solana] No USDC token account found')
+          setUsdcBalance('0')
+          return
+        }
+      } catch (error) {
+        console.warn(`[Solana] RPC ${rpcUrl} failed for USDC:`, error)
+        // Continue to next RPC
       }
-    } catch (error) {
-      console.error('[Solana] Error fetching USDC balance:', error)
-      setUsdcBalance('0')
     }
-  }, [solanaAddress, getConnection])
+
+    console.error('[Solana] All RPC endpoints failed for USDC balance')
+    setUsdcBalance('0')
+  }, [solanaAddress])
 
   // Fetch all balances
   const fetchBalances = useCallback(async () => {
