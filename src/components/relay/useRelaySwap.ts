@@ -98,9 +98,12 @@ const chainMap: Record<number, Chain> = {
 // Solana chain ID for Relay API
 export const SOLANA_CHAIN_ID = 792703809
 
+// Helius RPC (premium) - uses env var or falls back to hardcoded key
+const HELIUS_API_KEY = process.env.NEXT_PUBLIC_HELIUS_RPC_KEY || 'adfbe4d1-c717-41c2-8962-0723246cbeda'
+
 // Multiple Solana RPC endpoints for reliability (fallback order)
 const SOLANA_RPC_ENDPOINTS = [
-  'https://mainnet.helius-rpc.com/?api-key=adfbe4d1-c717-41c2-8962-0723246cbeda', // Helius (premium, most reliable)
+  `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`, // Helius (premium, most reliable)
   'https://rpc.ankr.com/solana', // Ankr public RPC
   'https://api.mainnet-beta.solana.com', // Solana public RPC (fallback)
 ]
