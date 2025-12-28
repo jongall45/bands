@@ -622,6 +622,12 @@ export default function Dashboard() {
                     : (CHAIN_CONFIG[token.chainId]?.logo || CHAIN_CONFIG[8453].logo)
                   const chainName = isSolanaToken ? 'Solana' : (CHAIN_CONFIG[token.chainId]?.name || 'Unknown')
 
+                  // Don't show chain badge for native tokens (SOL on Solana, ETH on EVM chains)
+                  // since their logo already represents the chain
+                  const isNativeToken = (isSolanaToken && (token.address === 'native' || token.symbol === 'SOL')) ||
+                    (!isSolanaToken && (token.address === '0x0000000000000000000000000000000000000000' || token.symbol === 'ETH'))
+                  const showChainBadge = !isNativeToken
+
                   return (
                     <div
                       key={`${token.chainId}-${token.address}-${index}`}
@@ -638,11 +644,13 @@ export default function Dashboard() {
                                 (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/shapes/svg?seed=${token.symbol}`
                               }}
                             />
-                            <img
-                              src={chainLogo}
-                              alt={chainName}
-                              className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-[#050505]"
-                            />
+                            {showChainBadge && (
+                              <img
+                                src={chainLogo}
+                                alt={chainName}
+                                className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border border-[#050505]"
+                              />
+                            )}
                           </div>
                           <div>
                             <p className="text-white font-semibold text-sm">{token.symbol}</p>
