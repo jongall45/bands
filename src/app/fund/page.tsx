@@ -28,18 +28,19 @@ const BaseBadge = ({ className = "w-4 h-4" }: { className?: string }) => (
 
 export default function FundPage() {
   const router = useRouter()
-  const { address, isConnected, isReady } = useAuth()
+  const { address, isAuthenticated, isReady } = useAuth()
   const [copied, setCopied] = useState(false)
   const [showOnrampModal, setShowOnrampModal] = useState(false)
   const hasNavigatedRef = useRef(false)
 
-  // Only redirect after auth is ready to prevent flash/glitch
+  // Only redirect after auth is ready AND user is not authenticated
+  // Use isAuthenticated (from Privy) to avoid timing issues on refresh
   useEffect(() => {
-    if (isReady && !isConnected && !hasNavigatedRef.current) {
+    if (isReady && !isAuthenticated && !hasNavigatedRef.current) {
       hasNavigatedRef.current = true
       router.push('/')
     }
-  }, [isConnected, isReady, router])
+  }, [isAuthenticated, isReady, router])
 
   const copyAddress = () => {
     if (address) {
@@ -49,8 +50,8 @@ export default function FundPage() {
     }
   }
 
-  // Show loading spinner while auth is initializing
-  if (!isReady) {
+  // Show loading spinner while auth is initializing or not authenticated
+  if (!isReady || !isAuthenticated) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="w-10 h-10 border-2 border-[#ef4444] border-t-transparent rounded-full animate-spin" />
@@ -58,8 +59,8 @@ export default function FundPage() {
     )
   }
 
-  // Don't render if not connected (redirect will happen in useEffect)
-  if (!isConnected || !address) return null
+  // Don't render if no address (smart wallet may still be loading)
+  if (!address) return null
 
   return (
     <div className="min-h-screen bg-black">
