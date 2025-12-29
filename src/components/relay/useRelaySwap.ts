@@ -429,6 +429,33 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
   }, [smartWalletAddress, solanaWalletAddress, publicClient])
 
   // ============================================
+  // CHECK TOKEN ALLOWANCE (for ERC-20 tokens)
+  // ============================================
+  const checkAllowance = useCallback(async (
+    token: Token,
+    spender: string,
+    requiredAmount: bigint,
+  ): Promise<boolean> => {
+    if (!smartWalletAddress) return false
+    if (token.address === NATIVE_TOKEN_ADDRESS) return true // Native tokens don't need approval
+
+    try {
+      const client = getPublicClientForChain(token.chainId, publicClient)
+      const allowance = await client.readContract({
+        address: token.address as `0x${string}`,
+        abi: erc20Abi,
+        functionName: 'allowance',
+        args: [smartWalletAddress, spender as `0x${string}`],
+      })
+      console.log('[useRelaySwap] Current allowance:', allowance.toString(), 'Required:', requiredAmount.toString())
+      return (allowance as bigint) >= requiredAmount
+    } catch (err) {
+      console.error('[useRelaySwap] checkAllowance error:', err)
+      return false
+    }
+  }, [smartWalletAddress, publicClient])
+
+  // ============================================
   // FETCH QUOTE
   // ============================================
   const fetchQuote = useCallback(async (
@@ -487,6 +514,8 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
         recipient: destinationWallet,
         tradeType: 'EXACT_INPUT',
         referrer: 'bands.cash',
+        // Request that approval steps are included if needed
+        useExternalLiquidity: true,
       }
 
       console.log('[useRelaySwap] Fetching quote:', {
@@ -582,6 +611,9 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
     setState('confirming')
     setError(null)
 
+    // ERC20 approve function selector
+    const APPROVE_SELECTOR = '0x095ea7b3'
+
     try {
       let lastTxHash: string | undefined
 
@@ -604,43 +636,83 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
             throw new Error(`Failed to get smart wallet client for chain ${targetChainId}`)
           }
 
-          console.log('[useRelaySwap] Sending transaction via smart wallet')
-          const txHash = await chainClient.sendTransaction({
+          // Check if this is an approval transaction
+          const txData = item.data.data as string
+          const isApproveStep = step.id === 'approve' ||
+                                step.action?.toLowerCase().includes('approve') ||
+                                (txData && txData.startsWith(APPROVE_SELECTOR))
+
+          if (isApproveStep) {
+            console.log('[useRelaySwap] Processing approval step...')
+          }
+
+          // Build transaction with explicit gas settings to avoid bundler estimation issues
+          const txParams: {
+            to: `0x${string}`
+            data: `0x${string}`
+            value: bigint
+          } = {
             to: item.data.to as `0x${string}`,
-            data: item.data.data as `0x${string}`,
+            data: txData as `0x${string}`,
             value: item.data.value ? BigInt(item.data.value) : BigInt(0),
+          }
+
+          console.log('[useRelaySwap] Sending transaction via smart wallet:', {
+            to: txParams.to,
+            value: txParams.value.toString(),
+            dataLength: txParams.data.length,
+            isApprove: isApproveStep,
           })
 
-          console.log('[useRelaySwap] Transaction sent:', txHash)
-          lastTxHash = txHash
-
-          // Wait for confirmation with better error handling
-          setState('pending')
           try {
-            const chainPublicClient = getPublicClientForChain(targetChainId, publicClient)
-            const receipt = await chainPublicClient.waitForTransactionReceipt({
-              hash: txHash as `0x${string}`,
-              timeout: 60_000, // Reduced timeout
-              confirmations: 1,
-            })
-            console.log('[useRelaySwap] Transaction confirmed:', txHash, 'status:', receipt.status)
-            
-            if (receipt.status === 'reverted') {
-              throw new Error('Transaction reverted on chain')
+            const txHash = await chainClient.sendTransaction(txParams)
+            console.log('[useRelaySwap] Transaction sent:', txHash)
+            lastTxHash = txHash
+
+            // Wait for confirmation with better error handling
+            setState('pending')
+            try {
+              const chainPublicClient = getPublicClientForChain(targetChainId, publicClient)
+              const receipt = await chainPublicClient.waitForTransactionReceipt({
+                hash: txHash as `0x${string}`,
+                timeout: 60_000,
+                confirmations: 1,
+              })
+              console.log('[useRelaySwap] Transaction confirmed:', txHash, 'status:', receipt.status)
+
+              if (receipt.status === 'reverted') {
+                throw new Error('Transaction reverted on chain')
+              }
+
+              // Wait a bit after approval for it to propagate
+              if (isApproveStep) {
+                console.log('[useRelaySwap] Waiting for approval to propagate...')
+                await new Promise(resolve => setTimeout(resolve, 2000))
+              }
+            } catch (receiptErr: any) {
+              console.warn('[useRelaySwap] waitForTransactionReceipt error:', receiptErr.message)
+
+              if (receiptErr.message?.includes('timeout') || receiptErr.message?.includes('Timeout') ||
+                  receiptErr.message?.includes('fetch') || receiptErr.message?.includes('network')) {
+                console.log('[useRelaySwap] Proceeding despite receipt error - tx was sent')
+              } else if (receiptErr.message?.includes('reverted')) {
+                throw receiptErr
+              }
             }
-          } catch (receiptErr: any) {
-            // If we have a tx hash and Privy confirmed it, consider it successful
-            // The waitForTransactionReceipt might fail due to RPC issues
-            console.warn('[useRelaySwap] waitForTransactionReceipt error:', receiptErr.message)
-            
-            // If it's a timeout or RPC error, still proceed (tx was sent)
-            if (receiptErr.message?.includes('timeout') || receiptErr.message?.includes('Timeout') || 
-                receiptErr.message?.includes('fetch') || receiptErr.message?.includes('network')) {
-              console.log('[useRelaySwap] Proceeding despite receipt error - tx was sent')
-            } else if (receiptErr.message?.includes('reverted')) {
-              throw receiptErr // Actual revert, propagate error
+          } catch (txErr: any) {
+            // If the bundler fails with gas estimation, provide a clearer error
+            if (txErr.message?.includes('UserOperation reverted during simulation') ||
+                txErr.message?.includes('callGasLimit')) {
+              console.error('[useRelaySwap] Bundler simulation failed:', txErr.message)
+
+              // Check if this might be an approval issue
+              if (!isApproveStep) {
+                throw new Error('Transaction simulation failed. The token may need approval or there may be insufficient balance.')
+              } else {
+                throw new Error('Token approval failed. Please try again or use a smaller amount.')
+              }
             }
-            // For other errors, log but continue
+            throw txErr
           }
         }
       }
@@ -659,16 +731,18 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
       return swapResult
     } catch (err: any) {
       console.error('[useRelaySwap] executeSwap error:', err)
-      
+
       // Check if user rejected
       if (err.message?.includes('rejected') || err.message?.includes('denied')) {
         setError('Transaction rejected')
       } else if (err.message?.includes('AA10') || err.message?.includes('already constructed')) {
         setError('Wallet sync issue - please refresh and try again')
+      } else if (err.message?.includes('simulation failed') || err.message?.includes('approval')) {
+        setError(err.message)
       } else {
         setError(err.message || 'Swap failed')
       }
-      
+
       setState('error')
       return null
     }
