@@ -408,12 +408,20 @@ export function useUserTokens(walletAddress: string | undefined) {
 // ============================================
 
 // Solana signing function type (from Privy)
+// Note: Privy's signAndSendTransaction returns signature as Uint8Array
 export interface SolanaSigningOptions {
   signAndSendTransaction?: (params: {
     transaction: Uint8Array
     wallet: any
-  }) => Promise<{ signature: string }>
+  }) => Promise<{ signature: Uint8Array | string }>
   solanaWallet?: any
+}
+
+// Helper to convert Solana signature (Uint8Array or string) to string
+function toSignatureString(signature: Uint8Array | string): string {
+  if (typeof signature === 'string') return signature
+  // Convert Uint8Array to base58 (simple hex for now, as base58 needs a library)
+  return Array.from(signature).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
 export function useRelaySwap(
@@ -897,7 +905,7 @@ export function useRelaySwap(
               wallet: solanaSigningOptions.solanaWallet,
             })
 
-            lastTxSignature = result.signature
+            lastTxSignature = toSignatureString(result.signature)
             console.log('[useRelaySwap] Solana transaction sent:', lastTxSignature)
             // #region agent log
             fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:880',message:'Solana transaction sent',data:{signature:lastTxSignature},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
@@ -1158,8 +1166,9 @@ export function useRelaySwap(
               transaction: serializedTx,
               wallet: solanaSigningOptions.solanaWallet,
             })
-            lastTxHash = result.signature
-            console.log('[useRelaySwap] Solana transaction sent:', result.signature)
+            const sigString = toSignatureString(result.signature)
+            lastTxHash = sigString
+            console.log('[useRelaySwap] Solana transaction sent:', sigString)
             continue
           }
 
