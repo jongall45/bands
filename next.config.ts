@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Disable Turbopack to use webpack config
+  experimental: {
+    turbo: false,
+  },
   serverExternalPackages: ['pino', 'pino-pretty', 'thread-stream'],
   images: {
     // Allow external images from these domains for asset icons

@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { usePublicClient } from 'wagmi'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
-import { createPublicClient, http, erc20Abi, type Chain, parseUnits, formatUnits } from 'viem'
+import { createPublicClient, http, erc20Abi, type Chain, parseUnits, formatUnits, decodeFunctionData, encodeFunctionData } from 'viem'
 import { base, arbitrum, optimism, mainnet, polygon, zora, blast } from 'viem/chains'
 
 // ============================================
@@ -550,17 +550,27 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
     toToken: Token,
     amount: string,
   ): Promise<Quote | null> => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:548',message:'fetchQuote entry',data:{fromToken:fromToken.symbol,fromChainId:fromToken.chainId,fromAddress:fromToken.address,toToken:toToken.symbol,toChainId:toToken.chainId,toAddress:toToken.address,amount},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+
     // Get the appropriate wallet addresses based on chain
     const originWallet = getWalletForChain(fromToken.chainId)
     const destinationWallet = getWalletForChain(toToken.chainId)
 
     if (!originWallet) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:557',message:'No origin wallet',data:{fromChainId:fromToken.chainId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       const chainName = fromToken.chainId === SOLANA_CHAIN_ID ? 'Solana' : 'EVM'
       setError(`${chainName} wallet not connected`)
       return null
     }
 
     if (!destinationWallet) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:563',message:'No destination wallet',data:{toChainId:toToken.chainId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       const chainName = toToken.chainId === SOLANA_CHAIN_ID ? 'Solana' : 'EVM'
       setError(`${chainName} wallet not connected`)
       return null
@@ -568,6 +578,9 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
 
     const parsedAmount = parseFloat(amount)
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:570',message:'Invalid amount',data:{amount,parsedAmount},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       setQuote(null)
       return null
     }
@@ -589,8 +602,13 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
       const originCurrency = toRelayCurrency(fromToken)
       const destinationCurrency = toRelayCurrency(toToken)
 
+      const isCrossChain = fromToken.chainId !== toToken.chainId
+      const isSolanaDestination = toToken.chainId === SOLANA_CHAIN_ID
+      const isSolanaOrigin = fromToken.chainId === SOLANA_CHAIN_ID
+      const isEVMToEVM = isCrossChain && !isSolanaDestination && !isSolanaOrigin
+
       // Build request body per Relay API spec
-      const requestBody = {
+      const requestBody: Record<string, any> = {
         user: originWallet,
         originChainId: fromToken.chainId,
         destinationChainId: toToken.chainId,
@@ -600,8 +618,51 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
         recipient: destinationWallet,
         tradeType: 'EXACT_INPUT',
         referrer: 'bands.cash',
-        useExternalLiquidity: true,
       }
+
+      // Protocol v2 with explicitDeposit for smart wallets (applies to EVM origin chains)
+      // This ensures separate approve + deposit steps instead of bundling
+      // See: https://docs.relay.link/references/api/api_core_concepts/wallet-detection#best-practices
+      // Note: explicitDeposit controls origin chain behavior, so it applies even for Solana destinations
+      if (!isSolanaOrigin) {
+        requestBody.protocolVersion = 'preferV2'
+        
+        // For ERC-20 tokens (not native ETH), use explicitDeposit: true for smart wallets
+        // This prevents Relay from bundling approval into deposit transaction
+        // Smart wallets can batch the separate steps atomically
+        const isERC20Token = fromToken.address !== NATIVE_TOKEN_ADDRESS
+        if (isERC20Token && smartWalletAddress) {
+          // We're using a smart wallet (Privy), so set explicitDeposit: true
+          // This will give us separate approve + deposit steps that can be batched
+          requestBody.explicitDeposit = true
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:641',message:'Setting explicitDeposit: true for smart wallet ERC-20',data:{fromToken:fromToken.symbol,smartWalletAddress,protocolVersion:'preferV2',isSolanaDestination},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
+          // #endregion
+        }
+      }
+
+      // For Solana routes, use minimal parameters - let Relay handle routing
+      if (isSolanaDestination || isSolanaOrigin) {
+        // Solana routes: don't set useExternalLiquidity - let Relay determine routing
+        // No deposit addresses, no recipientType - minimal request for canonical bridges
+        // Note: Relay handles Solana routing automatically for canonical bridges
+      } else {
+        // EVM-to-EVM routes: use external liquidity
+        requestBody.useExternalLiquidity = true
+        
+        // Add cross-chain parameters ONLY for EVM-to-EVM swaps
+        // Deposit addresses are NOT supported for canonical bridges (e.g., Base → Solana)
+        if (isEVMToEVM) {
+          requestBody.useDepositAddress = true
+          requestBody.refundTo = originWallet
+          // Don't set usePermit = false - let Relay decide whether to use permits or transactions
+          // Permits (signatures) are more gas-efficient and don't require separate approval transactions
+        }
+      }
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:610',message:'Before quote request',data:{isCrossChain,isSolanaDestination,isSolanaOrigin,requestBody,originCurrency,destinationCurrency,amountInWei,originWallet,destinationWallet},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
+      // #endregion
 
       console.log('[useRelaySwap] Fetching quote:', {
         from: `${fromToken.symbol} (${originCurrency}) on chain ${fromToken.chainId}`,
@@ -626,17 +687,27 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
             body: JSON.stringify(requestBody),
           })
 
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:632',message:'Quote response received',data:{status:response?.status,statusText:response?.statusText,ok:response?.ok,retry},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
+          // #endregion
+
           // If we got a response (even error), break retry loop
           if (response) break
         } catch (fetchErr: any) {
           lastError = fetchErr
           if (fetchErr.name === 'AbortError') throw fetchErr
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:637',message:'Quote fetch retry error',data:{retry,error:fetchErr.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
+          // #endregion
           console.warn(`[useRelaySwap] Quote fetch attempt ${retry + 1} failed:`, fetchErr.message)
           await new Promise(resolve => setTimeout(resolve, Math.pow(2, retry) * 500))
         }
       }
 
       if (!response) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:643',message:'No response after retries',data:{lastError:lastError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
+        // #endregion
         throw lastError || new Error('Failed to fetch quote after retries')
       }
 
@@ -644,18 +715,32 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
         const errorText = await response.text()
         console.error('[useRelaySwap] Quote error:', errorText)
         
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:648',message:'Quote error response',data:{status:response.status,errorText:errorText.substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D'})}).catch(()=>{});
+        // #endregion
+        
         // Parse error message from Relay API
         try {
           const errorData = JSON.parse(errorText)
           const message = errorData.message || 'Failed to get quote'
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:653',message:'Parsed error data',data:{errorData,message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D'})}).catch(()=>{});
+          // #endregion
           throw new Error(message)
         } catch (parseErr) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:656',message:'Error parse failed',data:{parseErr:parseErr instanceof Error?parseErr.message:String(parseErr)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D'})}).catch(()=>{});
+          // #endregion
           throw new Error('Failed to get quote')
         }
       }
 
       const data = await response.json()
       console.log('[useRelaySwap] Quote received:', data)
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:662',message:'Quote success',data:{requestId:data.requestId,stepsCount:data.steps?.length,hasDetails:!!data.details},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
+      // #endregion
 
       // Parse quote data - Relay API returns USD values as strings, convert to numbers
       const fromAmountUsd = parseFloat(data.details?.currencyIn?.amountUsd) || parsedAmount
@@ -683,17 +768,26 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
 
       setQuote(quoteData)
       setState('idle')
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:690',message:'fetchQuote success exit',data:{quoteData:JSON.stringify(quoteData).substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
+      // #endregion
       return quoteData
     } catch (err: any) {
       if (err.name === 'AbortError') {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:694',message:'Request aborted',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         return null // Cancelled, ignore
       }
       console.error('[useRelaySwap] fetchQuote error:', err)
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:698',message:'fetchQuote error catch',data:{errorMessage:err.message,errorName:err.name,errorStack:err.stack?.substring(0,300)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D,E'})}).catch(()=>{});
+      // #endregion
       setError(err.message || 'Failed to fetch quote')
       setState('error')
       return null
     }
-  }, [getWalletForChain])
+  }, [getWalletForChain, smartWalletAddress])
 
   // ============================================
   // EXECUTE SWAP - Use getClientForChain to get chain-specific smart wallet client
@@ -703,10 +797,18 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
     fromToken: Token,
     toToken: Token,
   ): Promise<SwapResult | null> => {
+    // #region agent log
+    const executeStartTime = Date.now()
+    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:774',message:'executeSwap entry',data:{stepsCount:quote?.steps?.length,fromToken:fromToken.symbol,toToken:toToken.symbol},timestamp:executeStartTime,sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
+
     if (!quote || !quote.steps || quote.steps.length === 0) {
       setError('No quote available')
       return null
     }
+
+    // Use a mutable reference to quote so we can update it after approval
+    let currentQuote = quote
 
     if (!smartWalletAddress || !smartWalletClient) {
       setError('Wallet not connected')
@@ -716,14 +818,189 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
     setState('confirming')
     setError(null)
 
+    // Check if this is a cross-chain swap
+    const isCrossChain = fromToken.chainId !== toToken.chainId
+
     // ERC20 approve function selector
     const APPROVE_SELECTOR = '0x095ea7b3'
 
     try {
       let lastTxHash: string | undefined
+      
+      // Check if quote has an approval step or permit step
+      const hasApprovalStep = quote.steps.some(s => s.id === 'approve')
+      const hasPermitStep = quote.steps.some(s => s.id === 'authorize1' || s.id === 'authorize2')
+      const isERC20Token = fromToken.address !== NATIVE_TOKEN_ADDRESS
+      
+      // If no approval step and no permit step but ERC-20 token, check if first step contains approval call
+      // If it does, we need to execute approval first before the deposit
+      // NOTE: For Solana destinations, Relay handles approvals differently per Solana docs
+      // Solana swaps use different calldata handling - let Relay handle the entire flow
+      const isSolanaDestination = toToken.chainId === SOLANA_CHAIN_ID
+      if (!hasApprovalStep && !hasPermitStep && isERC20Token && currentQuote.steps.length > 0 && !isSolanaDestination) {
+        const firstStep = currentQuote.steps[0]
+        const firstItem = firstStep.items?.[0]
+        if (firstItem?.data?.data) {
+          const txData = firstItem.data.data as string
+          // Check if transaction data contains approval call
+          if (txData.includes(APPROVE_SELECTOR.slice(2))) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:815',message:'Detected approval call in transaction data - will execute approval first',data:{stepId:firstStep.id,fromToken:fromToken.symbol,hasApprovalStep,hasPermitStep},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+            // #endregion
+            
+            // Extract approval spender and amount
+            try {
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:825',message:'Starting approval extraction',data:{txDataLength:txData.length,approveSelector:APPROVE_SELECTOR},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+              // #endregion
+              const approveIndex = txData.indexOf(APPROVE_SELECTOR.slice(2))
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:828',message:'Approval selector found',data:{approveIndex,found:approveIndex!==-1},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+              // #endregion
+              if (approveIndex !== -1) {
+                const spenderStart = approveIndex + APPROVE_SELECTOR.length - 2
+                const spenderHex = txData.substring(spenderStart, spenderStart + 64)
+                const approvalSpender = '0x' + spenderHex.slice(24)
+                
+                const amountStart = spenderStart + 64
+                const amountHex = txData.substring(amountStart, amountStart + 64)
+                const approvalAmount = BigInt('0x' + amountHex)
+                
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:835',message:'Approval extracted successfully',data:{approvalSpender,approvalAmount:approvalAmount.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                // #endregion
+                
+                // Check allowance and execute approval if needed
+                const requiredAmount = approvalAmount || parseUnits(quote.fromAmount, fromToken.decimals)
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:837',message:'Before checking allowance for pre-approval',data:{fromToken:fromToken.symbol,approvalSpender,requiredAmount:requiredAmount.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                // #endregion
+                const hasAllowance = await checkAllowance(fromToken, approvalSpender, requiredAmount)
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:840',message:'After checking allowance for pre-approval',data:{hasAllowance,fromToken:fromToken.symbol},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                // #endregion
+                
+                if (!hasAllowance) {
+                  // #region agent log
+                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:843',message:'Token needs approval - executing before swap',data:{fromToken:fromToken.symbol,approvalSpender,requiredAmount:requiredAmount.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                  // #endregion
+                  console.log(`[useRelaySwap] Token ${fromToken.symbol} needs approval. Executing approval first...`)
+                  setState('confirming')
+                  
+                  // Get chain client for approval
+                  const targetChainId = firstItem.data.chainId
+                  const chainClient = await getClientForChain({ id: targetChainId })
+                  if (!chainClient) {
+                    throw new Error(`Failed to get smart wallet client for chain ${targetChainId}`)
+                  }
+                  
+                  // Execute approval
+                  const approveData = encodeFunctionData({
+                    abi: erc20Abi,
+                    functionName: 'approve',
+                    args: [approvalSpender as `0x${string}`, requiredAmount],
+                  })
+                  
+                  setState('sending')
+                  // #region agent log
+                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:860',message:'Sending approval transaction before swap',data:{fromToken:fromToken.symbol,approvalSpender,requiredAmount:requiredAmount.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                  // #endregion
+                  const approveTxHash = await chainClient.sendTransaction({
+                    to: fromToken.address as `0x${string}`,
+                    data: approveData,
+                    value: BigInt(0),
+                  })
+                  // #region agent log
+                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:865',message:'Approval transaction sent before swap',data:{approveTxHash},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                  // #endregion
+                  
+                  // Wait for approval confirmation
+                  setState('pending')
+                  const chainPublicClient = getPublicClientForChain(targetChainId, publicClient)
+                  // #region agent log
+                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:871',message:'Waiting for approval confirmation before swap',data:{approveTxHash,timeout:60000},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                  // #endregion
+                  // For Solana destinations, use a longer timeout as Relay may handle these differently
+                  // Also, don't wait for confirmation if it's taking too long - let Relay handle the flow
+                  const timeout = isSolanaDestination ? 120_000 : 60_000
+                  try {
+                    await chainPublicClient.waitForTransactionReceipt({
+                      hash: approveTxHash as `0x${string}`,
+                      timeout,
+                      confirmations: 1,
+                    })
+                  } catch (timeoutErr: any) {
+                    // If timeout occurs, check if transaction was actually sent
+                    // For Solana destinations, we may need to proceed anyway
+                    if (timeoutErr.message?.includes('Timed out')) {
+                      // #region agent log
+                      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:925',message:'Approval timeout - checking if transaction exists',data:{approveTxHash,isSolanaDestination},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
+                      // #endregion
+                      // For Solana destinations, proceed anyway - Relay may handle it
+                      if (isSolanaDestination) {
+                        console.warn('[useRelaySwap] Approval timeout for Solana swap - proceeding anyway, Relay will handle it')
+                        // Don't throw - proceed with the swap
+                      } else {
+                        throw timeoutErr
+                      }
+                    } else {
+                      throw timeoutErr
+                    }
+                  }
+                  // #region agent log
+                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:896',message:'Approval confirmed, requesting new quote',data:{approveTxHash},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                  // #endregion
+                  console.log('[useRelaySwap] Approval confirmed. Requesting new quote (approval should not be bundled now)...')
+                  
+                  // Request a new quote - the approval now exists, so Relay should not bundle it
+                  // This is the key insight from Relay ERC-20 best practices: approval must come BEFORE the call
+                  const newQuote = await fetchQuote(fromToken, toToken, quote.fromAmount)
+                  if (!newQuote || !newQuote.steps || newQuote.steps.length === 0) {
+                    throw new Error('Failed to get new quote after approval')
+                  }
+                  
+                  // #region agent log
+                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:904',message:'New quote received after approval',data:{stepsCount:newQuote.steps.length,hasApprovalStep:newQuote.steps.some(s=>s.id==='approve'),hasBundledApproval:newQuote.steps[0]?.items?.[0]?.data?.data?.includes(APPROVE_SELECTOR.slice(2))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                  // #endregion
+                  
+                  // Update the quote to use the new one (without bundled approval)
+                  currentQuote = newQuote
+                  // Also update the state so UI reflects the new quote
+                  setQuote(newQuote)
+                  
+                  // #region agent log
+                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:860',message:'Approval confirmed before swap execution',data:{approveTxHash},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                  // #endregion
+                }
+              }
+            } catch (approveErr: any) {
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:882',message:'Failed to execute approval before swap',data:{error:approveErr.message,errorStack:approveErr.stack,fromToken:fromToken.symbol},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+              // #endregion
+              console.error('[useRelaySwap] Failed to execute approval before swap:', approveErr)
+              throw new Error(`Failed to approve ${fromToken.symbol}. ${approveErr.message || 'Please try again.'}`)
+            }
+          }
+        }
+      }
 
-      for (const step of quote.steps) {
-        console.log('[useRelaySwap] Executing step:', step.id, step.action)
+        for (const step of currentQuote.steps) {
+        // #region agent log
+        const stepStartTime = Date.now()
+        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:807',message:'Step start',data:{stepId:step.id,stepAction:step.action,itemsCount:step.items?.length,allStepIds:quote.steps.map(s=>s.id),fromToken:fromToken.symbol,toToken:toToken.symbol},timestamp:stepStartTime,sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+        // #endregion
+        console.log('[useRelaySwap] Executing step:', step.id, step.action, 'kind:', step.kind)
+        
+        // Handle signature steps (permits) - these don't require transactions
+        if (step.kind === 'signature') {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:833',message:'Signature step detected - skipping transaction execution',data:{stepId:step.id,stepAction:step.action},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+          // #endregion
+          console.warn('[useRelaySwap] Signature step (permit) detected but not yet implemented. Relay should handle this automatically.')
+          // TODO: Implement signature step handling for permits (authorize1/authorize2)
+          // For now, skip and let Relay handle it
+          continue
+        }
 
         for (const item of step.items) {
           if (!item.data) continue
@@ -734,8 +1011,15 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
           setState('sending')
 
           // Get chain-specific client to ensure correct bundler URL
+          // #region agent log
+          const getClientStartTime = Date.now()
+          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:810',message:'Before getClientForChain',data:{targetChainId},timestamp:getClientStartTime,sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+          // #endregion
           console.log('[useRelaySwap] Getting smart wallet client for chain:', targetChainId)
           const chainClient = await getClientForChain({ id: targetChainId })
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:812',message:'After getClientForChain',data:{targetChainId,elapsed:Date.now()-getClientStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+          // #endregion
 
           if (!chainClient) {
             throw new Error(`Failed to get smart wallet client for chain ${targetChainId}`)
@@ -746,6 +1030,98 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
           const isApproveStep = step.id === 'approve' ||
                                 step.action?.toLowerCase().includes('approve') ||
                                 (txData && txData.startsWith(APPROVE_SELECTOR))
+          
+          // Check if transaction data contains an approval call (even if not a separate step)
+          // This happens when Relay bundles approval into the deposit step
+          const containsApprovalCall = txData && txData.includes(APPROVE_SELECTOR.slice(2))
+          
+          // Try to extract approval spender and amount from transaction data if it contains approval
+          let approvalSpender: string | null = null
+          let approvalAmount: bigint | null = null
+          if (containsApprovalCall && !isApproveStep) {
+            try {
+              // Look for approval call in the transaction data
+              // Approval selector is 0x095ea7b3, followed by spender (32 bytes) and amount (32 bytes)
+              const approveIndex = txData.indexOf(APPROVE_SELECTOR.slice(2))
+              if (approveIndex !== -1) {
+                // Extract spender (next 64 hex chars = 32 bytes)
+                const spenderStart = approveIndex + APPROVE_SELECTOR.length - 2
+                const spenderHex = txData.substring(spenderStart, spenderStart + 64)
+                approvalSpender = '0x' + spenderHex.slice(24) // Last 20 bytes (40 hex chars) = address
+                
+                // Extract amount (next 64 hex chars = 32 bytes)
+                const amountStart = spenderStart + 64
+                const amountHex = txData.substring(amountStart, amountStart + 64)
+                approvalAmount = BigInt('0x' + amountHex)
+                
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:850',message:'Extracted approval from tx data',data:{approvalSpender,approvalAmount:approvalAmount.toString(),fromToken:fromToken.symbol},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                // #endregion
+              }
+            } catch (extractErr) {
+              console.warn('[useRelaySwap] Failed to extract approval from tx data:', extractErr)
+            }
+          }
+
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:861',message:'Checking approval step',data:{stepId:step.id,stepAction:step.action,txDataStart:txData?.substring(0,10),isApproveStep,containsApprovalCall,approvalSpender,approvalAmount:approvalAmount?.toString(),approveSelector:APPROVE_SELECTOR},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+          // #endregion
+          
+          // If transaction contains approval call but no separate approval step, we need to execute approval first
+          // Relay bundled the approval into the deposit transaction, but you can't approve and use it in the same transaction
+          // Solution: Execute approval separately first, then the deposit will work
+          if (containsApprovalCall && !isApproveStep && approvalSpender && fromToken.address !== NATIVE_TOKEN_ADDRESS) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:913',message:'Transaction contains approval call but no separate approve step',data:{stepId:step.id,hasApprovalStep:quote.steps.some(s=>s.id==='approve'),hasPermitStep:quote.steps.some(s=>s.id==='authorize1'||s.id==='authorize2'),fromToken:fromToken.symbol,approvalSpender},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+            // #endregion
+            
+            const requiredAmount = approvalAmount || parseUnits(quote.fromAmount, fromToken.decimals)
+            const hasAllowance = await checkAllowance(fromToken, approvalSpender, requiredAmount)
+            
+            if (!hasAllowance) {
+              // Execute approval first
+              console.log(`[useRelaySwap] Token ${fromToken.symbol} needs approval. Executing approval first...`)
+              setState('confirming')
+              
+              try {
+                const approveData = encodeFunctionData({
+                  abi: erc20Abi,
+                  functionName: 'approve',
+                  args: [approvalSpender as `0x${string}`, requiredAmount],
+                })
+                
+                const approveTxParams = {
+                  to: fromToken.address as `0x${string}`,
+                  data: approveData,
+                  value: BigInt(0),
+                }
+                
+                setState('sending')
+                const approveTxHash = await chainClient.sendTransaction(approveTxParams)
+                console.log('[useRelaySwap] Approval transaction sent:', approveTxHash)
+                
+                // Wait for approval confirmation - use longer timeout for smart wallet transactions
+                setState('pending')
+                const chainPublicClient = getPublicClientForChain(targetChainId, publicClient)
+                await chainPublicClient.waitForTransactionReceipt({
+                  hash: approveTxHash as `0x${string}`,
+                  timeout: 60_000, // 60 seconds for smart wallet transactions
+                  confirmations: 1,
+                })
+                console.log('[useRelaySwap] Approval confirmed, proceeding with deposit...')
+                
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:945',message:'Approval confirmed, proceeding with deposit',data:{approveTxHash},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                // #endregion
+              } catch (approveErr: any) {
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:950',message:'Approval failed',data:{error:approveErr.message,fromToken:fromToken.symbol},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                // #endregion
+                console.error('[useRelaySwap] Approval failed:', approveErr)
+                throw new Error(`Failed to approve ${fromToken.symbol}. ${approveErr.message || 'Please try again.'}`)
+              }
+            }
+          }
 
           if (isApproveStep) {
             console.log('[useRelaySwap] Processing approval step...')
@@ -770,46 +1146,89 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
           })
 
           try {
+            // #region agent log
+            const sendTxStartTime = Date.now()
+            fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:845',message:'Before sendTransaction',data:{targetChainId,isApproveStep},timestamp:sendTxStartTime,sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+            // #endregion
             const txHash = await chainClient.sendTransaction(txParams)
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:847',message:'After sendTransaction',data:{txHash,elapsed:Date.now()-sendTxStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+            // #endregion
             console.log('[useRelaySwap] Transaction sent:', txHash)
             lastTxHash = txHash
 
             // Wait for confirmation
             setState('pending')
-            try {
-              const chainPublicClient = getPublicClientForChain(targetChainId, publicClient)
-              const receipt = await chainPublicClient.waitForTransactionReceipt({
-                hash: txHash as `0x${string}`,
-                timeout: 60_000,
-                confirmations: 1,
-              })
-              console.log('[useRelaySwap] Transaction confirmed:', txHash, 'status:', receipt.status)
+            
+            // CRITICAL: Always wait for approval steps to complete, even in cross-chain swaps
+            // The next step (swap/deposit) needs the approval to be confirmed before it can execute
+            // For non-approval steps in cross-chain swaps, we can skip waiting since Relay handles execution
+            if (isCrossChain && !isApproveStep) {
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:882',message:'Skipping receipt wait for cross-chain non-approval step',data:{txHash,targetChainId,stepId:step.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+              // #endregion
+              console.log('[useRelaySwap] Cross-chain swap - skipping receipt wait for non-approval step, Relay handles execution')
+              // Transaction is sent, Relay will handle the rest
+            } else {
+              // Wait for approval steps (always) or same-chain swaps (briefly)
+              // Approval steps MUST complete before next step can execute
+              try {
+                // #region agent log
+                const waitReceiptStartTime = Date.now()
+                fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:891',message:'Before waitForTransactionReceipt',data:{txHash,targetChainId,isCrossChain,isApproveStep,stepId:step.id},timestamp:waitReceiptStartTime,sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                // #endregion
+                const chainPublicClient = getPublicClientForChain(targetChainId, publicClient)
+                // For approval steps, wait longer (10s) to ensure approval completes
+                // For same-chain swaps, shorter timeout (3s) is enough
+                const timeout = isApproveStep ? 10_000 : 3_000
+                const receipt = await chainPublicClient.waitForTransactionReceipt({
+                  hash: txHash as `0x${string}`,
+                  timeout,
+                  confirmations: 1,
+                })
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:888',message:'After waitForTransactionReceipt',data:{txHash,status:receipt.status,elapsed:Date.now()-waitReceiptStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+                // #endregion
+                console.log('[useRelaySwap] Transaction confirmed:', txHash, 'status:', receipt.status)
 
-              if (receipt.status === 'reverted') {
-                throw new Error('Transaction reverted on chain')
-              }
+                if (receipt.status === 'reverted') {
+                  throw new Error('Transaction reverted on chain')
+                }
+              } catch (receiptErr: any) {
+                console.warn('[useRelaySwap] waitForTransactionReceipt error:', receiptErr.message)
 
-              if (isApproveStep) {
-                console.log('[useRelaySwap] Waiting for approval to propagate...')
-                await new Promise(resolve => setTimeout(resolve, 2000))
-              }
-            } catch (receiptErr: any) {
-              console.warn('[useRelaySwap] waitForTransactionReceipt error:', receiptErr.message)
-
-              if (receiptErr.message?.includes('timeout') || receiptErr.message?.includes('Timeout') ||
-                  receiptErr.message?.includes('fetch') || receiptErr.message?.includes('network')) {
-                console.log('[useRelaySwap] Proceeding despite receipt error - tx was sent')
-              } else if (receiptErr.message?.includes('reverted')) {
-                throw receiptErr
+                if (receiptErr.message?.includes('timeout') || receiptErr.message?.includes('Timeout') ||
+                    receiptErr.message?.includes('fetch') || receiptErr.message?.includes('network')) {
+                  console.log('[useRelaySwap] Proceeding despite receipt error - tx was sent')
+                } else if (receiptErr.message?.includes('reverted')) {
+                  throw receiptErr
+                }
               }
             }
           } catch (txErr: any) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:920',message:'Transaction error caught',data:{txErrMessage:txErr.message,isApproveStep,stepId:step.id,stepAction:step.action,targetChainId,fromToken:fromToken.symbol,toToken:toToken.symbol,isCrossChain},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+            // #endregion
             if (txErr.message?.includes('UserOperation reverted during simulation') ||
                 txErr.message?.includes('callGasLimit')) {
               console.error('[useRelaySwap] Bundler simulation failed:', txErr.message)
 
               if (!isApproveStep) {
-                throw new Error('Transaction simulation failed. The token may need approval or there may be insufficient balance.')
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:930',message:'Non-approval step simulation failed',data:{stepId:step.id,stepAction:step.action,hasApprovalStep:quote.steps.some(s=>s.id==='approve'),approvalSteps:quote.steps.filter(s=>s.id==='approve').length,containsApprovalCall},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                // #endregion
+                // If the transaction contains an approval call but failed, it means the approval needs to happen separately
+                if (containsApprovalCall) {
+                  // For Solana destinations, Relay handles approvals differently per Solana docs
+                  // Solana swaps use different calldata handling - provide specific error message
+                  if (isSolanaDestination) {
+                    throw new Error(`Transaction simulation failed for Solana swap. The ${fromToken.symbol} token needs to be approved first. Please approve ${fromToken.symbol} manually on ${fromToken.chainId === 8453 ? 'Base' : 'the origin chain'} and try the swap again.`)
+                  } else {
+                    throw new Error(`The ${fromToken.symbol} token needs to be approved first. Please try the swap again - Relay should handle the approval automatically. If this error persists, the token may need manual approval.`)
+                  }
+                } else {
+                  throw new Error('Transaction simulation failed. The token may need approval or there may be insufficient balance.')
+                }
               } else {
                 throw new Error('Token approval failed. Please try again or use a smaller amount.')
               }
@@ -820,13 +1239,17 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
       }
 
       // Success!
-      const swapResult: SwapResult = {
-        txHash: lastTxHash || '',
-        fromAmount: quote.fromAmount,
-        toAmount: quote.toAmount,
-        fromToken,
-        toToken,
-      }
+      // #region agent log
+      const totalElapsed = Date.now() - executeStartTime
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:895',message:'executeSwap success',data:{totalElapsed,txHash:lastTxHash},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
+        const swapResult: SwapResult = {
+          txHash: lastTxHash || '',
+          fromAmount: currentQuote.fromAmount,
+          toAmount: currentQuote.toAmount,
+          fromToken,
+          toToken,
+        }
 
       setResult(swapResult)
       setState('success')
