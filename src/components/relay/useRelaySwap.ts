@@ -1065,13 +1065,15 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
           }
 
           // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:861',message:'Checking approval step',data:{stepId:step.id,stepAction:step.action,txDataStart:txData?.substring(0,10),isApproveStep,containsApprovalCall,approvalSpender,approvalAmount:approvalAmount?.toString(),approveSelector:APPROVE_SELECTOR},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:861',message:'Checking approval step',data:{stepId:step.id,stepAction:step.action,txDataStart:txData?.substring(0,10),isApproveStep,containsApprovalCall,approvalSpender,approvalAmount:approvalAmount?.toString(),approveSelector:APPROVE_SELECTOR,isSolanaDestination},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
           // #endregion
-          
+
           // If transaction contains approval call but no separate approval step, we need to execute approval first
           // Relay bundled the approval into the deposit transaction, but you can't approve and use it in the same transaction
           // Solution: Execute approval separately first, then the deposit will work
-          if (containsApprovalCall && !isApproveStep && approvalSpender && fromToken.address !== NATIVE_TOKEN_ADDRESS) {
+          // NOTE: Skip for Solana destinations - Relay handles approvals differently per Solana docs
+          // Solana swaps use different calldata handling, so we let Relay handle the entire flow
+          if (containsApprovalCall && !isApproveStep && approvalSpender && fromToken.address !== NATIVE_TOKEN_ADDRESS && !isSolanaDestination) {
             // #region agent log
             fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:913',message:'Transaction contains approval call but no separate approve step',data:{stepId:step.id,hasApprovalStep:quote.steps.some(s=>s.id==='approve'),hasPermitStep:quote.steps.some(s=>s.id==='authorize1'||s.id==='authorize2'),fromToken:fromToken.symbol,approvalSpender},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
             // #endregion
