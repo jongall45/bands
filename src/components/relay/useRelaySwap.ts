@@ -596,6 +596,12 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
       const isToSolana = toToken.chainId === SOLANA_CHAIN_ID
       const isFromSolana = fromToken.chainId === SOLANA_CHAIN_ID
 
+      // Major tokens that support deposit address method
+      const MAJOR_TOKENS = ['ETH', 'USDC', 'USDT', 'DAI', 'WETH', 'SOL']
+      const isFromMajorToken = MAJOR_TOKENS.includes(fromToken.symbol.toUpperCase())
+      const isToMajorToken = MAJOR_TOKENS.includes(toToken.symbol.toUpperCase())
+      const canUseDepositAddress = isFromMajorToken && isToMajorToken
+
       // Build request body per Relay API spec
       // Use appropriate wallet addresses based on origin/destination chains
       const requestBody: Record<string, any> = {
@@ -610,16 +616,18 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
         referrer: 'bands.cash',
       }
 
-      // For cross-chain swaps, use deposit address method which is more reliable
-      // This matches the working PrivyRelaySwap implementation
-      if (isCrossChain) {
+      // For cross-chain swaps with major tokens, use deposit address method
+      // For other tokens, use standard execution (Relay will handle routing)
+      if (isCrossChain && canUseDepositAddress) {
         requestBody.useDepositAddress = true
-        requestBody.refundTo = originWallet // Refund to origin wallet on failure
+        requestBody.refundTo = originWallet
         requestBody.usePermit = false
-        // For cross-chain, external liquidity can cause issues - disable it
         requestBody.useExternalLiquidity = false
+      } else if (isCrossChain) {
+        // Cross-chain but not major tokens - don't use deposit address
+        requestBody.useExternalLiquidity = true
       } else {
-        // For same-chain swaps, external liquidity is fine
+        // Same-chain swaps
         requestBody.useExternalLiquidity = true
       }
 
@@ -637,6 +645,7 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
         destinationWallet,
         isCrossChain,
         isToSolana,
+        canUseDepositAddress,
         requestBody,
       })
 
