@@ -1,10 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Disable Turbopack to use webpack config
-  experimental: {
-    turbo: false,
-  },
+  // Webpack is the default in Next.js 16 - no need to disable Turbopack
   serverExternalPackages: ['pino', 'pino-pretty', 'thread-stream'],
   images: {
     // Allow external images from these domains for asset icons
