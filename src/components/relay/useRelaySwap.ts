@@ -919,16 +919,30 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
                   setState('pending')
                   const chainPublicClient = getPublicClientForChain(targetChainId, publicClient)
                   // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:871',message:'Waiting for approval confirmation before swap',data:{approveTxHash,timeout:180000,isSolanaDestination},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:871',message:'Waiting for approval confirmation before swap',data:{approveTxHash,timeout:30000,isSolanaDestination},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
                   // #endregion
-                  // Use longer timeout for smart wallet transactions (bundler can be slow)
-                  // Approval MUST be confirmed before proceeding - bundler simulation needs it
-                  const timeout = 180_000 // 3 minutes for smart wallet approval transactions
-                  await chainPublicClient.waitForTransactionReceipt({
-                    hash: approveTxHash as `0x${string}`,
-                    timeout,
-                    confirmations: 1,
-                  })
+                  // Use reasonable timeout - Base has 2s blocks, so 30s should be plenty
+                  // If timeout occurs, verify allowance directly (tx may have succeeded despite polling failure)
+                  const timeout = 30_000
+                  try {
+                    await chainPublicClient.waitForTransactionReceipt({
+                      hash: approveTxHash as `0x${string}`,
+                      timeout,
+                      confirmations: 1,
+                    })
+                  } catch (receiptErr: any) {
+                    // On timeout, check if allowance was actually set (tx may have succeeded)
+                    if (receiptErr.message?.includes('Timed out') || receiptErr.message?.includes('timeout')) {
+                      console.warn('[useRelaySwap] Receipt polling timed out, checking allowance directly...')
+                      const allowanceSet = await checkAllowance(fromToken, approvalSpender, requiredAmount)
+                      if (!allowanceSet) {
+                        throw new Error('Approval transaction pending. Please try again in a few seconds.')
+                      }
+                      console.log('[useRelaySwap] Allowance verified on-chain despite receipt timeout')
+                    } else {
+                      throw receiptErr
+                    }
+                  }
                   // #region agent log
                   fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:896',message:'Approval confirmed, requesting new quote',data:{approveTxHash},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
                   // #endregion
