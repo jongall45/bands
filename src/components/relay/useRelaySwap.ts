@@ -1054,42 +1054,12 @@ export function useRelaySwap(
                   // For cross-chain swaps, don't wait for receipt - Relay handles execution
                   if (isCrossChain) {
                     console.log('[useRelaySwap] Cross-chain swap - batched tx sent, Relay handles execution')
-                    // Return success - the deposit is sent, Relay will handle the rest
-                    const swapResult: SwapResult = {
-                      txHash: batchedTxHash,
-                      fromAmount: quote.fromAmount,
-                      toAmount: quote.toAmount,
-                      fromToken,
-                      toToken,
-                    }
-                    setResult(swapResult)
-                    setState('success')
-                    return swapResult
+                  } else {
+                    console.log('[useRelaySwap] Same-chain swap - batched tx sent successfully')
                   }
 
-                  // For same-chain swaps, wait briefly for confirmation
-                  setState('pending')
-                  const chainPublicClient = getPublicClientForChain(targetChainId, publicClient)
-                  try {
-                    await chainPublicClient.waitForTransactionReceipt({
-                      hash: batchedTxHash as `0x${string}`,
-                      timeout: 15_000, // Reduced from 30s - bundler should be faster
-                      confirmations: 1,
-                    })
-                    console.log('[useRelaySwap] Batched transaction confirmed')
-                  } catch (receiptErr: any) {
-                    // If timeout, proceed anyway - the tx was sent successfully
-                    const isTimeout = receiptErr.name?.includes('Timeout') ||
-                                     receiptErr.message?.includes('Timed out') ||
-                                     receiptErr.message?.includes('timeout')
-                    if (isTimeout) {
-                      console.warn('[useRelaySwap] Batched tx receipt timeout - tx was sent, proceeding to success')
-                    } else {
-                      throw receiptErr
-                    }
-                  }
-
-                  // Return success
+                  // Return success immediately - don't wait for receipt
+                  // The transaction is sent, backend will confirm it
                   const swapResult: SwapResult = {
                     txHash: batchedTxHash,
                     fromAmount: quote.fromAmount,
@@ -1286,30 +1256,7 @@ export function useRelaySwap(
                 setState('sending')
                 const approveTxHash = await chainClient.sendTransaction(approveTxParams)
                 console.log('[useRelaySwap] Approval transaction sent:', approveTxHash)
-                
-                // Wait for approval confirmation - reduced timeout since bundler should be fast
-                setState('pending')
-                const chainPublicClient = getPublicClientForChain(targetChainId, publicClient)
-                try {
-                  await chainPublicClient.waitForTransactionReceipt({
-                    hash: approveTxHash as `0x${string}`,
-                    timeout: 15_000, // 15 seconds should be enough for bundler
-                    confirmations: 1,
-                  })
-                  console.log('[useRelaySwap] Approval confirmed, proceeding with deposit...')
-                } catch (receiptErr: any) {
-                  // If timeout, check if we should proceed anyway
-                  const isTimeout = receiptErr.name?.includes('Timeout') || receiptErr.message?.includes('timeout')
-                  if (isTimeout) {
-                    console.warn('[useRelaySwap] Approval receipt timeout - proceeding anyway, tx was sent')
-                  } else {
-                    throw receiptErr
-                  }
-                }
-                
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:945',message:'Approval confirmed, proceeding with deposit',data:{approveTxHash},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-                // #endregion
+                // Don't wait for receipt - proceed immediately
               } catch (approveErr: any) {
                 // #region agent log
                 fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:950',message:'Approval failed',data:{error:approveErr.message,fromToken:fromToken.symbol},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
@@ -1360,58 +1307,9 @@ export function useRelaySwap(
             // CRITICAL: Always wait for approval steps to complete, even in cross-chain swaps
             // The next step (swap/deposit) needs the approval to be confirmed before it can execute
             // For non-approval steps in cross-chain swaps, we can skip waiting since Relay handles execution
-            if (isCrossChain && !isApproveStep) {
-              // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:882',message:'Skipping receipt wait for cross-chain non-approval step',data:{txHash,targetChainId,stepId:step.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-              // #endregion
-              console.log('[useRelaySwap] Cross-chain swap - skipping receipt wait for non-approval step, Relay handles execution')
-              // Transaction is sent, Relay will handle the rest
-            } else {
-              // Wait for approval steps (always) or same-chain swaps (briefly)
-              // Approval steps MUST complete before next step can execute
-              try {
-                // #region agent log
-                const waitReceiptStartTime = Date.now()
-                fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:891',message:'Before waitForTransactionReceipt',data:{txHash,targetChainId,isCrossChain,isApproveStep,stepId:step.id},timestamp:waitReceiptStartTime,sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-                // #endregion
-                const chainPublicClient = getPublicClientForChain(targetChainId, publicClient)
-                // For approval steps, wait longer (10s) to ensure approval completes
-                // For same-chain swaps, shorter timeout (3s) is enough
-                const timeout = isApproveStep ? 10_000 : 3_000
-                const receipt = await chainPublicClient.waitForTransactionReceipt({
-                  hash: txHash as `0x${string}`,
-                  timeout,
-                  confirmations: 1,
-                })
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:888',message:'After waitForTransactionReceipt',data:{txHash,status:receipt.status,elapsed:Date.now()-waitReceiptStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-                // #endregion
-                console.log('[useRelaySwap] Transaction confirmed:', txHash, 'status:', receipt.status)
-
-                if (receipt.status === 'reverted') {
-                  throw new Error('Transaction reverted on chain')
-                }
-              } catch (receiptErr: any) {
-                console.warn('[useRelaySwap] waitForTransactionReceipt error:', receiptErr.message, 'name:', receiptErr.name)
-
-                // Check both error name and message for timeout/network issues
-                const isTimeout = receiptErr.name?.includes('Timeout') ||
-                                 receiptErr.message?.includes('timeout') ||
-                                 receiptErr.message?.includes('Timeout') ||
-                                 receiptErr.message?.includes('Timed out')
-                const isNetworkError = receiptErr.message?.includes('fetch') ||
-                                       receiptErr.message?.includes('network')
-
-                if (isTimeout || isNetworkError) {
-                  console.log('[useRelaySwap] Proceeding despite receipt error - tx was sent')
-                  // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:1220',message:'Timeout/network error but proceeding',data:{errorName:receiptErr.name,errorMessage:receiptErr.message,isTimeout,isNetworkError},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'TIMEOUT'})}).catch(()=>{});
-                  // #endregion
-                } else if (receiptErr.message?.includes('reverted')) {
-                  throw receiptErr
-                }
-              }
-            }
+            // Don't wait for receipt - show success immediately
+            // Transaction is sent, backend will confirm it
+            console.log('[useRelaySwap] Transaction sent successfully:', txHash)
           } catch (txErr: any) {
             // #region agent log
             fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:920',message:'Transaction error caught',data:{txErrMessage:txErr.message,isApproveStep,stepId:step.id,stepAction:step.action,targetChainId,fromToken:fromToken.symbol,toToken:toToken.symbol,isCrossChain},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
