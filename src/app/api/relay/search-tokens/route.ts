@@ -63,6 +63,10 @@ export async function GET(request: NextRequest) {
       if (!mappedChainId) continue
       if (chainId && mappedChainId !== parseInt(chainId)) continue
 
+      // Only include tokens with verified logos - filters out most scam tokens
+      const imageUrl = pair.info?.imageUrl
+      if (!imageUrl) continue
+
       const baseToken = pair.baseToken
       if (!baseToken?.address) continue
 
@@ -82,7 +86,7 @@ export async function GET(request: NextRequest) {
         address: baseToken.address,
         chainId: mappedChainId,
         decimals,
-        logoURI: pair.info?.imageUrl || null,
+        logoURI: imageUrl,
       })
 
       // Limit to 15 unique tokens
