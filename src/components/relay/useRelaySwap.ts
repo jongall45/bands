@@ -913,9 +913,21 @@ export function useRelaySwap(
           }
         }
 
-        // Success!
+        // Check if we actually sent any transaction
+        if (!lastTxSignature) {
+          console.error('[useRelaySwap] No Solana transaction was sent - steps had no transaction data')
+          console.log('[useRelaySwap] Solana steps received:', JSON.stringify(quote.steps, null, 2))
+
+          // This likely means Relay returns quote data but no executable transactions for Solana
+          // The user needs to be informed that this swap route isn't supported yet
+          setError('This Solana swap route is not yet supported. Relay did not provide transaction data. Please try a different token pair or use a Solana DEX directly.')
+          setState('error')
+          return null
+        }
+
+        // Success - we have a transaction signature!
         const swapResult: SwapResult = {
-          txHash: lastTxSignature || '',
+          txHash: lastTxSignature,
           fromAmount: quote.fromAmount,
           toAmount: quote.toAmount,
           fromToken,
@@ -1011,18 +1023,17 @@ export function useRelaySwap(
               }
             }
           } else {
-            // Check if approval is bundled in deposit tx data
-            const txData = depositItem.data.data as string
-            if (txData && txData.includes(APPROVE_SELECTOR.slice(2))) {
-              const approveIndex = txData.indexOf(APPROVE_SELECTOR.slice(2))
-              if (approveIndex !== -1) {
-                const spenderStart = approveIndex + APPROVE_SELECTOR.length - 2
-                const spenderHex = txData.substring(spenderStart, spenderStart + 64)
-                approvalSpender = '0x' + spenderHex.slice(24)
-                const amountStart = spenderStart + 64
-                const amountHex = txData.substring(amountStart, amountStart + 64)
-                approvalAmount = BigInt('0x' + amountHex)
-              }
+            // No separate approve step - we need to approve to the deposit contract directly
+            // The deposit contract address is in depositItem.data.to
+            // Use the swap amount from the quote as the approval amount
+            approvalSpender = depositItem.data.to
+            try {
+              // Parse the fromAmount to wei using the token's decimals
+              approvalAmount = parseUnits(currentQuote.fromAmount, fromToken.decimals)
+              console.log('[useRelaySwap] No approve step - will approve to deposit contract:', approvalSpender, 'amount:', approvalAmount.toString())
+            } catch (parseErr) {
+              console.warn('[useRelaySwap] Failed to parse fromAmount for approval:', parseErr)
+              approvalAmount = null
             }
           }
 
