@@ -1042,37 +1042,46 @@ export function useRelaySwap(
             const hasAllowance = await checkAllowance(fromToken, approvalSpender, approvalAmount)
 
             if (!hasAllowance) {
-              console.log(`[useRelaySwap] Token ${fromToken.symbol} needs approval. Batching with deposit...`)
+              console.log(`[useRelaySwap] Token ${fromToken.symbol} needs approval to ${approvalSpender}`)
               setState('sending')
 
-              // Create approval call data
+              // Use max uint256 for approval so user only needs to approve once
+              const maxApproval = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
+
+              // Create approval call data with max approval
               const approveData = encodeFunctionData({
                 abi: erc20Abi,
                 functionName: 'approve',
-                args: [approvalSpender as `0x${string}`, approvalAmount],
+                args: [approvalSpender as `0x${string}`, maxApproval],
               })
 
-              // Batch approval + deposit in single UserOperation
-              const batchedTxHash = await chainClient.sendTransaction({
-                calls: [
-                  {
-                    to: fromToken.address as `0x${string}`,
-                    data: approveData,
-                    value: BigInt(0),
-                  },
-                  {
-                    to: depositItem.data.to as `0x${string}`,
-                    data: depositItem.data.data as `0x${string}`,
-                    value: depositItem.data.value ? BigInt(depositItem.data.value) : BigInt(0),
-                  },
-                ],
+              // Send approval as separate transaction first
+              // This avoids gas estimation issues with batched calls
+              console.log('[useRelaySwap] Sending approval transaction...')
+              const approveTxHash = await chainClient.sendTransaction({
+                to: fromToken.address as `0x${string}`,
+                data: approveData,
+                value: BigInt(0),
               })
+              console.log('[useRelaySwap] Approval sent:', approveTxHash)
 
-              console.log('[useRelaySwap] Batched approval+deposit sent:', batchedTxHash)
+              // Wait for approval to be processed by bundler (3 seconds)
+              // This ensures the nonce is updated before we send the deposit
+              console.log('[useRelaySwap] Waiting for approval to process...')
+              await new Promise(resolve => setTimeout(resolve, 3000))
 
-              // Return success immediately
+              // Now send the deposit transaction
+              console.log('[useRelaySwap] Sending deposit transaction...')
+              const depositTxHash = await chainClient.sendTransaction({
+                to: depositItem.data.to as `0x${string}`,
+                data: depositItem.data.data as `0x${string}`,
+                value: depositItem.data.value ? BigInt(depositItem.data.value) : BigInt(0),
+              })
+              console.log('[useRelaySwap] Deposit sent:', depositTxHash)
+
+              // Return success with deposit tx hash
               const swapResult: SwapResult = {
-                txHash: batchedTxHash,
+                txHash: depositTxHash,
                 fromAmount: quote.fromAmount,
                 toAmount: quote.toAmount,
                 fromToken,
