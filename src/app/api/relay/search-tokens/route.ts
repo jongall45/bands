@@ -63,12 +63,19 @@ export async function GET(request: NextRequest) {
       if (!mappedChainId) continue
       if (chainId && mappedChainId !== parseInt(chainId)) continue
 
-      // Only include tokens with verified logos - filters out most scam tokens
-      const imageUrl = pair.info?.imageUrl
-      if (!imageUrl) continue
-
       const baseToken = pair.baseToken
       if (!baseToken?.address) continue
+
+      // Quality filter: Include tokens with verified logos OR high trading activity
+      // This allows legitimate tokens like Pump.fun that don't have logos yet
+      const imageUrl = pair.info?.imageUrl
+      const liquidity = pair.liquidity?.usd || 0
+      const volume24h = pair.volume?.h24 || 0
+      const hasLogo = !!imageUrl
+      const hasHighActivity = liquidity >= 100000 || volume24h >= 50000 // $100k liquidity or $50k volume
+
+      // Skip tokens without logos AND without significant trading activity
+      if (!hasLogo && !hasHighActivity) continue
 
       // Deduplicate by chain + token address (keep first occurrence = DexScreener's best)
       const tokenKey = `${mappedChainId}:${baseToken.address.toLowerCase()}`
@@ -86,7 +93,7 @@ export async function GET(request: NextRequest) {
         address: baseToken.address,
         chainId: mappedChainId,
         decimals,
-        logoURI: imageUrl,
+        logoURI: imageUrl || null,
       })
 
       // Limit to 15 unique tokens
