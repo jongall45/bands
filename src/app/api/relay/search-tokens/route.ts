@@ -38,6 +38,19 @@ interface ScoredToken {
 // Calculate quality score for a token based on metrics
 // DexScreener prioritizes: Market Cap > Liquidity > Volume > Age
 function calculateScore(liquidity: number, volume24h: number, txns24h: number, fdv: number, marketCap: number): number {
+  // SCAM DETECTION: Tokens with liquidity nearly equal to market cap are fake
+  // Real tokens have liquidity that's a small fraction of market cap (typically 0.1% to 10%)
+  // Scam example: $250M market cap with $249M liquidity (99.7% ratio) = FAKE
+  // Real example: $666M market cap with $234K liquidity (0.035% ratio) = REAL
+  if (marketCap > 0 && liquidity > 0) {
+    const liquidityRatio = liquidity / marketCap
+    if (liquidityRatio > 0.3) {
+      // More than 30% liquidity-to-market-cap ratio is suspicious
+      // Return negative score to push to bottom
+      return -100
+    }
+  }
+
   let score = 0
 
   // MARKET CAP is the most important factor (0-50 points)
@@ -184,6 +197,9 @@ export async function GET(request: NextRequest) {
     // Convert to array and filter by minimum thresholds
     let tokens = Array.from(tokenMap.values())
       .filter(t => {
+        // Filter out scam tokens (negative score from liquidity ratio check)
+        if (t.score < 0) return false
+
         // Apply minimum thresholds to filter out likely scams
         // But be lenient for exact symbol matches (user knows what they want)
         const isExactMatch = t.symbol.toLowerCase() === query.toLowerCase()
