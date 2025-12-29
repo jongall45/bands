@@ -835,10 +835,10 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
       
       // If no approval step and no permit step but ERC-20 token, check if first step contains approval call
       // If it does, we need to execute approval first before the deposit
-      // NOTE: For Solana destinations, Relay handles approvals differently per Solana docs
-      // Solana swaps use different calldata handling - let Relay handle the entire flow
+      // NOTE: For Solana destinations, Relay still bundles approvals despite explicitDeposit: true
+      // So we need to handle pre-swap approval for Solana too, with special timeout handling
       const isSolanaDestination = toToken.chainId === SOLANA_CHAIN_ID
-      if (!hasApprovalStep && !hasPermitStep && isERC20Token && currentQuote.steps.length > 0 && !isSolanaDestination) {
+      if (!hasApprovalStep && !hasPermitStep && isERC20Token && currentQuote.steps.length > 0) {
         const firstStep = currentQuote.steps[0]
         const firstItem = firstStep.items?.[0]
         if (firstItem?.data?.data) {
@@ -919,33 +919,28 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
                   setState('pending')
                   const chainPublicClient = getPublicClientForChain(targetChainId, publicClient)
                   // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:871',message:'Waiting for approval confirmation before swap',data:{approveTxHash,timeout:60000},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:871',message:'Waiting for approval confirmation before swap',data:{approveTxHash,timeout:30000,isSolanaDestination},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
                   // #endregion
-                  // For Solana destinations, use a longer timeout as Relay may handle these differently
-                  // Also, don't wait for confirmation if it's taking too long - let Relay handle the flow
-                  const timeout = isSolanaDestination ? 120_000 : 60_000
+                  // Use reasonable timeout - Base has 2s blocks, so 30s should be plenty
+                  // If timeout occurs, verify allowance directly (tx may have succeeded despite polling failure)
+                  const timeout = 30_000
                   try {
                     await chainPublicClient.waitForTransactionReceipt({
                       hash: approveTxHash as `0x${string}`,
                       timeout,
                       confirmations: 1,
                     })
-                  } catch (timeoutErr: any) {
-                    // If timeout occurs, check if transaction was actually sent
-                    // For Solana destinations, we may need to proceed anyway
-                    if (timeoutErr.message?.includes('Timed out')) {
-                      // #region agent log
-                      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:925',message:'Approval timeout - checking if transaction exists',data:{approveTxHash,isSolanaDestination},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
-                      // #endregion
-                      // For Solana destinations, proceed anyway - Relay may handle it
-                      if (isSolanaDestination) {
-                        console.warn('[useRelaySwap] Approval timeout for Solana swap - proceeding anyway, Relay will handle it')
-                        // Don't throw - proceed with the swap
-                      } else {
-                        throw timeoutErr
+                  } catch (receiptErr: any) {
+                    // On timeout, check if allowance was actually set (tx may have succeeded)
+                    if (receiptErr.message?.includes('Timed out') || receiptErr.message?.includes('timeout')) {
+                      console.warn('[useRelaySwap] Receipt polling timed out, checking allowance directly...')
+                      const allowanceSet = await checkAllowance(fromToken, approvalSpender, requiredAmount)
+                      if (!allowanceSet) {
+                        throw new Error('Approval transaction pending. Please try again in a few seconds.')
                       }
+                      console.log('[useRelaySwap] Allowance verified on-chain despite receipt timeout')
                     } else {
-                      throw timeoutErr
+                      throw receiptErr
                     }
                   }
                   // #region agent log
