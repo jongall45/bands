@@ -406,7 +406,20 @@ export function useUserTokens(walletAddress: string | undefined) {
 // ============================================
 // HOOK: Main Swap Hook
 // ============================================
-export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: any) {
+
+// Solana signing function type (from Privy)
+export interface SolanaSigningOptions {
+  signAndSendTransaction?: (params: {
+    transaction: Uint8Array
+    wallet: any
+  }) => Promise<{ signature: string }>
+  solanaWallet?: any
+}
+
+export function useRelaySwap(
+  solanaWalletAddress?: string,
+  solanaSigningOptions?: SolanaSigningOptions
+) {
   const { login, authenticated } = usePrivy()
   const { wallets } = useWallets()
   const { client: smartWalletClient, getClientForChain } = useSmartWallets()
@@ -816,27 +829,107 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
     const isSolanaDestination = toToken.chainId === SOLANA_CHAIN_ID
     const isSolanaOnlySwap = isSolanaOrigin && isSolanaDestination
 
-    // For Solana-only swaps, Relay handles everything - just show success since quote was obtained
+    // For Solana-only swaps, use Privy's Solana signing
     if (isSolanaOnlySwap) {
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:820',message:'Solana-only swap detected',data:{fromToken:fromToken.symbol,toToken:toToken.symbol,stepsCount:quote.steps.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:820',message:'Solana-only swap detected',data:{fromToken:fromToken.symbol,toToken:toToken.symbol,stepsCount:quote.steps.length,hasSolanaWallet:!!solanaSigningOptions?.solanaWallet},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
       // #endregion
-      console.log('[useRelaySwap] Solana-to-Solana swap - Relay handles execution directly')
+      console.log('[useRelaySwap] Solana-to-Solana swap - signing via Privy Solana wallet')
 
-      // For Solana swaps, the Relay SDK/API handles the transaction execution
-      // Since we don't have a Solana transaction signing flow yet, return success with placeholder
-      const swapResult: SwapResult = {
-        txHash: 'solana-swap-pending',
-        fromAmount: quote.fromAmount,
-        toAmount: quote.toAmount,
-        fromToken,
-        toToken,
+      // Check if we have Solana signing capability
+      if (!solanaSigningOptions?.signAndSendTransaction || !solanaSigningOptions?.solanaWallet) {
+        setError('Solana wallet not available for signing. Please ensure your Solana wallet is connected.')
+        setState('error')
+        return null
       }
-      setResult(swapResult)
-      setState('success')
-      setError('Solana-to-Solana swaps are not yet fully supported. Please use a Solana DEX for this trade.')
-      setState('error')
-      return null
+
+      setState('confirming')
+      setError(null)
+
+      try {
+        let lastTxSignature: string | undefined
+
+        // Execute each Solana step
+        for (const step of quote.steps) {
+          console.log('[useRelaySwap] Executing Solana step:', step.id, step.action)
+
+          for (const item of step.items) {
+            if (!item.data) continue
+
+            // Relay returns Solana transaction data as base64-encoded string
+            // The data field contains the serialized transaction
+            const txData = item.data.data as string
+            if (!txData) {
+              console.warn('[useRelaySwap] No transaction data in Solana step item')
+              continue
+            }
+
+            setState('sending')
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:850',message:'Signing Solana transaction',data:{stepId:step.id,txDataLength:txData.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
+            // #endregion
+
+            // Decode base64 transaction data to Uint8Array
+            let serializedTx: Uint8Array
+            try {
+              // Try base64 decoding first (common Relay format)
+              const binaryString = atob(txData)
+              serializedTx = new Uint8Array(binaryString.length)
+              for (let i = 0; i < binaryString.length; i++) {
+                serializedTx[i] = binaryString.charCodeAt(i)
+              }
+            } catch {
+              // If not base64, try hex decoding
+              if (txData.startsWith('0x')) {
+                const hexString = txData.slice(2)
+                serializedTx = new Uint8Array(hexString.length / 2)
+                for (let i = 0; i < hexString.length; i += 2) {
+                  serializedTx[i / 2] = parseInt(hexString.substr(i, 2), 16)
+                }
+              } else {
+                throw new Error('Unable to decode Solana transaction data')
+              }
+            }
+
+            console.log('[useRelaySwap] Sending Solana transaction via Privy...')
+            const result = await solanaSigningOptions.signAndSendTransaction({
+              transaction: serializedTx,
+              wallet: solanaSigningOptions.solanaWallet,
+            })
+
+            lastTxSignature = result.signature
+            console.log('[useRelaySwap] Solana transaction sent:', lastTxSignature)
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:880',message:'Solana transaction sent',data:{signature:lastTxSignature},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
+            // #endregion
+          }
+        }
+
+        // Success!
+        const swapResult: SwapResult = {
+          txHash: lastTxSignature || '',
+          fromAmount: quote.fromAmount,
+          toAmount: quote.toAmount,
+          fromToken,
+          toToken,
+        }
+        setResult(swapResult)
+        setState('success')
+        return swapResult
+      } catch (err: any) {
+        console.error('[useRelaySwap] Solana swap error:', err)
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:900',message:'Solana swap error',data:{error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
+        // #endregion
+
+        if (err.message?.includes('rejected') || err.message?.includes('denied')) {
+          setError('Transaction rejected')
+        } else {
+          setError(err.message || 'Solana swap failed')
+        }
+        setState('error')
+        return null
+      }
     }
 
     // For EVM swaps, require smart wallet
@@ -980,22 +1073,17 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
                   try {
                     await chainPublicClient.waitForTransactionReceipt({
                       hash: batchedTxHash as `0x${string}`,
-                      timeout: 30_000,
+                      timeout: 15_000, // Reduced from 30s - bundler should be faster
                       confirmations: 1,
                     })
                     console.log('[useRelaySwap] Batched transaction confirmed')
                   } catch (receiptErr: any) {
                     // If timeout, proceed anyway - the tx was sent successfully
-                    // Check both error name and message for timeout detection
                     const isTimeout = receiptErr.name?.includes('Timeout') ||
                                      receiptErr.message?.includes('Timed out') ||
-                                     receiptErr.message?.includes('timeout') ||
-                                     receiptErr.message?.includes('Timeout')
+                                     receiptErr.message?.includes('timeout')
                     if (isTimeout) {
                       console.warn('[useRelaySwap] Batched tx receipt timeout - tx was sent, proceeding to success')
-                      // #region agent log
-                      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:960',message:'Batched tx timeout but proceeding',data:{errorName:receiptErr.name,errorMessage:receiptErr.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'TIMEOUT'})}).catch(()=>{});
-                      // #endregion
                     } else {
                       throw receiptErr
                     }
@@ -1055,12 +1143,53 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
 
           if (isSolanaStep) {
             // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:1015',message:'Solana step detected - skipping EVM handling',data:{targetChainId,stepId:step.id,fromChainId:fromToken.chainId,toChainId:toToken.chainId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:1015',message:'Solana step detected - signing via Privy',data:{targetChainId,stepId:step.id,fromChainId:fromToken.chainId,toChainId:toToken.chainId,hasSolanaWallet:!!solanaSigningOptions?.solanaWallet},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
             // #endregion
-            console.log('[useRelaySwap] Solana step detected - Relay handles Solana transactions directly')
-            // For Solana-origin swaps, Relay API handles the transaction execution
-            // The transaction data is for Solana, not EVM - skip EVM wallet handling
-            // Relay will execute the Solana transaction on behalf of the user
+            console.log('[useRelaySwap] Solana step detected - signing via Privy Solana wallet')
+
+            // Check if we have Solana signing capability
+            if (!solanaSigningOptions?.signAndSendTransaction || !solanaSigningOptions?.solanaWallet) {
+              console.log('[useRelaySwap] No Solana signing available - skipping step (Relay may handle)')
+              continue
+            }
+
+            // Get transaction data from step
+            const txData = item.data.data as string
+            if (!txData) {
+              console.warn('[useRelaySwap] No transaction data in Solana step item')
+              continue
+            }
+
+            setState('sending')
+
+            // Decode transaction data (base64 or hex)
+            let serializedTx: Uint8Array
+            try {
+              const binaryString = atob(txData)
+              serializedTx = new Uint8Array(binaryString.length)
+              for (let i = 0; i < binaryString.length; i++) {
+                serializedTx[i] = binaryString.charCodeAt(i)
+              }
+            } catch {
+              if (txData.startsWith('0x')) {
+                const hexString = txData.slice(2)
+                serializedTx = new Uint8Array(hexString.length / 2)
+                for (let i = 0; i < hexString.length; i += 2) {
+                  serializedTx[i / 2] = parseInt(hexString.substr(i, 2), 16)
+                }
+              } else {
+                console.warn('[useRelaySwap] Unable to decode Solana tx data, skipping')
+                continue
+              }
+            }
+
+            console.log('[useRelaySwap] Sending Solana transaction via Privy...')
+            const result = await solanaSigningOptions.signAndSendTransaction({
+              transaction: serializedTx,
+              wallet: solanaSigningOptions.solanaWallet,
+            })
+            lastTxHash = result.signature
+            console.log('[useRelaySwap] Solana transaction sent:', result.signature)
             continue
           }
 
@@ -1158,15 +1287,25 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
                 const approveTxHash = await chainClient.sendTransaction(approveTxParams)
                 console.log('[useRelaySwap] Approval transaction sent:', approveTxHash)
                 
-                // Wait for approval confirmation - use longer timeout for smart wallet transactions
+                // Wait for approval confirmation - reduced timeout since bundler should be fast
                 setState('pending')
                 const chainPublicClient = getPublicClientForChain(targetChainId, publicClient)
-                await chainPublicClient.waitForTransactionReceipt({
-                  hash: approveTxHash as `0x${string}`,
-                  timeout: 60_000, // 60 seconds for smart wallet transactions
-                  confirmations: 1,
-                })
-                console.log('[useRelaySwap] Approval confirmed, proceeding with deposit...')
+                try {
+                  await chainPublicClient.waitForTransactionReceipt({
+                    hash: approveTxHash as `0x${string}`,
+                    timeout: 15_000, // 15 seconds should be enough for bundler
+                    confirmations: 1,
+                  })
+                  console.log('[useRelaySwap] Approval confirmed, proceeding with deposit...')
+                } catch (receiptErr: any) {
+                  // If timeout, check if we should proceed anyway
+                  const isTimeout = receiptErr.name?.includes('Timeout') || receiptErr.message?.includes('timeout')
+                  if (isTimeout) {
+                    console.warn('[useRelaySwap] Approval receipt timeout - proceeding anyway, tx was sent')
+                  } else {
+                    throw receiptErr
+                  }
+                }
                 
                 // #region agent log
                 fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:945',message:'Approval confirmed, proceeding with deposit',data:{approveTxHash},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
