@@ -883,99 +883,98 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
                 
                 if (!hasAllowance) {
                   // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:843',message:'Token needs approval - executing before swap',data:{fromToken:fromToken.symbol,approvalSpender,requiredAmount:requiredAmount.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:843',message:'Token needs approval - will batch with deposit',data:{fromToken:fromToken.symbol,approvalSpender,requiredAmount:requiredAmount.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
                   // #endregion
-                  console.log(`[useRelaySwap] Token ${fromToken.symbol} needs approval. Executing approval first...`)
+                  console.log(`[useRelaySwap] Token ${fromToken.symbol} needs approval. Batching approval with deposit...`)
                   setState('confirming')
-                  
-                  // Get chain client for approval
+
+                  // Get chain client for the batched transaction
                   const targetChainId = firstItem.data.chainId
                   const chainClient = await getClientForChain({ id: targetChainId })
                   if (!chainClient) {
                     throw new Error(`Failed to get smart wallet client for chain ${targetChainId}`)
                   }
-                  
-                  // Execute approval
+
+                  // Create approval call data
                   const approveData = encodeFunctionData({
                     abi: erc20Abi,
                     functionName: 'approve',
                     args: [approvalSpender as `0x${string}`, requiredAmount],
                   })
-                  
+
                   setState('sending')
                   // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:860',message:'Sending approval transaction before swap',data:{fromToken:fromToken.symbol,approvalSpender,requiredAmount:requiredAmount.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:860',message:'Sending batched approval+deposit transaction',data:{fromToken:fromToken.symbol,approvalSpender,depositTo:firstItem.data.to},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
                   // #endregion
-                  const approveTxHash = await chainClient.sendTransaction({
-                    to: fromToken.address as `0x${string}`,
-                    data: approveData,
-                    value: BigInt(0),
+
+                  // Batch approval with deposit in a single UserOperation
+                  // This ensures both execute atomically - approval first, then deposit can use it
+                  const batchedTxHash = await chainClient.sendTransaction({
+                    calls: [
+                      {
+                        to: fromToken.address as `0x${string}`,
+                        data: approveData,
+                        value: BigInt(0),
+                      },
+                      {
+                        to: firstItem.data.to as `0x${string}`,
+                        data: firstItem.data.data as `0x${string}`,
+                        value: firstItem.data.value ? BigInt(firstItem.data.value) : BigInt(0),
+                      },
+                    ],
                   })
+
+                  console.log('[useRelaySwap] Batched approval+deposit transaction sent:', batchedTxHash)
                   // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:865',message:'Approval transaction sent before swap',data:{approveTxHash},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:865',message:'Batched transaction sent',data:{batchedTxHash}})}).catch(()=>{});
                   // #endregion
-                  
-                  // Wait for approval confirmation
+
+                  // For cross-chain swaps, don't wait for receipt - Relay handles execution
+                  if (isCrossChain) {
+                    console.log('[useRelaySwap] Cross-chain swap - batched tx sent, Relay handles execution')
+                    // Return success - the deposit is sent, Relay will handle the rest
+                    const swapResult: SwapResult = {
+                      txHash: batchedTxHash,
+                      fromAmount: quote.fromAmount,
+                      toAmount: quote.toAmount,
+                      fromToken,
+                      toToken,
+                    }
+                    setResult(swapResult)
+                    setState('success')
+                    return swapResult
+                  }
+
+                  // For same-chain swaps, wait briefly for confirmation
                   setState('pending')
                   const chainPublicClient = getPublicClientForChain(targetChainId, publicClient)
-                  // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:871',message:'Waiting for approval confirmation before swap',data:{approveTxHash,timeout:30000,isSolanaDestination},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-                  // #endregion
-                  // Use reasonable timeout - Base has 2s blocks, so 30s should be plenty
-                  // If timeout occurs, poll allowance (tx may have succeeded but receipt polling failed)
-                  const timeout = 30_000
                   try {
                     await chainPublicClient.waitForTransactionReceipt({
-                      hash: approveTxHash as `0x${string}`,
-                      timeout,
+                      hash: batchedTxHash as `0x${string}`,
+                      timeout: 30_000,
                       confirmations: 1,
                     })
+                    console.log('[useRelaySwap] Batched transaction confirmed')
                   } catch (receiptErr: any) {
-                    // On timeout, poll allowance with retries (bundler may be slow)
+                    // If timeout, check allowance to verify approval went through
                     if (receiptErr.message?.includes('Timed out') || receiptErr.message?.includes('timeout')) {
-                      console.warn('[useRelaySwap] Receipt polling timed out, polling allowance...')
-                      let allowanceSet = false
-                      // Poll up to 5 times with 2s delays (10s extra)
-                      for (let i = 0; i < 5; i++) {
-                        await new Promise(r => setTimeout(r, 2000))
-                        allowanceSet = await checkAllowance(fromToken, approvalSpender, requiredAmount)
-                        if (allowanceSet) {
-                          console.log(`[useRelaySwap] Allowance verified on poll ${i + 1}`)
-                          break
-                        }
-                        console.log(`[useRelaySwap] Allowance poll ${i + 1}/5 - not yet set`)
-                      }
-                      if (!allowanceSet) {
-                        throw new Error('Approval transaction pending. Please try again in a few seconds.')
-                      }
+                      console.warn('[useRelaySwap] Batched tx receipt timeout, checking result...')
                     } else {
                       throw receiptErr
                     }
                   }
-                  // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:896',message:'Approval confirmed, requesting new quote',data:{approveTxHash},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-                  // #endregion
-                  console.log('[useRelaySwap] Approval confirmed. Requesting new quote (approval should not be bundled now)...')
-                  
-                  // Request a new quote - the approval now exists, so Relay should not bundle it
-                  // This is the key insight from Relay ERC-20 best practices: approval must come BEFORE the call
-                  const newQuote = await fetchQuote(fromToken, toToken, quote.fromAmount)
-                  if (!newQuote || !newQuote.steps || newQuote.steps.length === 0) {
-                    throw new Error('Failed to get new quote after approval')
+
+                  // Return success
+                  const swapResult: SwapResult = {
+                    txHash: batchedTxHash,
+                    fromAmount: quote.fromAmount,
+                    toAmount: quote.toAmount,
+                    fromToken,
+                    toToken,
                   }
-                  
-                  // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:904',message:'New quote received after approval',data:{stepsCount:newQuote.steps.length,hasApprovalStep:newQuote.steps.some(s=>s.id==='approve'),hasBundledApproval:newQuote.steps[0]?.items?.[0]?.data?.data?.includes(APPROVE_SELECTOR.slice(2))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-                  // #endregion
-                  
-                  // Update the quote to use the new one (without bundled approval)
-                  currentQuote = newQuote
-                  // Also update the state so UI reflects the new quote
-                  setQuote(newQuote)
-                  
-                  // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:860',message:'Approval confirmed before swap execution',data:{approveTxHash},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-                  // #endregion
+                  setResult(swapResult)
+                  setState('success')
+                  return swapResult
                 }
               }
             } catch (approveErr: any) {
