@@ -588,7 +588,9 @@ export default function Dashboard() {
           // Combine EVM tokens with Solana tokens for display
           const evmTokens = portfolio?.tokens || []
           const solanaDisplayTokens = solanaTokensForSelector.filter(t => parseFloat(t.balance) > 0)
+          // Sort all tokens by USD value (descending)
           const allTokens = [...solanaDisplayTokens, ...evmTokens]
+            .sort((a, b) => (b.balanceUsd || 0) - (a.balanceUsd || 0))
 
           if (allTokens.length === 0) return null
 

@@ -99,7 +99,9 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken, 
       balanceUsd: t.balanceUsd,
       logoURI: t.logoURI,
     }))
+    // Sort by USD value (descending) so highest value tokens appear first
     return [...evmUserTokens, ...solanaTokensAsToken]
+      .sort((a, b) => (b.balanceUsd || 0) - (a.balanceUsd || 0))
   }, [evmUserTokens, splTokens])
 
   const isLoadingUserTokens = isLoadingEvmTokens || isLoadingSolana

@@ -207,8 +207,11 @@ const TokenModal: React.FC<TokenModalProps> = ({
     const userAddresses = new Set(userFiltered.map(t => `${t.chainId}:${t.address.toLowerCase()}`))
     common = common.filter(t => !userAddresses.has(`${t.chainId}:${t.address.toLowerCase()}`))
 
+    // Sort user tokens by USD value (descending)
+    const sortedUserTokens = [...userFiltered].sort((a, b) => (b.balanceUsd || 0) - (a.balanceUsd || 0))
+
     return {
-      tokensWithBalance: userFiltered,
+      tokensWithBalance: sortedUserTokens,
       commonTokens: common,
     }
   }, [userTokens, activeChainId, searchQuery])
