@@ -50,6 +50,7 @@ export interface QuoteStep {
   id: string
   action: string
   description: string
+  kind?: string // Optional: 'signature' for permit steps, etc.
   items: {
     data: {
       to: string
