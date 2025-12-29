@@ -922,7 +922,7 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
                   fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:871',message:'Waiting for approval confirmation before swap',data:{approveTxHash,timeout:30000,isSolanaDestination},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
                   // #endregion
                   // Use reasonable timeout - Base has 2s blocks, so 30s should be plenty
-                  // If timeout occurs, verify allowance directly (tx may have succeeded despite polling failure)
+                  // If timeout occurs, poll allowance (tx may have succeeded but receipt polling failed)
                   const timeout = 30_000
                   try {
                     await chainPublicClient.waitForTransactionReceipt({
@@ -931,14 +931,23 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
                       confirmations: 1,
                     })
                   } catch (receiptErr: any) {
-                    // On timeout, check if allowance was actually set (tx may have succeeded)
+                    // On timeout, poll allowance with retries (bundler may be slow)
                     if (receiptErr.message?.includes('Timed out') || receiptErr.message?.includes('timeout')) {
-                      console.warn('[useRelaySwap] Receipt polling timed out, checking allowance directly...')
-                      const allowanceSet = await checkAllowance(fromToken, approvalSpender, requiredAmount)
+                      console.warn('[useRelaySwap] Receipt polling timed out, polling allowance...')
+                      let allowanceSet = false
+                      // Poll up to 5 times with 2s delays (10s extra)
+                      for (let i = 0; i < 5; i++) {
+                        await new Promise(r => setTimeout(r, 2000))
+                        allowanceSet = await checkAllowance(fromToken, approvalSpender, requiredAmount)
+                        if (allowanceSet) {
+                          console.log(`[useRelaySwap] Allowance verified on poll ${i + 1}`)
+                          break
+                        }
+                        console.log(`[useRelaySwap] Allowance poll ${i + 1}/5 - not yet set`)
+                      }
                       if (!allowanceSet) {
                         throw new Error('Approval transaction pending. Please try again in a few seconds.')
                       }
-                      console.log('[useRelaySwap] Allowance verified on-chain despite receipt timeout')
                     } else {
                       throw receiptErr
                     }
