@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useWaitForTransactionReceipt } from 'wagmi'
 import { useReadContract } from 'wagmi'
@@ -40,7 +40,7 @@ const SEND_CHAINS = [
 
 export default function Dashboard() {
   const { isAuthenticated, isConnected, address, isSmartWalletReady, logout, getClientForChain, isReady, solanaAddress, hasSolanaWallet, balances } = useAuth()
-  const { sendTransaction, getConnection, fetchBalances: fetchSolanaBalances } = useSolanaAuth()
+  const { sendTransaction, getConnection, fetchBalances: fetchSolanaBalances, splTokens } = useSolanaAuth()
   const router = useRouter()
   const queryClient = useQueryClient()
   const [copied, setCopied] = useState(false)
@@ -69,34 +69,23 @@ export default function Dashboard() {
   // Cross-chain portfolio from Dune API
   const { data: portfolio, refetch: refetchPortfolio, isLoading: portfolioLoading } = usePortfolio(address)
 
-  // Create Solana tokens for the token selector
-  const solPrice = 180 // Approximate SOL price
-  const solanaTokensForSelector: PortfolioToken[] = hasSolanaWallet ? [
-    {
+  // Convert Solana SPL tokens to PortfolioToken format for display
+  const solanaTokensForSelector: PortfolioToken[] = useMemo(() => {
+    if (!hasSolanaWallet || splTokens.length === 0) return []
+
+    return splTokens.map(t => ({
       chainId: SOLANA_CHAIN_ID,
       chain: 'solana',
-      address: 'native',
-      symbol: 'SOL',
-      name: 'Solana',
-      decimals: 9,
-      balance: balances.sol || '0',
-      balanceUsd: parseFloat(balances.sol || '0') * solPrice,
-      price: solPrice,
-      logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
-    },
-    {
-      chainId: SOLANA_CHAIN_ID,
-      chain: 'solana',
-      address: SOLANA_TOKENS.USDC.address,
-      symbol: 'USDC',
-      name: 'USD Coin',
-      decimals: 6,
-      balance: balances.usdcSolana || '0',
-      balanceUsd: parseFloat(balances.usdcSolana || '0'),
-      price: 1,
-      logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png',
-    },
-  ] : []
+      address: t.address,
+      symbol: t.symbol,
+      name: t.name,
+      decimals: t.decimals,
+      balance: t.balance,
+      balanceUsd: t.balanceUsd || 0,
+      price: t.balanceUsd && parseFloat(t.balance) > 0 ? t.balanceUsd / parseFloat(t.balance) : 0,
+      logoURI: t.logoURI || `https://api.dicebear.com/7.x/shapes/svg?seed=${t.symbol}`,
+    }))
+  }, [hasSolanaWallet, splTokens])
 
   // Filter tokens by selected chain
   const tokensOnSelectedChain = selectedChain.isSolana

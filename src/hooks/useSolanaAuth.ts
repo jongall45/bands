@@ -45,6 +45,24 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeout = 100
   }
 }
 
+// Solana chain ID for Relay API
+export const SOLANA_CHAIN_ID = 792703809
+
+// Token Program ID for fetching all SPL tokens
+const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+
+// SPL Token type for the token list
+export interface SplToken {
+  address: string
+  symbol: string
+  name: string
+  decimals: number
+  balance: string
+  balanceUsd?: number
+  logoURI?: string
+  chainId: number
+}
+
 export function useSolanaAuth() {
   // Note: createWallet is not available on Solana useWallets hook
   // Solana wallets are automatically created on login via createOnLogin: 'all-users' config
@@ -56,6 +74,7 @@ export function useSolanaAuth() {
   // Balance state
   const [solBalance, setSolBalance] = useState<string>('0')
   const [usdcBalance, setUsdcBalance] = useState<string>('0')
+  const [splTokens, setSplTokens] = useState<SplToken[]>([])
   const [isLoadingBalances, setIsLoadingBalances] = useState(false)
 
   // Get embedded Solana wallet (Privy)
@@ -162,17 +181,115 @@ export function useSolanaAuth() {
     setUsdcBalance('0')
   }, [solanaAddress])
 
+  // Fetch ALL SPL tokens using Helius DAS API
+  const fetchAllSplTokens = useCallback(async () => {
+    if (!solanaAddress) {
+      setSplTokens([])
+      return
+    }
+
+    console.log('[Solana] Fetching all SPL tokens for:', solanaAddress)
+
+    try {
+      // Use Helius DAS API to get all tokens with metadata
+      const heliusUrl = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
+
+      const response = await fetchWithTimeout(heliusUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getAssetsByOwner',
+          params: {
+            ownerAddress: solanaAddress,
+            page: 1,
+            limit: 100,
+            displayOptions: {
+              showFungible: true,
+              showNativeBalance: true,
+            },
+          },
+        }),
+      }, 15000)
+
+      const data = await response.json()
+      console.log('[Solana] Helius getAssetsByOwner response:', data)
+
+      if (data.result?.items) {
+        const tokens: SplToken[] = []
+
+        for (const item of data.result.items) {
+          // Only include fungible tokens with balance
+          if (item.interface === 'FungibleToken' || item.interface === 'FungibleAsset') {
+            const tokenInfo = item.token_info || {}
+            const balance = tokenInfo.balance || 0
+            const decimals = tokenInfo.decimals || 0
+            const uiBalance = balance / Math.pow(10, decimals)
+
+            if (uiBalance > 0) {
+              tokens.push({
+                address: item.id,
+                symbol: tokenInfo.symbol || item.content?.metadata?.symbol || 'Unknown',
+                name: item.content?.metadata?.name || tokenInfo.symbol || 'Unknown Token',
+                decimals: decimals,
+                balance: uiBalance.toString(),
+                balanceUsd: tokenInfo.price_info?.total_price,
+                logoURI: item.content?.links?.image || item.content?.files?.[0]?.uri,
+                chainId: SOLANA_CHAIN_ID,
+              })
+            }
+          }
+        }
+
+        // Add native SOL if we have a balance
+        if (data.result.nativeBalance?.lamports > 0) {
+          const solUiBalance = data.result.nativeBalance.lamports / 1e9
+          tokens.unshift({
+            address: '11111111111111111111111111111111',
+            symbol: 'SOL',
+            name: 'Solana',
+            decimals: 9,
+            balance: solUiBalance.toString(),
+            balanceUsd: data.result.nativeBalance.price_per_sol
+              ? solUiBalance * data.result.nativeBalance.price_per_sol
+              : undefined,
+            logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
+            chainId: SOLANA_CHAIN_ID,
+          })
+        }
+
+        console.log('[Solana] Found SPL tokens:', tokens)
+        setSplTokens(tokens)
+      }
+    } catch (error) {
+      console.error('[Solana] Failed to fetch SPL tokens:', error)
+      // Fall back to just showing SOL if Helius fails
+      if (solBalance && parseFloat(solBalance) > 0) {
+        setSplTokens([{
+          address: '11111111111111111111111111111111',
+          symbol: 'SOL',
+          name: 'Solana',
+          decimals: 9,
+          balance: solBalance,
+          chainId: SOLANA_CHAIN_ID,
+          logoURI: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
+        }])
+      }
+    }
+  }, [solanaAddress, solBalance])
+
   // Fetch all balances
   const fetchBalances = useCallback(async () => {
     if (!solanaAddress) return
 
     setIsLoadingBalances(true)
     try {
-      await Promise.all([fetchSolBalance(), fetchUsdcBalance()])
+      await Promise.all([fetchSolBalance(), fetchUsdcBalance(), fetchAllSplTokens()])
     } finally {
       setIsLoadingBalances(false)
     }
-  }, [solanaAddress, fetchSolBalance, fetchUsdcBalance])
+  }, [solanaAddress, fetchSolBalance, fetchUsdcBalance, fetchAllSplTokens])
 
   // Auto-fetch balances when wallet address changes
   useEffect(() => {
@@ -226,6 +343,7 @@ export function useSolanaAuth() {
       sol: solBalance,
       usdc: usdcBalance,
     },
+    splTokens, // All SPL tokens with balances
     isLoadingBalances,
     fetchBalances,
 

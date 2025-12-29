@@ -21,6 +21,13 @@ interface CustomSwapWidgetProps {
     chainId: number
     logoURI?: string
   } | null
+  // Allow external setting of sell token (for chart integration)
+  sellToken?: {
+    address: string
+    symbol: string
+    chainId: number
+    logoURI?: string
+  } | null
 }
 
 // Chain explorer URLs
@@ -53,9 +60,9 @@ const getExplorerName = (chainId: number): string => {
 // ============================================
 // COMPONENT
 // ============================================
-export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }: CustomSwapWidgetProps) {
+export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken, sellToken }: CustomSwapWidgetProps) {
   // Solana wallet hook - get address first to pass to useRelaySwap
-  const { solanaAddress, fetchBalances: fetchSolanaBalances } = useSolanaAuth()
+  const { solanaAddress, fetchBalances: fetchSolanaBalances, splTokens, isLoadingBalances: isLoadingSolana } = useSolanaAuth()
 
   // Relay swap hook - pass Solana address for cross-chain swaps
   const {
@@ -72,12 +79,30 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
     reset,
   } = useRelaySwap(solanaAddress)
 
-  // Fetch user tokens from Sim API
+  // Fetch user tokens from Sim API (EVM only)
   const {
-    tokens: userTokens,
-    isLoading: isLoadingUserTokens,
+    tokens: evmUserTokens,
+    isLoading: isLoadingEvmTokens,
     refetch: refetchUserTokens,
   } = useUserTokens(walletAddress)
+
+  // Combine EVM tokens with Solana tokens for unified token list
+  const userTokens = useMemo(() => {
+    // Convert SPL tokens to Token format
+    const solanaTokensAsToken: Token[] = splTokens.map(t => ({
+      symbol: t.symbol,
+      name: t.name,
+      address: t.address,
+      chainId: t.chainId,
+      decimals: t.decimals,
+      balance: t.balance,
+      balanceUsd: t.balanceUsd,
+      logoURI: t.logoURI,
+    }))
+    return [...evmUserTokens, ...solanaTokensAsToken]
+  }, [evmUserTokens, splTokens])
+
+  const isLoadingUserTokens = isLoadingEvmTokens || isLoadingSolana
 
   // Local state - Default to USDC Base → ETH Base (same-chain swap is more reliable)
   const [sellAmount, setSellAmount] = useState('')
@@ -89,7 +114,7 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
   const [isToModalOpen, setIsToModalOpen] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
 
-  // Handle external token selection from chart
+  // Handle external BUY token selection from chart (sets the "to" token)
   useEffect(() => {
     if (buyToken) {
       // Try to find in common tokens first
@@ -111,13 +136,45 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken }
           name: buyToken.symbol, // Use symbol as name fallback
           address: buyToken.address,
           chainId: buyToken.chainId,
-          decimals: 18, // Default, will be fetched
+          decimals: 18, // Default, will be fetched from Relay API
           logoURI: buyToken.logoURI, // Use logo from DexScreener
         }
         setToToken(newToken)
       }
     }
   }, [buyToken])
+
+  // Handle external SELL token selection from chart (sets the "from" token)
+  useEffect(() => {
+    if (sellToken) {
+      // Try to find in common tokens first
+      const chainTokens = COMMON_TOKENS[sellToken.chainId] || []
+      const existingToken = chainTokens.find(
+        t => t.address.toLowerCase() === sellToken.address.toLowerCase()
+      )
+
+      if (existingToken) {
+        // Use common token but override with provided logo if available
+        setFromToken({
+          ...existingToken,
+          logoURI: sellToken.logoURI || existingToken.logoURI,
+        })
+      } else {
+        // Create a new token object for tokens not in common list
+        const newToken: Token = {
+          symbol: sellToken.symbol,
+          name: sellToken.symbol, // Use symbol as name fallback
+          address: sellToken.address,
+          chainId: sellToken.chainId,
+          decimals: 18, // Default, will be fetched from Relay API
+          logoURI: sellToken.logoURI, // Use logo from DexScreener
+        }
+        setFromToken(newToken)
+      }
+      // Clear the sell amount when token changes
+      setSellAmount('')
+    }
+  }, [sellToken])
 
   // Notify parent of state changes
   useEffect(() => {
