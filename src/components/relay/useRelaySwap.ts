@@ -44,6 +44,8 @@ export interface Quote {
   gasFee: string
   gasFeeUsd: number
   steps: QuoteStep[]
+  // For cross-chain swaps using deposit address method
+  depositAddress?: string | null
 }
 
 export interface QuoteStep {
@@ -93,6 +95,35 @@ const chainMap: Record<number, Chain> = {
   [arbitrum.id]: arbitrum,
   [zora.id]: zora,
   [blast.id]: blast,
+}
+
+// Fallback RPC endpoints for EVM chains (to avoid rate limiting)
+const EVM_RPC_ENDPOINTS: Record<number, string[]> = {
+  [base.id]: [
+    'https://base.llamarpc.com',
+    'https://rpc.ankr.com/base',
+    'https://mainnet.base.org',
+  ],
+  [arbitrum.id]: [
+    'https://arbitrum.llamarpc.com',
+    'https://rpc.ankr.com/arbitrum',
+    'https://arb1.arbitrum.io/rpc',
+  ],
+  [optimism.id]: [
+    'https://optimism.llamarpc.com',
+    'https://rpc.ankr.com/optimism',
+    'https://mainnet.optimism.io',
+  ],
+  [mainnet.id]: [
+    'https://eth.llamarpc.com',
+    'https://rpc.ankr.com/eth',
+    'https://cloudflare-eth.com',
+  ],
+  [polygon.id]: [
+    'https://polygon.llamarpc.com',
+    'https://rpc.ankr.com/polygon',
+    'https://polygon-rpc.com',
+  ],
 }
 
 // Solana chain ID for Relay API
@@ -206,12 +237,14 @@ export const COMMON_TOKENS: Record<number, Token[]> = {
   ],
 }
 
-// Public client cache
-const publicClientCache: Record<number, ReturnType<typeof createPublicClient>> = {}
+// Public client cache - keyed by chainId and rpcIndex
+const publicClientCache: Record<string, ReturnType<typeof createPublicClient>> = {}
 
-function getPublicClientForChain(targetChainId: number, defaultClient: any) {
-  if (publicClientCache[targetChainId]) {
-    return publicClientCache[targetChainId]
+// Get a public client with fallback RPC support
+function getPublicClientForChain(targetChainId: number, defaultClient: any, rpcIndex = 0) {
+  const cacheKey = `${targetChainId}-${rpcIndex}`
+  if (publicClientCache[cacheKey]) {
+    return publicClientCache[cacheKey]
   }
 
   const chain = chainMap[targetChainId]
@@ -220,12 +253,58 @@ function getPublicClientForChain(targetChainId: number, defaultClient: any) {
     return defaultClient
   }
 
+  // Use fallback RPC if available
+  const rpcEndpoints = EVM_RPC_ENDPOINTS[targetChainId]
+  const rpcUrl = rpcEndpoints?.[rpcIndex]
+
   const client = createPublicClient({
     chain,
-    transport: http(),
+    transport: rpcUrl ? http(rpcUrl) : http(),
   })
-  publicClientCache[targetChainId] = client
+  publicClientCache[cacheKey] = client
   return client
+}
+
+// Helper to execute an RPC call with retry across fallback endpoints
+async function executeWithFallback<T>(
+  chainId: number,
+  defaultClient: any,
+  operation: (client: ReturnType<typeof createPublicClient>) => Promise<T>,
+  maxRetries = 3
+): Promise<T> {
+  const rpcEndpoints = EVM_RPC_ENDPOINTS[chainId] || []
+  const maxRpcIndex = Math.max(rpcEndpoints.length - 1, 0)
+
+  let lastError: any
+
+  for (let rpcIndex = 0; rpcIndex <= maxRpcIndex; rpcIndex++) {
+    for (let retry = 0; retry < maxRetries; retry++) {
+      try {
+        const client = getPublicClientForChain(chainId, defaultClient, rpcIndex)
+        return await operation(client)
+      } catch (err: any) {
+        lastError = err
+        const isRateLimited = err.message?.includes('429') || err.message?.includes('rate limit')
+        const isTimeout = err.message?.includes('timeout') || err.message?.includes('Timeout')
+
+        if (isRateLimited || isTimeout) {
+          console.warn(`[useRelaySwap] RPC ${rpcIndex} attempt ${retry + 1} failed:`, err.message)
+          // Wait before retry (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, retry) * 500))
+
+          // If rate limited, try next RPC immediately
+          if (isRateLimited && retry === 0) {
+            break // Move to next RPC
+          }
+        } else {
+          // Non-recoverable error, throw immediately
+          throw err
+        }
+      }
+    }
+  }
+
+  throw lastError || new Error('All RPC endpoints failed')
 }
 
 // ============================================
@@ -406,21 +485,28 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
     if (!smartWalletAddress) return '0'
 
     try {
-      const client = getPublicClientForChain(token.chainId, publicClient)
-
+      // Use fallback RPC logic to avoid rate limiting
       if (token.address === '0x0000000000000000000000000000000000000000') {
         // Native token
-        const balance = await client.getBalance({ address: smartWalletAddress })
+        const balance = await executeWithFallback(
+          token.chainId,
+          publicClient,
+          (client) => client.getBalance({ address: smartWalletAddress })
+        )
         return formatUnits(balance, token.decimals)
       }
 
       // ERC20
-      const balance = await client.readContract({
-        address: token.address as `0x${string}`,
-        abi: erc20Abi,
-        functionName: 'balanceOf',
-        args: [smartWalletAddress],
-      })
+      const balance = await executeWithFallback(
+        token.chainId,
+        publicClient,
+        (client) => client.readContract({
+          address: token.address as `0x${string}`,
+          abi: erc20Abi,
+          functionName: 'balanceOf',
+          args: [smartWalletAddress],
+        })
+      )
       return formatUnits(balance as bigint, token.decimals)
     } catch (err) {
       console.error('[useRelaySwap] fetchBalance error:', err)
@@ -440,13 +526,16 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
     if (token.address === NATIVE_TOKEN_ADDRESS) return true // Native tokens don't need approval
 
     try {
-      const client = getPublicClientForChain(token.chainId, publicClient)
-      const allowance = await client.readContract({
-        address: token.address as `0x${string}`,
-        abi: erc20Abi,
-        functionName: 'allowance',
-        args: [smartWalletAddress, spender as `0x${string}`],
-      })
+      const allowance = await executeWithFallback(
+        token.chainId,
+        publicClient,
+        (client) => client.readContract({
+          address: token.address as `0x${string}`,
+          abi: erc20Abi,
+          functionName: 'allowance',
+          args: [smartWalletAddress, spender as `0x${string}`],
+        })
+      )
       console.log('[useRelaySwap] Current allowance:', allowance.toString(), 'Required:', requiredAmount.toString())
       return (allowance as bigint) >= requiredAmount
     } catch (err) {
@@ -502,9 +591,14 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
       const originCurrency = toRelayCurrency(fromToken)
       const destinationCurrency = toRelayCurrency(toToken)
 
+      // Check if this is a cross-chain swap
+      const isCrossChain = fromToken.chainId !== toToken.chainId
+      const isToSolana = toToken.chainId === SOLANA_CHAIN_ID
+      const isFromSolana = fromToken.chainId === SOLANA_CHAIN_ID
+
       // Build request body per Relay API spec
       // Use appropriate wallet addresses based on origin/destination chains
-      const requestBody = {
+      const requestBody: Record<string, any> = {
         user: originWallet,
         originChainId: fromToken.chainId,
         destinationChainId: toToken.chainId,
@@ -514,8 +608,25 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
         recipient: destinationWallet,
         tradeType: 'EXACT_INPUT',
         referrer: 'bands.cash',
-        // Request that approval steps are included if needed
-        useExternalLiquidity: true,
+      }
+
+      // For cross-chain swaps, use deposit address method which is more reliable
+      // This matches the working PrivyRelaySwap implementation
+      if (isCrossChain) {
+        requestBody.useDepositAddress = true
+        requestBody.refundTo = originWallet // Refund to origin wallet on failure
+        requestBody.usePermit = false
+        // For cross-chain, external liquidity can cause issues - disable it
+        requestBody.useExternalLiquidity = false
+      } else {
+        // For same-chain swaps, external liquidity is fine
+        requestBody.useExternalLiquidity = true
+      }
+
+      // For Solana destinations, ensure proper address handling
+      if (isToSolana && destinationWallet) {
+        // Solana addresses are case-sensitive - ensure we use the exact address
+        requestBody.recipient = destinationWallet
       }
 
       console.log('[useRelaySwap] Fetching quote:', {
@@ -524,15 +635,38 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
         amount: amountInWei,
         originWallet,
         destinationWallet,
+        isCrossChain,
+        isToSolana,
         requestBody,
       })
 
-      const response = await fetch(`${RELAY_API}/quote`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: abortControllerRef.current.signal,
-        body: JSON.stringify(requestBody),
-      })
+      // Retry logic for transient errors
+      let response: Response | null = null
+      let lastError: Error | null = null
+      const maxRetries = 3
+
+      for (let retry = 0; retry < maxRetries; retry++) {
+        try {
+          response = await fetch(`${RELAY_API}/quote`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: abortControllerRef.current.signal,
+            body: JSON.stringify(requestBody),
+          })
+
+          // If we got a response (even error), break retry loop
+          if (response) break
+        } catch (fetchErr: any) {
+          lastError = fetchErr
+          if (fetchErr.name === 'AbortError') throw fetchErr
+          console.warn(`[useRelaySwap] Quote fetch attempt ${retry + 1} failed:`, fetchErr.message)
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, retry) * 500))
+        }
+      }
+
+      if (!response) {
+        throw lastError || new Error('Failed to fetch quote after retries')
+      }
 
       if (!response.ok) {
         const errorText = await response.text()
@@ -562,8 +696,16 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
       const toAmountFormatted = formatUnits(BigInt(toAmountRaw), toDecimals)
       const toAmountNum = parseFloat(toAmountFormatted)
 
+      // Extract deposit address for cross-chain swaps (from first step)
+      const step = data.steps?.[0]
+      const depositAddress = step?.depositAddress || null
+
+      if (isCrossChain && !depositAddress) {
+        console.warn('[useRelaySwap] No deposit address in cross-chain quote response')
+      }
+
       const quoteData: Quote = {
-        requestId: data.requestId || '',
+        requestId: data.requestId || step?.requestId || '',
         fromAmount: amount,
         fromAmountUsd: fromAmountUsd,
         toAmount: toAmountFormatted,
@@ -574,6 +716,7 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
         gasFee: data.fees?.gas?.amount || '0',
         gasFeeUsd: gasFeeUsd,
         steps: data.steps || [],
+        depositAddress: depositAddress,
       }
 
       setQuote(quoteData)
@@ -613,15 +756,86 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
 
     // ERC20 approve function selector
     const APPROVE_SELECTOR = '0x095ea7b3'
+    // ERC20 transfer function selector
+    const TRANSFER_SELECTOR = '0xa9059cbb'
+
+    // Check if this is a cross-chain swap with deposit address
+    const isCrossChain = fromToken.chainId !== toToken.chainId
+    const hasDepositAddress = !!quote.depositAddress
 
     try {
       let lastTxHash: string | undefined
 
-      for (const step of quote.steps) {
-        console.log('[useRelaySwap] Executing step:', step.id, step.action)
+      // For cross-chain with deposit address, use simple transfer method
+      if (isCrossChain && hasDepositAddress) {
+        console.log('[useRelaySwap] Cross-chain swap using deposit address:', quote.depositAddress)
 
-        for (const item of step.items) {
-          if (!item.data) continue
+        const amountInWei = parseUnits(quote.fromAmount, fromToken.decimals)
+        const targetChainId = fromToken.chainId
+
+        // Get chain-specific client
+        const chainClient = await getClientForChain({ id: targetChainId })
+        if (!chainClient) {
+          throw new Error(`Failed to get smart wallet client for chain ${targetChainId}`)
+        }
+
+        setState('sending')
+
+        if (fromToken.address === NATIVE_TOKEN_ADDRESS) {
+          // Native token (ETH) - simple value transfer to deposit address
+          console.log('[useRelaySwap] Sending native token to deposit address')
+          lastTxHash = await chainClient.sendTransaction({
+            to: quote.depositAddress as `0x${string}`,
+            value: amountInWei,
+            data: '0x' as `0x${string}`,
+          })
+        } else {
+          // ERC-20 token - transfer to deposit address
+          console.log('[useRelaySwap] Sending ERC-20 to deposit address')
+          // Encode transfer function: transfer(address to, uint256 amount)
+          const paddedAddress = quote.depositAddress!.slice(2).toLowerCase().padStart(64, '0')
+          const paddedAmount = amountInWei.toString(16).padStart(64, '0')
+          const transferData = `${TRANSFER_SELECTOR}${paddedAddress}${paddedAmount}` as `0x${string}`
+
+          lastTxHash = await chainClient.sendTransaction({
+            to: fromToken.address as `0x${string}`,
+            value: BigInt(0),
+            data: transferData,
+          })
+        }
+
+        console.log('[useRelaySwap] Deposit transaction sent:', lastTxHash)
+
+        // Wait for confirmation
+        setState('pending')
+        try {
+          const chainPublicClient = getPublicClientForChain(targetChainId, publicClient)
+          const receipt = await chainPublicClient.waitForTransactionReceipt({
+            hash: lastTxHash as `0x${string}`,
+            timeout: 60_000,
+            confirmations: 1,
+          })
+          console.log('[useRelaySwap] Deposit transaction confirmed:', lastTxHash, 'status:', receipt.status)
+
+          if (receipt.status === 'reverted') {
+            throw new Error('Deposit transaction reverted on chain')
+          }
+        } catch (receiptErr: any) {
+          console.warn('[useRelaySwap] waitForTransactionReceipt error:', receiptErr.message)
+          // For deposit address method, we can proceed - the intent will be tracked
+          if (!receiptErr.message?.includes('reverted')) {
+            console.log('[useRelaySwap] Proceeding despite receipt error - tx was sent')
+          } else {
+            throw receiptErr
+          }
+        }
+      } else {
+        // Same-chain swap or no deposit address - use step execution
+        for (const step of quote.steps) {
+          console.log('[useRelaySwap] Executing step:', step.id, step.action)
+
+          for (const item of step.items) {
+            if (!item.data) continue
 
           const targetChainId = item.data.chainId
           console.log('[useRelaySwap] Sending tx on chain:', targetChainId)
@@ -714,6 +928,7 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
             }
             throw txErr
           }
+        }
         }
       }
 
