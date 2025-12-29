@@ -44,8 +44,6 @@ export interface Quote {
   gasFee: string
   gasFeeUsd: number
   steps: QuoteStep[]
-  // For cross-chain swaps using deposit address method
-  depositAddress?: string | null
 }
 
 export interface QuoteStep {
@@ -591,20 +589,8 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
       const originCurrency = toRelayCurrency(fromToken)
       const destinationCurrency = toRelayCurrency(toToken)
 
-      // Check if this is a cross-chain swap
-      const isCrossChain = fromToken.chainId !== toToken.chainId
-      const isToSolana = toToken.chainId === SOLANA_CHAIN_ID
-      const isFromSolana = fromToken.chainId === SOLANA_CHAIN_ID
-
-      // Major tokens that support deposit address method
-      const MAJOR_TOKENS = ['ETH', 'USDC', 'USDT', 'DAI', 'WETH', 'SOL']
-      const isFromMajorToken = MAJOR_TOKENS.includes(fromToken.symbol.toUpperCase())
-      const isToMajorToken = MAJOR_TOKENS.includes(toToken.symbol.toUpperCase())
-      const canUseDepositAddress = isFromMajorToken && isToMajorToken
-
       // Build request body per Relay API spec
-      // Use appropriate wallet addresses based on origin/destination chains
-      const requestBody: Record<string, any> = {
+      const requestBody = {
         user: originWallet,
         originChainId: fromToken.chainId,
         destinationChainId: toToken.chainId,
@@ -614,27 +600,7 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
         recipient: destinationWallet,
         tradeType: 'EXACT_INPUT',
         referrer: 'bands.cash',
-      }
-
-      // For cross-chain swaps with major tokens, use deposit address method
-      // For other tokens, use standard execution (Relay will handle routing)
-      if (isCrossChain && canUseDepositAddress) {
-        requestBody.useDepositAddress = true
-        requestBody.refundTo = originWallet
-        requestBody.usePermit = false
-        requestBody.useExternalLiquidity = false
-      } else if (isCrossChain) {
-        // Cross-chain but not major tokens - don't use deposit address
-        requestBody.useExternalLiquidity = true
-      } else {
-        // Same-chain swaps
-        requestBody.useExternalLiquidity = true
-      }
-
-      // For Solana destinations, ensure proper address handling
-      if (isToSolana && destinationWallet) {
-        // Solana addresses are case-sensitive - ensure we use the exact address
-        requestBody.recipient = destinationWallet
+        useExternalLiquidity: true,
       }
 
       console.log('[useRelaySwap] Fetching quote:', {
@@ -643,9 +609,6 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
         amount: amountInWei,
         originWallet,
         destinationWallet,
-        isCrossChain,
-        isToSolana,
-        canUseDepositAddress,
         requestBody,
       })
 
@@ -700,21 +663,12 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
       const gasFeeUsd = parseFloat(data.fees?.gas?.amountUsd) || 0
       const toAmountRaw = data.details?.currencyOut?.amount || '0'
       // Use decimals from Relay API response if available, fall back to token decimals
-      // This is important for Solana tokens where we may not know the decimals upfront
       const toDecimals = data.details?.currencyOut?.currency?.decimals ?? toToken.decimals
       const toAmountFormatted = formatUnits(BigInt(toAmountRaw), toDecimals)
       const toAmountNum = parseFloat(toAmountFormatted)
 
-      // Extract deposit address for cross-chain swaps (from first step)
-      const step = data.steps?.[0]
-      const depositAddress = step?.depositAddress || null
-
-      if (isCrossChain && !depositAddress) {
-        console.warn('[useRelaySwap] No deposit address in cross-chain quote response')
-      }
-
       const quoteData: Quote = {
-        requestId: data.requestId || step?.requestId || '',
+        requestId: data.requestId || '',
         fromAmount: amount,
         fromAmountUsd: fromAmountUsd,
         toAmount: toAmountFormatted,
@@ -725,7 +679,6 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
         gasFee: data.fees?.gas?.amount || '0',
         gasFeeUsd: gasFeeUsd,
         steps: data.steps || [],
-        depositAddress: depositAddress,
       }
 
       setQuote(quoteData)
@@ -765,86 +718,15 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
 
     // ERC20 approve function selector
     const APPROVE_SELECTOR = '0x095ea7b3'
-    // ERC20 transfer function selector
-    const TRANSFER_SELECTOR = '0xa9059cbb'
-
-    // Check if this is a cross-chain swap with deposit address
-    const isCrossChain = fromToken.chainId !== toToken.chainId
-    const hasDepositAddress = !!quote.depositAddress
 
     try {
       let lastTxHash: string | undefined
 
-      // For cross-chain with deposit address, use simple transfer method
-      if (isCrossChain && hasDepositAddress) {
-        console.log('[useRelaySwap] Cross-chain swap using deposit address:', quote.depositAddress)
+      for (const step of quote.steps) {
+        console.log('[useRelaySwap] Executing step:', step.id, step.action)
 
-        const amountInWei = parseUnits(quote.fromAmount, fromToken.decimals)
-        const targetChainId = fromToken.chainId
-
-        // Get chain-specific client
-        const chainClient = await getClientForChain({ id: targetChainId })
-        if (!chainClient) {
-          throw new Error(`Failed to get smart wallet client for chain ${targetChainId}`)
-        }
-
-        setState('sending')
-
-        if (fromToken.address === NATIVE_TOKEN_ADDRESS) {
-          // Native token (ETH) - simple value transfer to deposit address
-          console.log('[useRelaySwap] Sending native token to deposit address')
-          lastTxHash = await chainClient.sendTransaction({
-            to: quote.depositAddress as `0x${string}`,
-            value: amountInWei,
-            data: '0x' as `0x${string}`,
-          })
-        } else {
-          // ERC-20 token - transfer to deposit address
-          console.log('[useRelaySwap] Sending ERC-20 to deposit address')
-          // Encode transfer function: transfer(address to, uint256 amount)
-          const paddedAddress = quote.depositAddress!.slice(2).toLowerCase().padStart(64, '0')
-          const paddedAmount = amountInWei.toString(16).padStart(64, '0')
-          const transferData = `${TRANSFER_SELECTOR}${paddedAddress}${paddedAmount}` as `0x${string}`
-
-          lastTxHash = await chainClient.sendTransaction({
-            to: fromToken.address as `0x${string}`,
-            value: BigInt(0),
-            data: transferData,
-          })
-        }
-
-        console.log('[useRelaySwap] Deposit transaction sent:', lastTxHash)
-
-        // Wait for confirmation
-        setState('pending')
-        try {
-          const chainPublicClient = getPublicClientForChain(targetChainId, publicClient)
-          const receipt = await chainPublicClient.waitForTransactionReceipt({
-            hash: lastTxHash as `0x${string}`,
-            timeout: 60_000,
-            confirmations: 1,
-          })
-          console.log('[useRelaySwap] Deposit transaction confirmed:', lastTxHash, 'status:', receipt.status)
-
-          if (receipt.status === 'reverted') {
-            throw new Error('Deposit transaction reverted on chain')
-          }
-        } catch (receiptErr: any) {
-          console.warn('[useRelaySwap] waitForTransactionReceipt error:', receiptErr.message)
-          // For deposit address method, we can proceed - the intent will be tracked
-          if (!receiptErr.message?.includes('reverted')) {
-            console.log('[useRelaySwap] Proceeding despite receipt error - tx was sent')
-          } else {
-            throw receiptErr
-          }
-        }
-      } else {
-        // Same-chain swap or no deposit address - use step execution
-        for (const step of quote.steps) {
-          console.log('[useRelaySwap] Executing step:', step.id, step.action)
-
-          for (const item of step.items) {
-            if (!item.data) continue
+        for (const item of step.items) {
+          if (!item.data) continue
 
           const targetChainId = item.data.chainId
           console.log('[useRelaySwap] Sending tx on chain:', targetChainId)
@@ -869,7 +751,7 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
             console.log('[useRelaySwap] Processing approval step...')
           }
 
-          // Build transaction with explicit gas settings to avoid bundler estimation issues
+          // Build transaction
           const txParams: {
             to: `0x${string}`
             data: `0x${string}`
@@ -892,7 +774,7 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
             console.log('[useRelaySwap] Transaction sent:', txHash)
             lastTxHash = txHash
 
-            // Wait for confirmation with better error handling
+            // Wait for confirmation
             setState('pending')
             try {
               const chainPublicClient = getPublicClientForChain(targetChainId, publicClient)
@@ -907,7 +789,6 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
                 throw new Error('Transaction reverted on chain')
               }
 
-              // Wait a bit after approval for it to propagate
               if (isApproveStep) {
                 console.log('[useRelaySwap] Waiting for approval to propagate...')
                 await new Promise(resolve => setTimeout(resolve, 2000))
@@ -923,12 +804,10 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
               }
             }
           } catch (txErr: any) {
-            // If the bundler fails with gas estimation, provide a clearer error
             if (txErr.message?.includes('UserOperation reverted during simulation') ||
                 txErr.message?.includes('callGasLimit')) {
               console.error('[useRelaySwap] Bundler simulation failed:', txErr.message)
 
-              // Check if this might be an approval issue
               if (!isApproveStep) {
                 throw new Error('Transaction simulation failed. The token may need approval or there may be insufficient balance.')
               } else {
@@ -937,7 +816,6 @@ export function useRelaySwap(solanaWalletAddress?: string, solanaConnection?: an
             }
             throw txErr
           }
-        }
         }
       }
 
