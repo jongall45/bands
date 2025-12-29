@@ -61,10 +61,17 @@ const getExplorerName = (chainId: number): string => {
 // COMPONENT
 // ============================================
 export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken, sellToken }: CustomSwapWidgetProps) {
-  // Solana wallet hook - get address first to pass to useRelaySwap
-  const { solanaAddress, fetchBalances: fetchSolanaBalances, splTokens, isLoadingBalances: isLoadingSolana } = useSolanaAuth()
+  // Solana wallet hook - get address and signing functions
+  const {
+    solanaAddress,
+    solanaWallet,
+    signAndSendTransaction,
+    fetchBalances: fetchSolanaBalances,
+    splTokens,
+    isLoadingBalances: isLoadingSolana
+  } = useSolanaAuth()
 
-  // Relay swap hook - pass Solana address for cross-chain swaps
+  // Relay swap hook - pass Solana address and signing options for cross-chain and Solana swaps
   const {
     state,
     quote,
@@ -77,7 +84,10 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken, 
     fetchBalance,
     executeSwap,
     reset,
-  } = useRelaySwap(solanaAddress)
+  } = useRelaySwap(solanaAddress, {
+    signAndSendTransaction,
+    solanaWallet,
+  })
 
   // Fetch user tokens from Sim API (EVM only)
   const {
