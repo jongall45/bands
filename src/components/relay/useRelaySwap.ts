@@ -999,9 +999,22 @@ export function useRelaySwap(
         // Execute Solana deposit steps
         for (const step of quote.steps) {
           console.log('[useRelaySwap] Processing Solana → EVM step:', step.id, step.action)
+          console.log('[useRelaySwap] Step items:', JSON.stringify(step.items, null, 2))
 
           for (const item of step.items) {
-            if (!item.data) continue
+            console.log('[useRelaySwap] Processing item:', {
+              status: item.status,
+              hasData: !!item.data,
+              dataKeys: item.data ? Object.keys(item.data) : [],
+              chainId: item.data?.chainId,
+              to: item.data?.to,
+              dataLength: item.data?.data?.length,
+            })
+
+            if (!item.data) {
+              console.log('[useRelaySwap] Skipping item - no data field')
+              continue
+            }
 
             // Check if this is a Solana step (chainId matches Solana or is undefined for Solana-origin)
             const stepChainId = item.data.chainId
@@ -1012,9 +1025,10 @@ export function useRelaySwap(
               continue
             }
 
+            // For Solana, tx data might be in 'data' field or directly serialized
             const txData = item.data.data as string
             if (!txData) {
-              console.warn('[useRelaySwap] No transaction data in step item')
+              console.warn('[useRelaySwap] No transaction data in step item. Full item.data:', JSON.stringify(item.data, null, 2))
               continue
             }
 
