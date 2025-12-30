@@ -1072,53 +1072,37 @@ export function useRelaySwap(
                 data: approveData,
                 value: BigInt(0),
               })
-              console.log('[useRelaySwap] Approval sent:', approveTxHash, '- waiting for confirmation...')
+              console.log('[useRelaySwap] Approval sent:', approveTxHash)
 
-              // Wait for approval to be confirmed on-chain
-              // This is REQUIRED because deposit will fail simulation if approval isn't confirmed
-              const chainIdForWait = depositItem.data.chainId
-              const chainForWait = chainMap[chainIdForWait]
-              if (!chainForWait) {
-                throw new Error(`Unsupported chain ${chainIdForWait} for approval wait`)
-              }
+              // IMPORTANT: Privy returns a UserOp hash, NOT a transaction hash
+              // waitForTransactionReceipt doesn't work with UserOp hashes
+              // Instead, poll the actual allowance on-chain until it's set
+              console.log('[useRelaySwap] Polling for allowance on-chain (UserOp may take time to execute)...')
 
-              // Try multiple RPC endpoints for reliability
-              const rpcEndpoints = EVM_RPC_ENDPOINTS[chainIdForWait] || []
-              let approvalConfirmed = false
+              const maxWaitTime = 60000 // 60 seconds max
+              const pollInterval = 3000 // Check every 3 seconds
+              const startTime = Date.now()
+              let allowanceDetected = false
 
-              for (const rpcUrl of rpcEndpoints) {
-                if (approvalConfirmed) break
+              while (!allowanceDetected && Date.now() - startTime < maxWaitTime) {
+                await new Promise(resolve => setTimeout(resolve, pollInterval))
+
                 try {
-                  const txPublicClient = createPublicClient({
-                    chain: chainForWait,
-                    transport: http(rpcUrl),
-                  })
-                  await txPublicClient.waitForTransactionReceipt({
-                    hash: approveTxHash as `0x${string}`,
-                    timeout: 60_000, // 60 second timeout
-                    confirmations: 1,
-                  })
-                  console.log('[useRelaySwap] Approval confirmed via', rpcUrl)
-                  approvalConfirmed = true
-                } catch (waitErr) {
-                  console.warn('[useRelaySwap] Approval wait failed with', rpcUrl, '- trying next RPC:', waitErr)
+                  const currentAllowance = await checkAllowance(fromToken, approvalSpender, approvalAmount)
+                  if (currentAllowance) {
+                    allowanceDetected = true
+                    console.log('[useRelaySwap] Allowance detected on-chain after', Date.now() - startTime, 'ms')
+                  } else {
+                    console.log('[useRelaySwap] Allowance not yet set, waiting... elapsed:', Date.now() - startTime, 'ms')
+                  }
+                } catch (pollErr) {
+                  console.warn('[useRelaySwap] Allowance poll error:', pollErr)
                 }
               }
 
-              if (!approvalConfirmed) {
-                // Last resort: wait a fixed time and hope it confirmed
-                console.log('[useRelaySwap] All RPC waits failed, waiting 15s as fallback...')
-                await new Promise(resolve => setTimeout(resolve, 15000))
+              if (!allowanceDetected) {
+                throw new Error('Approval transaction sent but allowance not detected after 60 seconds. The UserOp may have failed.')
               }
-
-              // CRITICAL: Verify allowance on-chain before proceeding to deposit
-              // This ensures the approval actually took effect
-              console.log('[useRelaySwap] Verifying allowance on-chain...')
-              const verifiedAllowance = await checkAllowance(fromToken, approvalSpender, approvalAmount)
-              if (!verifiedAllowance) {
-                throw new Error('Approval transaction confirmed but allowance not set on-chain. Please try again.')
-              }
-              console.log('[useRelaySwap] Allowance verified on-chain!')
 
               // Now send the deposit transaction (don't wait for this one)
               console.log('[useRelaySwap] Sending deposit transaction...')
