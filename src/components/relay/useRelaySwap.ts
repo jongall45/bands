@@ -1428,35 +1428,11 @@ export function useRelaySwap(
                   })
                   console.log('[useRelaySwap] Approval tx sent:', approvalTxHash)
 
-                  // IMPORTANT: Privy returns a UserOp hash, NOT a transaction hash
-                  // waitForTransactionReceipt doesn't work with UserOp hashes
-                  // Instead, poll the actual allowance on-chain until it's set
-                  console.log('[useRelaySwap] Polling for allowance on-chain (UserOp may take time to execute)...')
-
-                  const maxWaitTime = 60000 // 60 seconds max
-                  const pollInterval = 3000 // Check every 3 seconds
-                  const pollStartTime = Date.now()
-                  let allowanceDetected = false
-
-                  while (!allowanceDetected && Date.now() - pollStartTime < maxWaitTime) {
-                    await new Promise(resolve => setTimeout(resolve, pollInterval))
-
-                    try {
-                      const currentAllowance = await checkAllowance(fromToken, depositContractAddress, approvalAmount)
-                      if (currentAllowance) {
-                        allowanceDetected = true
-                        console.log('[useRelaySwap] Allowance detected on-chain after', Date.now() - pollStartTime, 'ms')
-                      } else {
-                        console.log('[useRelaySwap] Allowance not yet set, waiting... elapsed:', Date.now() - pollStartTime, 'ms')
-                      }
-                    } catch (pollErr) {
-                      console.warn('[useRelaySwap] Allowance poll error:', pollErr)
-                    }
-                  }
-
-                  if (!allowanceDetected) {
-                    throw new Error('Approval transaction sent but allowance not detected after 60 seconds. The UserOp may have failed.')
-                  }
+                  // Wait for approval UserOp to be bundled and executed
+                  // Privy returns UserOp hash (not tx hash), so we can't use waitForTransactionReceipt
+                  // Instead, wait a reasonable time then re-fetch quote to check if approval worked
+                  console.log('[useRelaySwap] Waiting 15s for approval UserOp to execute...')
+                  await new Promise(resolve => setTimeout(resolve, 15000))
 
                   // Re-fetch quote to get fresh deposit data (original quote may be stale)
                   console.log('[useRelaySwap] Re-fetching quote for fresh deposit data...')
@@ -1497,7 +1473,16 @@ export function useRelaySwap(
                   console.log('[useRelaySwap] Got refreshed quote:', {
                     requestId: refreshedQuoteData.requestId,
                     stepsCount: refreshedQuoteData.steps?.length,
+                    stepIds: refreshedQuoteData.steps?.map((s: any) => s.id),
                   })
+
+                  // Check if the refreshed quote still has an approval step
+                  // If it does, the approval failed and we should abort
+                  const stillNeedsApproval = refreshedQuoteData.steps?.some((s: any) => s.id === 'approve')
+                  if (stillNeedsApproval) {
+                    console.error('[useRelaySwap] Fresh quote still requires approval - approval UserOp may have failed')
+                    throw new Error('Token approval failed. Please try again or approve the token manually.')
+                  }
 
                   // Find the deposit step in refreshed quote
                   const depositStep = refreshedQuoteData.steps?.find((s: any) => s.id === 'deposit' || s.id === 'swap')
