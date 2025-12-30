@@ -667,6 +667,32 @@ export function useRelaySwap(
         // Solana routes: don't set useExternalLiquidity - let Relay determine routing
         // No deposit addresses, no recipientType - minimal request for canonical bridges
         // Note: Relay handles Solana routing automatically for canonical bridges
+
+        // EVM → Solana: Validate Solana recipient address
+        if (isSolanaDestination && !isSolanaOrigin) {
+          // Per Relay docs: Solana addresses are case-sensitive and must be valid
+          // Solana addresses are base58 encoded, typically 32-44 characters
+          const solanaRecipient = destinationWallet
+          if (!solanaRecipient || solanaRecipient.startsWith('0x')) {
+            throw new Error('Invalid Solana recipient address. Please connect your Solana wallet.')
+          }
+          console.log('[useRelaySwap] EVM → Solana cross-chain swap:', {
+            evmOrigin: fromToken.chainId,
+            solanaRecipient,
+            originToken: fromToken.symbol,
+            destinationToken: toToken.symbol,
+          })
+        }
+
+        // Solana → EVM: Log the cross-chain route
+        if (isSolanaOrigin && !isSolanaDestination) {
+          console.log('[useRelaySwap] Solana → EVM cross-chain swap:', {
+            solanaUser: originWallet,
+            evmRecipient: destinationWallet,
+            originToken: fromToken.symbol,
+            destinationToken: toToken.symbol,
+          })
+        }
       } else {
         // EVM-to-EVM routes: use external liquidity
         requestBody.useExternalLiquidity = true
