@@ -1058,13 +1058,31 @@ export function useRelaySwap(
                   console.warn('[useRelaySwap] WARNING: Approval target does not match token address!')
                 }
 
-                // Send approval with explicit gas to avoid estimation issues
+                // Send approval - try with the exact Relay data
                 console.log('[useRelaySwap] Sending approval transaction...')
-                const approveTxHash = await chainClient.sendTransaction({
-                  to: approveItem.data.to as `0x${string}`,
-                  data: approveItem.data.data as `0x${string}`,
-                  value: approveItem.data.value ? BigInt(approveItem.data.value) : BigInt(0),
-                })
+                let approveTxHash: string
+
+                try {
+                  approveTxHash = await chainClient.sendTransaction({
+                    to: approveItem.data.to as `0x${string}`,
+                    data: approveItem.data.data as `0x${string}`,
+                    value: approveItem.data.value ? BigInt(approveItem.data.value) : BigInt(0),
+                  })
+                } catch (approveErr: any) {
+                  console.error('[useRelaySwap] Approval failed:', approveErr.message)
+                  // If Relay's exact data fails, try creating our own approval
+                  console.log('[useRelaySwap] Retrying with manual approval call...')
+                  const manualApproveData = encodeFunctionData({
+                    abi: erc20Abi,
+                    functionName: 'approve',
+                    args: [approvalSpender as `0x${string}`, approvalAmount!],
+                  })
+                  approveTxHash = await chainClient.sendTransaction({
+                    to: fromToken.address as `0x${string}`,
+                    data: manualApproveData,
+                    value: BigInt(0),
+                  })
+                }
                 console.log('[useRelaySwap] Approval UserOp hash:', approveTxHash)
 
                 // Poll for allowance on-chain
