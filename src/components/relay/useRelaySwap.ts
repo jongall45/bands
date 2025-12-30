@@ -796,13 +796,23 @@ export function useRelaySwap(
         requestBody.protocolVersion = 'preferV2'
 
         // For ERC-20 tokens with smart wallets:
-        // DON'T use explicitDeposit - let Relay bundle approval into deposit
-        // Our code will detect the embedded approval and batch it atomically
-        // This approach works better with ERC-4337 bundler simulation
+        // Use explicitDeposit: true to get separate approve + deposit steps
+        // Smart wallets can batch the separate steps atomically
         const isERC20Token = fromToken.address !== NATIVE_TOKEN_ADDRESS
         if (isERC20Token && smartWalletAddress) {
+          // We're using a smart wallet (Privy), so set explicitDeposit: true
+          // This will give us separate approve + deposit steps that can be batched
+          requestBody.explicitDeposit = true
+
+          // CRITICAL: Add userOperationGasOverhead for ERC-4337 smart wallet flows
+          // Per Relay docs: "This field indicates how much additional gas overhead
+          // will be necessary to include the user operation on the chain"
+          // See: https://docs.relay.link/references/api/api_guides/smart_accounts/erc-4337
+          requestBody.userOperationGasOverhead = 300000
+
           console.log('[useRelaySwap] Smart wallet ERC-20 config:', {
-            explicitDeposit: false, // Let Relay bundle approval
+            explicitDeposit: true,
+            userOperationGasOverhead: 300000,
             protocolVersion: 'preferV2',
           })
         }
@@ -1418,9 +1428,35 @@ export function useRelaySwap(
                   })
                   console.log('[useRelaySwap] Approval tx sent:', approvalTxHash)
 
-                  // Wait for approval to propagate
-                  console.log('[useRelaySwap] Waiting for approval to propagate...')
-                  await new Promise(resolve => setTimeout(resolve, 3000))
+                  // IMPORTANT: Privy returns a UserOp hash, NOT a transaction hash
+                  // waitForTransactionReceipt doesn't work with UserOp hashes
+                  // Instead, poll the actual allowance on-chain until it's set
+                  console.log('[useRelaySwap] Polling for allowance on-chain (UserOp may take time to execute)...')
+
+                  const maxWaitTime = 60000 // 60 seconds max
+                  const pollInterval = 3000 // Check every 3 seconds
+                  const pollStartTime = Date.now()
+                  let allowanceDetected = false
+
+                  while (!allowanceDetected && Date.now() - pollStartTime < maxWaitTime) {
+                    await new Promise(resolve => setTimeout(resolve, pollInterval))
+
+                    try {
+                      const currentAllowance = await checkAllowance(fromToken, depositContractAddress, approvalAmount)
+                      if (currentAllowance) {
+                        allowanceDetected = true
+                        console.log('[useRelaySwap] Allowance detected on-chain after', Date.now() - pollStartTime, 'ms')
+                      } else {
+                        console.log('[useRelaySwap] Allowance not yet set, waiting... elapsed:', Date.now() - pollStartTime, 'ms')
+                      }
+                    } catch (pollErr) {
+                      console.warn('[useRelaySwap] Allowance poll error:', pollErr)
+                    }
+                  }
+
+                  if (!allowanceDetected) {
+                    throw new Error('Approval transaction sent but allowance not detected after 60 seconds. The UserOp may have failed.')
+                  }
 
                   // Re-fetch quote to get fresh deposit data (original quote may be stale)
                   console.log('[useRelaySwap] Re-fetching quote for fresh deposit data...')
