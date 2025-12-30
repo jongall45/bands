@@ -315,12 +315,19 @@ export function PrivyRelaySwap({
         referrer: 'bands.cash',
       }
 
-      // Only use deposit address for CROSS-CHAIN (Relay doesn't support it for same-chain)
-      if (!isSameChain) {
+      // Only use deposit address for EVM-to-EVM cross-chain swaps
+      // Per Relay docs: Deposit addresses are NOT supported for Solana routes (canonical bridges)
+      if (!isSameChain && !isToSolana && !isFromSolana) {
         requestBody.useDepositAddress = true
         requestBody.refundTo = userAddress // Refund to EVM wallet
         requestBody.usePermit = false
-        requestBody.useExternalLiquidity = false
+        requestBody.useExternalLiquidity = true // Use external liquidity for EVM-to-EVM
+      }
+
+      // For Solana routes: Let Relay handle routing automatically
+      // Don't set useDepositAddress, useExternalLiquidity, etc.
+      if (isToSolana || isFromSolana) {
+        console.log('[PrivyRelaySwap] Solana cross-chain route - using minimal params')
       }
 
       console.log(`🔍 Fetching ${isSameChain ? 'same-chain' : 'cross-chain'}${isToSolana ? ' (to Solana)' : ''} quote:`, requestBody)
@@ -514,12 +521,22 @@ export function PrivyRelaySwap({
         
       } else {
         // ============================================
-        // SAME-CHAIN: Use steps from quote directly
-        // The quote response already contains transaction data
+        // STEPS-BASED SWAP: Same-chain OR cross-chain to Solana
+        // For EVM → Solana: Execute EVM deposit, Relay bridges automatically
         // ============================================
-        console.log('╔════════════════════════════════════════╗')
-        console.log('║     SAME-CHAIN SWAP                    ║')
-        console.log('╚════════════════════════════════════════╝')
+        const isEvmToSolana = isToSolana && !isFromSolana
+
+        if (isEvmToSolana) {
+          console.log('╔════════════════════════════════════════╗')
+          console.log('║     EVM → SOLANA CROSS-CHAIN           ║')
+          console.log('╚════════════════════════════════════════╝')
+          console.log('🌉 Bridging from EVM to Solana')
+          console.log('📍 Solana recipient:', solanaAddress)
+        } else {
+          console.log('╔════════════════════════════════════════╗')
+          console.log('║     SAME-CHAIN SWAP                    ║')
+          console.log('╚════════════════════════════════════════╝')
+        }
         console.log('💰 Amount:', amount, fromToken, '→', toToken)
         console.log('📋 Steps from quote:', quote.steps)
 
@@ -593,8 +610,43 @@ export function PrivyRelaySwap({
         }
 
         if (lastTxHash) {
-          setState('success')
-          onSuccess?.(lastTxHash)
+          // For EVM → Solana cross-chain: poll for bridge completion
+          if (isEvmToSolana && quote.requestId) {
+            console.log('🌉 EVM deposit sent, polling for Solana bridge completion...')
+            setState('polling')
+
+            let attempts = 0
+            const maxAttempts = 90 // 3 minutes (90 * 2s)
+
+            while (attempts < maxAttempts) {
+              await new Promise(resolve => setTimeout(resolve, 2000))
+              const status = await checkBridgeStatus(quote.requestId)
+
+              if (status === 'success') {
+                console.log('✅ EVM → Solana bridge completed!')
+                setState('success')
+                onSuccess?.(lastTxHash)
+                setTimeout(fetchBalances, 3000)
+                return
+              }
+
+              if (status === 'failed') {
+                throw new Error('Bridge to Solana failed - funds may be refunded')
+              }
+
+              attempts++
+              if (attempts % 10 === 0) {
+                console.log(`⏳ Still waiting for bridge... (${attempts * 2}s elapsed)`)
+              }
+            }
+
+            console.log('⏰ Bridge status check timed out, but EVM deposit was sent')
+            setState('success')
+            onSuccess?.(lastTxHash)
+          } else {
+            setState('success')
+            onSuccess?.(lastTxHash)
+          }
           setTimeout(fetchBalances, 3000)
         } else {
           throw new Error('No transaction was executed - check quote steps')
@@ -607,7 +659,7 @@ export function PrivyRelaySwap({
       setState('error')
       onError?.(error.message)
     }
-  }, [embeddedWallet, address, quote, amount, fromChainId, toChainId, fromToken, toToken, fetchBalances, onSuccess, onError, checkBridgeStatus])
+  }, [embeddedWallet, address, quote, amount, fromChainId, toChainId, fromToken, toToken, fetchBalances, onSuccess, onError, checkBridgeStatus, isToSolana, isFromSolana, solanaAddress])
 
   // ============================================
   // HELPERS
