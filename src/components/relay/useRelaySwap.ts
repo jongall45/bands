@@ -1044,17 +1044,28 @@ export function useRelaySwap(
 
               if (!hasAllowance && approvalSpender) {
                 console.log(`[useRelaySwap] Token ${fromToken.symbol} needs approval`)
+                console.log('[useRelaySwap] Approval details:', {
+                  tokenAddress: fromToken.address,
+                  approveStepTo: approveItem.data.to,
+                  spender: approvalSpender,
+                  amount: approvalAmount?.toString(),
+                  matchesToken: approveItem.data.to.toLowerCase() === fromToken.address.toLowerCase(),
+                })
                 setState('sending')
 
-                // USE RELAY'S EXACT APPROVAL DATA - don't modify it!
-                // This is what Relay's example code does
-                console.log('[useRelaySwap] Sending Relay approval step EXACTLY as provided...')
+                // Verify the approval is targeting the token contract
+                if (approveItem.data.to.toLowerCase() !== fromToken.address.toLowerCase()) {
+                  console.warn('[useRelaySwap] WARNING: Approval target does not match token address!')
+                }
+
+                // Send approval with explicit gas to avoid estimation issues
+                console.log('[useRelaySwap] Sending approval transaction...')
                 const approveTxHash = await chainClient.sendTransaction({
                   to: approveItem.data.to as `0x${string}`,
                   data: approveItem.data.data as `0x${string}`,
                   value: approveItem.data.value ? BigInt(approveItem.data.value) : BigInt(0),
                 })
-                console.log('[useRelaySwap] Approval sent:', approveTxHash)
+                console.log('[useRelaySwap] Approval UserOp hash:', approveTxHash)
 
                 // Poll for allowance on-chain
                 console.log('[useRelaySwap] Polling for allowance on-chain...')
