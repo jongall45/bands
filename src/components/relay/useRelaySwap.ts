@@ -1055,22 +1055,37 @@ export function useRelaySwap(
                 args: [approvalSpender as `0x${string}`, maxApproval],
               })
 
-              // Send approval as separate transaction first
-              // This avoids gas estimation issues with batched calls
+              // Send approval transaction and WAIT for confirmation
+              // We must wait because deposit will fail if approval isn't confirmed
               console.log('[useRelaySwap] Sending approval transaction...')
               const approveTxHash = await chainClient.sendTransaction({
                 to: fromToken.address as `0x${string}`,
                 data: approveData,
                 value: BigInt(0),
               })
-              console.log('[useRelaySwap] Approval sent:', approveTxHash)
+              console.log('[useRelaySwap] Approval sent:', approveTxHash, '- waiting for confirmation...')
 
-              // Wait for approval to be processed by bundler (3 seconds)
-              // This ensures the nonce is updated before we send the deposit
-              console.log('[useRelaySwap] Waiting for approval to process...')
-              await new Promise(resolve => setTimeout(resolve, 3000))
+              // Wait for approval to be confirmed on-chain
+              // This is required because deposit will fail simulation if approval isn't confirmed
+              const chainId = depositItem.data.chainId
+              const chain = chainMap[chainId]
+              if (chain) {
+                const txPublicClient = createPublicClient({
+                  chain,
+                  transport: http(EVM_RPC_ENDPOINTS[chainId]?.[0]),
+                })
+                try {
+                  await txPublicClient.waitForTransactionReceipt({
+                    hash: approveTxHash as `0x${string}`,
+                    timeout: 30_000, // 30 second timeout for approval
+                  })
+                  console.log('[useRelaySwap] Approval confirmed!')
+                } catch (waitErr) {
+                  console.warn('[useRelaySwap] Approval wait timed out, proceeding anyway:', waitErr)
+                }
+              }
 
-              // Now send the deposit transaction
+              // Now send the deposit transaction (don't wait for this one)
               console.log('[useRelaySwap] Sending deposit transaction...')
               const depositTxHash = await chainClient.sendTransaction({
                 to: depositItem.data.to as `0x${string}`,
