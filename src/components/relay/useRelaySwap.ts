@@ -977,6 +977,109 @@ export function useRelaySwap(
       }
     }
 
+    // For Solana → EVM cross-chain swaps, sign Solana deposit then Relay bridges to EVM
+    if (isSolanaOrigin && !isSolanaDestination) {
+      console.log('[useRelaySwap] Solana → EVM cross-chain swap')
+      console.log('[useRelaySwap] Solana user:', solanaWalletAddress)
+      console.log('[useRelaySwap] EVM recipient:', smartWalletAddress)
+
+      // Check if we have Solana signing capability
+      if (!solanaSigningOptions?.signAndSendTransaction || !solanaSigningOptions?.solanaWallet) {
+        setError('Solana wallet not available for signing. Please ensure your Solana wallet is connected.')
+        setState('error')
+        return null
+      }
+
+      setState('confirming')
+      setError(null)
+
+      try {
+        let lastTxSignature: string | undefined
+
+        // Execute Solana deposit steps
+        for (const step of quote.steps) {
+          console.log('[useRelaySwap] Processing Solana → EVM step:', step.id, step.action)
+
+          for (const item of step.items) {
+            if (!item.data) continue
+
+            // Check if this is a Solana step (chainId matches Solana or is undefined for Solana-origin)
+            const stepChainId = item.data.chainId
+            const isSolanaStep = stepChainId === SOLANA_CHAIN_ID || !stepChainId
+
+            if (!isSolanaStep) {
+              console.log('[useRelaySwap] Skipping non-Solana step (EVM destination handled by Relay)')
+              continue
+            }
+
+            const txData = item.data.data as string
+            if (!txData) {
+              console.warn('[useRelaySwap] No transaction data in step item')
+              continue
+            }
+
+            setState('sending')
+
+            // Decode base64 transaction data
+            let serializedTx: Uint8Array
+            try {
+              const binaryString = atob(txData)
+              serializedTx = new Uint8Array(binaryString.length)
+              for (let i = 0; i < binaryString.length; i++) {
+                serializedTx[i] = binaryString.charCodeAt(i)
+              }
+            } catch {
+              if (txData.startsWith('0x')) {
+                const hexString = txData.slice(2)
+                serializedTx = new Uint8Array(hexString.length / 2)
+                for (let i = 0; i < hexString.length; i += 2) {
+                  serializedTx[i / 2] = parseInt(hexString.substr(i, 2), 16)
+                }
+              } else {
+                throw new Error('Unable to decode Solana transaction data')
+              }
+            }
+
+            console.log('[useRelaySwap] Sending Solana deposit transaction via Privy...')
+            const result = await solanaSigningOptions.signAndSendTransaction({
+              transaction: serializedTx,
+              wallet: solanaSigningOptions.solanaWallet,
+            })
+
+            lastTxSignature = toSignatureString(result.signature)
+            console.log('[useRelaySwap] Solana deposit sent:', lastTxSignature)
+          }
+        }
+
+        if (!lastTxSignature) {
+          setError('No Solana transaction was executed. Relay may not support this route yet.')
+          setState('error')
+          return null
+        }
+
+        // Success - Solana deposit sent, Relay will handle bridging to EVM
+        const swapResult: SwapResult = {
+          txHash: lastTxSignature,
+          fromAmount: quote.fromAmount,
+          toAmount: quote.toAmount,
+          fromToken,
+          toToken,
+        }
+        setResult(swapResult)
+        setState('success')
+        return swapResult
+      } catch (err: any) {
+        console.error('[useRelaySwap] Solana → EVM swap error:', err)
+        if (err.message?.includes('rejected') || err.message?.includes('denied')) {
+          setError('Transaction rejected')
+        } else {
+          setError(err.message || 'Solana → EVM swap failed')
+        }
+        setState('error')
+        return null
+      }
+    }
+
     // For EVM swaps, require smart wallet
     if (!smartWalletAddress || !smartWalletClient) {
       setError('Wallet not connected')
