@@ -868,6 +868,7 @@ export function useRelaySwap(
       fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:820',message:'Solana-only swap detected',data:{fromToken:fromToken.symbol,toToken:toToken.symbol,stepsCount:quote.steps.length,hasSolanaWallet:!!solanaSigningOptions?.solanaWallet},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
       // #endregion
       console.log('[useRelaySwap] Solana-to-Solana swap - signing via Privy Solana wallet')
+      console.log('[useRelaySwap] Quote steps:', JSON.stringify(quote.steps, null, 2))
 
       // Check if we have Solana signing capability
       if (!solanaSigningOptions?.signAndSendTransaction || !solanaSigningOptions?.solanaWallet) {
@@ -885,15 +886,22 @@ export function useRelaySwap(
         // Execute each Solana step
         for (const step of quote.steps) {
           console.log('[useRelaySwap] Executing Solana step:', step.id, step.action)
+          console.log('[useRelaySwap] Step details:', JSON.stringify(step, null, 2))
 
           for (const item of step.items) {
-            if (!item.data) continue
+            console.log('[useRelaySwap] Processing Solana step item:', JSON.stringify(item, null, 2))
+
+            if (!item.data) {
+              console.log('[useRelaySwap] Skipping item - no data field')
+              continue
+            }
 
             // Relay returns Solana transaction data as base64-encoded string
             // The data field contains the serialized transaction
             const txData = item.data.data as string
             if (!txData) {
               console.warn('[useRelaySwap] No transaction data in Solana step item')
+              console.log('[useRelaySwap] Full item.data:', JSON.stringify(item.data, null, 2))
               continue
             }
 
@@ -911,6 +919,7 @@ export function useRelaySwap(
               for (let i = 0; i < binaryString.length; i++) {
                 serializedTx[i] = binaryString.charCodeAt(i)
               }
+              console.log('[useRelaySwap] Successfully decoded base64 transaction, length:', serializedTx.length)
             } catch {
               // If not base64, try hex decoding
               if (txData.startsWith('0x')) {
@@ -919,6 +928,7 @@ export function useRelaySwap(
                 for (let i = 0; i < hexString.length; i += 2) {
                   serializedTx[i / 2] = parseInt(hexString.substr(i, 2), 16)
                 }
+                console.log('[useRelaySwap] Successfully decoded hex transaction, length:', serializedTx.length)
               } else {
                 throw new Error('Unable to decode Solana transaction data')
               }
@@ -999,17 +1009,11 @@ export function useRelaySwap(
         // Execute Solana deposit steps
         for (const step of quote.steps) {
           console.log('[useRelaySwap] Processing Solana → EVM step:', step.id, step.action)
-          console.log('[useRelaySwap] Step items:', JSON.stringify(step.items, null, 2))
+          console.log('[useRelaySwap] Step details:', JSON.stringify(step, null, 2))
 
           for (const item of step.items) {
-            console.log('[useRelaySwap] Processing item:', {
-              status: item.status,
-              hasData: !!item.data,
-              dataKeys: item.data ? Object.keys(item.data) : [],
-              chainId: item.data?.chainId,
-              to: item.data?.to,
-              dataLength: item.data?.data?.length,
-            })
+            // Enhanced logging to debug step item structure
+            console.log('[useRelaySwap] Processing step item:', JSON.stringify(item, null, 2))
 
             if (!item.data) {
               console.log('[useRelaySwap] Skipping item - no data field')
@@ -1018,7 +1022,14 @@ export function useRelaySwap(
 
             // Check if this is a Solana step (chainId matches Solana or is undefined for Solana-origin)
             const stepChainId = item.data.chainId
-            const isSolanaStep = stepChainId === SOLANA_CHAIN_ID || !stepChainId
+            const isSolanaStep = stepChainId === SOLANA_CHAIN_ID || (stepChainId === undefined && isSolanaOrigin)
+
+            console.log('[useRelaySwap] Step chain analysis:', {
+              stepChainId,
+              SOLANA_CHAIN_ID,
+              isSolanaStep,
+              fromChainId: fromToken.chainId,
+            })
 
             if (!isSolanaStep) {
               console.log('[useRelaySwap] Skipping non-Solana step (EVM destination handled by Relay)')
@@ -1026,22 +1037,26 @@ export function useRelaySwap(
             }
 
             // For Solana, tx data might be in 'data' field or directly serialized
+            // Relay may also return transaction data in different formats
             const txData = item.data.data as string
             if (!txData) {
-              console.warn('[useRelaySwap] No transaction data in step item. Full item.data:', JSON.stringify(item.data, null, 2))
+              console.warn('[useRelaySwap] No transaction data in step item. Checking alternative fields...')
+              console.log('[useRelaySwap] Full item.data:', JSON.stringify(item.data, null, 2))
               continue
             }
 
             setState('sending')
 
-            // Decode base64 transaction data
+            // Decode transaction data - try base64 first, then hex
             let serializedTx: Uint8Array
             try {
+              // Try base64 decoding first (standard Relay format for Solana)
               const binaryString = atob(txData)
               serializedTx = new Uint8Array(binaryString.length)
               for (let i = 0; i < binaryString.length; i++) {
                 serializedTx[i] = binaryString.charCodeAt(i)
               }
+              console.log('[useRelaySwap] Successfully decoded base64 transaction, length:', serializedTx.length)
             } catch {
               if (txData.startsWith('0x')) {
                 const hexString = txData.slice(2)
@@ -1049,8 +1064,9 @@ export function useRelaySwap(
                 for (let i = 0; i < hexString.length; i += 2) {
                   serializedTx[i / 2] = parseInt(hexString.substr(i, 2), 16)
                 }
+                console.log('[useRelaySwap] Successfully decoded hex transaction, length:', serializedTx.length)
               } else {
-                throw new Error('Unable to decode Solana transaction data')
+                throw new Error('Unable to decode Solana transaction data - not base64 or hex')
               }
             }
 
@@ -1066,6 +1082,8 @@ export function useRelaySwap(
         }
 
         if (!lastTxSignature) {
+          console.error('[useRelaySwap] No Solana transaction was executed')
+          console.log('[useRelaySwap] Full quote steps:', JSON.stringify(quote.steps, null, 2))
           setError('No Solana transaction was executed. Relay may not support this route yet.')
           setState('error')
           return null
@@ -1088,6 +1106,160 @@ export function useRelaySwap(
           setError('Transaction rejected')
         } else {
           setError(err.message || 'Solana → EVM swap failed')
+        }
+        setState('error')
+        return null
+      }
+    }
+
+    // For EVM → Solana cross-chain swaps
+    // User signs EVM transaction to deposit, then Relay bridges to Solana
+    if (!isSolanaOrigin && isSolanaDestination) {
+      console.log('[useRelaySwap] EVM → Solana cross-chain swap')
+      console.log('[useRelaySwap] EVM user:', smartWalletAddress)
+      console.log('[useRelaySwap] Solana recipient:', solanaWalletAddress)
+
+      if (!smartWalletAddress || !smartWalletClient) {
+        setError('EVM wallet not connected')
+        return null
+      }
+
+      setState('confirming')
+      setError(null)
+
+      try {
+        let lastTxHash: string | undefined
+        const isERC20Token = fromToken.address !== NATIVE_TOKEN_ADDRESS
+
+        // Process steps - we need to handle EVM-side transactions
+        for (const step of quote.steps) {
+          console.log('[useRelaySwap] Processing EVM → Solana step:', step.id, step.action)
+          console.log('[useRelaySwap] Step details:', JSON.stringify(step, null, 2))
+
+          // Skip approve steps if we'll handle them via batching
+          if (step.id === 'approve') {
+            console.log('[useRelaySwap] Found approve step - will batch with deposit')
+            continue
+          }
+
+          for (const item of step.items) {
+            console.log('[useRelaySwap] Processing step item:', JSON.stringify(item, null, 2))
+
+            if (!item.data) {
+              console.log('[useRelaySwap] Skipping item - no data field')
+              continue
+            }
+
+            const stepChainId = item.data.chainId
+
+            // For EVM → Solana, we only handle EVM-side steps here
+            // Solana-side delivery is handled by Relay's bridge
+            if (stepChainId === SOLANA_CHAIN_ID) {
+              console.log('[useRelaySwap] Skipping Solana-side step (handled by Relay bridge)')
+              continue
+            }
+
+            setState('sending')
+
+            // Get chain-specific client
+            const targetChainId = stepChainId || fromToken.chainId
+            console.log('[useRelaySwap] Getting smart wallet client for chain:', targetChainId)
+            const chainClient = await getClientForChain({ id: targetChainId })
+
+            if (!chainClient) {
+              throw new Error(`Failed to get smart wallet client for chain ${targetChainId}`)
+            }
+
+            const txData = item.data.data as string
+            const depositContractAddress = item.data.to as string
+
+            // Check if we need approval for ERC20 tokens
+            if (isERC20Token && step.id !== 'approve') {
+              const approvalAmount = parseUnits(quote.fromAmount, fromToken.decimals)
+              const hasAllowance = await checkAllowance(fromToken, depositContractAddress, approvalAmount)
+
+              console.log('[useRelaySwap] EVM → Solana allowance check:', {
+                hasAllowance,
+                depositContract: depositContractAddress,
+                amount: approvalAmount.toString(),
+              })
+
+              if (!hasAllowance) {
+                console.log('[useRelaySwap] Batching approval + deposit for EVM → Solana')
+
+                const MAX_UINT256 = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
+                const approveData = encodeFunctionData({
+                  abi: erc20Abi,
+                  functionName: 'approve',
+                  args: [depositContractAddress as `0x${string}`, MAX_UINT256],
+                })
+
+                // Batch approval with deposit
+                const batchedTxHash = await chainClient.sendTransaction({
+                  calls: [
+                    {
+                      to: fromToken.address as `0x${string}`,
+                      data: approveData,
+                      value: BigInt(0),
+                    },
+                    {
+                      to: item.data.to as `0x${string}`,
+                      data: txData as `0x${string}`,
+                      value: item.data.value ? BigInt(item.data.value) : BigInt(0),
+                    },
+                  ],
+                })
+
+                console.log('[useRelaySwap] EVM → Solana batched tx sent:', batchedTxHash)
+                lastTxHash = batchedTxHash
+                continue
+              }
+            }
+
+            // Send the deposit transaction
+            const txParams = {
+              to: item.data.to as `0x${string}`,
+              data: txData as `0x${string}`,
+              value: item.data.value ? BigInt(item.data.value) : BigInt(0),
+            }
+
+            console.log('[useRelaySwap] Sending EVM → Solana deposit tx:', {
+              to: txParams.to,
+              value: txParams.value.toString(),
+              dataLength: txParams.data.length,
+            })
+
+            const txHash = await chainClient.sendTransaction(txParams)
+            console.log('[useRelaySwap] EVM → Solana deposit sent:', txHash)
+            lastTxHash = txHash
+          }
+        }
+
+        if (!lastTxHash) {
+          console.error('[useRelaySwap] No EVM transaction was executed for EVM → Solana swap')
+          console.log('[useRelaySwap] Full quote steps:', JSON.stringify(quote.steps, null, 2))
+          setError('No transaction was executed. Please try again.')
+          setState('error')
+          return null
+        }
+
+        // Success - EVM deposit sent, Relay will handle bridging to Solana
+        const swapResult: SwapResult = {
+          txHash: lastTxHash,
+          fromAmount: quote.fromAmount,
+          toAmount: quote.toAmount,
+          fromToken,
+          toToken,
+        }
+        setResult(swapResult)
+        setState('success')
+        return swapResult
+      } catch (err: any) {
+        console.error('[useRelaySwap] EVM → Solana swap error:', err)
+        if (err.message?.includes('rejected') || err.message?.includes('denied')) {
+          setError('Transaction rejected')
+        } else {
+          setError(err.message || 'EVM → Solana swap failed')
         }
         setState('error')
         return null
