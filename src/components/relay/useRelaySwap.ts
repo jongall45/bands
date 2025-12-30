@@ -1001,16 +1001,16 @@ export function useRelaySwap(
             throw new Error(`Failed to get smart wallet client for chain ${targetChainId}`)
           }
 
-          // Determine spender and amount for approval
-          let approvalSpender: string | null = null
-          let approvalAmount: bigint | null = null
-
-          // Check if there's a separate approve step
+          // Check if there's a separate approve step from Relay
           if (hasApprovalStep) {
             const approveStep = currentQuote.steps.find(s => s.id === 'approve')
             const approveItem = approveStep?.items?.[0]
-            if (approveItem?.data?.data) {
-              // Decode approve call from the step
+
+            if (approveItem?.data) {
+              // Decode the spender and amount from Relay's approval for allowance checking
+              let approvalSpender: string | null = null
+              let approvalAmount: bigint | null = null
+
               try {
                 const decoded = decodeFunctionData({
                   abi: erc20Abi,
@@ -1021,7 +1021,7 @@ export function useRelaySwap(
                   approvalAmount = decoded.args[1] as bigint
                 }
               } catch {
-                // Try manual extraction
+                // Manual extraction fallback
                 const txData = approveItem.data.data as string
                 if (txData.startsWith(APPROVE_SELECTOR)) {
                   const spenderHex = txData.substring(10, 74)
@@ -1030,82 +1030,64 @@ export function useRelaySwap(
                   approvalAmount = BigInt('0x' + amountHex)
                 }
               }
-            }
-          } else {
-            // No separate approve step - we need to approve to the deposit contract directly
-            // The deposit contract address is in depositItem.data.to
-            // Use the swap amount from the quote as the approval amount
-            approvalSpender = depositItem.data.to
-            try {
-              // Parse the fromAmount to wei using the token's decimals
-              approvalAmount = parseUnits(currentQuote.fromAmount, fromToken.decimals)
-              console.log('[useRelaySwap] No approve step - will approve to deposit contract:', approvalSpender, 'amount:', approvalAmount.toString())
-            } catch (parseErr) {
-              console.warn('[useRelaySwap] Failed to parse fromAmount for approval:', parseErr)
-              approvalAmount = null
-            }
-          }
 
-          // If we found approval info, check if we need to approve
-          if (approvalSpender && approvalAmount) {
-            const hasAllowance = await checkAllowance(fromToken, approvalSpender, approvalAmount)
-
-            if (!hasAllowance) {
-              console.log(`[useRelaySwap] Token ${fromToken.symbol} needs approval to ${approvalSpender}`)
-              setState('sending')
-
-              // Use max uint256 for approval so user only needs to approve once
-              const maxApproval = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
-
-              // Create approval call data with max approval
-              const approveData = encodeFunctionData({
-                abi: erc20Abi,
-                functionName: 'approve',
-                args: [approvalSpender as `0x${string}`, maxApproval],
+              console.log('[useRelaySwap] Relay approval step:', {
+                to: approveItem.data.to,
+                spender: approvalSpender,
+                amount: approvalAmount?.toString(),
               })
 
-              // Send approval transaction and WAIT for confirmation
-              // We must wait because deposit will fail if approval isn't confirmed
-              console.log('[useRelaySwap] Sending approval transaction...')
-              const approveTxHash = await chainClient.sendTransaction({
-                to: fromToken.address as `0x${string}`,
-                data: approveData,
-                value: BigInt(0),
-              })
-              console.log('[useRelaySwap] Approval sent:', approveTxHash)
+              // Check if we already have sufficient allowance
+              const hasAllowance = approvalSpender && approvalAmount
+                ? await checkAllowance(fromToken, approvalSpender, approvalAmount)
+                : false
 
-              // IMPORTANT: Privy returns a UserOp hash, NOT a transaction hash
-              // waitForTransactionReceipt doesn't work with UserOp hashes
-              // Instead, poll the actual allowance on-chain until it's set
-              console.log('[useRelaySwap] Polling for allowance on-chain (UserOp may take time to execute)...')
+              if (!hasAllowance && approvalSpender) {
+                console.log(`[useRelaySwap] Token ${fromToken.symbol} needs approval - batching with deposit`)
+                setState('sending')
 
-              const maxWaitTime = 60000 // 60 seconds max
-              const pollInterval = 3000 // Check every 3 seconds
-              const startTime = Date.now()
-              let allowanceDetected = false
+                // Create approval call data
+                const approveData = encodeFunctionData({
+                  abi: erc20Abi,
+                  functionName: 'approve',
+                  args: [approvalSpender as `0x${string}`, approvalAmount!],
+                })
 
-              while (!allowanceDetected && Date.now() - startTime < maxWaitTime) {
-                await new Promise(resolve => setTimeout(resolve, pollInterval))
+                console.log('[useRelaySwap] Sending batched approval+deposit UserOperation...')
+                // Batch approval with deposit in a SINGLE UserOperation
+                // This ensures both execute atomically - approval first, then deposit uses it
+                const batchedTxHash = await chainClient.sendTransaction({
+                  calls: [
+                    {
+                      to: fromToken.address as `0x${string}`,
+                      data: approveData,
+                      value: BigInt(0),
+                    },
+                    {
+                      to: depositItem.data.to as `0x${string}`,
+                      data: depositItem.data.data as `0x${string}`,
+                      value: depositItem.data.value ? BigInt(depositItem.data.value) : BigInt(0),
+                    },
+                  ],
+                })
 
-                try {
-                  const currentAllowance = await checkAllowance(fromToken, approvalSpender, approvalAmount)
-                  if (currentAllowance) {
-                    allowanceDetected = true
-                    console.log('[useRelaySwap] Allowance detected on-chain after', Date.now() - startTime, 'ms')
-                  } else {
-                    console.log('[useRelaySwap] Allowance not yet set, waiting... elapsed:', Date.now() - startTime, 'ms')
-                  }
-                } catch (pollErr) {
-                  console.warn('[useRelaySwap] Allowance poll error:', pollErr)
+                console.log('[useRelaySwap] Batched approval+deposit sent:', batchedTxHash)
+
+                const swapResult: SwapResult = {
+                  txHash: batchedTxHash,
+                  fromAmount: quote.fromAmount,
+                  toAmount: quote.toAmount,
+                  fromToken,
+                  toToken,
                 }
+                setResult(swapResult)
+                setState('success')
+                return swapResult
               }
 
-              if (!allowanceDetected) {
-                throw new Error('Approval transaction sent but allowance not detected after 60 seconds. The UserOp may have failed.')
-              }
-
-              // Now send the deposit transaction (don't wait for this one)
-              console.log('[useRelaySwap] Sending deposit transaction...')
+              // Already have allowance - just send deposit
+              console.log('[useRelaySwap] Already has allowance, sending deposit...')
+              setState('sending')
               const depositTxHash = await chainClient.sendTransaction({
                 to: depositItem.data.to as `0x${string}`,
                 data: depositItem.data.data as `0x${string}`,
@@ -1113,7 +1095,6 @@ export function useRelaySwap(
               })
               console.log('[useRelaySwap] Deposit sent:', depositTxHash)
 
-              // Return success with deposit tx hash
               const swapResult: SwapResult = {
                 txHash: depositTxHash,
                 fromAmount: quote.fromAmount,
