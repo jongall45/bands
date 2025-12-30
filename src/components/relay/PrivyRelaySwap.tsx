@@ -136,8 +136,14 @@ export function PrivyRelaySwap({
   const { wallets } = useWallets()
   const publicClient = usePublicClient({ chainId: base.id })
 
-  // Solana wallet hook
-  const { solanaAddress, hasSolanaWallet } = useSolanaAuth()
+  // Solana wallet hook - get address, balances, and signing capability
+  const {
+    solanaAddress,
+    hasSolanaWallet,
+    balances: solanaBalances,
+    signAndSendTransaction: privySignAndSendSolana,
+    solanaWallet,
+  } = useSolanaAuth()
 
   // Get the embedded wallet (Privy)
   const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
@@ -192,12 +198,43 @@ export function PrivyRelaySwap({
   // FETCH BALANCES
   // ============================================
   const fetchBalances = useCallback(async () => {
+    // For Solana source, use Solana balances
+    if (isFromSolana) {
+      if (solanaBalances) {
+        if (fromToken === 'SOL') {
+          setFromBalance(solanaBalances.sol || '0')
+        } else if (fromToken === 'USDC') {
+          setFromBalance(solanaBalances.usdc || '0')
+        }
+      }
+      // To token balance (EVM destination)
+      if (!isToSolana && address && embeddedWallet) {
+        try {
+          const provider = await embeddedWallet.getEthereumProvider()
+          const toTokenInfo = TOKENS[toToken][toChainId]
+          if (toTokenInfo?.address === '0x0000000000000000000000000000000000000000') {
+            const balance = await provider.request({
+              method: 'eth_getBalance',
+              params: [address, 'latest'],
+            }) as string
+            setToBalance(formatUnits(BigInt(balance), 18))
+          } else {
+            setToBalance('0')
+          }
+        } catch (e) {
+          console.error('Error fetching EVM to balance:', e)
+        }
+      }
+      return
+    }
+
+    // For EVM source
     if (!address || !embeddedWallet) return
 
     try {
       const provider = await embeddedWallet.getEthereumProvider()
-      
-      // From token balance
+
+      // From token balance (EVM)
       const fromTokenInfo = TOKENS[fromToken][fromChainId]
       if (fromTokenInfo) {
         if (fromTokenInfo.address === '0x0000000000000000000000000000000000000000') {
@@ -222,24 +259,35 @@ export function PrivyRelaySwap({
         }
       }
 
-      // To token balance (on destination chain)
-      const toTokenInfo = TOKENS[toToken][toChainId]
-      if (toTokenInfo) {
-        if (toTokenInfo.address === '0x0000000000000000000000000000000000000000') {
-          const balance = await provider.request({
-            method: 'eth_getBalance',
-            params: [address, 'latest'],
-          }) as string
-          setToBalance(formatUnits(BigInt(balance), 18))
-        } else {
-          // For simplicity, we'll show 0 for other chains
-          setToBalance('0')
+      // To token balance
+      if (isToSolana) {
+        // Solana destination - show Solana balance
+        if (solanaBalances) {
+          if (toToken === 'SOL') {
+            setToBalance(solanaBalances.sol || '0')
+          } else if (toToken === 'USDC') {
+            setToBalance(solanaBalances.usdc || '0')
+          }
+        }
+      } else {
+        // EVM destination
+        const toTokenInfo = TOKENS[toToken][toChainId]
+        if (toTokenInfo) {
+          if (toTokenInfo.address === '0x0000000000000000000000000000000000000000') {
+            const balance = await provider.request({
+              method: 'eth_getBalance',
+              params: [address, 'latest'],
+            }) as string
+            setToBalance(formatUnits(BigInt(balance), 18))
+          } else {
+            setToBalance('0')
+          }
         }
       }
     } catch (error) {
       console.error('Error fetching balances:', error)
     }
-  }, [address, embeddedWallet, fromChainId, toChainId, fromToken, toToken, publicClient])
+  }, [address, embeddedWallet, fromChainId, toChainId, fromToken, toToken, publicClient, isFromSolana, isToSolana, solanaBalances])
 
   // Fetch balances on mount and when params change
   useEffect(() => {
@@ -271,18 +319,35 @@ export function PrivyRelaySwap({
   // FETCH QUOTE FROM RELAY
   // ============================================
   const fetchQuote = useCallback(async () => {
-    // For Solana destination, we need both EVM and Solana addresses
-    const userAddress = address
+    // Determine user address based on origin chain
+    // Per Relay docs: "user" should be the wallet signing the origin transaction
+    const userAddress = isFromSolana ? solanaAddress : address
+    // Destination address depends on destination chain
     const destAddress = isToSolana ? solanaAddress : address
 
-    if (!userAddress || !amount || parseFloat(amount) <= 0) {
+    if (!amount || parseFloat(amount) <= 0) {
       setQuote(null)
       return
     }
 
-    // Check if swapping to Solana but no Solana wallet
-    if (isToSolana && !solanaAddress) {
+    // Validate required wallets
+    if (isFromSolana && !solanaAddress) {
       setErrorMessage('Solana wallet not available. Please log in again.')
+      setState('error')
+      return
+    }
+    if (!isFromSolana && !address) {
+      setErrorMessage('EVM wallet not connected.')
+      setState('error')
+      return
+    }
+    if (isToSolana && !solanaAddress) {
+      setErrorMessage('Solana wallet not available for receiving.')
+      setState('error')
+      return
+    }
+    if (!isToSolana && !address) {
+      setErrorMessage('EVM wallet not connected for receiving.')
       setState('error')
       return
     }
@@ -377,7 +442,7 @@ export function PrivyRelaySwap({
       setState('error')
       setQuote(null)
     }
-  }, [address, amount, fromChainId, toChainId, fromToken, toToken, isToSolana, solanaAddress])
+  }, [address, amount, fromChainId, toChainId, fromToken, toToken, isToSolana, isFromSolana, solanaAddress])
 
   // ============================================
   // CHECK BRIDGE STATUS (for cross-chain via deposit address)
@@ -406,7 +471,20 @@ export function PrivyRelaySwap({
   // EXECUTE SWAP
   // ============================================
   const executeSwap = useCallback(async () => {
-    if (!embeddedWallet || !address || !quote || !amount) return
+    if (!quote || !amount) return
+
+    // Validate wallet requirements based on origin chain
+    if (isFromSolana) {
+      if (!solanaWallet || !solanaAddress) {
+        setErrorMessage('Solana wallet not available')
+        return
+      }
+    } else {
+      if (!embeddedWallet || !address) {
+        setErrorMessage('EVM wallet not connected')
+        return
+      }
+    }
 
     setState('executing')
     setErrorMessage(null)
@@ -422,13 +500,128 @@ export function PrivyRelaySwap({
       const amountWei = parseUnits(amount, fromTokenInfo.decimals)
       const isCrossChainSwap = fromChainId !== toChainId
 
-      // Get provider from embedded wallet
-      const provider = await embeddedWallet.getEthereumProvider()
+      // ============================================
+      // SOLANA → EVM: Sign Solana transaction
+      // ============================================
+      if (isFromSolana) {
+        console.log('╔════════════════════════════════════════╗')
+        console.log('║     SOLANA → EVM CROSS-CHAIN           ║')
+        console.log('╚════════════════════════════════════════╝')
+        console.log('🌉 Bridging from Solana to EVM')
+        console.log('📍 Solana user:', solanaAddress)
+        console.log('📍 EVM recipient:', address)
+        console.log('💰 Amount:', amount, fromToken)
+        console.log('📋 Steps from quote:', quote.steps)
+
+        // Execute Solana steps from quote
+        let lastTxSignature: string | null = null
+
+        for (const step of quote.steps || []) {
+          console.log(`📌 Processing Solana step: ${step.id}`, step.action || '')
+
+          for (const item of step.items || []) {
+            if (item.status === 'incomplete' && item.data) {
+              const txData = item.data.data as string
+              if (!txData) {
+                console.warn('[Solana] No transaction data in step item')
+                continue
+              }
+
+              console.log('[Solana] Sending transaction via Privy...')
+              setState('executing')
+
+              // Decode base64 transaction data
+              let serializedTx: Uint8Array
+              try {
+                const binaryString = atob(txData)
+                serializedTx = new Uint8Array(binaryString.length)
+                for (let i = 0; i < binaryString.length; i++) {
+                  serializedTx[i] = binaryString.charCodeAt(i)
+                }
+              } catch {
+                // Try hex decoding if base64 fails
+                if (txData.startsWith('0x')) {
+                  const hexString = txData.slice(2)
+                  serializedTx = new Uint8Array(hexString.length / 2)
+                  for (let i = 0; i < hexString.length; i += 2) {
+                    serializedTx[i / 2] = parseInt(hexString.substr(i, 2), 16)
+                  }
+                } else {
+                  console.error('[Solana] Unable to decode transaction data')
+                  throw new Error('Unable to decode Solana transaction data')
+                }
+              }
+
+              // Send via Privy Solana wallet
+              const result = await privySignAndSendSolana({
+                transaction: serializedTx,
+                wallet: solanaWallet!,
+              })
+              if (result?.signature) {
+                // Convert signature to string if it's a Uint8Array
+                const sigString = typeof result.signature === 'string'
+                  ? result.signature
+                  : Array.from(result.signature as Uint8Array).map(b => b.toString(16).padStart(2, '0')).join('')
+                lastTxSignature = sigString
+                console.log('[Solana] Transaction sent:', sigString)
+                setTxHash(sigString)
+              }
+            }
+          }
+        }
+
+        if (!lastTxSignature) {
+          throw new Error('No Solana transaction was executed - check quote steps')
+        }
+
+        // Poll for bridge completion
+        if (quote.requestId) {
+          console.log('🌉 Solana deposit sent, polling for EVM bridge completion...')
+          setState('polling')
+
+          let attempts = 0
+          const maxAttempts = 90 // 3 minutes
+
+          while (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 2000))
+            const status = await checkBridgeStatus(quote.requestId)
+
+            if (status === 'success') {
+              console.log('✅ Solana → EVM bridge completed!')
+              setState('success')
+              onSuccess?.(lastTxSignature)
+              setTimeout(fetchBalances, 3000)
+              return
+            }
+
+            if (status === 'failed') {
+              throw new Error('Bridge to EVM failed - funds may be refunded')
+            }
+
+            attempts++
+            if (attempts % 10 === 0) {
+              console.log(`⏳ Still waiting for bridge... (${attempts * 2}s elapsed)`)
+            }
+          }
+
+          console.log('⏰ Bridge status check timed out, but Solana deposit was sent')
+        }
+
+        setState('success')
+        onSuccess?.(lastTxSignature)
+        setTimeout(fetchBalances, 3000)
+        return
+      }
+
+      // ============================================
+      // EVM ORIGIN: Get provider and switch chain
+      // ============================================
+      const provider = await embeddedWallet!.getEthereumProvider()
 
       // Ensure we're on the correct source chain
       const currentChainId = await provider.request({ method: 'eth_chainId' })
       const expectedChainHex = `0x${fromChainId.toString(16)}`
-      
+
       if (currentChainId !== expectedChainHex) {
         console.log('🔄 Switching chain from', currentChainId, 'to', expectedChainHex)
         await provider.request({
@@ -440,7 +633,7 @@ export function PrivyRelaySwap({
       // ============================================
       // EXECUTE BASED ON SWAP TYPE
       // ============================================
-      
+
       if (isCrossChainSwap && quote.depositAddress) {
         // ============================================
         // CROSS-CHAIN: Use deposit address method
@@ -577,7 +770,7 @@ export function PrivyRelaySwap({
               })
 
               const txParams: Record<string, string> = {
-                from: address,
+                from: address!, // Already validated above
                 to: item.data.to,
                 data: txData,
               }
@@ -659,7 +852,7 @@ export function PrivyRelaySwap({
       setState('error')
       onError?.(error.message)
     }
-  }, [embeddedWallet, address, quote, amount, fromChainId, toChainId, fromToken, toToken, fetchBalances, onSuccess, onError, checkBridgeStatus, isToSolana, isFromSolana, solanaAddress])
+  }, [embeddedWallet, address, quote, amount, fromChainId, toChainId, fromToken, toToken, fetchBalances, onSuccess, onError, checkBridgeStatus, isToSolana, isFromSolana, solanaAddress, solanaWallet, privySignAndSendSolana])
 
   // ============================================
   // HELPERS
@@ -677,11 +870,7 @@ export function PrivyRelaySwap({
   }
 
   const swapDirection = () => {
-    // Don't allow swapping if source would become Solana (not supported yet)
-    if (toChainId === SOLANA_CHAIN_ID) {
-      console.log('Swapping from Solana is not yet supported')
-      return
-    }
+    // Now supports bidirectional: EVM ↔ Solana
     setFromChainId(toChainId)
     setToChainId(fromChainId)
     setFromToken(toToken)
@@ -690,8 +879,8 @@ export function PrivyRelaySwap({
     setState('idle')
   }
 
-  // Check if swap direction is allowed
-  const canSwapDirection = toChainId !== SOLANA_CHAIN_ID
+  // Swap direction is always allowed now (bidirectional support)
+  const canSwapDirection = true
 
   const hasInsufficientBalance = parseFloat(amount || '0') > parseFloat(fromBalance)
   const amountNum = parseFloat(amount || '0')
@@ -717,10 +906,10 @@ export function PrivyRelaySwap({
           <span className="text-white/60 text-xs font-mono">
             {address.slice(0, 6)}...{address.slice(-4)}
           </span>
-          {/* Show Solana wallet if swapping to Solana */}
-          {isToSolana && solanaAddress && (
+          {/* Show Solana wallet if swapping to/from Solana */}
+          {(isToSolana || isFromSolana) && solanaAddress && (
             <>
-              <span className="text-white/30">→</span>
+              <span className="text-white/30">{isFromSolana ? '←' : '→'}</span>
               <div className="w-2 h-2 bg-gradient-to-br from-[#9945FF] to-[#14F195] rounded-full" />
               <span className="text-white/60 text-xs font-mono">
                 {solanaAddress.slice(0, 4)}...{solanaAddress.slice(-4)}
@@ -733,8 +922,8 @@ export function PrivyRelaySwap({
         </span>
       </div>
 
-      {/* Warning if Solana selected but no Solana wallet */}
-      {isToSolana && !solanaAddress && (
+      {/* Warning if Solana selected (source or destination) but no Solana wallet */}
+      {(isToSolana || isFromSolana) && !solanaAddress && (
         <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-3 flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
           <span className="text-yellow-400 text-xs">
@@ -762,8 +951,8 @@ export function PrivyRelaySwap({
           {/* Chain selector dropdown */}
           {showFromChainSelect && (
             <div className="absolute top-12 right-4 bg-[#1a1a1a] border border-white/10 rounded-xl p-2 z-20 min-w-[140px]">
-              {/* Filter out Solana from source chains - only EVM -> Solana supported */}
-              {CHAINS.filter(c => !c.isSolana).map(chain => (
+              {/* All chains including Solana - bidirectional support */}
+              {CHAINS.map(chain => (
                 <button
                   key={chain.id}
                   onClick={() => {
