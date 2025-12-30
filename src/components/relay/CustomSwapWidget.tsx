@@ -37,10 +37,15 @@ const CHAIN_EXPLORERS: Record<number, string> = {
   1: 'https://etherscan.io',
   10: 'https://optimistic.etherscan.io',
   137: 'https://polygonscan.com',
+  [SOLANA_CHAIN_ID]: 'https://solscan.io',
 }
 
 // Get explorer URL for a transaction
 const getExplorerUrl = (chainId: number, txHash: string): string => {
+  // Solana uses a different URL format
+  if (chainId === SOLANA_CHAIN_ID) {
+    return `https://solscan.io/tx/${txHash}`
+  }
   const baseUrl = CHAIN_EXPLORERS[chainId] || 'https://basescan.org'
   return `${baseUrl}/tx/${txHash}`
 }
@@ -53,6 +58,7 @@ const getExplorerName = (chainId: number): string => {
     1: 'Etherscan',
     10: 'Optimism Explorer',
     137: 'PolygonScan',
+    [SOLANA_CHAIN_ID]: 'Solscan',
   }
   return names[chainId] || 'Explorer'
 }
