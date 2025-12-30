@@ -1057,7 +1057,7 @@ export function useRelaySwap(
             if (isSolanaInstructionFormat(item.data)) {
               console.log('[useRelaySwap] Detected Solana instruction format - building transaction')
               // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:850',message:'Building Solana transaction from instructions',data:{stepId:step.id,hasInstructions:!!item.data.instructions,hasSingleInstruction:!!(item.data as any).programId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
+              fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:850',message:'Building Solana transaction from instructions',data:{stepId:step.id,hasInstructions:!!(item.data as any).instructions,hasSingleInstruction:!!(item.data as any).programId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
               // #endregion
 
               const transaction = await buildSolanaTransaction(item.data as RelaySolanaStepData, solanaWalletAddress)
@@ -1070,10 +1070,11 @@ export function useRelaySwap(
               console.log('[useRelaySwap] Built Solana transaction, serialized length:', serializedTx.length)
             } else {
               // Fallback: Try to decode as base64 or hex serialized transaction
-              const txData = item.data.data as string
+              const itemData = item.data as any
+              const txData = itemData.data as string
               if (!txData) {
                 console.warn('[useRelaySwap] No transaction data in Solana step item')
-                console.log('[useRelaySwap] Full item.data:', JSON.stringify(item.data, null, 2))
+                console.log('[useRelaySwap] Full item.data:', JSON.stringify(itemData, null, 2))
                 continue
               }
 
