@@ -648,7 +648,7 @@ export function useRelaySwap(
       // Note: explicitDeposit controls origin chain behavior, so it applies even for Solana destinations
       if (!isSolanaOrigin) {
         requestBody.protocolVersion = 'preferV2'
-        
+
         // For ERC-20 tokens (not native ETH), use explicitDeposit: true for smart wallets
         // This prevents Relay from bundling approval into deposit transaction
         // Smart wallets can batch the separate steps atomically
@@ -657,9 +657,18 @@ export function useRelaySwap(
           // We're using a smart wallet (Privy), so set explicitDeposit: true
           // This will give us separate approve + deposit steps that can be batched
           requestBody.explicitDeposit = true
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:641',message:'Setting explicitDeposit: true for smart wallet ERC-20',data:{fromToken:fromToken.symbol,smartWalletAddress,protocolVersion:'preferV2',isSolanaDestination},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
-          // #endregion
+
+          // CRITICAL: Add userOperationGasOverhead for ERC-4337 smart wallet flows
+          // Per Relay docs: "This field indicates how much additional gas overhead
+          // will be necessary to include the user operation on the chain"
+          // See: https://docs.relay.link/references/api/api_guides/smart_accounts/erc-4337
+          requestBody.userOperationGasOverhead = 300000
+
+          console.log('[useRelaySwap] Smart wallet ERC-20 config:', {
+            explicitDeposit: true,
+            userOperationGasOverhead: 300000,
+            protocolVersion: 'preferV2',
+          })
         }
       }
 
@@ -1066,24 +1075,50 @@ export function useRelaySwap(
               console.log('[useRelaySwap] Approval sent:', approveTxHash, '- waiting for confirmation...')
 
               // Wait for approval to be confirmed on-chain
-              // This is required because deposit will fail simulation if approval isn't confirmed
-              const chainId = depositItem.data.chainId
-              const chain = chainMap[chainId]
-              if (chain) {
-                const txPublicClient = createPublicClient({
-                  chain,
-                  transport: http(EVM_RPC_ENDPOINTS[chainId]?.[0]),
-                })
+              // This is REQUIRED because deposit will fail simulation if approval isn't confirmed
+              const chainIdForWait = depositItem.data.chainId
+              const chainForWait = chainMap[chainIdForWait]
+              if (!chainForWait) {
+                throw new Error(`Unsupported chain ${chainIdForWait} for approval wait`)
+              }
+
+              // Try multiple RPC endpoints for reliability
+              const rpcEndpoints = EVM_RPC_ENDPOINTS[chainIdForWait] || []
+              let approvalConfirmed = false
+
+              for (const rpcUrl of rpcEndpoints) {
+                if (approvalConfirmed) break
                 try {
+                  const txPublicClient = createPublicClient({
+                    chain: chainForWait,
+                    transport: http(rpcUrl),
+                  })
                   await txPublicClient.waitForTransactionReceipt({
                     hash: approveTxHash as `0x${string}`,
-                    timeout: 30_000, // 30 second timeout for approval
+                    timeout: 60_000, // 60 second timeout
+                    confirmations: 1,
                   })
-                  console.log('[useRelaySwap] Approval confirmed!')
+                  console.log('[useRelaySwap] Approval confirmed via', rpcUrl)
+                  approvalConfirmed = true
                 } catch (waitErr) {
-                  console.warn('[useRelaySwap] Approval wait timed out, proceeding anyway:', waitErr)
+                  console.warn('[useRelaySwap] Approval wait failed with', rpcUrl, '- trying next RPC:', waitErr)
                 }
               }
+
+              if (!approvalConfirmed) {
+                // Last resort: wait a fixed time and hope it confirmed
+                console.log('[useRelaySwap] All RPC waits failed, waiting 15s as fallback...')
+                await new Promise(resolve => setTimeout(resolve, 15000))
+              }
+
+              // CRITICAL: Verify allowance on-chain before proceeding to deposit
+              // This ensures the approval actually took effect
+              console.log('[useRelaySwap] Verifying allowance on-chain...')
+              const verifiedAllowance = await checkAllowance(fromToken, approvalSpender, approvalAmount)
+              if (!verifiedAllowance) {
+                throw new Error('Approval transaction confirmed but allowance not set on-chain. Please try again.')
+              }
+              console.log('[useRelaySwap] Allowance verified on-chain!')
 
               // Now send the deposit transaction (don't wait for this one)
               console.log('[useRelaySwap] Sending deposit transaction...')
