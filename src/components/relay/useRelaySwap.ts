@@ -6,6 +6,15 @@ import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { createPublicClient, http, erc20Abi, type Chain, parseUnits, formatUnits, decodeFunctionData, encodeFunctionData } from 'viem'
 import { base, arbitrum, optimism, mainnet, polygon, zora, blast } from 'viem/chains'
+import {
+  Connection,
+  PublicKey,
+  TransactionMessage,
+  VersionedTransaction,
+  AddressLookupTableAccount,
+  TransactionInstruction,
+} from '@solana/web3.js'
+import bs58 from 'bs58'
 
 // ============================================
 // TYPES
@@ -166,6 +175,143 @@ async function fetchSolanaRpc(body: object, timeout = 8000): Promise<any> {
     }
   }
   throw new Error('All Solana RPC endpoints failed')
+}
+
+// Types for Relay's Solana instruction format
+interface RelayKeyMeta {
+  pubkey: string
+  isSigner: boolean
+  isWritable: boolean
+}
+
+interface RelaySolanaInstruction {
+  programId: string
+  keys: RelayKeyMeta[]
+  data: string // hex-encoded instruction data
+}
+
+interface RelaySolanaStepData {
+  instructions?: RelaySolanaInstruction[]
+  addressLookupTableAddresses?: string[]
+  // Also check for single instruction format
+  programId?: string
+  keys?: RelayKeyMeta[]
+  data?: string
+  // Check info for status endpoint
+  check?: {
+    endpoint: string
+    method: string
+  }
+}
+
+// Get Solana connection
+function getSolanaConnection(): Connection {
+  return new Connection(SOLANA_RPC_ENDPOINTS[0], 'confirmed')
+}
+
+// Helper to build a Solana VersionedTransaction from Relay instruction data
+async function buildSolanaTransaction(
+  stepData: RelaySolanaStepData,
+  payerAddress: string
+): Promise<VersionedTransaction | null> {
+  console.log('[buildSolanaTransaction] Building transaction from step data')
+  console.log('[buildSolanaTransaction] Step data keys:', Object.keys(stepData))
+
+  // Extract instructions - they might be in an array or as single instruction fields
+  let instructions: RelaySolanaInstruction[] = []
+
+  if (stepData.instructions && Array.isArray(stepData.instructions)) {
+    instructions = stepData.instructions
+  } else if (stepData.programId && stepData.keys && stepData.data) {
+    // Single instruction format
+    instructions = [{
+      programId: stepData.programId,
+      keys: stepData.keys,
+      data: stepData.data
+    }]
+  }
+
+  if (instructions.length === 0) {
+    console.warn('[buildSolanaTransaction] No instructions found in step data')
+    return null
+  }
+
+  console.log('[buildSolanaTransaction] Found', instructions.length, 'instructions')
+
+  try {
+    const connection = getSolanaConnection()
+    const payer = new PublicKey(payerAddress)
+
+    // Convert Relay instructions to Solana TransactionInstructions
+    const txInstructions: TransactionInstruction[] = instructions.map((ix, index) => {
+      console.log(`[buildSolanaTransaction] Processing instruction ${index}:`, ix.programId)
+
+      // Decode the hex data (remove 0x prefix if present)
+      let dataBuffer: Buffer
+      const hexData = ix.data.startsWith('0x') ? ix.data.slice(2) : ix.data
+      dataBuffer = Buffer.from(hexData, 'hex')
+
+      return new TransactionInstruction({
+        programId: new PublicKey(ix.programId),
+        keys: ix.keys.map(key => ({
+          pubkey: new PublicKey(key.pubkey),
+          isSigner: key.isSigner,
+          isWritable: key.isWritable,
+        })),
+        data: dataBuffer,
+      })
+    })
+
+    // Get recent blockhash
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
+    console.log('[buildSolanaTransaction] Got blockhash:', blockhash)
+
+    // Load address lookup tables if provided
+    let addressLookupTableAccounts: AddressLookupTableAccount[] = []
+    if (stepData.addressLookupTableAddresses && stepData.addressLookupTableAddresses.length > 0) {
+      console.log('[buildSolanaTransaction] Loading', stepData.addressLookupTableAddresses.length, 'lookup tables')
+
+      for (const tableAddress of stepData.addressLookupTableAddresses) {
+        try {
+          const tableAccount = await connection.getAddressLookupTable(new PublicKey(tableAddress))
+          if (tableAccount.value) {
+            addressLookupTableAccounts.push(tableAccount.value)
+          }
+        } catch (err) {
+          console.warn('[buildSolanaTransaction] Failed to load lookup table:', tableAddress, err)
+        }
+      }
+    }
+
+    // Build the transaction message
+    const messageV0 = new TransactionMessage({
+      payerKey: payer,
+      recentBlockhash: blockhash,
+      instructions: txInstructions,
+    }).compileToV0Message(addressLookupTableAccounts)
+
+    // Create the versioned transaction
+    const transaction = new VersionedTransaction(messageV0)
+    console.log('[buildSolanaTransaction] Built VersionedTransaction successfully')
+
+    return transaction
+  } catch (err) {
+    console.error('[buildSolanaTransaction] Error building transaction:', err)
+    throw err
+  }
+}
+
+// Helper to check if step data contains Solana instruction format
+function isSolanaInstructionFormat(data: any): data is RelaySolanaStepData {
+  // Check for instructions array
+  if (data.instructions && Array.isArray(data.instructions)) {
+    return data.instructions.some((ix: any) => ix.programId && ix.keys && ix.data)
+  }
+  // Check for single instruction format
+  if (data.programId && data.keys && data.data) {
+    return true
+  }
+  return false
 }
 
 // Supported chains with metadata
@@ -877,6 +1023,12 @@ export function useRelaySwap(
         return null
       }
 
+      if (!solanaWalletAddress) {
+        setError('Solana wallet address not available')
+        setState('error')
+        return null
+      }
+
       setState('confirming')
       setError(null)
 
@@ -896,41 +1048,60 @@ export function useRelaySwap(
               continue
             }
 
-            // Relay returns Solana transaction data as base64-encoded string
-            // The data field contains the serialized transaction
-            const txData = item.data.data as string
-            if (!txData) {
-              console.warn('[useRelaySwap] No transaction data in Solana step item')
-              console.log('[useRelaySwap] Full item.data:', JSON.stringify(item.data, null, 2))
-              continue
-            }
-
             setState('sending')
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:850',message:'Signing Solana transaction',data:{stepId:step.id,txDataLength:txData.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
-            // #endregion
 
-            // Decode base64 transaction data to Uint8Array
             let serializedTx: Uint8Array
-            try {
-              // Try base64 decoding first (common Relay format)
-              const binaryString = atob(txData)
-              serializedTx = new Uint8Array(binaryString.length)
-              for (let i = 0; i < binaryString.length; i++) {
-                serializedTx[i] = binaryString.charCodeAt(i)
+
+            // Check if Relay returned instruction format (programId, keys, data)
+            // This is the format used for Jupiter swaps via Relay
+            if (isSolanaInstructionFormat(item.data)) {
+              console.log('[useRelaySwap] Detected Solana instruction format - building transaction')
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:850',message:'Building Solana transaction from instructions',data:{stepId:step.id,hasInstructions:!!(item.data as any).instructions,hasSingleInstruction:!!(item.data as any).programId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
+              // #endregion
+
+              const transaction = await buildSolanaTransaction(item.data as RelaySolanaStepData, solanaWalletAddress)
+              if (!transaction) {
+                console.warn('[useRelaySwap] Failed to build Solana transaction from instructions')
+                continue
               }
-              console.log('[useRelaySwap] Successfully decoded base64 transaction, length:', serializedTx.length)
-            } catch {
-              // If not base64, try hex decoding
-              if (txData.startsWith('0x')) {
-                const hexString = txData.slice(2)
-                serializedTx = new Uint8Array(hexString.length / 2)
-                for (let i = 0; i < hexString.length; i += 2) {
-                  serializedTx[i / 2] = parseInt(hexString.substr(i, 2), 16)
+
+              serializedTx = transaction.serialize()
+              console.log('[useRelaySwap] Built Solana transaction, serialized length:', serializedTx.length)
+            } else {
+              // Fallback: Try to decode as base64 or hex serialized transaction
+              const itemData = item.data as any
+              const txData = itemData.data as string
+              if (!txData) {
+                console.warn('[useRelaySwap] No transaction data in Solana step item')
+                console.log('[useRelaySwap] Full item.data:', JSON.stringify(itemData, null, 2))
+                continue
+              }
+
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:850',message:'Decoding Solana transaction data',data:{stepId:step.id,txDataLength:txData.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
+              // #endregion
+
+              try {
+                // Try base64 decoding first (common Relay format)
+                const binaryString = atob(txData)
+                serializedTx = new Uint8Array(binaryString.length)
+                for (let i = 0; i < binaryString.length; i++) {
+                  serializedTx[i] = binaryString.charCodeAt(i)
                 }
-                console.log('[useRelaySwap] Successfully decoded hex transaction, length:', serializedTx.length)
-              } else {
-                throw new Error('Unable to decode Solana transaction data')
+                console.log('[useRelaySwap] Successfully decoded base64 transaction, length:', serializedTx.length)
+              } catch {
+                // If not base64, try hex decoding
+                if (txData.startsWith('0x')) {
+                  const hexString = txData.slice(2)
+                  serializedTx = new Uint8Array(hexString.length / 2)
+                  for (let i = 0; i < hexString.length; i += 2) {
+                    serializedTx[i / 2] = parseInt(hexString.substr(i, 2), 16)
+                  }
+                  console.log('[useRelaySwap] Successfully decoded hex transaction, length:', serializedTx.length)
+                } else {
+                  throw new Error('Unable to decode Solana transaction data')
+                }
               }
             }
 
@@ -1000,6 +1171,12 @@ export function useRelaySwap(
         return null
       }
 
+      if (!solanaWalletAddress) {
+        setError('Solana wallet address not available')
+        setState('error')
+        return null
+      }
+
       setState('confirming')
       setError(null)
 
@@ -1021,13 +1198,14 @@ export function useRelaySwap(
             }
 
             // Check if this is a Solana step (chainId matches Solana or is undefined for Solana-origin)
-            const stepChainId = item.data.chainId
-            const isSolanaStep = stepChainId === SOLANA_CHAIN_ID || (stepChainId === undefined && isSolanaOrigin)
+            const stepChainId = (item.data as any).chainId
+            const isSolanaStep = stepChainId === SOLANA_CHAIN_ID || stepChainId === undefined || isSolanaInstructionFormat(item.data)
 
             console.log('[useRelaySwap] Step chain analysis:', {
               stepChainId,
               SOLANA_CHAIN_ID,
               isSolanaStep,
+              isInstructionFormat: isSolanaInstructionFormat(item.data),
               fromChainId: fromToken.chainId,
             })
 
@@ -1036,37 +1214,50 @@ export function useRelaySwap(
               continue
             }
 
-            // For Solana, tx data might be in 'data' field or directly serialized
-            // Relay may also return transaction data in different formats
-            const txData = item.data.data as string
-            if (!txData) {
-              console.warn('[useRelaySwap] No transaction data in step item. Checking alternative fields...')
-              console.log('[useRelaySwap] Full item.data:', JSON.stringify(item.data, null, 2))
-              continue
-            }
-
             setState('sending')
 
-            // Decode transaction data - try base64 first, then hex
             let serializedTx: Uint8Array
-            try {
-              // Try base64 decoding first (standard Relay format for Solana)
-              const binaryString = atob(txData)
-              serializedTx = new Uint8Array(binaryString.length)
-              for (let i = 0; i < binaryString.length; i++) {
-                serializedTx[i] = binaryString.charCodeAt(i)
+
+            // Check if Relay returned instruction format (programId, keys, data)
+            if (isSolanaInstructionFormat(item.data)) {
+              console.log('[useRelaySwap] Detected Solana instruction format - building transaction')
+
+              const transaction = await buildSolanaTransaction(item.data as RelaySolanaStepData, solanaWalletAddress)
+              if (!transaction) {
+                console.warn('[useRelaySwap] Failed to build Solana transaction from instructions')
+                continue
               }
-              console.log('[useRelaySwap] Successfully decoded base64 transaction, length:', serializedTx.length)
-            } catch {
-              if (txData.startsWith('0x')) {
-                const hexString = txData.slice(2)
-                serializedTx = new Uint8Array(hexString.length / 2)
-                for (let i = 0; i < hexString.length; i += 2) {
-                  serializedTx[i / 2] = parseInt(hexString.substr(i, 2), 16)
+
+              serializedTx = transaction.serialize()
+              console.log('[useRelaySwap] Built Solana transaction, serialized length:', serializedTx.length)
+            } else {
+              // Fallback: Try to decode as base64 or hex serialized transaction
+              const txData = (item.data as any).data as string
+              if (!txData) {
+                console.warn('[useRelaySwap] No transaction data in step item. Checking alternative fields...')
+                console.log('[useRelaySwap] Full item.data:', JSON.stringify(item.data, null, 2))
+                continue
+              }
+
+              try {
+                // Try base64 decoding first (standard Relay format for Solana)
+                const binaryString = atob(txData)
+                serializedTx = new Uint8Array(binaryString.length)
+                for (let i = 0; i < binaryString.length; i++) {
+                  serializedTx[i] = binaryString.charCodeAt(i)
                 }
-                console.log('[useRelaySwap] Successfully decoded hex transaction, length:', serializedTx.length)
-              } else {
-                throw new Error('Unable to decode Solana transaction data - not base64 or hex')
+                console.log('[useRelaySwap] Successfully decoded base64 transaction, length:', serializedTx.length)
+              } catch {
+                if (txData.startsWith('0x')) {
+                  const hexString = txData.slice(2)
+                  serializedTx = new Uint8Array(hexString.length / 2)
+                  for (let i = 0; i < hexString.length; i += 2) {
+                    serializedTx[i / 2] = parseInt(hexString.substr(i, 2), 16)
+                  }
+                  console.log('[useRelaySwap] Successfully decoded hex transaction, length:', serializedTx.length)
+                } else {
+                  throw new Error('Unable to decode Solana transaction data - not base64 or hex')
+                }
               }
             }
 
@@ -1185,7 +1376,7 @@ export function useRelaySwap(
               })
 
               if (!hasAllowance) {
-                console.log('[useRelaySwap] Batching approval + deposit for EVM → Solana')
+                console.log('[useRelaySwap] Need approval for EVM → Solana swap')
 
                 const MAX_UINT256 = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
                 const approveData = encodeFunctionData({
@@ -1194,25 +1385,55 @@ export function useRelaySwap(
                   args: [depositContractAddress as `0x${string}`, MAX_UINT256],
                 })
 
-                // Batch approval with deposit
-                const batchedTxHash = await chainClient.sendTransaction({
-                  calls: [
-                    {
-                      to: fromToken.address as `0x${string}`,
-                      data: approveData,
-                      value: BigInt(0),
-                    },
-                    {
-                      to: item.data.to as `0x${string}`,
-                      data: txData as `0x${string}`,
-                      value: item.data.value ? BigInt(item.data.value) : BigInt(0),
-                    },
-                  ],
-                })
+                // Try batching first (works for most tokens)
+                try {
+                  console.log('[useRelaySwap] Attempting batched approval + deposit for EVM → Solana')
+                  const batchedTxHash = await chainClient.sendTransaction({
+                    calls: [
+                      {
+                        to: fromToken.address as `0x${string}`,
+                        data: approveData,
+                        value: BigInt(0),
+                      },
+                      {
+                        to: item.data.to as `0x${string}`,
+                        data: txData as `0x${string}`,
+                        value: item.data.value ? BigInt(item.data.value) : BigInt(0),
+                      },
+                    ],
+                  })
 
-                console.log('[useRelaySwap] EVM → Solana batched tx sent:', batchedTxHash)
-                lastTxHash = batchedTxHash
-                continue
+                  console.log('[useRelaySwap] EVM → Solana batched tx sent:', batchedTxHash)
+                  lastTxHash = batchedTxHash
+                  continue
+                } catch (batchError: any) {
+                  console.warn('[useRelaySwap] Batched approval failed, trying sequential approach:', batchError.message)
+
+                  // Fallback: Do approval first, then deposit separately
+                  console.log('[useRelaySwap] Sending approval transaction first...')
+                  const approvalTxHash = await chainClient.sendTransaction({
+                    to: fromToken.address as `0x${string}`,
+                    data: approveData,
+                    value: BigInt(0),
+                  })
+                  console.log('[useRelaySwap] Approval tx sent:', approvalTxHash)
+
+                  // Wait a moment for approval to propagate
+                  console.log('[useRelaySwap] Waiting for approval to propagate...')
+                  await new Promise(resolve => setTimeout(resolve, 2000))
+
+                  // Now send the deposit transaction
+                  console.log('[useRelaySwap] Sending deposit transaction...')
+                  const depositTxHash = await chainClient.sendTransaction({
+                    to: item.data.to as `0x${string}`,
+                    data: txData as `0x${string}`,
+                    value: item.data.value ? BigInt(item.data.value) : BigInt(0),
+                  })
+
+                  console.log('[useRelaySwap] EVM → Solana deposit sent:', depositTxHash)
+                  lastTxHash = depositTxHash
+                  continue
+                }
               }
             }
 
