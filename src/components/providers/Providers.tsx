@@ -11,6 +11,11 @@ import { PWALayout } from '@/components/layout/PWALayout'
 import { ErrorBoundary } from './ErrorBoundary'
 import { createSolanaRpc, createSolanaRpcSubscriptions } from '@solana/kit'
 
+// Helius RPC for reliable Solana transactions (avoids rate-limited public RPC)
+const HELIUS_API_KEY = process.env.NEXT_PUBLIC_HELIUS_RPC_KEY || 'adfbe4d1-c717-41c2-8962-0723246cbeda'
+const HELIUS_RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
+const HELIUS_WSS_URL = `wss://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
+
 // Wagmi config for Privy - supports all chains for cross-chain swaps
 const wagmiConfig = createConfig({
   chains: [base, arbitrum, optimism, mainnet, polygon, zora, blast],
@@ -89,11 +94,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
           },
 
           // Solana RPC configuration for embedded wallet UIs
+          // Using Helius RPC for reliability - public Solana RPC is rate-limited (403 errors)
           solana: {
             rpcs: {
               'solana:mainnet': {
-                rpc: createSolanaRpc('https://api.mainnet-beta.solana.com'),
-                rpcSubscriptions: createSolanaRpcSubscriptions('wss://api.mainnet-beta.solana.com'),
+                rpc: createSolanaRpc(HELIUS_RPC_URL),
+                rpcSubscriptions: createSolanaRpcSubscriptions(HELIUS_WSS_URL),
               },
               'solana:devnet': {
                 rpc: createSolanaRpc('https://api.devnet.solana.com'),
