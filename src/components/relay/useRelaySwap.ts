@@ -1066,23 +1066,40 @@ export function useRelaySwap(
               console.log('[useRelaySwap] Approval sent:', approveTxHash, '- waiting for confirmation...')
 
               // Wait for approval to be confirmed on-chain
-              // This is required because deposit will fail simulation if approval isn't confirmed
-              const chainId = depositItem.data.chainId
-              const chain = chainMap[chainId]
-              if (chain) {
-                const txPublicClient = createPublicClient({
-                  chain,
-                  transport: http(EVM_RPC_ENDPOINTS[chainId]?.[0]),
-                })
+              // This is REQUIRED because deposit will fail simulation if approval isn't confirmed
+              const chainIdForWait = depositItem.data.chainId
+              const chainForWait = chainMap[chainIdForWait]
+              if (!chainForWait) {
+                throw new Error(`Unsupported chain ${chainIdForWait} for approval wait`)
+              }
+
+              // Try multiple RPC endpoints for reliability
+              const rpcEndpoints = EVM_RPC_ENDPOINTS[chainIdForWait] || []
+              let approvalConfirmed = false
+
+              for (const rpcUrl of rpcEndpoints) {
+                if (approvalConfirmed) break
                 try {
+                  const txPublicClient = createPublicClient({
+                    chain: chainForWait,
+                    transport: http(rpcUrl),
+                  })
                   await txPublicClient.waitForTransactionReceipt({
                     hash: approveTxHash as `0x${string}`,
-                    timeout: 30_000, // 30 second timeout for approval
+                    timeout: 60_000, // 60 second timeout
+                    confirmations: 1,
                   })
-                  console.log('[useRelaySwap] Approval confirmed!')
+                  console.log('[useRelaySwap] Approval confirmed via', rpcUrl)
+                  approvalConfirmed = true
                 } catch (waitErr) {
-                  console.warn('[useRelaySwap] Approval wait timed out, proceeding anyway:', waitErr)
+                  console.warn('[useRelaySwap] Approval wait failed with', rpcUrl, '- trying next RPC:', waitErr)
                 }
+              }
+
+              if (!approvalConfirmed) {
+                // Last resort: wait a fixed time and hope it confirmed
+                console.log('[useRelaySwap] All RPC waits failed, waiting 15s as fallback...')
+                await new Promise(resolve => setTimeout(resolve, 15000))
               }
 
               // Now send the deposit transaction (don't wait for this one)
