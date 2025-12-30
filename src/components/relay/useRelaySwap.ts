@@ -649,24 +649,14 @@ export function useRelaySwap(
       if (!isSolanaOrigin) {
         requestBody.protocolVersion = 'preferV2'
 
-        // For ERC-20 tokens (not native ETH), use explicitDeposit: true for smart wallets
-        // This prevents Relay from bundling approval into deposit transaction
-        // Smart wallets can batch the separate steps atomically
+        // For ERC-20 tokens with smart wallets:
+        // DON'T use explicitDeposit - let Relay bundle approval into deposit
+        // Our code will detect the embedded approval and batch it atomically
+        // This approach works better with ERC-4337 bundler simulation
         const isERC20Token = fromToken.address !== NATIVE_TOKEN_ADDRESS
         if (isERC20Token && smartWalletAddress) {
-          // We're using a smart wallet (Privy), so set explicitDeposit: true
-          // This will give us separate approve + deposit steps that can be batched
-          requestBody.explicitDeposit = true
-
-          // CRITICAL: Add userOperationGasOverhead for ERC-4337 smart wallet flows
-          // Per Relay docs: "This field indicates how much additional gas overhead
-          // will be necessary to include the user operation on the chain"
-          // See: https://docs.relay.link/references/api/api_guides/smart_accounts/erc-4337
-          requestBody.userOperationGasOverhead = 300000
-
           console.log('[useRelaySwap] Smart wallet ERC-20 config:', {
-            explicitDeposit: true,
-            userOperationGasOverhead: 300000,
+            explicitDeposit: false, // Let Relay bundle approval
             protocolVersion: 'preferV2',
           })
         }
@@ -987,7 +977,7 @@ export function useRelaySwap(
       // For ERC-20 tokens, check if we need approval and batch it with deposit
       // This handles BOTH cases:
       // 1. When Relay returns separate approve step
-      // 2. When approval is bundled in deposit tx data
+      // 2. When approval is bundled in deposit tx data (default without explicitDeposit)
       // We MUST batch into single UserOperation to avoid nonce collision
       if (isERC20Token && currentQuote.steps.length > 0 && !hasPermitStep) {
         // Find the deposit/swap step (non-approve step)
@@ -1001,7 +991,7 @@ export function useRelaySwap(
             throw new Error(`Failed to get smart wallet client for chain ${targetChainId}`)
           }
 
-          // Check if there's a separate approve step from Relay
+          // CASE 1: Check if there's a separate approve step from Relay
           if (hasApprovalStep) {
             const approveStep = currentQuote.steps.find(s => s.id === 'approve')
             const approveItem = approveStep?.items?.[0]
@@ -1032,9 +1022,11 @@ export function useRelaySwap(
               }
 
               console.log('[useRelaySwap] Relay approval step:', {
-                to: approveItem.data.to,
+                approveStepTo: approveItem.data.to,
                 spender: approvalSpender,
                 amount: approvalAmount?.toString(),
+                depositTo: depositItem.data.to,
+                tokenAddress: fromToken.address,
               })
 
               // Check if we already have sufficient allowance
@@ -1042,39 +1034,88 @@ export function useRelaySwap(
                 ? await checkAllowance(fromToken, approvalSpender, approvalAmount)
                 : false
 
+              console.log('[useRelaySwap] Current allowance status:', { hasAllowance, approvalSpender })
+
               if (!hasAllowance && approvalSpender) {
                 console.log(`[useRelaySwap] Token ${fromToken.symbol} needs approval - batching with deposit`)
                 setState('sending')
 
-                // Create approval call data
+                // Use MAX_UINT256 for approval to avoid amount issues
+                const MAX_UINT256 = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
+
+                // Create approval call data with max approval
                 const approveData = encodeFunctionData({
                   abi: erc20Abi,
                   functionName: 'approve',
-                  args: [approvalSpender as `0x${string}`, approvalAmount!],
+                  args: [approvalSpender as `0x${string}`, MAX_UINT256],
                 })
 
-                console.log('[useRelaySwap] Sending batched approval+deposit UserOperation...')
-                // Batch approval with deposit in a SINGLE UserOperation
-                // This ensures both execute atomically - approval first, then deposit uses it
-                const batchedTxHash = await chainClient.sendTransaction({
-                  calls: [
-                    {
-                      to: fromToken.address as `0x${string}`,
-                      data: approveData,
-                      value: BigInt(0),
-                    },
-                    {
-                      to: depositItem.data.to as `0x${string}`,
-                      data: depositItem.data.data as `0x${string}`,
-                      value: depositItem.data.value ? BigInt(depositItem.data.value) : BigInt(0),
-                    },
-                  ],
+                console.log('[useRelaySwap] Batching approval+deposit:', {
+                  approvalTo: fromToken.address,
+                  approvalSpender,
+                  approvalAmount: 'MAX_UINT256',
+                  depositTo: depositItem.data.to,
+                  depositValue: depositItem.data.value?.toString() || '0',
                 })
 
-                console.log('[useRelaySwap] Batched approval+deposit sent:', batchedTxHash)
+                try {
+                  // Batch approval with deposit in a SINGLE UserOperation
+                  const batchedTxHash = await chainClient.sendTransaction({
+                    calls: [
+                      {
+                        to: fromToken.address as `0x${string}`,
+                        data: approveData,
+                        value: BigInt(0),
+                      },
+                      {
+                        to: depositItem.data.to as `0x${string}`,
+                        data: depositItem.data.data as `0x${string}`,
+                        value: depositItem.data.value ? BigInt(depositItem.data.value) : BigInt(0),
+                      },
+                    ],
+                  })
+
+                  console.log('[useRelaySwap] Batched approval+deposit sent:', batchedTxHash)
+
+                  const swapResult: SwapResult = {
+                    txHash: batchedTxHash,
+                    fromAmount: quote.fromAmount,
+                    toAmount: quote.toAmount,
+                    fromToken,
+                    toToken,
+                  }
+                  setResult(swapResult)
+                  setState('success')
+                  return swapResult
+                } catch (batchErr: any) {
+                  console.error('[useRelaySwap] Batched tx failed:', batchErr)
+                  // Try to decode revert reason if present
+                  const errMsg = batchErr.message || ''
+                  if (errMsg.includes('0x08c379a')) {
+                    // Error(string) - try to extract
+                    const match = errMsg.match(/0x08c379a[0-9a-fA-F]+/)
+                    if (match) {
+                      console.log('[useRelaySwap] Revert data:', match[0])
+                    }
+                  }
+                  throw batchErr
+                }
+              }
+
+              // Already have allowance - just send deposit
+              console.log('[useRelaySwap] Already has allowance, sending deposit only...')
+              setState('sending')
+
+              try {
+                const depositTxHash = await chainClient.sendTransaction({
+                  to: depositItem.data.to as `0x${string}`,
+                  data: depositItem.data.data as `0x${string}`,
+                  value: depositItem.data.value ? BigInt(depositItem.data.value) : BigInt(0),
+                })
+                console.log('[useRelaySwap] Deposit sent:', depositTxHash)
 
                 const swapResult: SwapResult = {
-                  txHash: batchedTxHash,
+                  txHash: depositTxHash,
                   fromAmount: quote.fromAmount,
                   toAmount: quote.toAmount,
                   fromToken,
@@ -1083,28 +1124,84 @@ export function useRelaySwap(
                 setResult(swapResult)
                 setState('success')
                 return swapResult
+              } catch (depositErr: any) {
+                console.error('[useRelaySwap] Deposit-only tx failed:', depositErr)
+                throw depositErr
               }
+            }
+          } else {
+            // CASE 2: No separate approval step - check if approval is embedded in deposit tx data
+            // This happens when explicitDeposit is NOT set (default Relay behavior)
+            const txData = depositItem.data.data as string
+            if (txData && txData.includes(APPROVE_SELECTOR.slice(2))) {
+              console.log('[useRelaySwap] Detected embedded approval in deposit data')
 
-              // Already have allowance - just send deposit
-              console.log('[useRelaySwap] Already has allowance, sending deposit...')
-              setState('sending')
-              const depositTxHash = await chainClient.sendTransaction({
-                to: depositItem.data.to as `0x${string}`,
-                data: depositItem.data.data as `0x${string}`,
-                value: depositItem.data.value ? BigInt(depositItem.data.value) : BigInt(0),
+              // Extract approval spender from embedded approval call
+              const approveIndex = txData.indexOf(APPROVE_SELECTOR.slice(2))
+              const spenderStart = approveIndex + APPROVE_SELECTOR.length - 2
+              const spenderHex = txData.substring(spenderStart, spenderStart + 64)
+              const approvalSpender = '0x' + spenderHex.slice(24)
+
+              const amountStart = spenderStart + 64
+              const amountHex = txData.substring(amountStart, amountStart + 64)
+              const approvalAmount = BigInt('0x' + amountHex)
+
+              console.log('[useRelaySwap] Embedded approval:', {
+                approvalSpender,
+                approvalAmount: approvalAmount.toString(),
+                depositTo: depositItem.data.to,
+                tokenAddress: fromToken.address,
               })
-              console.log('[useRelaySwap] Deposit sent:', depositTxHash)
 
-              const swapResult: SwapResult = {
-                txHash: depositTxHash,
-                fromAmount: quote.fromAmount,
-                toAmount: quote.toAmount,
-                fromToken,
-                toToken,
+              // Check if we already have sufficient allowance
+              const hasAllowance = await checkAllowance(fromToken, approvalSpender, approvalAmount)
+              console.log('[useRelaySwap] Current allowance status:', { hasAllowance, approvalSpender })
+
+              if (!hasAllowance) {
+                console.log(`[useRelaySwap] Token ${fromToken.symbol} needs approval - batching with deposit`)
+                setState('sending')
+
+                // Create approval call
+                const approveData = encodeFunctionData({
+                  abi: erc20Abi,
+                  functionName: 'approve',
+                  args: [approvalSpender as `0x${string}`, approvalAmount],
+                })
+
+                try {
+                  // Batch approval + deposit in single UserOperation
+                  const batchedTxHash = await chainClient.sendTransaction({
+                    calls: [
+                      {
+                        to: fromToken.address as `0x${string}`,
+                        data: approveData,
+                        value: BigInt(0),
+                      },
+                      {
+                        to: depositItem.data.to as `0x${string}`,
+                        data: depositItem.data.data as `0x${string}`,
+                        value: depositItem.data.value ? BigInt(depositItem.data.value) : BigInt(0),
+                      },
+                    ],
+                  })
+
+                  console.log('[useRelaySwap] Batched approval+deposit sent:', batchedTxHash)
+
+                  const swapResult: SwapResult = {
+                    txHash: batchedTxHash,
+                    fromAmount: quote.fromAmount,
+                    toAmount: quote.toAmount,
+                    fromToken,
+                    toToken,
+                  }
+                  setResult(swapResult)
+                  setState('success')
+                  return swapResult
+                } catch (batchErr: any) {
+                  console.error('[useRelaySwap] Batched tx failed:', batchErr)
+                  throw batchErr
+                }
               }
-              setResult(swapResult)
-              setState('success')
-              return swapResult
             }
           }
         }
