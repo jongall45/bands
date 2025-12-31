@@ -32,6 +32,12 @@ import { arbitrum, base, polygon } from 'viem/chains'
 // Your Privy App ID (from Dashboard)
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID || ''
 
+// Detect if running in Capacitor native app
+const isCapacitorNative = (): boolean => {
+  if (typeof window === 'undefined') return false
+  return !!(window as any).Capacitor?.isNativePlatform?.()
+}
+
 // Supported chains
 const SUPPORTED_CHAINS = [arbitrum, base, polygon] as const
 
@@ -80,10 +86,6 @@ const privyConfig = {
 
   // Login methods
   loginMethods: ['email', 'google', 'apple'] as ('email' | 'google' | 'apple')[],
-
-  // OAuth redirect URL for Capacitor apps
-  // This tells Privy where to redirect after OAuth completes
-  customOAuthRedirectUrl: 'https://www.bands.cash/redirect',
 
   // Embedded wallet configuration
   embeddedWallets: {
@@ -152,13 +154,19 @@ export function PrivyProviders({ children }: PrivyProvidersProps) {
     return <div>Missing Privy configuration</div>
   }
 
+  // Only add customOAuthRedirectUrl for Capacitor native apps
+  const isNative = isCapacitorNative()
+  const config = isNative
+    ? { ...privyConfig, customOAuthRedirectUrl: 'https://www.bands.cash/redirect' }
+    : privyConfig
+
   return (
     <>
       {/* AppUrlListener handles OAuth deep link callbacks for Capacitor */}
       <AppUrlListener />
       <BasePrivyProvider
         appId={PRIVY_APP_ID}
-        config={privyConfig}
+        config={config}
       >
         {/* SmartWalletsProvider MUST be inside PrivyProvider */}
         <SmartWalletsProvider>
