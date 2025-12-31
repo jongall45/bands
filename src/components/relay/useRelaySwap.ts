@@ -348,6 +348,37 @@ function isSolanaInstructionFormat(data: any): data is RelaySolanaStepData {
   return false
 }
 
+// Helper to refresh blockhash in a pre-serialized Solana transaction
+// This is critical because Relay may return transactions with stale blockhashes
+async function refreshSolanaTransactionBlockhash(
+  serializedTx: Uint8Array
+): Promise<Uint8Array> {
+  try {
+    const connection = getSolanaConnection()
+
+    // Deserialize the transaction
+    const transaction = VersionedTransaction.deserialize(serializedTx)
+    console.log('[refreshBlockhash] Deserialized transaction, getting fresh blockhash...')
+
+    // Get fresh blockhash
+    const { blockhash } = await connection.getLatestBlockhash('confirmed')
+    console.log('[refreshBlockhash] Fresh blockhash:', blockhash)
+
+    // Update the blockhash in the transaction message
+    transaction.message.recentBlockhash = blockhash
+
+    // Re-serialize and return
+    const refreshedTx = transaction.serialize()
+    console.log('[refreshBlockhash] Transaction refreshed successfully')
+
+    return refreshedTx
+  } catch (err) {
+    console.warn('[refreshBlockhash] Failed to refresh blockhash, using original:', err)
+    // Return original if refresh fails
+    return serializedTx
+  }
+}
+
 // Supported chains with metadata
 export const SUPPORTED_CHAINS = [
   { id: 8453, name: 'Base', logo: 'https://raw.githubusercontent.com/base-org/brand-kit/001c0e9b40a67799ebe0418671ac4e02a0c683ce/logo/symbol/Base_Symbol_Blue.svg' },
@@ -1232,9 +1263,13 @@ export function useRelaySwap(
               }
             }
 
+            // Refresh the blockhash to avoid stale transaction errors
+            console.log('[useRelaySwap] Refreshing Solana transaction blockhash...')
+            const refreshedTx = await refreshSolanaTransactionBlockhash(serializedTx)
+
             console.log('[useRelaySwap] Sending Solana transaction via Privy...')
             const result = await solanaSigningOptions.signAndSendTransaction({
-              transaction: serializedTx,
+              transaction: refreshedTx,
               wallet: solanaSigningOptions.solanaWallet,
             })
 
@@ -1388,9 +1423,14 @@ export function useRelaySwap(
               }
             }
 
+            // Refresh the blockhash to avoid stale transaction errors
+            // Relay may return pre-serialized transactions with old blockhashes
+            console.log('[useRelaySwap] Refreshing Solana transaction blockhash...')
+            const refreshedTx = await refreshSolanaTransactionBlockhash(serializedTx)
+
             console.log('[useRelaySwap] Sending Solana deposit transaction via Privy...')
             const result = await solanaSigningOptions.signAndSendTransaction({
-              transaction: serializedTx,
+              transaction: refreshedTx,
               wallet: solanaSigningOptions.solanaWallet,
             })
 
@@ -2153,9 +2193,13 @@ export function useRelaySwap(
               }
             }
 
+            // Refresh the blockhash to avoid stale transaction errors
+            console.log('[useRelaySwap] Refreshing Solana transaction blockhash...')
+            const refreshedTx = await refreshSolanaTransactionBlockhash(serializedTx)
+
             console.log('[useRelaySwap] Sending Solana transaction via Privy...')
             const result = await solanaSigningOptions.signAndSendTransaction({
-              transaction: serializedTx,
+              transaction: refreshedTx,
               wallet: solanaSigningOptions.solanaWallet,
             })
             const sigString = toSignatureString(result.signature)
