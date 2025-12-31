@@ -1263,13 +1263,9 @@ export function useRelaySwap(
               }
             }
 
-            // Refresh the blockhash to avoid stale transaction errors
-            console.log('[useRelaySwap] Refreshing Solana transaction blockhash...')
-            const refreshedTx = await refreshSolanaTransactionBlockhash(serializedTx)
-
             console.log('[useRelaySwap] Sending Solana transaction via Privy...')
             const result = await solanaSigningOptions.signAndSendTransaction({
-              transaction: refreshedTx,
+              transaction: serializedTx,
               wallet: solanaSigningOptions.solanaWallet,
             })
 
@@ -1423,14 +1419,9 @@ export function useRelaySwap(
               }
             }
 
-            // Refresh the blockhash to avoid stale transaction errors
-            // Relay may return pre-serialized transactions with old blockhashes
-            console.log('[useRelaySwap] Refreshing Solana transaction blockhash...')
-            const refreshedTx = await refreshSolanaTransactionBlockhash(serializedTx)
-
             console.log('[useRelaySwap] Sending Solana deposit transaction via Privy...')
             const result = await solanaSigningOptions.signAndSendTransaction({
-              transaction: refreshedTx,
+              transaction: serializedTx,
               wallet: solanaSigningOptions.solanaWallet,
             })
 
@@ -2334,13 +2325,9 @@ export function useRelaySwap(
               }
             }
 
-            // Refresh the blockhash to avoid stale transaction errors
-            console.log('[useRelaySwap] Refreshing Solana transaction blockhash...')
-            const refreshedTx = await refreshSolanaTransactionBlockhash(serializedTx)
-
             console.log('[useRelaySwap] Sending Solana transaction via Privy...')
             const result = await solanaSigningOptions.signAndSendTransaction({
-              transaction: refreshedTx,
+              transaction: serializedTx,
               wallet: solanaSigningOptions.solanaWallet,
             })
             const sigString = toSignatureString(result.signature)
