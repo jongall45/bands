@@ -18,6 +18,7 @@
 
 import { ReactNode } from 'react'
 import { PrivyProvider as BasePrivyProvider } from '@privy-io/react-auth'
+import { AppUrlListener } from '@/components/capacitor/AppUrlListener'
 import { SmartWalletsProvider } from '@privy-io/react-auth/smart-wallets'
 import { WagmiProvider, createConfig } from '@privy-io/wagmi'
 import { http } from 'viem'
@@ -76,9 +77,7 @@ const wagmiConfig = createConfig({
  * KEY SETTINGS:
  * - embeddedWallets.createOnLogin: 'all-users' → Auto-create wallet
  * - embeddedWallets.showWalletUIs: false → Hide wallet modals by default
- *
- * NOTE: In Capacitor native apps, we only use email login to avoid
- * OAuth redirects that open Safari.
+ * - customOAuthRedirectUrl: Required for Capacitor OAuth flows
  */
 const getPrivyConfig = (isNative: boolean) => ({
   // Appearance
@@ -89,10 +88,14 @@ const getPrivyConfig = (isNative: boolean) => ({
     showWalletLoginFirst: false,
   },
 
-  // Login methods - email only for native apps to avoid OAuth redirects
-  loginMethods: isNative
-    ? ['email'] as ('email')[]
-    : ['email', 'google', 'apple'] as ('email' | 'google' | 'apple')[],
+  // Login methods - Google/Apple OAuth works in Capacitor with proper redirect config
+  loginMethods: ['email', 'google', 'apple'] as ('email' | 'google' | 'apple')[],
+
+  // Custom OAuth redirect URL for Capacitor apps
+  // This tells Privy where to redirect after OAuth completes
+  ...(isNative && {
+    customOAuthRedirectUrl: 'https://bands.cash/redirect',
+  }),
 
   // Embedded wallet configuration
   embeddedWallets: {
@@ -167,22 +170,26 @@ export function PrivyProviders({ children }: PrivyProvidersProps) {
   const privyConfig = getPrivyConfig(isNative)
 
   return (
-    <BasePrivyProvider
-      appId={PRIVY_APP_ID}
-      clientId={clientId}
-      config={privyConfig}
-    >
-      {/* SmartWalletsProvider MUST be inside PrivyProvider */}
-      <SmartWalletsProvider>
-        {/* QueryClient for React Query (used by Wagmi) */}
-        <QueryClientProvider client={queryClient}>
-          {/* Wagmi for blockchain hooks */}
-          <WagmiProvider config={wagmiConfig}>
-            {children}
-          </WagmiProvider>
-        </QueryClientProvider>
-      </SmartWalletsProvider>
-    </BasePrivyProvider>
+    <>
+      {/* AppUrlListener handles OAuth deep link callbacks for Capacitor */}
+      <AppUrlListener />
+      <BasePrivyProvider
+        appId={PRIVY_APP_ID}
+        clientId={clientId}
+        config={privyConfig}
+      >
+        {/* SmartWalletsProvider MUST be inside PrivyProvider */}
+        <SmartWalletsProvider>
+          {/* QueryClient for React Query (used by Wagmi) */}
+          <QueryClientProvider client={queryClient}>
+            {/* Wagmi for blockchain hooks */}
+            <WagmiProvider config={wagmiConfig}>
+              {children}
+            </WagmiProvider>
+          </QueryClientProvider>
+        </SmartWalletsProvider>
+      </BasePrivyProvider>
+    </>
   )
 }
 
