@@ -1419,8 +1419,8 @@ export function useRelaySwap(
                 } catch (batchError: any) {
                   console.warn('[useRelaySwap] Batched approval failed, trying sequential approach:', batchError.message)
 
-                  // Fallback: Do approval first, then deposit separately
-                  console.log('[useRelaySwap] Sending approval transaction first...')
+                  // Sequential fallback: approval first, then deposit
+                  console.log('[useRelaySwap] Sending approval transaction...')
                   const approvalTxHash = await chainClient.sendTransaction({
                     to: fromToken.address as `0x${string}`,
                     data: approveData,
@@ -1428,96 +1428,16 @@ export function useRelaySwap(
                   })
                   console.log('[useRelaySwap] Approval tx sent:', approvalTxHash)
 
-                  // IMPORTANT: Privy returns a UserOp hash, NOT a transaction hash
-                  // waitForTransactionReceipt doesn't work with UserOp hashes
-                  // Instead, poll the actual allowance on-chain until it's set
-                  console.log('[useRelaySwap] Polling for allowance on-chain (UserOp may take time to execute)...')
+                  // Wait for approval to propagate
+                  console.log('[useRelaySwap] Waiting for approval to propagate...')
+                  await new Promise(resolve => setTimeout(resolve, 5000))
 
-                  const maxWaitTime = 60000 // 60 seconds max
-                  const pollInterval = 3000 // Check every 3 seconds
-                  const pollStartTime = Date.now()
-                  let allowanceDetected = false
-
-                  while (!allowanceDetected && Date.now() - pollStartTime < maxWaitTime) {
-                    await new Promise(resolve => setTimeout(resolve, pollInterval))
-
-                    try {
-                      const currentAllowance = await checkAllowance(fromToken, depositContractAddress, approvalAmount)
-                      if (currentAllowance) {
-                        allowanceDetected = true
-                        console.log('[useRelaySwap] Allowance detected on-chain after', Date.now() - pollStartTime, 'ms')
-                      } else {
-                        console.log('[useRelaySwap] Allowance not yet set, waiting... elapsed:', Date.now() - pollStartTime, 'ms')
-                      }
-                    } catch (pollErr) {
-                      console.warn('[useRelaySwap] Allowance poll error:', pollErr)
-                    }
-                  }
-
-                  if (!allowanceDetected) {
-                    throw new Error('Approval transaction sent but allowance not detected after 60 seconds. The UserOp may have failed.')
-                  }
-
-                  // Re-fetch quote to get fresh deposit data (original quote may be stale)
-                  console.log('[useRelaySwap] Re-fetching quote for fresh deposit data...')
-                  const originWallet = getWalletForChain(fromToken.chainId)
-                  const destinationWallet = getWalletForChain(toToken.chainId)
-
-                  if (!originWallet || !destinationWallet) {
-                    throw new Error('Wallet addresses not available for quote refresh')
-                  }
-
-                  const amountInWei = parseUnits(quote.fromAmount, fromToken.decimals).toString()
-                  const refreshRequestBody: Record<string, any> = {
-                    user: originWallet,
-                    originChainId: fromToken.chainId,
-                    destinationChainId: toToken.chainId,
-                    originCurrency: toRelayCurrency(fromToken),
-                    destinationCurrency: toRelayCurrency(toToken),
-                    amount: amountInWei,
-                    recipient: destinationWallet,
-                    tradeType: 'EXACT_INPUT',
-                    referrer: 'bands.cash',
-                    protocolVersion: 'preferV2',
-                  }
-
-                  const refreshResponse = await fetch(`${RELAY_API}/quote`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(refreshRequestBody),
-                  })
-
-                  if (!refreshResponse.ok) {
-                    const errorText = await refreshResponse.text()
-                    console.error('[useRelaySwap] Quote refresh failed:', errorText)
-                    throw new Error('Failed to refresh quote after approval')
-                  }
-
-                  const refreshedQuoteData = await refreshResponse.json()
-                  console.log('[useRelaySwap] Got refreshed quote:', {
-                    requestId: refreshedQuoteData.requestId,
-                    stepsCount: refreshedQuoteData.steps?.length,
-                  })
-
-                  // Find the deposit step in refreshed quote
-                  const depositStep = refreshedQuoteData.steps?.find((s: any) => s.id === 'deposit' || s.id === 'swap')
-                  if (!depositStep || !depositStep.items?.[0]?.data) {
-                    console.error('[useRelaySwap] No deposit step in refreshed quote:', refreshedQuoteData.steps)
-                    throw new Error('Could not find deposit transaction in refreshed quote')
-                  }
-
-                  const freshDepositData = depositStep.items[0].data
-                  console.log('[useRelaySwap] Using fresh deposit data:', {
-                    to: freshDepositData.to,
-                    dataLength: freshDepositData.data?.length,
-                  })
-
-                  // Now send the deposit transaction with fresh data
-                  console.log('[useRelaySwap] Sending deposit transaction with fresh quote data...')
+                  // Send the deposit transaction
+                  console.log('[useRelaySwap] Sending deposit transaction...')
                   const depositTxHash = await chainClient.sendTransaction({
-                    to: freshDepositData.to as `0x${string}`,
-                    data: freshDepositData.data as `0x${string}`,
-                    value: freshDepositData.value ? BigInt(freshDepositData.value) : BigInt(0),
+                    to: item.data.to as `0x${string}`,
+                    data: txData as `0x${string}`,
+                    value: item.data.value ? BigInt(item.data.value) : BigInt(0),
                   })
 
                   console.log('[useRelaySwap] EVM → Solana deposit sent:', depositTxHash)
