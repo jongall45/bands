@@ -72,14 +72,13 @@ const wagmiConfig = createConfig({
 // ============================================
 
 /**
- * Get Privy configuration based on platform
+ * Privy configuration
  *
  * KEY SETTINGS:
  * - embeddedWallets.createOnLogin: 'all-users' → Auto-create wallet
  * - embeddedWallets.showWalletUIs: false → Hide wallet modals by default
- * - customOAuthRedirectUrl: Required for Capacitor OAuth flows
  */
-const getPrivyConfig = (isNative: boolean) => ({
+const privyConfig = {
   // Appearance
   appearance: {
     theme: 'dark' as const,
@@ -88,14 +87,8 @@ const getPrivyConfig = (isNative: boolean) => ({
     showWalletLoginFirst: false,
   },
 
-  // Login methods - Google/Apple OAuth works in Capacitor with proper redirect config
+  // Login methods
   loginMethods: ['email', 'google', 'apple'] as ('email' | 'google' | 'apple')[],
-
-  // Custom OAuth redirect URL for Capacitor apps
-  // This tells Privy where to redirect after OAuth completes
-  ...(isNative && {
-    customOAuthRedirectUrl: 'https://bands.cash/redirect',
-  }),
 
   // Embedded wallet configuration
   embeddedWallets: {

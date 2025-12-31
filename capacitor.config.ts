@@ -8,16 +8,9 @@ const config: CapacitorConfig = {
   // Point to production URL - no local build needed!
   // Change to your staging URL for testing: 'https://bands-staging.vercel.app'
   server: {
-    url: 'https://bands.cash',
+    // Use www version - site redirects bands.cash → www.bands.cash
+    url: 'https://www.bands.cash',
     cleartext: false,
-    // Allow navigation to OAuth provider domains
-    allowNavigation: [
-      'https://bands.cash/*',
-      'https://*.privy.io/*',
-      'https://auth.privy.io/*',
-      'https://accounts.google.com/*',
-      'https://appleid.apple.com/*',
-    ],
   },
 
   ios: {
