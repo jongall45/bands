@@ -1542,16 +1542,44 @@ export function useRelaySwap(
 
               const approvalAmount = parseUnits(quote.fromAmount, fromToken.decimals)
 
-              // Build the batch of calls for atomic execution
+              // Check current allowances
+              const hasERC20ToPermit2 = await checkAllowance(fromToken, PERMIT2_ADDRESS, approvalAmount)
+              console.log('[useRelaySwap] ERC20 allowance to Permit2:', hasERC20ToPermit2)
+
+              // Check Permit2 internal allowance
+              let hasPermit2InternalAllowance = false
+              try {
+                const permit2AllowanceResult = await executeWithFallback(
+                  fromToken.chainId,
+                  publicClient,
+                  (client) => client.readContract({
+                    address: PERMIT2_ADDRESS,
+                    abi: permit2Abi,
+                    functionName: 'allowance',
+                    args: [smartWalletAddress!, fromToken.address as `0x${string}`, embeddedApprovalSpender as `0x${string}`],
+                  })
+                ) as [bigint, number, number]
+                const [permit2Amount, permit2Expiration] = permit2AllowanceResult
+                console.log('[useRelaySwap] Permit2 internal allowance:', {
+                  amount: permit2Amount.toString(),
+                  expiration: permit2Expiration,
+                  hasEnough: permit2Amount >= approvalAmount,
+                })
+                hasPermit2InternalAllowance = permit2Amount >= approvalAmount
+              } catch (err) {
+                console.log('[useRelaySwap] Could not check Permit2 allowance:', err)
+              }
+
+              // Build calls - only include what's needed
               const calls: Array<{ to: `0x${string}`; data: `0x${string}`; value: bigint }> = []
+              const MAX_UINT256 = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
+              const MAX_UINT160 = BigInt('0xffffffffffffffffffffffffffffffffffffffff') // 2^160 - 1
+              const EXPIRATION = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365 // 1 year (safe uint48)
 
-              // Step 1: ERC20 approve Permit2 (if not already approved)
-              const hasPermit2Allowance = await checkAllowance(fromToken, PERMIT2_ADDRESS, approvalAmount)
-              console.log('[useRelaySwap] Has ERC20 allowance to Permit2:', hasPermit2Allowance)
-
-              if (!hasPermit2Allowance) {
-                const MAX_UINT256 = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
-                const erc20ApproveData = encodeFunctionData({
+              // Step 1: ERC20 approve Permit2 (if needed)
+              let erc20ApproveData: `0x${string}` | null = null
+              if (!hasERC20ToPermit2) {
+                erc20ApproveData = encodeFunctionData({
                   abi: erc20Abi,
                   functionName: 'approve',
                   args: [PERMIT2_ADDRESS, MAX_UINT256],
@@ -1561,44 +1589,75 @@ export function useRelaySwap(
                   data: erc20ApproveData,
                   value: BigInt(0),
                 })
-                console.log('[useRelaySwap] Added ERC20 approve Permit2 to batch')
+                console.log('[useRelaySwap] Call 1: ERC20 approve Permit2')
               }
 
-              // Step 2: Permit2 internal approve (approve the router/spender within Permit2)
-              // uint160 max amount, uint48 expiration (far future)
-              const MAX_UINT160 = BigInt('0xffffffffffffffffffffffffffffffffffffffff') // 2^160 - 1
-              const FAR_FUTURE_EXPIRATION = BigInt(Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365 * 10) // 10 years
-              const permit2ApproveData = encodeFunctionData({
-                abi: permit2Abi,
-                functionName: 'approve',
-                args: [
-                  fromToken.address as `0x${string}`,
-                  embeddedApprovalSpender as `0x${string}`,
-                  MAX_UINT160,
-                  Number(FAR_FUTURE_EXPIRATION),
-                ],
-              })
-              calls.push({
-                to: PERMIT2_ADDRESS,
-                data: permit2ApproveData,
-                value: BigInt(0),
-              })
-              console.log('[useRelaySwap] Added Permit2.approve() to batch')
+              // Step 2: Permit2 internal approve (if needed)
+              let permit2ApproveData: `0x${string}` | null = null
+              if (!hasPermit2InternalAllowance) {
+                permit2ApproveData = encodeFunctionData({
+                  abi: permit2Abi,
+                  functionName: 'approve',
+                  args: [
+                    fromToken.address as `0x${string}`,
+                    embeddedApprovalSpender as `0x${string}`,
+                    MAX_UINT160,
+                    EXPIRATION,
+                  ],
+                })
+                calls.push({
+                  to: PERMIT2_ADDRESS,
+                  data: permit2ApproveData,
+                  value: BigInt(0),
+                })
+                console.log('[useRelaySwap] Call 2: Permit2.approve(token, spender, amount, exp)')
+                console.log('[useRelaySwap]   token:', fromToken.address)
+                console.log('[useRelaySwap]   spender:', embeddedApprovalSpender)
+                console.log('[useRelaySwap]   amount:', MAX_UINT160.toString())
+                console.log('[useRelaySwap]   expiration:', EXPIRATION)
+              }
 
-              // Step 3: Execute the deposit
+              // Step 3: Deposit
+              const depositData = txData as `0x${string}`
+              const depositTo = item.data.to as `0x${string}`
+              const depositValue = item.data.value ? BigInt(item.data.value) : BigInt(0)
               calls.push({
-                to: item.data.to as `0x${string}`,
-                data: txData as `0x${string}`,
-                value: item.data.value ? BigInt(item.data.value) : BigInt(0),
+                to: depositTo,
+                data: depositData,
+                value: depositValue,
               })
-              console.log('[useRelaySwap] Added deposit call to batch')
+              console.log('[useRelaySwap] Call 3: Deposit')
+              console.log('[useRelaySwap]   to:', depositTo)
+              console.log('[useRelaySwap]   value:', depositValue.toString())
 
-              console.log('[useRelaySwap] Sending batched Permit2 approval + deposit UserOp...', {
-                totalCalls: calls.length,
-                hasERC20Approve: !hasPermit2Allowance,
-              })
+              // Simulate each call individually to identify failures
+              console.log('[useRelaySwap] Simulating calls individually...')
+              const baseClient = getPublicClientForChain(fromToken.chainId, publicClient, 0)
+
+              for (let i = 0; i < calls.length; i++) {
+                const call = calls[i]
+                const callName = i === 0 && erc20ApproveData ? 'ERC20 approve' :
+                                 i === (erc20ApproveData ? 1 : 0) && permit2ApproveData ? 'Permit2.approve' :
+                                 'Deposit'
+                try {
+                  await baseClient.call({
+                    account: smartWalletAddress,
+                    to: call.to,
+                    data: call.data,
+                    value: call.value,
+                  })
+                  console.log(`[useRelaySwap] ✓ Simulation ${i + 1} (${callName}): SUCCESS`)
+                } catch (simErr: any) {
+                  console.error(`[useRelaySwap] ✗ Simulation ${i + 1} (${callName}): FAILED`)
+                  console.error('[useRelaySwap]   Error:', simErr?.message || simErr)
+                  console.error('[useRelaySwap]   Call data:', { to: call.to, data: call.data.slice(0, 66) + '...', value: call.value.toString() })
+                }
+              }
+
+              // Send the batched UserOp
+              console.log('[useRelaySwap] Sending batched UserOp with', calls.length, 'calls...')
               const batchedTxHash = await chainClient.sendTransaction({ calls })
-              console.log('[useRelaySwap] Batched Permit2 + deposit UserOp sent:', batchedTxHash)
+              console.log('[useRelaySwap] Batched UserOp sent:', batchedTxHash)
               lastTxHash = batchedTxHash
               continue
             }
