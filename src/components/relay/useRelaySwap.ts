@@ -137,6 +137,40 @@ const EVM_RPC_ENDPOINTS: Record<number, string[]> = {
 // Solana chain ID for Relay API
 export const SOLANA_CHAIN_ID = 792703809
 
+// Permit2 canonical address (same on all EVM chains)
+const PERMIT2_ADDRESS = '0x000000000022D473030F116dDEE9F6B43aC78BA3' as `0x${string}`
+
+// Permit2 ABI for the approve function
+const permit2Abi = [
+  {
+    name: 'approve',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'token', type: 'address' },
+      { name: 'spender', type: 'address' },
+      { name: 'amount', type: 'uint160' },
+      { name: 'expiration', type: 'uint48' },
+    ],
+    outputs: [],
+  },
+  {
+    name: 'allowance',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'token', type: 'address' },
+      { name: 'spender', type: 'address' },
+    ],
+    outputs: [
+      { name: 'amount', type: 'uint160' },
+      { name: 'expiration', type: 'uint48' },
+      { name: 'nonce', type: 'uint48' },
+    ],
+  },
+] as const
+
 // Helius RPC (premium) - uses env var or falls back to hardcoded key
 const HELIUS_API_KEY = process.env.NEXT_PUBLIC_HELIUS_RPC_KEY || 'adfbe4d1-c717-41c2-8962-0723246cbeda'
 
@@ -1493,63 +1527,80 @@ export function useRelaySwap(
             // The Multicall3 inside the deposit tries to approve on our behalf but fails
             // because msg.sender inside Multicall3 is the contract, not us
             //
-            // Strategy: Batch approval + deposit into single UserOp so they execute atomically
+            // IMPORTANT: Relay uses Permit2 for token approvals
+            // Permit2 is a 2-step approval model:
+            //   1. ERC20 approve Permit2 contract (token.approve(PERMIT2, amount))
+            //   2. Permit2 internal approve (Permit2.approve(token, spender, amount, expiration))
+            //
+            // We batch all approvals + deposit into a single UserOp for atomic execution
             if (hasEmbeddedApproval && embeddedApprovalSpender && !hasExplicitApproveStep) {
-              console.log('[useRelaySwap] Relay bundled approval in deposit - using batched approach')
+              console.log('[useRelaySwap] Relay bundled approval in deposit - using Permit2 flow')
               console.log('[useRelaySwap] Embedded spender (router):', embeddedApprovalSpender)
+              console.log('[useRelaySwap] Permit2 address:', PERMIT2_ADDRESS)
               console.log('[useRelaySwap] Deposit contract:', depositContractAddress)
               console.log('[useRelaySwap] Smart wallet:', smartWalletAddress)
 
               const approvalAmount = parseUnits(quote.fromAmount, fromToken.decimals)
 
-              // Check if we already have allowance to the router
-              const hasRouterAllowance = await checkAllowance(fromToken, embeddedApprovalSpender, approvalAmount)
+              // Build the batch of calls for atomic execution
+              const calls: Array<{ to: `0x${string}`; data: `0x${string}`; value: bigint }> = []
 
-              if (!hasRouterAllowance) {
-                console.log('[useRelaySwap] Need to approve router before deposit')
+              // Step 1: ERC20 approve Permit2 (if not already approved)
+              const hasPermit2Allowance = await checkAllowance(fromToken, PERMIT2_ADDRESS, approvalAmount)
+              console.log('[useRelaySwap] Has ERC20 allowance to Permit2:', hasPermit2Allowance)
 
-                // Batch approval + deposit into single UserOp
-                // This ensures they execute atomically in the same transaction
+              if (!hasPermit2Allowance) {
                 const MAX_UINT256 = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
-                const approveData = encodeFunctionData({
+                const erc20ApproveData = encodeFunctionData({
                   abi: erc20Abi,
                   functionName: 'approve',
-                  args: [embeddedApprovalSpender as `0x${string}`, MAX_UINT256],
+                  args: [PERMIT2_ADDRESS, MAX_UINT256],
                 })
-
-                console.log('[useRelaySwap] Sending batched approval + deposit UserOp...')
-                const batchedTxHash = await chainClient.sendTransaction({
-                  calls: [
-                    // First call: approve the router
-                    {
-                      to: fromToken.address as `0x${string}`,
-                      data: approveData,
-                      value: BigInt(0),
-                    },
-                    // Second call: execute the deposit
-                    {
-                      to: item.data.to as `0x${string}`,
-                      data: txData as `0x${string}`,
-                      value: item.data.value ? BigInt(item.data.value) : BigInt(0),
-                    },
-                  ],
+                calls.push({
+                  to: fromToken.address as `0x${string}`,
+                  data: erc20ApproveData,
+                  value: BigInt(0),
                 })
-                console.log('[useRelaySwap] Batched approval + deposit UserOp sent:', batchedTxHash)
-                lastTxHash = batchedTxHash
-                continue
-              } else {
-                console.log('[useRelaySwap] Already have router allowance, sending deposit only')
-                const txHash = await chainClient.sendTransaction({
-                  calls: [{
-                    to: item.data.to as `0x${string}`,
-                    data: txData as `0x${string}`,
-                    value: item.data.value ? BigInt(item.data.value) : BigInt(0),
-                  }],
-                })
-                console.log('[useRelaySwap] EVM → Solana deposit sent:', txHash)
-                lastTxHash = txHash
-                continue
+                console.log('[useRelaySwap] Added ERC20 approve Permit2 to batch')
               }
+
+              // Step 2: Permit2 internal approve (approve the router/spender within Permit2)
+              // uint160 max amount, uint48 expiration (far future)
+              const MAX_UINT160 = BigInt('0xffffffffffffffffffffffffffffffffffffffff') // 2^160 - 1
+              const FAR_FUTURE_EXPIRATION = BigInt(Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365 * 10) // 10 years
+              const permit2ApproveData = encodeFunctionData({
+                abi: permit2Abi,
+                functionName: 'approve',
+                args: [
+                  fromToken.address as `0x${string}`,
+                  embeddedApprovalSpender as `0x${string}`,
+                  MAX_UINT160,
+                  Number(FAR_FUTURE_EXPIRATION),
+                ],
+              })
+              calls.push({
+                to: PERMIT2_ADDRESS,
+                data: permit2ApproveData,
+                value: BigInt(0),
+              })
+              console.log('[useRelaySwap] Added Permit2.approve() to batch')
+
+              // Step 3: Execute the deposit
+              calls.push({
+                to: item.data.to as `0x${string}`,
+                data: txData as `0x${string}`,
+                value: item.data.value ? BigInt(item.data.value) : BigInt(0),
+              })
+              console.log('[useRelaySwap] Added deposit call to batch')
+
+              console.log('[useRelaySwap] Sending batched Permit2 approval + deposit UserOp...', {
+                totalCalls: calls.length,
+                hasERC20Approve: !hasPermit2Allowance,
+              })
+              const batchedTxHash = await chainClient.sendTransaction({ calls })
+              console.log('[useRelaySwap] Batched Permit2 + deposit UserOp sent:', batchedTxHash)
+              lastTxHash = batchedTxHash
+              continue
             }
 
             // Only handle manual approval if needed (no embedded approval)
