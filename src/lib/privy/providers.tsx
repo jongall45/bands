@@ -32,15 +32,6 @@ import { arbitrum, base, polygon } from 'viem/chains'
 // Your Privy App ID (from Dashboard)
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID || ''
 
-// Mobile Client ID for iOS/Android native apps (from Privy Dashboard → Clients → Mobile)
-const PRIVY_MOBILE_CLIENT_ID = 'client-WY6TNAUrZBa8MAobKfEij6W9uFE7nfzYhNGxAK2WMduDq'
-
-// Detect if running in Capacitor native app
-const isCapacitorNative = (): boolean => {
-  if (typeof window === 'undefined') return false
-  return !!(window as any).Capacitor?.isNativePlatform?.()
-}
-
 // Supported chains
 const SUPPORTED_CHAINS = [arbitrum, base, polygon] as const
 
@@ -119,7 +110,7 @@ const privyConfig = {
     termsAndConditionsUrl: 'https://bands.cash/terms',
     privacyPolicyUrl: 'https://bands.cash/privacy',
   },
-})
+}
 
 // ============================================
 // PROVIDERS COMPONENT
@@ -156,12 +147,6 @@ export function PrivyProviders({ children }: PrivyProvidersProps) {
     console.error('❌ NEXT_PUBLIC_PRIVY_APP_ID is not set!')
     return <div>Missing Privy configuration</div>
   }
-
-  // Detect Capacitor for config purposes, but don't use mobile client ID
-  // Mobile client ID causes Privy to use native auth flows that open Safari
-  const isNative = isCapacitorNative()
-  // const clientId = isNative ? PRIVY_MOBILE_CLIENT_ID : undefined  // Disabled - causes Safari redirect
-  const privyConfig = getPrivyConfig(isNative)
 
   return (
     <>
