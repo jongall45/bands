@@ -621,104 +621,63 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken, 
         side="to"
       />
 
-      {/* Success Modal */}
+      {/* Success Modal - Compact */}
       {showSuccess && result && (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/80 p-4" onClick={handleCloseSuccess}>
-          <div className="bg-[#0f0f0f] border border-white/10 rounded-[24px] p-8 max-w-[360px] w-full text-center" onClick={e => e.stopPropagation()}>
-            <button
-              onClick={handleCloseSuccess}
-              className="absolute top-4 right-4 p-2 hover:bg-white/10 rounded-full text-white/40 transition"
-            >
-              <X size={20} />
-            </button>
-
-            <div className="w-[72px] h-[72px] mx-auto mb-5 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
-              <CheckCircle className="w-10 h-10 text-white" />
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={handleCloseSuccess}>
+          <div
+            className="bg-[#0a0a0a] border border-white/10 rounded-2xl p-5 max-w-[260px] w-full text-center shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Animated checkmark */}
+            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-green-500/20 flex items-center justify-center group cursor-default hover:bg-green-500/30 transition-all duration-300 hover:scale-110">
+              <CheckCircle className="w-6 h-6 text-green-400 group-hover:text-green-300 transition-colors" />
             </div>
 
-            <h3 className="text-2xl font-bold text-white mb-2">Swap Successful!</h3>
-            <p className="text-white/60 mb-6">Your transaction has been confirmed</p>
+            <p className="text-white/90 font-medium text-sm mb-3">Swap Complete</p>
 
-            <div className="bg-white/5 rounded-xl p-4 mb-6 text-left space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-white/50 text-sm">Sent</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-white font-medium">
-                    {(() => {
-                      const num = parseFloat(result.fromAmount)
-                      // Stablecoins: 2 decimals, others: up to 6 (trim trailing zeros)
-                      if (['USDC', 'USDT', 'DAI'].includes(result.fromToken.symbol)) {
-                        return num.toFixed(2)
-                      }
-                      return num.toFixed(6).replace(/\.?0+$/, '')
-                    })()}
+            {/* Compact transaction details */}
+            <div className="bg-white/5 rounded-xl p-3 mb-3 space-y-2">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-white/40">Sent</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-white/80 font-medium">
+                    {parseFloat(result.fromAmount).toFixed(['USDC', 'USDT', 'DAI'].includes(result.fromToken.symbol) ? 2 : 4)}
                   </span>
-                  <div className="relative">
-                    {result.fromToken.logoURI ? (
-                      <img src={result.fromToken.logoURI} className="w-5 h-5 rounded-full" alt={result.fromToken.symbol} />
-                    ) : (
-                      <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold text-white">
-                        {result.fromToken.symbol.charAt(0)}
-                      </div>
-                    )}
-                    <img 
-                      src={SUPPORTED_CHAINS.find(c => c.id === result.fromToken.chainId)?.logo || ''} 
-                      className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-black/50" 
-                      alt="chain"
-                    />
-                  </div>
-                  <span className="text-white font-medium">{result.fromToken.symbol}</span>
+                  {result.fromToken.logoURI && <img src={result.fromToken.logoURI} className="w-4 h-4 rounded-full" alt="" />}
+                  <span className="text-white/60">{result.fromToken.symbol}</span>
                 </div>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-white/50 text-sm">Received</span>
-                <div className="flex items-center gap-2">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-white/40">Received</span>
+                <div className="flex items-center gap-1.5">
                   <span className="text-green-400 font-medium">
-                    {(() => {
-                      const num = parseFloat(result.toAmount)
-                      // Stablecoins: 2 decimals, others: up to 6 (trim trailing zeros)
-                      if (['USDC', 'USDT', 'DAI'].includes(result.toToken.symbol)) {
-                        return num.toFixed(2)
-                      }
-                      return num.toFixed(6).replace(/\.?0+$/, '')
-                    })()}
+                    {parseFloat(result.toAmount).toFixed(['USDC', 'USDT', 'DAI'].includes(result.toToken.symbol) ? 2 : 4)}
                   </span>
-                  <div className="relative">
-                    {result.toToken.logoURI ? (
-                      <img src={result.toToken.logoURI} className="w-5 h-5 rounded-full" alt={result.toToken.symbol} />
-                    ) : (
-                      <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold text-white">
-                        {result.toToken.symbol.charAt(0)}
-                      </div>
-                    )}
-                    <img 
-                      src={SUPPORTED_CHAINS.find(c => c.id === result.toToken.chainId)?.logo || ''} 
-                      className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-black/50" 
-                      alt="chain"
-                    />
-                  </div>
-                  <span className="text-green-400 font-medium">{result.toToken.symbol}</span>
+                  {result.toToken.logoURI && <img src={result.toToken.logoURI} className="w-4 h-4 rounded-full" alt="" />}
+                  <span className="text-green-400/70">{result.toToken.symbol}</span>
                 </div>
               </div>
             </div>
 
-            {result.txHash && (
-              <a
-                href={getExplorerUrl(result.fromToken.chainId, result.txHash)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block text-[#ef4444] hover:underline text-sm mb-6"
+            {/* Actions */}
+            <div className="flex gap-2">
+              {result.txHash && (
+                <a
+                  href={getExplorerUrl(result.fromToken.chainId, result.txHash)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-white/60 hover:text-white text-xs font-medium transition-all"
+                >
+                  View
+                </a>
+              )}
+              <button
+                onClick={handleCloseSuccess}
+                className="flex-1 py-2 bg-[#ef4444] hover:bg-[#dc2626] rounded-lg text-white text-xs font-medium transition-all hover:scale-[1.02]"
               >
-                View on {getExplorerName(result.fromToken.chainId)} →
-              </a>
-            )}
-
-            <button
-              onClick={handleCloseSuccess}
-              className="w-full py-4 bg-[#ef4444] hover:bg-[#dc2626] rounded-[14px] text-white font-semibold transition"
-            >
-              Done
-            </button>
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}
