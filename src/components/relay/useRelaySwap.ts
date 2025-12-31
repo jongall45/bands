@@ -590,6 +590,11 @@ export function useRelaySwap(
   // Get wallet address
   const smartWalletAddress = smartWalletClient?.account?.address as `0x${string}` | undefined
 
+  // Get the EOA (embedded wallet) address - this may differ from smart wallet
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const eoaWallet = wallets.find((w: any) => w.walletClientType === 'privy')
+  const eoaAddress = eoaWallet?.address as `0x${string}` | undefined
+
   // Helper to get the correct wallet address based on chain
   const getWalletForChain = useCallback((chainId: number): string | undefined => {
     if (chainId === SOLANA_CHAIN_ID) {
@@ -692,6 +697,12 @@ export function useRelaySwap(
     if (token.address === NATIVE_TOKEN_ADDRESS) return true // Native tokens don't need approval
 
     try {
+      console.log('[useRelaySwap] checkAllowance params:', {
+        owner: smartWalletAddress,
+        spender,
+        token: token.symbol,
+        tokenAddress: token.address,
+      })
       const allowance = await executeWithFallback(
         token.chainId,
         publicClient,
@@ -703,12 +714,158 @@ export function useRelaySwap(
         })
       )
       console.log('[useRelaySwap] Current allowance:', allowance.toString(), 'Required:', requiredAmount.toString())
+      console.log('[useRelaySwap] Allowance check: owner=', smartWalletAddress, 'spender=', spender, 'result=', (allowance as bigint) >= requiredAmount)
       return (allowance as bigint) >= requiredAmount
     } catch (err) {
       console.error('[useRelaySwap] checkAllowance error:', err)
       return false
     }
   }, [smartWalletAddress, publicClient])
+
+  // ============================================
+  // DEBUG: Find true token holder (EOA vs Smart Wallet)
+  // ============================================
+  const debugTokenOwnership = useCallback(async (
+    token: Token
+  ): Promise<{ owner: `0x${string}` | null; eoaBalance: bigint; smartWalletBalance: bigint }> => {
+    if (!publicClient) {
+      return { owner: null, eoaBalance: BigInt(0), smartWalletBalance: BigInt(0) }
+    }
+
+    console.log('╔════════════════════════════════════════╗')
+    console.log('║  DEBUG: Token Ownership Analysis       ║')
+    console.log('╚════════════════════════════════════════╝')
+    console.log('[DEBUG] EOA address:', eoaAddress)
+    console.log('[DEBUG] Smart wallet address:', smartWalletAddress)
+    console.log('[DEBUG] Token:', token.symbol, 'at', token.address)
+
+    let eoaBalance = BigInt(0)
+    let smartWalletBalance = BigInt(0)
+
+    try {
+      // Check EOA balance
+      if (eoaAddress) {
+        eoaBalance = await executeWithFallback(
+          token.chainId,
+          publicClient,
+          (client) => client.readContract({
+            address: token.address as `0x${string}`,
+            abi: erc20Abi,
+            functionName: 'balanceOf',
+            args: [eoaAddress],
+          })
+        ) as bigint
+        console.log('[DEBUG] EOA balance:', formatUnits(eoaBalance, token.decimals), token.symbol)
+      }
+
+      // Check Smart Wallet balance
+      if (smartWalletAddress) {
+        smartWalletBalance = await executeWithFallback(
+          token.chainId,
+          publicClient,
+          (client) => client.readContract({
+            address: token.address as `0x${string}`,
+            abi: erc20Abi,
+            functionName: 'balanceOf',
+            args: [smartWalletAddress],
+          })
+        ) as bigint
+        console.log('[DEBUG] Smart wallet balance:', formatUnits(smartWalletBalance, token.decimals), token.symbol)
+      }
+
+      // Determine who actually holds the tokens
+      const owner = smartWalletBalance > eoaBalance ? smartWalletAddress : eoaAddress
+      console.log('[DEBUG] Token holder (for approval owner):', owner)
+      console.log('[DEBUG] EOA holds more?', eoaBalance > smartWalletBalance)
+      console.log('[DEBUG] Smart wallet holds more?', smartWalletBalance > eoaBalance)
+
+      return { owner: owner || null, eoaBalance, smartWalletBalance }
+    } catch (err) {
+      console.error('[DEBUG] Error checking token ownership:', err)
+      return { owner: smartWalletAddress || null, eoaBalance, smartWalletBalance }
+    }
+  }, [eoaAddress, smartWalletAddress, publicClient])
+
+  // ============================================
+  // DEBUG: Verify approval via tx receipt
+  // Note: For Privy smart wallets, the hash is a UserOp hash, not a tx hash.
+  // We'll poll for the receipt since UserOps can take time to be bundled.
+  // ============================================
+  const verifyApprovalFromReceipt = useCallback(async (
+    txHash: string,
+    tokenAddress: string,
+    chainId: number
+  ): Promise<{ approved: boolean; owner?: string; spender?: string; amount?: string }> => {
+    if (!publicClient) {
+      return { approved: false }
+    }
+
+    console.log('[DEBUG] Attempting to fetch tx receipt for:', txHash)
+    console.log('[DEBUG] Note: For smart wallets, this is likely a UserOp hash')
+
+    // Poll for receipt - UserOps can take a few seconds to be bundled
+    const maxAttempts = 5
+    const delayMs = 2000
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        console.log(`[DEBUG] Receipt fetch attempt ${attempt}/${maxAttempts}...`)
+        const receipt = await executeWithFallback(
+          chainId,
+          publicClient,
+          (client) => client.getTransactionReceipt({ hash: txHash as `0x${string}` })
+        ) as { status: string; logs: Array<{ address: string; topics: string[]; data: string }>; from: string; to: string }
+
+        console.log('[DEBUG] Tx receipt status:', receipt.status)
+        console.log('[DEBUG] Tx receipt logs count:', receipt.logs.length)
+        console.log('[DEBUG] Tx from:', receipt.from)
+        console.log('[DEBUG] Tx to:', receipt.to)
+
+        // Approval event topic: keccak256("Approval(address,address,uint256)")
+        const APPROVAL_TOPIC = '0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925'
+
+        for (const log of receipt.logs) {
+          if (log.address.toLowerCase() === tokenAddress.toLowerCase() &&
+              log.topics[0] === APPROVAL_TOPIC) {
+            const owner = '0x' + log.topics[1]?.slice(26)
+            const spender = '0x' + log.topics[2]?.slice(26)
+            const amount = log.data
+
+            console.log('[DEBUG] ✓ Found Approval event!')
+            console.log('[DEBUG]   Owner (from event):', owner)
+            console.log('[DEBUG]   Spender (from event):', spender)
+            console.log('[DEBUG]   Amount (hex):', amount)
+
+            return { approved: true, owner, spender, amount }
+          }
+        }
+
+        console.log('[DEBUG] ✗ No Approval event found in receipt')
+        return { approved: false }
+      } catch (err: any) {
+        const errMsg = err?.message || String(err)
+        console.log(`[DEBUG] Attempt ${attempt} failed:`, errMsg)
+
+        // If it's a UserOp hash, we might get "could not be found"
+        if (errMsg.includes('could not be found') || errMsg.includes('not found')) {
+          console.log('[DEBUG] Hash not found - likely a UserOp hash awaiting bundling')
+          if (attempt < maxAttempts) {
+            console.log(`[DEBUG] Waiting ${delayMs}ms before retry...`)
+            await new Promise(resolve => setTimeout(resolve, delayMs))
+            continue
+          }
+        }
+
+        // Other errors - log and return
+        console.error('[DEBUG] Error verifying approval from receipt:', err)
+        return { approved: false }
+      }
+    }
+
+    console.log('[DEBUG] ✗ Could not fetch receipt after all attempts')
+    console.log('[DEBUG] This is likely a UserOp hash - receipt may appear later')
+    return { approved: false }
+  }, [publicClient])
 
   // ============================================
   // DEBUG: Simulate calls to diagnose failures
@@ -1495,6 +1652,10 @@ export function useRelaySwap(
               console.log('[useRelaySwap] Relay bundled approval in deposit')
               console.log('[useRelaySwap] Pre-approving embedded spender:', embeddedApprovalSpender)
 
+              // DEBUG: Check which address actually holds the tokens
+              const { owner: tokenHolder, eoaBalance, smartWalletBalance } = await debugTokenOwnership(fromToken)
+              console.log('[useRelaySwap] Token holder determined:', tokenHolder)
+
               const approvalAmount = parseUnits(quote.fromAmount, fromToken.decimals)
               const hasSpenderAllowance = await checkAllowance(fromToken, embeddedApprovalSpender, approvalAmount)
 
@@ -1517,13 +1678,40 @@ export function useRelaySwap(
                 })
                 console.log('[useRelaySwap] Pre-approval sent:', preApproveTxHash)
 
+                // DEBUG: Verify approval from tx receipt
+                console.log('[useRelaySwap] Verifying approval from tx receipt...')
+                const approvalResult = await verifyApprovalFromReceipt(
+                  preApproveTxHash,
+                  fromToken.address,
+                  fromToken.chainId
+                )
+                if (approvalResult.approved) {
+                  console.log('[useRelaySwap] ✓ Approval confirmed in receipt')
+                  console.log('[useRelaySwap]   Owner from event:', approvalResult.owner)
+                  console.log('[useRelaySwap]   Spender from event:', approvalResult.spender)
+                  // Check if the owner matches what we expect
+                  if (approvalResult.owner?.toLowerCase() !== smartWalletAddress?.toLowerCase()) {
+                    console.warn('[useRelaySwap] ⚠ Owner mismatch! Event owner:', approvalResult.owner, 'Expected:', smartWalletAddress)
+                  }
+                } else {
+                  console.warn('[useRelaySwap] ✗ Could not verify approval from receipt')
+                }
+
                 // Wait for pre-approval to propagate
                 console.log('[useRelaySwap] Waiting for pre-approval to propagate (8s)...')
                 await new Promise(resolve => setTimeout(resolve, 8000))
 
-                // Verify
+                // Verify using checkAllowance
                 const newAllowance = await checkAllowance(fromToken, embeddedApprovalSpender, approvalAmount)
-                console.log('[useRelaySwap] Pre-approval verified:', newAllowance)
+                console.log('[useRelaySwap] Pre-approval verified via checkAllowance:', newAllowance)
+
+                // DEBUG: If allowance check still fails, the owner might be wrong
+                if (!newAllowance && approvalResult.approved) {
+                  console.error('[useRelaySwap] ✗ CRITICAL: Approval event found but allowance check failed!')
+                  console.error('[useRelaySwap] This likely means checkAllowance is using wrong owner address')
+                  console.error('[useRelaySwap] checkAllowance uses:', smartWalletAddress)
+                  console.error('[useRelaySwap] Approval event owner:', approvalResult.owner)
+                }
               } else {
                 console.log('[useRelaySwap] Already have allowance for embedded spender')
               }
