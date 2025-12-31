@@ -32,7 +32,7 @@ import { arbitrum, base, polygon } from 'viem/chains'
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID || ''
 
 // Mobile Client ID for iOS/Android native apps (from Privy Dashboard → Clients → Mobile)
-const PRIVY_MOBILE_CLIENT_ID = 'client-WY6TNAUrZBa8MAobKfEij6W9uFE7nfzYhN5kND1FDVomJ'
+const PRIVY_MOBILE_CLIENT_ID = 'client-WY6TNAUrZBa8MAobKfEij6W9uFE7nfzYhNGxAK2WMduDq'
 
 // Detect if running in Capacitor native app
 const isCapacitorNative = (): boolean => {
