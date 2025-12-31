@@ -76,8 +76,8 @@ export function AppContent({ children, className = '', fullWidth = false }: AppC
         ${showDesktopUI
           ? fullWidth
             ? 'w-full'
-            : 'max-w-4xl mx-auto'
-          : 'max-w-[430px] mx-auto'
+            : 'max-w-[600px]'  // Desktop: wider than mobile but still compact
+          : 'max-w-[430px] mx-auto'  // Mobile: same as before
         }
         ${className}
       `}
