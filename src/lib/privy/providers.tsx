@@ -71,16 +71,16 @@ const wagmiConfig = createConfig({
 // ============================================
 
 /**
- * Privy configuration for fomo-style UX
- * 
+ * Get Privy configuration based on platform
+ *
  * KEY SETTINGS:
  * - embeddedWallets.createOnLogin: 'all-users' → Auto-create wallet
  * - embeddedWallets.showWalletUIs: false → Hide wallet modals by default
- * 
- * NOTE: `noPromptOnSignature` is DEPRECATED!
- * Use Dashboard setting "Require user confirmation" = OFF instead.
+ *
+ * NOTE: In Capacitor native apps, we only use email login to avoid
+ * OAuth redirects that open Safari.
  */
-const privyConfig = {
+const getPrivyConfig = (isNative: boolean) => ({
   // Appearance
   appearance: {
     theme: 'dark' as const,
@@ -89,8 +89,10 @@ const privyConfig = {
     showWalletLoginFirst: false,
   },
 
-  // Login methods
-  loginMethods: ['email', 'google', 'apple'] as ('email' | 'google' | 'apple')[],
+  // Login methods - email only for native apps to avoid OAuth redirects
+  loginMethods: isNative
+    ? ['email'] as ('email')[]
+    : ['email', 'google', 'apple'] as ('email' | 'google' | 'apple')[],
 
   // Embedded wallet configuration
   embeddedWallets: {
@@ -102,10 +104,6 @@ const privyConfig = {
     // Hide wallet UIs by default (key for no-prompt UX)
     // Individual methods can override with uiOptions
     showWalletUIs: false,
-
-    // DEPRECATED - DO NOT USE:
-    // noPromptOnSignature: true, // ❌ This does nothing
-    // Use Dashboard setting instead!
   },
 
   // Chain configuration
@@ -125,7 +123,7 @@ const privyConfig = {
     termsAndConditionsUrl: 'https://bands.cash/terms',
     privacyPolicyUrl: 'https://bands.cash/privacy',
   },
-}
+})
 
 // ============================================
 // PROVIDERS COMPONENT
@@ -163,9 +161,10 @@ export function PrivyProviders({ children }: PrivyProvidersProps) {
     return <div>Missing Privy configuration</div>
   }
 
-  // Use mobile client ID when running in Capacitor native app
+  // Use mobile client ID and email-only login when running in Capacitor native app
   const isNative = isCapacitorNative()
   const clientId = isNative ? PRIVY_MOBILE_CLIENT_ID : undefined
+  const privyConfig = getPrivyConfig(isNative)
 
   return (
     <BasePrivyProvider
