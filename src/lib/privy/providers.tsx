@@ -154,7 +154,8 @@ export function PrivyProviders({ children }: PrivyProvidersProps) {
     return <div>Missing Privy configuration</div>
   }
 
-  // Only add customOAuthRedirectUrl for Capacitor native apps
+  // For Capacitor apps, use customOAuthRedirectUrl to force OAuth in external browser
+  // This is required because Google blocks OAuth in embedded WebViews
   const isNative = isCapacitorNative()
   const config = isNative
     ? { ...privyConfig, customOAuthRedirectUrl: 'https://www.bands.cash/redirect' }
