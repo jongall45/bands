@@ -19,10 +19,9 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { Modal } from '@/components/ui/Modal'
-import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
 import { TransactionList } from '@/components/ui/TransactionList'
-import { InstallPrompt } from '@/components/pwa/InstallPrompt'
+import { AppShell, AppContent } from '@/components/layout/AppShell'
 import { IndustrialPage, GlassCard, GlassButton, GlassInner, TechBadge, SectionHeader } from '@/components/ui/IndustrialGlass'
 
 // Solana chain ID (used for Relay API, but we use 'solana' as a special case for native transfers)
@@ -417,24 +416,23 @@ export default function Dashboard() {
   }
 
   return (
-    <IndustrialPage>
-      {/* Header */}
-      <header
-        className="flex items-center justify-between px-5 py-4 max-w-[430px] mx-auto"
-        style={{ paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))' }}
-      >
-        <LogoInline size="sm" />
-        <button
-          onClick={() => logout()}
-          className="p-2 text-white/40 hover:text-white/70 transition-colors"
-          title="Sign out"
-        >
-          <LogOut className="w-5 h-5" strokeWidth={1.5} />
-        </button>
-      </header>
+    <AppShell>
+      <IndustrialPage>
+        <AppContent>
+          {/* Header */}
+          <header className="flex items-center justify-between mb-4">
+            <LogoInline size="sm" />
+            <button
+              onClick={() => logout()}
+              className="p-2 text-white/40 hover:text-white/70 transition-colors"
+              title="Sign out"
+            >
+              <LogOut className="w-5 h-5" strokeWidth={1.5} />
+            </button>
+          </header>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col px-4 pb-24 max-w-[430px] mx-auto w-full">
+          {/* Main Content */}
+          <div className="flex-1 flex flex-col w-full">
 
         {/* Balance Card */}
         <GlassCard variant="redAccent" className="mb-4">
@@ -671,21 +669,16 @@ export default function Dashboard() {
           )
         })()}
 
-        {/* Recent Activity Card */}
-        <GlassCard variant="redAccent">
-          <SectionHeader>Recent Activity</SectionHeader>
-          <TransactionList address={address} limit={5} />
-        </GlassCard>
+            {/* Recent Activity Card */}
+            <GlassCard variant="redAccent">
+              <SectionHeader>Recent Activity</SectionHeader>
+              <TransactionList address={address} limit={5} />
+            </GlassCard>
 
-      </main>
+          </div>
+        </AppContent>
 
-      {/* Bottom Navigation */}
-      <BottomNav />
-
-      {/* PWA Install Prompt */}
-      <InstallPrompt />
-
-      {/* Send Modal */}
+        {/* Send Modal */}
       <Modal isOpen={showSend} onClose={() => !isSending && !isConfirming && setShowSend(false)} title="Send">
         <div className="space-y-5">
           {/* Chain Selection */}
@@ -906,108 +899,109 @@ export default function Dashboard() {
         </div>
       </Modal>
 
-      {/* Receive Modal */}
-      <Modal isOpen={showReceive} onClose={() => setShowReceive(false)} title="Receive">
-        <div className="text-center">
-          {/* Wallet Selector Tabs */}
-          {hasSolanaWallet && solanaAddress && (
-            <div className="flex bg-white/[0.03] rounded-xl p-1 border border-white/[0.06] mb-4">
-              <button
-                onClick={() => setReceiveWallet('evm')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
-                  receiveWallet === 'evm'
-                    ? 'bg-[#FF3B30] text-white'
-                    : 'text-white/50 hover:text-white/70'
-                }`}
-              >
-                <img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" className="w-4 h-4 rounded-full" />
-                EVM
-              </button>
-              <button
-                onClick={() => setReceiveWallet('solana')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
-                  receiveWallet === 'solana'
-                    ? 'bg-[#FF3B30] text-white'
-                    : 'text-white/50 hover:text-white/70'
-                }`}
-              >
-                <img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" className="w-4 h-4 rounded-full" />
-                Solana
-              </button>
-            </div>
-          )}
+        {/* Receive Modal */}
+        <Modal isOpen={showReceive} onClose={() => setShowReceive(false)} title="Receive">
+          <div className="text-center">
+            {/* Wallet Selector Tabs */}
+            {hasSolanaWallet && solanaAddress && (
+              <div className="flex bg-white/[0.03] rounded-xl p-1 border border-white/[0.06] mb-4">
+                <button
+                  onClick={() => setReceiveWallet('evm')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
+                    receiveWallet === 'evm'
+                      ? 'bg-[#FF3B30] text-white'
+                      : 'text-white/50 hover:text-white/70'
+                  }`}
+                >
+                  <img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" className="w-4 h-4 rounded-full" />
+                  EVM
+                </button>
+                <button
+                  onClick={() => setReceiveWallet('solana')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
+                    receiveWallet === 'solana'
+                      ? 'bg-[#FF3B30] text-white'
+                      : 'text-white/50 hover:text-white/70'
+                  }`}
+                >
+                  <img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" className="w-4 h-4 rounded-full" />
+                  Solana
+                </button>
+              </div>
+            )}
 
-          {/* Wallet badge */}
-          {receiveWallet === 'evm' && isSmartWalletReady && (
-            <div className="flex items-center justify-center gap-1.5 mb-4 px-3 py-1.5 mx-auto w-fit bg-green-500/10 rounded-full border border-green-500/20">
-              <Shield className="w-3.5 h-3.5 text-green-400" />
-              <span className="text-green-400 text-xs font-medium">Smart Wallet</span>
-            </div>
-          )}
-          {receiveWallet === 'solana' && (
-            <div className="flex items-center justify-center gap-1.5 mb-4 px-3 py-1.5 mx-auto w-fit bg-[#9945FF]/10 rounded-full border border-[#9945FF]/20">
-              <img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" className="w-3.5 h-3.5 rounded-full" />
-              <span className="text-[#9945FF] text-xs font-medium">Solana Wallet</span>
-            </div>
-          )}
+            {/* Wallet badge */}
+            {receiveWallet === 'evm' && isSmartWalletReady && (
+              <div className="flex items-center justify-center gap-1.5 mb-4 px-3 py-1.5 mx-auto w-fit bg-green-500/10 rounded-full border border-green-500/20">
+                <Shield className="w-3.5 h-3.5 text-green-400" />
+                <span className="text-green-400 text-xs font-medium">Smart Wallet</span>
+              </div>
+            )}
+            {receiveWallet === 'solana' && (
+              <div className="flex items-center justify-center gap-1.5 mb-4 px-3 py-1.5 mx-auto w-fit bg-[#9945FF]/10 rounded-full border border-[#9945FF]/20">
+                <img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" className="w-3.5 h-3.5 rounded-full" />
+                <span className="text-[#9945FF] text-xs font-medium">Solana Wallet</span>
+              </div>
+            )}
 
-          <GlassInner className="w-48 h-48 mx-auto mb-6 flex items-center justify-center p-2">
-            <div className="w-full h-full bg-white rounded-xl flex items-center justify-center p-2">
-              {(receiveWallet === 'evm' ? address : solanaAddress) ? (
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${receiveWallet === 'evm' ? address : solanaAddress}&bgcolor=ffffff&color=111111`}
-                  alt="Wallet QR Code"
-                  className="w-full h-full"
-                />
-              ) : (
-                <QrCode className="w-16 h-16 text-[#111]" />
-              )}
-            </div>
-          </GlassInner>
+            <GlassInner className="w-48 h-48 mx-auto mb-6 flex items-center justify-center p-2">
+              <div className="w-full h-full bg-white rounded-xl flex items-center justify-center p-2">
+                {(receiveWallet === 'evm' ? address : solanaAddress) ? (
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${receiveWallet === 'evm' ? address : solanaAddress}&bgcolor=ffffff&color=111111`}
+                    alt="Wallet QR Code"
+                    className="w-full h-full"
+                  />
+                ) : (
+                  <QrCode className="w-16 h-16 text-[#111]" />
+                )}
+              </div>
+            </GlassInner>
 
-          <p className="text-white/40 text-sm mb-4">Share your address to receive tokens</p>
+            <p className="text-white/40 text-sm mb-4">Share your address to receive tokens</p>
 
-          <GlassInner className="mb-4">
-            <p className="font-mono text-xs text-white/60 break-all">
-              {receiveWallet === 'evm' ? address : solanaAddress}
-            </p>
-          </GlassInner>
+            <GlassInner className="mb-4">
+              <p className="font-mono text-xs text-white/60 break-all">
+                {receiveWallet === 'evm' ? address : solanaAddress}
+              </p>
+            </GlassInner>
 
-          <GlassButton
-            primary
-            onClick={() => {
-              receiveWallet === 'evm' ? copyAddress() : copySolanaAddress()
-              setShowReceive(false)
-            }}
-          >
-            <Copy className="w-4 h-4" />
-            Copy Address
-          </GlassButton>
+            <GlassButton
+              primary
+              onClick={() => {
+                receiveWallet === 'evm' ? copyAddress() : copySolanaAddress()
+                setShowReceive(false)
+              }}
+            >
+              <Copy className="w-4 h-4" />
+              Copy Address
+            </GlassButton>
 
-          <div className="mt-5">
-            <p className="text-white/30 text-xs mb-3">
-              {receiveWallet === 'evm' ? 'Works on' : 'Solana Network'}
-            </p>
-            <div className="flex items-center justify-center gap-2">
-              {receiveWallet === 'evm' ? (
-                SEND_CHAINS.map((chain) => (
-                  <div key={chain.id} className="flex flex-col items-center gap-1" title={chain.name}>
+            <div className="mt-5">
+              <p className="text-white/30 text-xs mb-3">
+                {receiveWallet === 'evm' ? 'Works on' : 'Solana Network'}
+              </p>
+              <div className="flex items-center justify-center gap-2">
+                {receiveWallet === 'evm' ? (
+                  SEND_CHAINS.map((chain) => (
+                    <div key={chain.id} className="flex flex-col items-center gap-1" title={chain.name}>
+                      <div className="w-8 h-8 bg-white/[0.05] rounded-full border border-white/[0.1] flex items-center justify-center">
+                        <img src={chain.logo} alt={chain.name} className="w-5 h-5 rounded-full" />
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="flex flex-col items-center gap-1">
                     <div className="w-8 h-8 bg-white/[0.05] rounded-full border border-white/[0.1] flex items-center justify-center">
-                      <img src={chain.logo} alt={chain.name} className="w-5 h-5 rounded-full" />
+                      <img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="Solana" className="w-5 h-5 rounded-full" />
                     </div>
                   </div>
-                ))
-              ) : (
-                <div className="flex flex-col items-center gap-1">
-                  <div className="w-8 h-8 bg-white/[0.05] rounded-full border border-white/[0.1] flex items-center justify-center">
-                    <img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="Solana" className="w-5 h-5 rounded-full" />
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      </Modal>
-    </IndustrialPage>
+        </Modal>
+      </IndustrialPage>
+    </AppShell>
   )
 }

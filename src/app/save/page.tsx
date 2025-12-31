@@ -12,8 +12,8 @@ import { VaultCard } from '@/components/morpho/VaultCard'
 import { DepositModal } from '@/components/morpho/DepositModal'
 import { WithdrawModal } from '@/components/morpho/WithdrawModal'
 import { SavingsProjectionChart } from '@/components/morpho/SavingsProjectionChart'
-import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
+import { AppShell, AppContent } from '@/components/layout/AppShell'
 import { IndustrialPage, GlassCard, GlassButton, GlassInner } from '@/components/ui/IndustrialGlass'
 import { useAuth } from '@/hooks/useAuth'
 
@@ -172,23 +172,21 @@ export default function SavePage() {
   }
 
   return (
-    <IndustrialPage>
-      <div className="max-w-[430px] mx-auto relative z-10 pb-24">
-        {/* Header */}
-        <header
-          className="flex items-center justify-between px-5 py-4"
-          style={{ paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))' }}
-        >
-          <div>
-            <h1 className="text-white font-extrabold text-xl" style={{ fontWeight: 800 }}>Yield Vaults</h1>
-            <p className="text-white/50 text-sm">Earn yield on your USDC</p>
-          </div>
-          <LogoInline size="sm" />
-        </header>
+    <AppShell>
+      <IndustrialPage>
+        <AppContent>
+          {/* Header */}
+          <header className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-white font-extrabold text-xl" style={{ fontWeight: 800 }}>Yield Vaults</h1>
+              <p className="text-white/50 text-sm">Earn yield on your USDC</p>
+            </div>
+            <LogoInline size="sm" />
+          </header>
 
-        {/* Combined Your Savings Card - Only show if user has deposits */}
-        {totalDeposited > 0 && (
-          <div className="px-5 mb-4">
+          {/* Combined Your Savings Card - Only show if user has deposits */}
+          {totalDeposited > 0 && (
+            <div className="mb-4">
             <button
               onClick={() => setIsSavingsExpanded(!isSavingsExpanded)}
               className="w-full text-left"
@@ -279,9 +277,9 @@ export default function SavePage() {
           </div>
         )}
 
-        {/* APY Summary Card - Show when no deposits */}
-        {totalDeposited === 0 && (
-          <div className="px-5 mb-4">
+          {/* APY Summary Card - Show when no deposits */}
+          {totalDeposited === 0 && (
+            <div className="mb-4">
             <GlassCard variant="green">
               <div className="flex items-center gap-3 mb-3">
                 <div className="relative w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center border border-green-500/30 overflow-hidden">
@@ -309,9 +307,9 @@ export default function SavePage() {
           </div>
         )}
 
-        {/* Available USDC Balance for selected chain */}
-        {usdcBalance > 0 && (
-          <div className="px-5 mb-4">
+          {/* Available USDC Balance for selected chain */}
+          {usdcBalance > 0 && (
+            <div className="mb-4">
             <GlassInner className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <img src={USDC_LOGO} alt="USDC" className="w-5 h-5" />
@@ -322,8 +320,8 @@ export default function SavePage() {
           </div>
         )}
 
-        {/* Earn Yield Section with Chain Selector */}
-        <div className="px-5">
+          {/* Earn Yield Section with Chain Selector */}
+          <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-white font-extrabold" style={{ fontWeight: 800 }}>Earn Yield</h2>
             <div className="flex items-center gap-2">
@@ -421,8 +419,8 @@ export default function SavePage() {
           )}
         </div>
 
-        {/* Safety Info */}
-        <div className="px-5 mt-6">
+          {/* Safety Info */}
+          <div className="mt-6">
           <GlassCard variant="redAccent">
             <div className="flex items-center gap-2 mb-2">
               <Shield className="w-4 h-4 text-[#FF3B30]/60" />
@@ -434,33 +432,31 @@ export default function SavePage() {
           </GlassCard>
         </div>
 
-        {/* Powered By */}
-        <div className="flex items-center justify-center gap-2 text-white/30 text-xs mt-6">
-          Powered by Morpho Protocol
-        </div>
-      </div>
+          {/* Powered By */}
+          <div className="flex items-center justify-center gap-2 text-white/30 text-xs mt-6">
+            Powered by Morpho Protocol
+          </div>
 
-      {/* Modals */}
-      {selectedVault && modalType === 'deposit' && (
-        <DepositModal
-          vault={selectedVault}
-          isOpen={true}
-          onClose={handleCloseModal}
-          onSuccess={refetchAfterTransaction}
-        />
-      )}
+          {/* Modals */}
+          {selectedVault && modalType === 'deposit' && (
+            <DepositModal
+              vault={selectedVault}
+              isOpen={true}
+              onClose={handleCloseModal}
+              onSuccess={refetchAfterTransaction}
+            />
+          )}
 
-      {selectedVault && modalType === 'withdraw' && (
-        <WithdrawModal
-          vault={selectedVault}
-          isOpen={true}
-          onClose={handleCloseModal}
-          onSuccess={refetchAfterTransaction}
-        />
-      )}
-
-      {/* Bottom Navigation */}
-      <BottomNav />
-    </IndustrialPage>
+          {selectedVault && modalType === 'withdraw' && (
+            <WithdrawModal
+              vault={selectedVault}
+              isOpen={true}
+              onClose={handleCloseModal}
+              onSuccess={refetchAfterTransaction}
+            />
+          )}
+        </AppContent>
+      </IndustrialPage>
+    </AppShell>
   )
 }

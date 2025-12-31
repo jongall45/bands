@@ -6,8 +6,8 @@ import { useWallets, usePrivy } from '@privy-io/react-auth'
 import { Repeat, RefreshCw, ChevronUp, ChevronDown } from 'lucide-react'
 import { CustomSwapWidget } from '@/components/relay/CustomSwapWidget'
 import type { SwapState } from '@/components/relay/useRelaySwap'
-import { BottomNav } from '@/components/ui/BottomNav'
 import { LogoInline } from '@/components/ui/Logo'
+import { AppShell, AppContent } from '@/components/layout/AppShell'
 import { IndustrialPage, GlassCard, TechBadge } from '@/components/ui/IndustrialGlass'
 import { TokenChart } from '@/components/chart/TokenChart'
 
@@ -124,20 +124,18 @@ export default function SwapPage() {
   }
 
   return (
-    <IndustrialPage className="swap-page-wrapper" data-swap-state={swapState}>
-      <div className="max-w-[430px] mx-auto relative z-10 pb-24">
-        <header
-          className="flex items-center justify-between px-5 py-4"
-          style={{ paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))' }}
-        >
-          <div>
-            <h1 className="text-white font-extrabold text-xl" style={{ fontWeight: 800 }}>Swap & Bridge</h1>
-            <p className="text-white/50 text-sm">Trade tokens across chains</p>
-          </div>
-          <LogoInline size="sm" />
-        </header>
+    <AppShell>
+      <IndustrialPage className="swap-page-wrapper" data-swap-state={swapState}>
+        <AppContent>
+          <header className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-white font-extrabold text-xl" style={{ fontWeight: 800 }}>Swap & Bridge</h1>
+              <p className="text-white/50 text-sm">Trade tokens across chains</p>
+            </div>
+            <LogoInline size="sm" />
+          </header>
 
-        <div className="px-5 space-y-4">
+          <div className="space-y-4">
           {/* Chart Section - Collapsible */}
           <div>
             <button
@@ -175,17 +173,15 @@ export default function SwapPage() {
           </div>
         </div>
 
-        <div className="px-5 mt-6">
-          <div className="flex items-center justify-center gap-2 text-white/30 text-xs">
-            <Repeat className="w-3 h-3" />
-            Powered by Relay Protocol
+          <div className="mt-6">
+            <div className="flex items-center justify-center gap-2 text-white/30 text-xs">
+              <Repeat className="w-3 h-3" />
+              Powered by Relay Protocol
+            </div>
           </div>
-        </div>
-      </div>
+        </AppContent>
 
-      <BottomNav />
-
-      <style jsx global>{`
+        <style jsx global>{`
         /* Disable effects during active swap states */
         .swap-page-wrapper[data-swap-state="confirming"],
         .swap-page-wrapper[data-swap-state="sending"],
@@ -203,6 +199,7 @@ export default function SwapPage() {
           -webkit-backdrop-filter: none !important;
         }
       `}</style>
-    </IndustrialPage>
+      </IndustrialPage>
+    </AppShell>
   )
 }
