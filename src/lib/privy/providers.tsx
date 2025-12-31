@@ -81,6 +81,10 @@ const privyConfig = {
   // Login methods
   loginMethods: ['email', 'google', 'apple'] as ('email' | 'google' | 'apple')[],
 
+  // OAuth redirect URL for Capacitor apps
+  // This tells Privy where to redirect after OAuth completes
+  customOAuthRedirectUrl: 'https://www.bands.cash/redirect',
+
   // Embedded wallet configuration
   embeddedWallets: {
     ethereum: {
