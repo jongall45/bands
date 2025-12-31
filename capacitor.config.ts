@@ -11,11 +11,22 @@ const config: CapacitorConfig = {
     // Use www version - site redirects bands.cash → www.bands.cash
     url: 'https://www.bands.cash',
     cleartext: false,
+    // CRITICAL: Allow navigation to these domains to prevent Safari redirect
+    allowNavigation: [
+      'bands.cash',
+      'www.bands.cash',
+      '*.privy.io',
+      'auth.privy.io',
+      '*.google.com',
+      'accounts.google.com',
+      '*.apple.com',
+      'appleid.apple.com',
+    ],
   },
 
   ios: {
-    // URL scheme for OAuth callbacks
-    scheme: 'bands',
+    // Use HTTPS scheme for production (prevents Safari redirect issues)
+    scheme: 'https',
     // Handle safe area insets automatically
     contentInset: 'automatic',
     // Disable link preview (cleaner UX)
