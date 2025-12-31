@@ -2035,20 +2035,30 @@ export function useRelaySwap(
               }
             }
           } else {
-            // CASE 2: No separate approval step - deposit contract needs our approval
-            // The deposit contract will call transferFrom(user) to get tokens, then swap internally
-            // So we must approve the DEPOSIT CONTRACT ADDRESS, not any internal router
+            // CASE 2: No separate approval step - check for Permit2 or direct approval
+            // Relay may use Permit2 for same-chain swaps too
             const depositContractAddress = depositItem.data.to as string
 
             // Extract amount from embedded data or use quote amount
             const txData = depositItem.data.data as string
             let approvalAmount = parseUnits(quote.fromAmount, fromToken.decimals)
 
-            // Try to extract exact amount from embedded approval if present
-            if (txData && txData.includes(APPROVE_SELECTOR.slice(2))) {
-              const approveIndex = txData.indexOf(APPROVE_SELECTOR.slice(2))
-              const amountStart = approveIndex + APPROVE_SELECTOR.length - 2 + 64
-              const amountHex = txData.substring(amountStart, amountStart + 64)
+            // Check for embedded approval and extract spender
+            const APPROVE_SELECTOR_NO_PREFIX = '095ea7b3'
+            let embeddedSpender: string | null = null
+
+            if (txData && txData.includes(APPROVE_SELECTOR_NO_PREFIX)) {
+              const approveIndex = txData.indexOf(APPROVE_SELECTOR_NO_PREFIX)
+              // Spender is 32 bytes after selector (padded address)
+              const spenderStart = approveIndex + APPROVE_SELECTOR_NO_PREFIX.length
+              const spenderHex = txData.slice(spenderStart, spenderStart + 64)
+              if (spenderHex && spenderHex.length === 64) {
+                embeddedSpender = '0x' + spenderHex.slice(24) // Take last 20 bytes
+              }
+
+              // Extract amount
+              const amountStart = spenderStart + 64
+              const amountHex = txData.slice(amountStart, amountStart + 64)
               if (amountHex && amountHex.length === 64) {
                 try {
                   approvalAmount = BigInt('0x' + amountHex)
@@ -2058,11 +2068,142 @@ export function useRelaySwap(
               }
             }
 
-            console.log('[useRelaySwap] Deposit contract approval check:', {
+            console.log('[useRelaySwap] Same-chain approval analysis:', {
               depositContract: depositContractAddress,
+              embeddedSpender,
               approvalAmount: approvalAmount.toString(),
               tokenAddress: fromToken.address,
+              isPermit2Spender: embeddedSpender?.toLowerCase() === PERMIT2_ADDRESS.toLowerCase() ||
+                embeddedSpender?.toLowerCase().startsWith('0x0000000000001ff3'),
             })
+
+            // Check if embedded spender is Permit2-related (Permit2 router)
+            const isPermit2Flow = embeddedSpender && (
+              embeddedSpender.toLowerCase() === PERMIT2_ADDRESS.toLowerCase() ||
+              embeddedSpender.toLowerCase().startsWith('0x0000000000001ff3')
+            )
+
+            if (isPermit2Flow) {
+              // Use Permit2 2-step approval flow (same as EVM→Solana)
+              console.log('[useRelaySwap] Same-chain swap using Permit2 flow')
+
+              const MAX_UINT160 = BigInt('0xffffffffffffffffffffffffffffffffffffffff')
+              const EXPIRATION = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30 // 30 days (as number for uint48)
+
+              // Check ERC20 allowance to Permit2
+              const hasERC20ToPermit2 = await checkAllowance(fromToken, PERMIT2_ADDRESS, approvalAmount)
+              console.log('[useRelaySwap] ERC20 → Permit2 allowance:', hasERC20ToPermit2)
+
+              // Check Permit2 internal allowance
+              let hasPermit2InternalAllowance = false
+              try {
+                const publicClient = createPublicClient({
+                  chain: chainMap[fromToken.chainId] || base,
+                  transport: http(),
+                })
+                const permit2AllowanceResult = await publicClient.readContract({
+                  address: PERMIT2_ADDRESS,
+                  abi: permit2Abi,
+                  functionName: 'allowance',
+                  args: [smartWalletAddress as `0x${string}`, fromToken.address as `0x${string}`, embeddedSpender as `0x${string}`],
+                })
+                const result = permit2AllowanceResult as unknown as [bigint, number, number]
+                const allowedAmount = result[0]
+                const expiration = result[1]
+                const now = Math.floor(Date.now() / 1000)
+                hasPermit2InternalAllowance = allowedAmount >= approvalAmount && expiration > now
+                console.log('[useRelaySwap] Permit2 internal allowance:', {
+                  amount: allowedAmount.toString(),
+                  expiration: expiration.toString(),
+                  hasEnough: hasPermit2InternalAllowance,
+                })
+              } catch (err) {
+                console.warn('[useRelaySwap] Failed to check Permit2 allowance:', err)
+              }
+
+              // Build calls array
+              const calls: Array<{ to: `0x${string}`; data: `0x${string}`; value: bigint }> = []
+
+              // Step 1: ERC20 approve Permit2 (if needed)
+              if (!hasERC20ToPermit2) {
+                const MAX_UINT256 = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
+                const erc20ApproveData = encodeFunctionData({
+                  abi: erc20Abi,
+                  functionName: 'approve',
+                  args: [PERMIT2_ADDRESS, MAX_UINT256],
+                })
+                calls.push({
+                  to: fromToken.address as `0x${string}`,
+                  data: erc20ApproveData,
+                  value: BigInt(0),
+                })
+                console.log('[useRelaySwap] Adding ERC20→Permit2 approval')
+              }
+
+              // Step 2: Permit2 internal approve (if needed)
+              if (!hasPermit2InternalAllowance) {
+                const permit2ApproveData = encodeFunctionData({
+                  abi: permit2Abi,
+                  functionName: 'approve',
+                  args: [fromToken.address as `0x${string}`, embeddedSpender as `0x${string}`, MAX_UINT160, EXPIRATION],
+                })
+                calls.push({
+                  to: PERMIT2_ADDRESS,
+                  data: permit2ApproveData,
+                  value: BigInt(0),
+                })
+                console.log('[useRelaySwap] Adding Permit2 internal approval')
+              }
+
+              // Step 3: Deposit/swap
+              calls.push({
+                to: depositItem.data.to as `0x${string}`,
+                data: depositItem.data.data as `0x${string}`,
+                value: depositItem.data.value ? BigInt(depositItem.data.value) : BigInt(0),
+              })
+
+              if (calls.length > 1) {
+                setState('sending')
+                console.log(`[useRelaySwap] Batching ${calls.length} calls (Permit2 flow)`)
+
+                const batchedTxHash = await chainClient.sendTransaction({ calls })
+                console.log('[useRelaySwap] Permit2 batched tx sent:', batchedTxHash)
+
+                const swapResult: SwapResult = {
+                  txHash: batchedTxHash,
+                  fromAmount: quote.fromAmount,
+                  toAmount: quote.toAmount,
+                  fromToken,
+                  toToken,
+                }
+                setResult(swapResult)
+                setState('success')
+                return swapResult
+              } else {
+                // Only deposit needed
+                setState('sending')
+                const depositTxHash = await chainClient.sendTransaction({
+                  to: depositItem.data.to as `0x${string}`,
+                  data: depositItem.data.data as `0x${string}`,
+                  value: depositItem.data.value ? BigInt(depositItem.data.value) : BigInt(0),
+                })
+                console.log('[useRelaySwap] Deposit sent:', depositTxHash)
+
+                const swapResult: SwapResult = {
+                  txHash: depositTxHash,
+                  fromAmount: quote.fromAmount,
+                  toAmount: quote.toAmount,
+                  fromToken,
+                  toToken,
+                }
+                setResult(swapResult)
+                setState('success')
+                return swapResult
+              }
+            }
+
+            // Not Permit2 - use direct approval to deposit contract
+            console.log('[useRelaySwap] Same-chain swap using direct approval')
 
             // Check if we have allowance to the DEPOSIT CONTRACT
             const hasAllowance = await checkAllowance(fromToken, depositContractAddress, approvalAmount)
