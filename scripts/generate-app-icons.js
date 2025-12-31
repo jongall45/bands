@@ -38,6 +38,7 @@ async function generateIcons() {
   console.log('Generating 1024x1024 app icon...');
   await sharp(Buffer.from(iconSvg))
     .resize(1024, 1024)
+    .flatten({ background: BRAND_RED }) // Remove alpha channel (required for App Store)
     .png()
     .toFile(appIconPath);
   console.log(`  ✓ Created ${appIconPath}`);

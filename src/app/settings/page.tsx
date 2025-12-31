@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState, useRef } from 'react'
 import { ArrowLeft, LogOut, ExternalLink, Copy, Check, Shield, Smartphone, Globe, Key, AlertTriangle, Loader2 } from 'lucide-react'
 import Link from 'next/link'
-import { BottomNav } from '@/components/ui/BottomNav'
+import { AppShell, AppContent } from '@/components/layout/AppShell'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 
 export default function SettingsPage() {
@@ -76,29 +76,27 @@ export default function SettingsPage() {
   if (!isConnected || !address) return null
 
   return (
-    <div className="min-h-screen bg-[#F4F4F5] pb-24">
-      {/* Grain overlay */}
-      <div className="fixed inset-0 pointer-events-none z-[10000] opacity-[0.08] mix-blend-overlay"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`
-        }}
-      />
+    <AppShell>
+      <div className="min-h-screen bg-[#F4F4F5]">
+        {/* Grain overlay */}
+        <div className="fixed inset-0 pointer-events-none z-[10000] opacity-[0.08] mix-blend-overlay"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`
+          }}
+        />
 
-      {/* Red auras */}
-      <div className="fixed w-[800px] h-[800px] -top-[250px] -left-[200px] bg-[#FF3B30] rounded-full blur-[150px] opacity-50 z-0" />
-      <div className="fixed w-[700px] h-[700px] -bottom-[200px] -right-[150px] bg-[#D70015] rounded-full blur-[140px] opacity-45 z-0" />
+        {/* Red auras */}
+        <div className="fixed w-[800px] h-[800px] -top-[250px] -left-[200px] bg-[#FF3B30] rounded-full blur-[150px] opacity-50 z-0" />
+        <div className="fixed w-[700px] h-[700px] -bottom-[200px] -right-[150px] bg-[#D70015] rounded-full blur-[140px] opacity-45 z-0" />
 
-      <div className="max-w-[430px] mx-auto relative z-10">
-        {/* Header with safe area */}
-        <header 
-          className="px-5 py-4"
-          style={{ paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))' }}
-        >
-          <h1 className="text-gray-900 font-semibold text-xl">Settings</h1>
-          <p className="text-gray-500 text-sm">Manage your wallet</p>
-        </header>
+        <AppContent>
+          {/* Header */}
+          <header className="mb-4">
+            <h1 className="text-gray-900 font-semibold text-xl">Settings</h1>
+            <p className="text-gray-500 text-sm">Manage your wallet</p>
+          </header>
 
-        <div className="p-5 space-y-4">
+          <div className="space-y-4">
           {/* Wallet Info Card */}
           <div className="bg-[#111] border border-white/[0.06] rounded-3xl p-5 relative overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-[#FF3B30]/25 via-[#FF3B30]/10 to-transparent pointer-events-none" />
@@ -258,13 +256,12 @@ export default function SettingsPage() {
             Sign Out
           </button>
 
-          <p className="text-gray-400 text-xs text-center px-4">
-            Signing out will disconnect your wallet. You can sign back in anytime with your passkey.
-          </p>
-        </div>
+            <p className="text-gray-400 text-xs text-center px-4">
+              Signing out will disconnect your wallet. You can sign back in anytime with your passkey.
+            </p>
+          </div>
+        </AppContent>
       </div>
-
-      <BottomNav />
-    </div>
+    </AppShell>
   )
 }

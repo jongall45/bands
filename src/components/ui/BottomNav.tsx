@@ -16,7 +16,7 @@ export function BottomNav() {
   const pathname = usePathname()
 
   return (
-    <div 
+    <div
       className="fixed bottom-0 left-0 right-0 z-50"
       style={{
         paddingBottom: 'max(env(safe-area-inset-bottom, 8px), 8px)',
@@ -24,11 +24,11 @@ export function BottomNav() {
     >
       <div className="flex justify-center px-3 pb-2">
         <nav className="
-          flex items-center gap-0.5 p-1.5
-          bg-[#1a1a1a]/95 backdrop-blur-xl
+          flex items-center gap-1 p-1.5
+          bg-[#0a0a0a]/98 backdrop-blur-xl
           border border-white/[0.08]
-          rounded-full
-          shadow-[0_8px_32px_rgba(0,0,0,0.4)]
+          rounded-2xl
+          shadow-[0_8px_32px_rgba(0,0,0,0.5)]
         ">
           {navItems.map(({ href, icon: Icon, label }) => {
             const isActive = pathname === href || pathname?.startsWith(href + '/')
@@ -37,16 +37,28 @@ export function BottomNav() {
                 key={href}
                 href={href}
                 className={`
-                  relative flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-full transition-all duration-200 active:scale-95
-                  ${isActive 
-                    ? 'bg-white/[0.1] text-white' 
+                  relative flex flex-col items-center justify-center
+                  min-w-[64px] min-h-[52px] px-3 py-2
+                  rounded-xl transition-all duration-200
+                  active:scale-95 active:opacity-80
+                  ${isActive
+                    ? 'bg-[#FF3B30]/15 text-white'
                     : 'text-white/40 hover:text-white/70 hover:bg-white/[0.05]'
                   }
                 `}
                 title={label}
               >
-                <Icon className="w-5 h-5" strokeWidth={isActive ? 2 : 1.5} />
-                <span className="text-[9px] font-medium">{label}</span>
+                <Icon
+                  className={`w-5 h-5 mb-0.5 ${isActive ? 'text-[#FF3B30]' : ''}`}
+                  strokeWidth={isActive ? 2 : 1.5}
+                />
+                <span className={`text-[10px] font-semibold ${isActive ? 'text-white' : ''}`}>
+                  {label}
+                </span>
+                {/* Active indicator dot */}
+                {isActive && (
+                  <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#FF3B30] rounded-full" />
+                )}
               </Link>
             )
           })}
