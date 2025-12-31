@@ -629,8 +629,8 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken, 
             onClick={e => e.stopPropagation()}
           >
             {/* Animated checkmark */}
-            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-green-500/20 flex items-center justify-center group cursor-default hover:bg-green-500/30 transition-all duration-300 hover:scale-110">
-              <CheckCircle className="w-6 h-6 text-green-400 group-hover:text-green-300 transition-colors" />
+            <div className="w-9 h-9 mx-auto mb-2 rounded-full bg-green-500/20 flex items-center justify-center group cursor-default hover:bg-green-500/30 transition-all duration-300 hover:scale-110">
+              <CheckCircle className="w-5 h-5 text-green-400 group-hover:text-green-300 transition-colors" />
             </div>
 
             <p className="text-white/90 font-medium text-sm mb-3">Swap Complete</p>
