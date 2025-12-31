@@ -1657,6 +1657,27 @@ export function useRelaySwap(
               console.log('[useRelaySwap] Token holder determined:', tokenHolder)
 
               const approvalAmount = parseUnits(quote.fromAmount, fromToken.decimals)
+
+              // CRITICAL: Verify we actually have tokens to swap
+              const totalBalance = eoaBalance + smartWalletBalance
+              if (totalBalance === BigInt(0)) {
+                console.error('[useRelaySwap] ✗ CRITICAL: No token balance found on either address!')
+                console.error('[useRelaySwap] This may indicate:')
+                console.error('[useRelaySwap]   1. Wrong token address')
+                console.error('[useRelaySwap]   2. Wrong chain/RPC')
+                console.error('[useRelaySwap]   3. Tokens held by different address')
+                console.error('[useRelaySwap] EOA:', eoaAddress)
+                console.error('[useRelaySwap] Smart wallet:', smartWalletAddress)
+                // Don't fail here - proceed and let the deposit fail with more context
+                console.warn('[useRelaySwap] Proceeding anyway to gather more debug info...')
+              } else if (smartWalletBalance < approvalAmount) {
+                console.warn('[useRelaySwap] ⚠ Smart wallet has insufficient balance!')
+                console.warn('[useRelaySwap] Smart wallet balance:', formatUnits(smartWalletBalance, fromToken.decimals))
+                console.warn('[useRelaySwap] Required amount:', formatUnits(approvalAmount, fromToken.decimals))
+                if (eoaBalance >= approvalAmount) {
+                  console.warn('[useRelaySwap] ⚠ EOA has sufficient balance - tokens may need to be transferred to smart wallet first!')
+                }
+              }
               const hasSpenderAllowance = await checkAllowance(fromToken, embeddedApprovalSpender, approvalAmount)
 
               if (!hasSpenderAllowance) {
@@ -1676,41 +1697,44 @@ export function useRelaySwap(
                     value: BigInt(0),
                   }],
                 })
-                console.log('[useRelaySwap] Pre-approval sent:', preApproveTxHash)
+                console.log('[useRelaySwap] Pre-approval UserOp sent:', preApproveTxHash)
+                console.log('[useRelaySwap] Note: This is a UserOp hash, not a tx hash')
 
-                // DEBUG: Verify approval from tx receipt
-                console.log('[useRelaySwap] Verifying approval from tx receipt...')
-                const approvalResult = await verifyApprovalFromReceipt(
-                  preApproveTxHash,
-                  fromToken.address,
-                  fromToken.chainId
-                )
-                if (approvalResult.approved) {
-                  console.log('[useRelaySwap] ✓ Approval confirmed in receipt')
-                  console.log('[useRelaySwap]   Owner from event:', approvalResult.owner)
-                  console.log('[useRelaySwap]   Spender from event:', approvalResult.spender)
-                  // Check if the owner matches what we expect
-                  if (approvalResult.owner?.toLowerCase() !== smartWalletAddress?.toLowerCase()) {
-                    console.warn('[useRelaySwap] ⚠ Owner mismatch! Event owner:', approvalResult.owner, 'Expected:', smartWalletAddress)
+                // For ERC-4337 smart wallets, the hash is a UserOp hash
+                // We cannot use getTransactionReceipt directly - poll allowance instead
+                console.log('[useRelaySwap] Polling allowance until confirmed (max 20s)...')
+
+                const maxPollAttempts = 10
+                const pollInterval = 2000 // 2 seconds
+                let approvalConfirmed = false
+
+                for (let attempt = 1; attempt <= maxPollAttempts; attempt++) {
+                  // Wait before checking (give bundler time to include UserOp)
+                  await new Promise(resolve => setTimeout(resolve, pollInterval))
+
+                  console.log(`[useRelaySwap] Allowance poll attempt ${attempt}/${maxPollAttempts}...`)
+                  const currentAllowance = await checkAllowance(fromToken, embeddedApprovalSpender, approvalAmount)
+
+                  if (currentAllowance) {
+                    console.log('[useRelaySwap] ✓ Pre-approval confirmed on-chain!')
+                    approvalConfirmed = true
+                    break
                   }
-                } else {
-                  console.warn('[useRelaySwap] ✗ Could not verify approval from receipt')
+
+                  console.log(`[useRelaySwap] Allowance not yet confirmed, attempt ${attempt}/${maxPollAttempts}`)
                 }
 
-                // Wait for pre-approval to propagate
-                console.log('[useRelaySwap] Waiting for pre-approval to propagate (8s)...')
-                await new Promise(resolve => setTimeout(resolve, 8000))
+                if (!approvalConfirmed) {
+                  console.error('[useRelaySwap] ✗ Pre-approval NOT confirmed after polling')
+                  console.error('[useRelaySwap] Token holder analysis:', {
+                    eoaAddress,
+                    smartWalletAddress,
+                    tokenAddress: fromToken.address,
+                    spender: embeddedApprovalSpender,
+                  })
 
-                // Verify using checkAllowance
-                const newAllowance = await checkAllowance(fromToken, embeddedApprovalSpender, approvalAmount)
-                console.log('[useRelaySwap] Pre-approval verified via checkAllowance:', newAllowance)
-
-                // DEBUG: If allowance check still fails, the owner might be wrong
-                if (!newAllowance && approvalResult.approved) {
-                  console.error('[useRelaySwap] ✗ CRITICAL: Approval event found but allowance check failed!')
-                  console.error('[useRelaySwap] This likely means checkAllowance is using wrong owner address')
-                  console.error('[useRelaySwap] checkAllowance uses:', smartWalletAddress)
-                  console.error('[useRelaySwap] Approval event owner:', approvalResult.owner)
+                  // Don't proceed with deposit if approval failed
+                  throw new Error(`Pre-approval for ${fromToken.symbol} was not confirmed. The UserOp may have failed or timed out.`)
                 }
               } else {
                 console.log('[useRelaySwap] Already have allowance for embedded spender')
