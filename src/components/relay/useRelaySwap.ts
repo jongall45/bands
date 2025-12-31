@@ -1459,8 +1459,90 @@ export function useRelaySwap(
             const txData = item.data.data as string
             const depositContractAddress = item.data.to as string
 
-            // Check if we need approval for ERC20 tokens
-            if (isERC20Token && step.id !== 'approve') {
+            // Check if the quote has an explicit approval step
+            const hasExplicitApproveStep = quote.steps.some((s: any) => s.id === 'approve')
+
+            // Check if approval is EMBEDDED in the deposit calldata (Relay bundles it)
+            const APPROVE_SELECTOR = '095ea7b3' // without 0x for string search
+            const hasEmbeddedApproval = txData?.includes(APPROVE_SELECTOR)
+
+            // Extract the spender from embedded approval if present
+            let embeddedApprovalSpender: string | null = null
+            if (hasEmbeddedApproval) {
+              const approveIndex = txData.indexOf(APPROVE_SELECTOR)
+              if (approveIndex > 0) {
+                // Spender is 32 bytes after selector (padded address)
+                const spenderStart = approveIndex + APPROVE_SELECTOR.length
+                const spenderHex = txData.slice(spenderStart, spenderStart + 64)
+                if (spenderHex.length === 64) {
+                  embeddedApprovalSpender = '0x' + spenderHex.slice(24) // last 20 bytes
+                }
+              }
+            }
+
+            console.log('[useRelaySwap] Approval analysis:', {
+              hasExplicitApproveStep,
+              hasEmbeddedApproval,
+              embeddedApprovalSpender,
+              depositContract: depositContractAddress,
+              token: fromToken.symbol,
+            })
+
+            // If Relay bundled approval into the deposit, we need to PRE-APPROVE the embedded spender
+            // The Multicall3 inside the deposit tries to approve on our behalf but fails
+            // because msg.sender inside Multicall3 is the contract, not us
+            if (hasEmbeddedApproval && embeddedApprovalSpender && !hasExplicitApproveStep) {
+              console.log('[useRelaySwap] Relay bundled approval in deposit')
+              console.log('[useRelaySwap] Pre-approving embedded spender:', embeddedApprovalSpender)
+
+              const approvalAmount = parseUnits(quote.fromAmount, fromToken.decimals)
+              const hasSpenderAllowance = await checkAllowance(fromToken, embeddedApprovalSpender, approvalAmount)
+
+              if (!hasSpenderAllowance) {
+                // Pre-approve the embedded spender BEFORE executing deposit
+                const MAX_UINT256 = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
+                const preApproveData = encodeFunctionData({
+                  abi: erc20Abi,
+                  functionName: 'approve',
+                  args: [embeddedApprovalSpender as `0x${string}`, MAX_UINT256],
+                })
+
+                console.log('[useRelaySwap] Sending pre-approval to embedded spender...')
+                const preApproveTxHash = await chainClient.sendTransaction({
+                  calls: [{
+                    to: fromToken.address as `0x${string}`,
+                    data: preApproveData,
+                    value: BigInt(0),
+                  }],
+                })
+                console.log('[useRelaySwap] Pre-approval sent:', preApproveTxHash)
+
+                // Wait for pre-approval to propagate
+                console.log('[useRelaySwap] Waiting for pre-approval to propagate (8s)...')
+                await new Promise(resolve => setTimeout(resolve, 8000))
+
+                // Verify
+                const newAllowance = await checkAllowance(fromToken, embeddedApprovalSpender, approvalAmount)
+                console.log('[useRelaySwap] Pre-approval verified:', newAllowance)
+              } else {
+                console.log('[useRelaySwap] Already have allowance for embedded spender')
+              }
+
+              // Now execute the deposit
+              const txHash = await chainClient.sendTransaction({
+                calls: [{
+                  to: item.data.to as `0x${string}`,
+                  data: txData as `0x${string}`,
+                  value: item.data.value ? BigInt(item.data.value) : BigInt(0),
+                }],
+              })
+              console.log('[useRelaySwap] EVM → Solana deposit sent:', txHash)
+              lastTxHash = txHash
+              continue
+            }
+
+            // Only handle manual approval if needed (no embedded approval)
+            if (isERC20Token && step.id !== 'approve' && !hasEmbeddedApproval) {
               const approvalAmount = parseUnits(quote.fromAmount, fromToken.decimals)
               const hasAllowance = await checkAllowance(fromToken, depositContractAddress, approvalAmount)
 
@@ -1473,7 +1555,7 @@ export function useRelaySwap(
               })
 
               if (!hasAllowance) {
-                console.log('[useRelaySwap] Need approval for EVM → Solana swap')
+                console.log('[useRelaySwap] Need manual approval for EVM → Solana swap')
 
                 const MAX_UINT256 = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
                 const approveData = encodeFunctionData({
