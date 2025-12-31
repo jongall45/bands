@@ -295,7 +295,11 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken, 
   const handlePercentage = (percent: number) => {
     const balance = parseFloat(fromBalance)
     if (balance > 0) {
-      const amount = (balance * percent / 100).toFixed(fromToken.decimals)
+      // For MAX (100%), use 99.9% to avoid precision issues
+      // This prevents "insufficient balance" errors when Relay's quote
+      // has tiny rounding differences from the actual balance
+      const effectivePercent = percent === 100 ? 99.9 : percent
+      const amount = (balance * effectivePercent / 100).toFixed(fromToken.decimals)
       setSellAmount(amount)
     }
   }
