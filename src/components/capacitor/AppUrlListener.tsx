@@ -2,21 +2,30 @@
 
 import { useEffect } from 'react'
 import { App } from '@capacitor/app'
+import { Browser } from '@capacitor/browser'
+
+// OAuth domains that should open in SFSafariViewController
+const OAUTH_DOMAINS = [
+  'accounts.google.com',
+  'appleid.apple.com',
+  'auth.privy.io',
+]
 
 /**
- * Handles OAuth deep link redirects for Capacitor apps.
- * This component must be rendered BEFORE PrivyProvider.
+ * Handles OAuth for Capacitor apps:
+ * 1. Intercepts OAuth link clicks → opens in SFSafariViewController (slide-up sheet)
+ * 2. Listens for OAuth deep link callbacks → passes params back to web app
  *
- * When OAuth completes, the redirect URL includes privy_oauth_* params.
- * This listener catches those deep links and passes them to the web app.
+ * This component must be rendered BEFORE PrivyProvider.
  */
 export function AppUrlListener() {
   useEffect(() => {
-    // Only set up listener in Capacitor environment
+    // Only set up in Capacitor environment
     if (typeof window === 'undefined') return
     if (!(window as any).Capacitor?.isNativePlatform?.()) return
 
-    const setupListener = async () => {
+    // 1. Set up deep link listener for OAuth callbacks
+    const setupDeepLinkListener = async () => {
       try {
         await App.addListener('appUrlOpen', (event) => {
           try {
@@ -29,6 +38,9 @@ export function AppUrlListener() {
               deepLinkUrl.searchParams.has('privy_oauth_state') &&
               deepLinkUrl.searchParams.has('privy_oauth_provider')
             ) {
+              // Close the SFSafariViewController
+              Browser.close().catch(() => {})
+
               // Pass the OAuth params to the current page
               const currentUrl = new URL(window.location.href)
               currentUrl.search = deepLinkUrl.search
@@ -43,10 +55,62 @@ export function AppUrlListener() {
       }
     }
 
-    setupListener()
+    // 2. Intercept OAuth link clicks to open in SFSafariViewController
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      const anchor = target.closest('a')
+
+      if (!anchor?.href) return
+
+      try {
+        const url = new URL(anchor.href)
+
+        // Check if this is an OAuth domain
+        if (OAUTH_DOMAINS.some(domain => url.hostname === domain || url.hostname.endsWith('.' + domain))) {
+          e.preventDefault()
+          e.stopPropagation()
+
+          // Open in SFSafariViewController (slide-up sheet within app)
+          Browser.open({ url: anchor.href, presentationStyle: 'popover' })
+            .catch((err) => {
+              console.error('Failed to open browser:', err)
+              // Fallback to normal navigation
+              window.location.href = anchor.href
+            })
+        }
+      } catch {
+        // Not a valid URL, let it proceed normally
+      }
+    }
+
+    // 3. Override window.open for OAuth URLs (Privy might use this)
+    const originalWindowOpen = window.open
+    window.open = function(url?: string | URL, target?: string, features?: string) {
+      if (url) {
+        try {
+          const urlObj = new URL(url.toString(), window.location.origin)
+
+          if (OAUTH_DOMAINS.some(domain => urlObj.hostname === domain || urlObj.hostname.endsWith('.' + domain))) {
+            Browser.open({ url: urlObj.toString(), presentationStyle: 'popover' })
+              .catch(() => {
+                originalWindowOpen.call(window, url, target, features)
+              })
+            return null
+          }
+        } catch {
+          // Not a valid URL
+        }
+      }
+      return originalWindowOpen.call(window, url, target, features)
+    }
+
+    setupDeepLinkListener()
+    document.addEventListener('click', handleClick, true)
 
     return () => {
       App.removeAllListeners()
+      document.removeEventListener('click', handleClick, true)
+      window.open = originalWindowOpen
     }
   }, [])
 
