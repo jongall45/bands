@@ -711,6 +711,88 @@ export function useRelaySwap(
   }, [smartWalletAddress, publicClient])
 
   // ============================================
+  // DEBUG: Simulate calls to diagnose failures
+  // ============================================
+  const simulateCall = useCallback(async (
+    call: { to: string; data: string; value?: string },
+    description: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!smartWalletAddress || !publicClient) {
+      return { success: false, error: 'No wallet or client' }
+    }
+
+    try {
+      await publicClient.call({
+        account: smartWalletAddress,
+        to: call.to as `0x${string}`,
+        data: call.data as `0x${string}`,
+        value: call.value ? BigInt(call.value) : BigInt(0),
+      })
+      console.log(`[DEBUG] Simulation SUCCESS: ${description}`)
+      return { success: true }
+    } catch (err: any) {
+      const errorMsg = err.message || 'Unknown error'
+      console.error(`[DEBUG] Simulation FAILED: ${description}`, {
+        to: call.to,
+        dataPrefix: call.data?.slice(0, 10),
+        error: errorMsg,
+        revertData: err.data || 'none',
+      })
+      return { success: false, error: errorMsg }
+    }
+  }, [smartWalletAddress, publicClient])
+
+  // ============================================
+  // DEBUG: Analyze quote steps for debugging
+  // ============================================
+  const debugQuoteSteps = useCallback((quote: Quote, fromToken: Token) => {
+    console.log('╔════════════════════════════════════════╗')
+    console.log('║     DEBUG: Quote Step Analysis         ║')
+    console.log('╚════════════════════════════════════════╝')
+    console.log('Token:', fromToken.symbol, fromToken.address)
+    console.log('Steps count:', quote.steps?.length)
+
+    const APPROVE_SELECTOR = '0x095ea7b3'
+
+    for (const step of quote.steps || []) {
+      console.log(`\n📌 Step: ${step.id} - ${step.action || step.description || 'no description'}`)
+
+      for (const item of step.items || []) {
+        const data = item.data
+        if (!data) continue
+
+        console.log('  Item:', {
+          to: data.to,
+          chainId: data.chainId,
+          value: data.value,
+          dataLength: data.data?.length,
+          dataPrefix: data.data?.slice(0, 10),
+        })
+
+        // Decode approval if present
+        if (data.data?.startsWith(APPROVE_SELECTOR)) {
+          const spender = '0x' + data.data.slice(34, 74)
+          const amountHex = data.data.slice(74, 138)
+          const amount = amountHex ? BigInt('0x' + amountHex) : BigInt(0)
+          console.log('  🔓 APPROVAL DETECTED:', {
+            tokenTarget: data.to,
+            spender,
+            amount: amount.toString(),
+            isMaxApproval: amount === BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'),
+          })
+        }
+      }
+    }
+
+    // Find deposit contract
+    const depositStep = quote.steps?.find(s => s.id !== 'approve')
+    const depositContract = depositStep?.items?.[0]?.data?.to
+    console.log('\n🎯 Deposit contract (spender for approval):', depositContract)
+
+    return depositContract
+  }, [])
+
+  // ============================================
   // FETCH QUOTE
   // ============================================
   const fetchQuote = useCallback(async (
@@ -1325,6 +1407,9 @@ export function useRelaySwap(
         return null
       }
 
+      // DEBUG: Analyze quote steps
+      debugQuoteSteps(quote, fromToken)
+
       setState('confirming')
       setError(null)
 
@@ -1332,20 +1417,21 @@ export function useRelaySwap(
         let lastTxHash: string | undefined
         const isERC20Token = fromToken.address !== NATIVE_TOKEN_ADDRESS
 
+        // Determine if this is a stable token (batching works well for stables)
+        const STABLE_TOKENS = ['USDC', 'USDT', 'DAI', 'USDC.e']
+        const isStableToken = STABLE_TOKENS.includes(fromToken.symbol)
+
         // Process steps - we need to handle EVM-side transactions
         for (const step of quote.steps) {
           console.log('[useRelaySwap] Processing EVM → Solana step:', step.id, step.action)
-          console.log('[useRelaySwap] Step details:', JSON.stringify(step, null, 2))
 
-          // Skip approve steps if we'll handle them via batching
+          // Skip approve steps if we'll handle them manually
           if (step.id === 'approve') {
-            console.log('[useRelaySwap] Found approve step - will batch with deposit')
+            console.log('[useRelaySwap] Found approve step - will handle with deposit')
             continue
           }
 
           for (const item of step.items) {
-            console.log('[useRelaySwap] Processing step item:', JSON.stringify(item, null, 2))
-
             if (!item.data) {
               console.log('[useRelaySwap] Skipping item - no data field')
               continue
@@ -1354,7 +1440,6 @@ export function useRelaySwap(
             const stepChainId = item.data.chainId
 
             // For EVM → Solana, we only handle EVM-side steps here
-            // Solana-side delivery is handled by Relay's bridge
             if (stepChainId === SOLANA_CHAIN_ID) {
               console.log('[useRelaySwap] Skipping Solana-side step (handled by Relay bridge)')
               continue
@@ -1383,6 +1468,8 @@ export function useRelaySwap(
                 hasAllowance,
                 depositContract: depositContractAddress,
                 amount: approvalAmount.toString(),
+                token: fromToken.symbol,
+                isStable: isStableToken,
               })
 
               if (!hasAllowance) {
@@ -1395,72 +1482,101 @@ export function useRelaySwap(
                   args: [depositContractAddress as `0x${string}`, MAX_UINT256],
                 })
 
-                // Try batching first (works for most tokens)
-                try {
-                  console.log('[useRelaySwap] Attempting batched approval + deposit for EVM → Solana')
-                  const batchedTxHash = await chainClient.sendTransaction({
-                    calls: [
-                      {
-                        to: fromToken.address as `0x${string}`,
-                        data: approveData,
-                        value: BigInt(0),
-                      },
-                      {
-                        to: item.data.to as `0x${string}`,
-                        data: txData as `0x${string}`,
-                        value: item.data.value ? BigInt(item.data.value) : BigInt(0),
-                      },
-                    ],
-                  })
+                // DEBUG: Simulate calls before execution
+                console.log('[useRelaySwap] Simulating approval call...')
+                const approvalSim = await simulateCall(
+                  { to: fromToken.address, data: approveData, value: '0' },
+                  `Approve ${fromToken.symbol} for ${depositContractAddress}`
+                )
 
-                  console.log('[useRelaySwap] EVM → Solana batched tx sent:', batchedTxHash)
-                  lastTxHash = batchedTxHash
-                  continue
-                } catch (batchError: any) {
-                  console.warn('[useRelaySwap] Batched approval failed, trying sequential approach:', batchError.message)
+                // For stable tokens, try batching first
+                // For non-stables (like AVNT), use sequential to avoid Multicall3 failures
+                if (isStableToken && approvalSim.success) {
+                  try {
+                    console.log('[useRelaySwap] Attempting batched approval + deposit (stable token)')
+                    const batchedTxHash = await chainClient.sendTransaction({
+                      calls: [
+                        {
+                          to: fromToken.address as `0x${string}`,
+                          data: approveData,
+                          value: BigInt(0),
+                        },
+                        {
+                          to: item.data.to as `0x${string}`,
+                          data: txData as `0x${string}`,
+                          value: item.data.value ? BigInt(item.data.value) : BigInt(0),
+                        },
+                      ],
+                    })
 
-                  // Sequential fallback: approval first, then deposit
-                  console.log('[useRelaySwap] Sending approval transaction...')
-                  const approvalTxHash = await chainClient.sendTransaction({
+                    console.log('[useRelaySwap] EVM → Solana batched tx sent:', batchedTxHash)
+                    lastTxHash = batchedTxHash
+                    continue
+                  } catch (batchError: any) {
+                    console.warn('[useRelaySwap] Batched approval failed:', batchError.message)
+                    // Fall through to sequential
+                  }
+                }
+
+                // Sequential approach for non-stables or batch failure
+                console.log(`[useRelaySwap] Using sequential approval for ${fromToken.symbol}`)
+
+                // Step 1: Send approval using calls format
+                console.log('[useRelaySwap] Sending approval transaction...')
+                const approvalTxHash = await chainClient.sendTransaction({
+                  calls: [{
                     to: fromToken.address as `0x${string}`,
                     data: approveData,
                     value: BigInt(0),
-                  })
-                  console.log('[useRelaySwap] Approval tx sent:', approvalTxHash)
+                  }],
+                })
+                console.log('[useRelaySwap] Approval tx sent:', approvalTxHash)
 
-                  // Wait for approval to propagate
-                  console.log('[useRelaySwap] Waiting for approval to propagate...')
-                  await new Promise(resolve => setTimeout(resolve, 5000))
+                // Step 2: Wait for approval to be mined and propagate
+                console.log('[useRelaySwap] Waiting for approval to propagate (8s)...')
+                await new Promise(resolve => setTimeout(resolve, 8000))
 
-                  // Send the deposit transaction
-                  console.log('[useRelaySwap] Sending deposit transaction...')
-                  const depositTxHash = await chainClient.sendTransaction({
+                // Step 3: Verify allowance is actually set
+                console.log('[useRelaySwap] Verifying allowance on-chain...')
+                const newAllowance = await checkAllowance(fromToken, depositContractAddress, approvalAmount)
+                if (!newAllowance) {
+                  console.error('[useRelaySwap] Allowance not set after approval tx!')
+                  // Continue anyway - the approval might still be processing
+                  console.log('[useRelaySwap] Proceeding with deposit anyway...')
+                } else {
+                  console.log('[useRelaySwap] ✓ Allowance verified on-chain')
+                }
+
+                // Step 4: Send deposit transaction using calls format
+                console.log('[useRelaySwap] Sending deposit transaction...')
+                const depositTxHash = await chainClient.sendTransaction({
+                  calls: [{
                     to: item.data.to as `0x${string}`,
                     data: txData as `0x${string}`,
                     value: item.data.value ? BigInt(item.data.value) : BigInt(0),
-                  })
+                  }],
+                })
 
-                  console.log('[useRelaySwap] EVM → Solana deposit sent:', depositTxHash)
-                  lastTxHash = depositTxHash
-                  continue
-                }
+                console.log('[useRelaySwap] EVM → Solana deposit sent:', depositTxHash)
+                lastTxHash = depositTxHash
+                continue
               }
             }
 
-            // Send the deposit transaction
-            const txParams = {
-              to: item.data.to as `0x${string}`,
-              data: txData as `0x${string}`,
-              value: item.data.value ? BigInt(item.data.value) : BigInt(0),
-            }
-
+            // No approval needed - send deposit directly using calls format
             console.log('[useRelaySwap] Sending EVM → Solana deposit tx:', {
-              to: txParams.to,
-              value: txParams.value.toString(),
-              dataLength: txParams.data.length,
+              to: item.data.to,
+              value: item.data.value || '0',
+              dataLength: txData?.length,
             })
 
-            const txHash = await chainClient.sendTransaction(txParams)
+            const txHash = await chainClient.sendTransaction({
+              calls: [{
+                to: item.data.to as `0x${string}`,
+                data: txData as `0x${string}`,
+                value: item.data.value ? BigInt(item.data.value) : BigInt(0),
+              }],
+            })
             console.log('[useRelaySwap] EVM → Solana deposit sent:', txHash)
             lastTxHash = txHash
           }
