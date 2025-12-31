@@ -628,11 +628,11 @@ export interface SolanaSigningOptions {
   solanaWallet?: any
 }
 
-// Helper to convert Solana signature (Uint8Array or string) to string
+// Helper to convert Solana signature (Uint8Array or string) to base58 string
 function toSignatureString(signature: Uint8Array | string): string {
   if (typeof signature === 'string') return signature
-  // Convert Uint8Array to base58 (simple hex for now, as base58 needs a library)
-  return Array.from(signature).map(b => b.toString(16).padStart(2, '0')).join('')
+  // Convert Uint8Array to base58 (required for Solscan URLs)
+  return bs58.encode(signature)
 }
 
 export function useRelaySwap(
