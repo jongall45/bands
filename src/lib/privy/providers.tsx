@@ -31,6 +31,15 @@ import { arbitrum, base, polygon } from 'viem/chains'
 // Your Privy App ID (from Dashboard)
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID || ''
 
+// Mobile Client ID for iOS/Android native apps (from Privy Dashboard → Clients → Mobile)
+const PRIVY_MOBILE_CLIENT_ID = 'client-WY6TNAUrZBa8MAobKfEij6W9uFE7nfzYhN5kND1FDVomJ'
+
+// Detect if running in Capacitor native app
+const isCapacitorNative = (): boolean => {
+  if (typeof window === 'undefined') return false
+  return !!(window as any).Capacitor?.isNativePlatform?.()
+}
+
 // Supported chains
 const SUPPORTED_CHAINS = [arbitrum, base, polygon] as const
 
@@ -154,9 +163,14 @@ export function PrivyProviders({ children }: PrivyProvidersProps) {
     return <div>Missing Privy configuration</div>
   }
 
+  // Use mobile client ID when running in Capacitor native app
+  const isNative = isCapacitorNative()
+  const clientId = isNative ? PRIVY_MOBILE_CLIENT_ID : undefined
+
   return (
     <BasePrivyProvider
       appId={PRIVY_APP_ID}
+      clientId={clientId}
       config={privyConfig}
     >
       {/* SmartWalletsProvider MUST be inside PrivyProvider */}
