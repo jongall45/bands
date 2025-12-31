@@ -72,14 +72,13 @@ const wagmiConfig = createConfig({
 // ============================================
 
 /**
- * Get Privy configuration based on platform
+ * Privy configuration
  *
  * KEY SETTINGS:
  * - embeddedWallets.createOnLogin: 'all-users' → Auto-create wallet
  * - embeddedWallets.showWalletUIs: false → Hide wallet modals by default
- * - customOAuthRedirectUrl: Required for Capacitor OAuth flows
  */
-const getPrivyConfig = (isNative: boolean) => ({
+const privyConfig = {
   // Appearance
   appearance: {
     theme: 'dark' as const,
@@ -88,14 +87,8 @@ const getPrivyConfig = (isNative: boolean) => ({
     showWalletLoginFirst: false,
   },
 
-  // Login methods - Google/Apple OAuth works in Capacitor with proper redirect config
+  // Login methods
   loginMethods: ['email', 'google', 'apple'] as ('email' | 'google' | 'apple')[],
-
-  // Custom OAuth redirect URL for Capacitor apps
-  // This tells Privy where to redirect after OAuth completes
-  ...(isNative && {
-    customOAuthRedirectUrl: 'https://bands.cash/redirect',
-  }),
 
   // Embedded wallet configuration
   embeddedWallets: {
@@ -164,9 +157,10 @@ export function PrivyProviders({ children }: PrivyProvidersProps) {
     return <div>Missing Privy configuration</div>
   }
 
-  // Use mobile client ID and email-only login when running in Capacitor native app
+  // Detect Capacitor for config purposes, but don't use mobile client ID
+  // Mobile client ID causes Privy to use native auth flows that open Safari
   const isNative = isCapacitorNative()
-  const clientId = isNative ? PRIVY_MOBILE_CLIENT_ID : undefined
+  // const clientId = isNative ? PRIVY_MOBILE_CLIENT_ID : undefined  // Disabled - causes Safari redirect
   const privyConfig = getPrivyConfig(isNative)
 
   return (
@@ -175,7 +169,6 @@ export function PrivyProviders({ children }: PrivyProvidersProps) {
       <AppUrlListener />
       <BasePrivyProvider
         appId={PRIVY_APP_ID}
-        clientId={clientId}
         config={privyConfig}
       >
         {/* SmartWalletsProvider MUST be inside PrivyProvider */}
