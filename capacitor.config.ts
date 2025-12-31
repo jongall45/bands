@@ -10,6 +10,14 @@ const config: CapacitorConfig = {
   server: {
     url: 'https://bands.cash',
     cleartext: false,
+    // Allow navigation to OAuth provider domains
+    allowNavigation: [
+      'https://bands.cash/*',
+      'https://*.privy.io/*',
+      'https://auth.privy.io/*',
+      'https://accounts.google.com/*',
+      'https://appleid.apple.com/*',
+    ],
   },
 
   ios: {
@@ -28,16 +36,8 @@ const config: CapacitorConfig = {
   },
 
   plugins: {
-    // Handle OAuth deep links
-    App: {
-      appUrlOpen: {
-        schemes: ['bands'],
-      },
-    },
-    // Browser plugin for external OAuth
-    Browser: {
-      // Use SFSafariViewController for OAuth flows
-    },
+    // Browser plugin for OAuth flows (uses SFSafariViewController on iOS)
+    Browser: {},
   },
 };
 
