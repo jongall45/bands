@@ -10,6 +10,14 @@ const config: CapacitorConfig = {
   server: {
     url: 'https://bands.cash',
     cleartext: false,
+    // Allow navigation to OAuth provider domains
+    allowNavigation: [
+      'https://bands.cash/*',
+      'https://*.privy.io/*',
+      'https://auth.privy.io/*',
+      'https://accounts.google.com/*',
+      'https://appleid.apple.com/*',
+    ],
   },
 
   ios: {
