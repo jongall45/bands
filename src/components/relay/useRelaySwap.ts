@@ -1489,88 +1489,67 @@ export function useRelaySwap(
               token: fromToken.symbol,
             })
 
-            // If Relay bundled approval into the deposit, we need to PRE-APPROVE the embedded spender
+            // If Relay bundled approval into the deposit, we need to handle approval separately
             // The Multicall3 inside the deposit tries to approve on our behalf but fails
             // because msg.sender inside Multicall3 is the contract, not us
+            //
+            // Strategy: Batch approval + deposit into single UserOp so they execute atomically
             if (hasEmbeddedApproval && embeddedApprovalSpender && !hasExplicitApproveStep) {
-              console.log('[useRelaySwap] Relay bundled approval in deposit')
-              console.log('[useRelaySwap] Pre-approving embedded spender:', embeddedApprovalSpender)
+              console.log('[useRelaySwap] Relay bundled approval in deposit - using batched approach')
+              console.log('[useRelaySwap] Embedded spender (router):', embeddedApprovalSpender)
+              console.log('[useRelaySwap] Deposit contract:', depositContractAddress)
               console.log('[useRelaySwap] Smart wallet:', smartWalletAddress)
 
               const approvalAmount = parseUnits(quote.fromAmount, fromToken.decimals)
-              const hasSpenderAllowance = await checkAllowance(fromToken, embeddedApprovalSpender, approvalAmount)
 
-              if (!hasSpenderAllowance) {
-                // Pre-approve the embedded spender BEFORE executing deposit
+              // Check if we already have allowance to the router
+              const hasRouterAllowance = await checkAllowance(fromToken, embeddedApprovalSpender, approvalAmount)
+
+              if (!hasRouterAllowance) {
+                console.log('[useRelaySwap] Need to approve router before deposit')
+
+                // Batch approval + deposit into single UserOp
+                // This ensures they execute atomically in the same transaction
                 const MAX_UINT256 = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
-                const preApproveData = encodeFunctionData({
+                const approveData = encodeFunctionData({
                   abi: erc20Abi,
                   functionName: 'approve',
                   args: [embeddedApprovalSpender as `0x${string}`, MAX_UINT256],
                 })
 
-                console.log('[useRelaySwap] Sending pre-approval to embedded spender...')
-                const preApproveTxHash = await chainClient.sendTransaction({
+                console.log('[useRelaySwap] Sending batched approval + deposit UserOp...')
+                const batchedTxHash = await chainClient.sendTransaction({
+                  calls: [
+                    // First call: approve the router
+                    {
+                      to: fromToken.address as `0x${string}`,
+                      data: approveData,
+                      value: BigInt(0),
+                    },
+                    // Second call: execute the deposit
+                    {
+                      to: item.data.to as `0x${string}`,
+                      data: txData as `0x${string}`,
+                      value: item.data.value ? BigInt(item.data.value) : BigInt(0),
+                    },
+                  ],
+                })
+                console.log('[useRelaySwap] Batched approval + deposit UserOp sent:', batchedTxHash)
+                lastTxHash = batchedTxHash
+                continue
+              } else {
+                console.log('[useRelaySwap] Already have router allowance, sending deposit only')
+                const txHash = await chainClient.sendTransaction({
                   calls: [{
-                    to: fromToken.address as `0x${string}`,
-                    data: preApproveData,
-                    value: BigInt(0),
+                    to: item.data.to as `0x${string}`,
+                    data: txData as `0x${string}`,
+                    value: item.data.value ? BigInt(item.data.value) : BigInt(0),
                   }],
                 })
-                console.log('[useRelaySwap] Pre-approval UserOp sent:', preApproveTxHash)
-                console.log('[useRelaySwap] Note: This is a UserOp hash, not a tx hash')
-
-                // For ERC-4337 smart wallets, the hash is a UserOp hash
-                // We cannot use getTransactionReceipt directly - poll allowance instead
-                console.log('[useRelaySwap] Polling allowance until confirmed (max 20s)...')
-
-                const maxPollAttempts = 10
-                const pollInterval = 2000 // 2 seconds
-                let approvalConfirmed = false
-
-                for (let attempt = 1; attempt <= maxPollAttempts; attempt++) {
-                  // Wait before checking (give bundler time to include UserOp)
-                  await new Promise(resolve => setTimeout(resolve, pollInterval))
-
-                  console.log(`[useRelaySwap] Allowance poll attempt ${attempt}/${maxPollAttempts}...`)
-                  const currentAllowance = await checkAllowance(fromToken, embeddedApprovalSpender, approvalAmount)
-
-                  if (currentAllowance) {
-                    console.log('[useRelaySwap] ✓ Pre-approval confirmed on-chain!')
-                    approvalConfirmed = true
-                    break
-                  }
-
-                  console.log(`[useRelaySwap] Allowance not yet confirmed, attempt ${attempt}/${maxPollAttempts}`)
-                }
-
-                if (!approvalConfirmed) {
-                  console.error('[useRelaySwap] ✗ Pre-approval NOT confirmed after 20s polling')
-                  console.error('[useRelaySwap] Details:', {
-                    smartWalletAddress,
-                    tokenAddress: fromToken.address,
-                    spender: embeddedApprovalSpender,
-                    userOpHash: preApproveTxHash,
-                  })
-
-                  // Don't proceed with deposit if approval failed
-                  throw new Error(`Pre-approval for ${fromToken.symbol} was not confirmed. The UserOp may have failed or timed out.`)
-                }
-              } else {
-                console.log('[useRelaySwap] Already have allowance for embedded spender')
+                console.log('[useRelaySwap] EVM → Solana deposit sent:', txHash)
+                lastTxHash = txHash
+                continue
               }
-
-              // Now execute the deposit
-              const txHash = await chainClient.sendTransaction({
-                calls: [{
-                  to: item.data.to as `0x${string}`,
-                  data: txData as `0x${string}`,
-                  value: item.data.value ? BigInt(item.data.value) : BigInt(0),
-                }],
-              })
-              console.log('[useRelaySwap] EVM → Solana deposit sent:', txHash)
-              lastTxHash = txHash
-              continue
             }
 
             // Only handle manual approval if needed (no embedded approval)
