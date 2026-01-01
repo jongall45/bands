@@ -1,442 +1,625 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
-import { ConnectButton } from '@/components/auth/ConnectButton'
 import { InstallPrompt } from '@/components/pwa/InstallPrompt'
-import { LogoInline } from '@/components/ui/Logo'
-import { Mail, Shield, Zap, Globe } from 'lucide-react'
+import { Loader2, Mail } from 'lucide-react'
+
+// Feature card data
+const featureCardsData = [
+  {
+    logo: "https://pbs.twimg.com/profile_images/1902346061005676544/e6WybE_v_400x400.jpg",
+    title: "EMAIL LOGIN & EMBEDDED WALLET",
+    body: "Powered by Privy. Self-custodial wallet architecture.",
+  },
+  {
+    logo: "https://pbs.twimg.com/profile_images/1960334543052816384/ejODKCzq_400x400.jpg",
+    title: "CROSSCHAIN SWAPS",
+    body: "Instant bridging across chains powered by Relay Protocol.",
+  },
+  {
+    logo: "https://pbs.twimg.com/profile_images/1930600293915410432/dgTU7UNU_400x400.jpg",
+    title: "EMBEDDED DEFI YIELDS",
+    body: "Earn yield on stables powered by Morpho Optimizer.",
+  },
+  {
+    logo: "https://www.svgrepo.com/show/393995/apple-pay.svg",
+    title: "EASY ONRAMP WITH APPLE PAY",
+    body: "Seamless Fiat to Stablecoin deposits.",
+    isApplePay: true,
+  },
+]
 
 export default function Home() {
-  const { isAuthenticated, address, isReady } = useAuth()
+  const { isAuthenticated, address, isReady, login } = useAuth()
   const router = useRouter()
   const hasNavigatedRef = useRef(false)
+  const [isLoggingIn, setIsLoggingIn] = useState(false)
 
-  // Redirect to dashboard when connected (only after auth is ready)
+  // Redirect to dashboard when connected
   useEffect(() => {
     if (isReady && isAuthenticated && address && !hasNavigatedRef.current) {
       hasNavigatedRef.current = true
-      console.log('Landing page: User connected, redirecting to dashboard')
       router.replace('/dashboard')
     }
   }, [isAuthenticated, address, isReady, router])
 
+  const handleLogin = async () => {
+    setIsLoggingIn(true)
+    try {
+      login()
+    } catch (error) {
+      console.error('Login error:', error)
+    } finally {
+      setTimeout(() => setIsLoggingIn(false), 1000)
+    }
+  }
+
+  // Triple the cards for seamless infinite scroll
+  const marqueeCards = [...featureCardsData, ...featureCardsData, ...featureCardsData]
+
   return (
     <div className="landing-page">
-      {/* Grain Texture Overlay */}
-      <div className="noise-overlay" />
+      {/* Grid Background */}
+      <div className="grid-background" />
+      {/* Crosshair Overlay */}
+      <div className="crosshair-overlay" />
 
-      {/* Lava Lamp Blobs */}
-      <div className="lava-container">
-        <div className="lava lava-1" />
-        <div className="lava lava-2" />
-        <div className="lava lava-3" />
-        <div className="lava lava-4" />
-        <div className="lava lava-5" />
-      </div>
+      {/* Master Container */}
+      <div className="master-container">
+        {/* Navigation */}
+        <nav className="navbar">
+          <div className="logo">BANDS</div>
+          <button className="sign-in-btn" onClick={handleLogin} disabled={!isReady || isLoggingIn}>
+            {isLoggingIn ? '[ ... ]' : '[ SIGN IN ]'}
+          </button>
+        </nav>
 
-      {/* Navigation - Clean, just logo and connect */}
-      <header className="navbar">
-        <LogoInline size="md" />
-        <ConnectButton />
-      </header>
-
-      {/* Hero Section */}
-      <main className="hero">
-        <div className="hero-content">
-          {/* Status Pill */}
-          <div className="status-pill">
-            <span className="status-dot" />
-            Protocol Live
-          </div>
-          
+        {/* Hero Section */}
+        <main className="hero">
           <h1 className="hero-title">
-            Spend. Save.<br />
-            <span className="text-gradient">Speculate.</span>
+            <span className="title-line">SPEND.</span>
+            <span className="title-line">SAVE.</span>
+            <span className="title-line speculate">SPECULATE.</span>
           </h1>
-          
-          <p className="subtitle">
-            The stablecoin neobank for degens.
-          </p>
-          
-          <div className="cta-group">
-            <ConnectButton variant="large" />
+
+          <div className="subheading">
+            <span className="def-label">DEF:</span>
+            <span className="def-text">THE STABLECOIN NEOBANK UTILITY DESIGNED FOR DEGENS.</span>
           </div>
 
-          {/* Features Grid */}
-          <div className="features-grid">
-            <div className="feature-card">
-              <Mail className="w-6 h-6 text-[#ef4444]" />
-              <h3>Email Login</h3>
-              <p>Email, Google, or Apple</p>
+          <button className="main-cta" onClick={handleLogin} disabled={!isReady || isLoggingIn}>
+            <span className="zip-tie" />
+            <span className="cta-content">
+              <span className="cta-arrow">→</span>
+              {isLoggingIn ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  CONNECTING...
+                </>
+              ) : (
+                <>SIGN IN WITH EMAIL</>
+              )}
+            </span>
+          </button>
+        </main>
+
+        {/* Features Section */}
+        <section className="features-section">
+          <div className="section-label">(FEATURES)</div>
+
+          <div className="marquee-mask">
+            <div className="marquee-track">
+              {marqueeCards.map((card, i) => (
+                <div key={i} className="feature-card">
+                  <div className="card-icon">
+                    <img
+                      src={card.logo}
+                      alt={card.title}
+                      className={card.isApplePay ? 'apple-pay-logo' : ''}
+                    />
+                  </div>
+                  <h3 className="card-title">{card.title}</h3>
+                  <p className="card-body">{card.body}</p>
+                </div>
+              ))}
             </div>
-            <div className="feature-card">
-              <Shield className="w-6 h-6 text-[#ef4444]" />
-              <h3>Self-Custody</h3>
-              <p>You own your keys</p>
-            </div>
-            <div className="feature-card">
-              <Zap className="w-6 h-6 text-[#ef4444]" />
-              <h3>Universal Wallet</h3>
-              <p>Works everywhere</p>
-            </div>
-            <div className="feature-card">
-              <Globe className="w-6 h-6 text-[#ef4444]" />
-              <h3>All DeFi</h3>
-              <p>Trade on any protocol</p>
-            </div>
-        </div>
-        </div>
-      </main>
+          </div>
+        </section>
+      </div>
 
       {/* PWA Install Prompt */}
       <InstallPrompt />
 
       <style jsx global>{`
         .landing-page {
-          --bg-base: #F4F4F5;
-          --text-main: #1D1D1F;
-          --text-muted: #86868B;
-          --bands-red: #FF3B30;
-          --bands-dark-red: #D70015;
-          
+          --brand-red: #FF3B30;
+          --off-white: #f0f0f0;
+          --industrial-grey: #8c8c8c;
+          --tape-grey: rgba(255,255,255,0.2);
+          --glass-bg: linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%);
+          --glass-border: rgba(255,255,255,0.12);
+
           min-height: 100vh;
           min-height: 100dvh;
           width: 100%;
-          background: var(--bg-base);
-          color: var(--text-main);
-          font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
+          background-color: #050505;
+          color: var(--off-white);
+          font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+          text-transform: uppercase;
+          letter-spacing: 1px;
           overflow-x: hidden;
           position: relative;
         }
 
-        /* === GRAIN TEXTURE === */
-        .landing-page .noise-overlay {
+        /* Grid Background */
+        .landing-page .grid-background {
           position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          pointer-events: none;
-          z-index: 10000;
-          opacity: 0.08;
-          mix-blend-mode: overlay;
-          background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-        }
-
-        /* === LAVA LAMP EFFECT === */
-        .landing-page .lava-container {
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          overflow: hidden;
+          inset: 0;
+          background-image:
+            linear-gradient(var(--tape-grey) 1px, transparent 1px),
+            linear-gradient(90deg, var(--tape-grey) 1px, transparent 1px),
+            linear-gradient(rgba(255, 59, 48, 0.05) 2px, transparent 2px),
+            linear-gradient(90deg, rgba(255, 59, 48, 0.05) 2px, transparent 2px);
+          background-size: 50px 50px, 50px 50px, 250px 250px, 250px 250px;
           z-index: 0;
-          filter: blur(60px);
+          pointer-events: none;
         }
 
-        .landing-page .lava {
-          position: absolute;
-          mix-blend-mode: normal;
-          will-change: transform, border-radius;
+        /* Crosshair Overlay */
+        .landing-page .crosshair-overlay {
+          position: fixed;
+          inset: 0;
+          background-image:
+            radial-gradient(circle at center, var(--brand-red) 2px, transparent 2px),
+            linear-gradient(to right, transparent 49%, var(--tape-grey) 49%, var(--tape-grey) 51%, transparent 51%),
+            linear-gradient(to bottom, transparent 49%, var(--tape-grey) 49%, var(--tape-grey) 51%, transparent 51%);
+          background-size: 100% 100%;
+          background-position: center;
+          background-repeat: no-repeat;
+          opacity: 0.3;
+          z-index: 0;
+          pointer-events: none;
         }
 
-        .landing-page .lava-1 {
-          width: 70vmax;
-          height: 70vmax;
-          background: radial-gradient(circle at 30% 30%, #FF3B30 0%, #FF6B6B 40%, rgba(255, 107, 107, 0.3) 70%, transparent 100%);
-          top: -20%;
-          left: -20%;
-          opacity: 0.7;
-          animation: lava1 35s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        /* Master Container */
+        .landing-page .master-container {
+          width: 90%;
+          max-width: 1100px;
+          margin: 0 auto;
+          display: flex;
+          flex-direction: column;
+          z-index: 10;
+          position: relative;
+          padding-bottom: 100px;
         }
 
-        .landing-page .lava-2 {
-          width: 60vmax;
-          height: 60vmax;
-          background: radial-gradient(circle at 70% 70%, #D70015 0%, #FF4444 40%, rgba(255, 68, 68, 0.3) 70%, transparent 100%);
-          bottom: -15%;
-          right: -15%;
-          opacity: 0.65;
-          animation: lava2 40s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-        }
-
-        .landing-page .lava-3 {
-          width: 45vmax;
-          height: 45vmax;
-          background: radial-gradient(circle at 50% 50%, #FF6B35 0%, #FFAA88 45%, rgba(255, 170, 136, 0.2) 75%, transparent 100%);
-          top: 25%;
-          right: 5%;
-          opacity: 0.55;
-          animation: lava3 28s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-        }
-
-        .landing-page .lava-4 {
-          width: 50vmax;
-          height: 50vmax;
-          background: radial-gradient(circle at 40% 60%, #FF8888 0%, #FFB4B4 45%, rgba(255, 180, 180, 0.2) 75%, transparent 100%);
-          top: 55%;
-          left: -5%;
-          opacity: 0.5;
-          animation: lava4 32s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-        }
-
-        .landing-page .lava-5 {
-          width: 35vmax;
-          height: 35vmax;
-          background: radial-gradient(circle at 60% 40%, #FFCCCC 0%, #FFE5E5 50%, rgba(255, 229, 229, 0.2) 80%, transparent 100%);
-          top: 5%;
-          right: 25%;
-          opacity: 0.6;
-          animation: lava5 25s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-        }
-
-        @keyframes lava1 {
-          0%, 100% {
-            transform: translate(0, 0) scale(1);
-            border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
-          }
-          20% {
-            transform: translate(8vw, 5vh) scale(1.08);
-            border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
-          }
-          40% {
-            transform: translate(3vw, 12vh) scale(0.95);
-            border-radius: 50% 60% 30% 60% / 30% 70% 40% 50%;
-          }
-          60% {
-            transform: translate(-5vw, 8vh) scale(1.12);
-            border-radius: 40% 60% 60% 40% / 70% 30% 50% 60%;
-          }
-          80% {
-            transform: translate(-2vw, 2vh) scale(1.02);
-            border-radius: 55% 45% 40% 60% / 45% 55% 60% 40%;
-          }
-        }
-
-        @keyframes lava2 {
-          0%, 100% {
-            transform: translate(0, 0) scale(1);
-            border-radius: 40% 60% 60% 40% / 70% 30% 50% 60%;
-          }
-          25% {
-            transform: translate(-6vw, -8vh) scale(1.15);
-            border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
-          }
-          50% {
-            transform: translate(-3vw, -15vh) scale(0.9);
-            border-radius: 50% 60% 30% 60% / 30% 70% 40% 50%;
-          }
-          75% {
-            transform: translate(5vw, -5vh) scale(1.1);
-            border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
-          }
-        }
-
-        @keyframes lava3 {
-          0%, 100% {
-            transform: translate(0, 0) scale(1);
-            border-radius: 50% 60% 30% 60% / 30% 70% 40% 50%;
-          }
-          30% {
-            transform: translate(-12vw, 10vh) scale(1.25);
-            border-radius: 60% 40% 70% 30% / 40% 60% 50% 70%;
-          }
-          60% {
-            transform: translate(-8vw, -8vh) scale(0.85);
-            border-radius: 40% 70% 50% 60% / 70% 40% 60% 30%;
-          }
-        }
-
-        @keyframes lava4 {
-          0%, 100% {
-            transform: translate(0, 0) scale(1);
-            border-radius: 70% 30% 50% 60% / 40% 70% 30% 60%;
-          }
-          35% {
-            transform: translate(10vw, -6vh) scale(1.15);
-            border-radius: 45% 55% 65% 35% / 55% 45% 35% 65%;
-          }
-          70% {
-            transform: translate(15vw, 5vh) scale(0.9);
-            border-radius: 30% 70% 60% 40% / 60% 30% 70% 40%;
-          }
-        }
-
-        @keyframes lava5 {
-          0%, 100% {
-            transform: translate(0, 0) scale(1);
-            border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
-            opacity: 0.5;
-          }
-          25% {
-            transform: translate(5vw, 12vh) scale(1.35);
-            border-radius: 70% 30% 30% 70% / 70% 70% 30% 30%;
-            opacity: 0.7;
-          }
-          50% {
-            transform: translate(-6vw, 8vh) scale(1.1);
-            border-radius: 50% 50% 50% 50%;
-            opacity: 0.55;
-          }
-          75% {
-            transform: translate(-10vw, -5vh) scale(0.9);
-            border-radius: 40% 60% 55% 45% / 55% 45% 60% 40%;
-            opacity: 0.65;
-          }
-        }
-
-        /* === NAVIGATION WITH SAFE AREA === */
+        /* Navigation */
         .landing-page .navbar {
           display: flex;
           justify-content: space-between;
-          align-items: center;
-          padding: 16px 20px;
-          padding-top: calc(16px + env(safe-area-inset-top, 0px));
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          z-index: 1000;
-          background: rgba(244, 244, 245, 0.85);
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
+          align-items: flex-start;
+          width: 100%;
+          padding: 32px 0;
+          padding-top: calc(32px + env(safe-area-inset-top, 0px));
+          border-bottom: 1px dashed var(--tape-grey);
         }
 
-        /* === HERO === */
+        .landing-page .logo {
+          font-weight: 900;
+          font-size: 28px;
+          letter-spacing: -1px;
+          color: var(--brand-red);
+        }
+
+        .landing-page .sign-in-btn {
+          padding: 12px 24px;
+          background-color: rgba(255, 59, 48, 0.1);
+          border: 1px solid var(--brand-red);
+          color: var(--brand-red);
+          font-weight: 700;
+          font-size: 12px;
+          cursor: pointer;
+          font-family: monospace;
+          border-radius: 4px;
+          backdrop-filter: blur(4px);
+          transition: all 0.2s;
+        }
+
+        .landing-page .sign-in-btn:hover {
+          background-color: rgba(255, 59, 48, 0.2);
+        }
+
+        .landing-page .sign-in-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        /* Hero Section */
         .landing-page .hero {
-          min-height: 100vh;
-          min-height: 100dvh;
           display: flex;
           flex-direction: column;
           align-items: center;
           text-align: center;
-          padding-top: calc(100px + env(safe-area-inset-top, 0px));
-          padding-bottom: 40px;
-          padding-left: 24px;
-          padding-right: 24px;
-          position: relative;
-          z-index: 1;
-        }
-
-        .landing-page .hero-content {
-          max-width: 700px;
-        }
-
-        .landing-page .status-pill {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 16px;
-          background: white;
-          border: 1px solid rgba(0, 0, 0, 0.08);
-          border-radius: 50px;
-          font-size: 0.85rem;
-          font-weight: 500;
-          color: var(--text-muted);
-          margin-bottom: 28px;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-        }
-
-        .landing-page .status-dot {
-          width: 8px;
-          height: 8px;
-          background: #34C759;
-          border-radius: 50%;
-          box-shadow: 0 0 8px #34C759;
+          width: 100%;
+          padding-top: 80px;
+          margin-bottom: 120px;
         }
 
         .landing-page .hero-title {
-          font-size: clamp(2.8rem, 10vw, 5.5rem);
-          font-weight: 700;
-          letter-spacing: -0.03em;
-          line-height: 1;
-          margin-bottom: 20px;
+          font-size: clamp(48px, 10vw, 90px);
+          line-height: 0.9;
+          font-weight: 900;
+          letter-spacing: -4px;
+          margin: 0 0 32px 0;
+          color: var(--off-white);
         }
 
-        .landing-page .text-gradient {
-          background: linear-gradient(135deg, var(--bands-red), var(--bands-dark-red));
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
+        .landing-page .title-line {
+          display: block;
         }
 
-        .landing-page .subtitle {
-          font-size: 1.15rem;
-          color: var(--text-muted);
-          margin-bottom: 32px;
+        .landing-page .title-line.speculate {
+          color: var(--brand-red);
+          text-shadow: 4px 4px 0px #000, -2px -2px 10px var(--brand-red);
+          border-bottom: 6px solid var(--brand-red);
+          padding: 0 10px;
+          display: inline-block;
+          transform: rotate(-2deg);
+          margin-top: 10px;
         }
 
-        .landing-page .cta-group {
-          display: flex;
-          gap: 16px;
-          justify-content: center;
-          margin-bottom: 48px;
-        }
-
-        /* === FEATURES GRID === */
-        .landing-page .features-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 12px;
-          max-width: 400px;
-          margin: 0 auto;
-        }
-
-        .landing-page .feature-card {
-          background: white;
-          border: 1px solid rgba(0, 0, 0, 0.08);
-          border-radius: 20px;
+        /* Subheading */
+        .landing-page .subheading {
+          font-size: 16px;
+          color: var(--off-white);
+          font-weight: 600;
+          max-width: 600px;
+          margin-bottom: 50px;
+          font-family: monospace;
+          border: 1px solid var(--tape-grey);
           padding: 16px;
-          text-align: left;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          background: rgba(0,0,0,0.3);
+          backdrop-filter: blur(4px);
+          border-radius: 12px;
+          flex-wrap: wrap;
+          justify-content: center;
+        }
+
+        .landing-page .def-label {
+          background: var(--brand-red);
+          color: black;
+          padding: 3px 6px;
+          font-size: 9px;
+          border-radius: 4px;
+          letter-spacing: 1px;
+        }
+
+        .landing-page .def-text {
+          text-align: center;
+        }
+
+        /* Main CTA */
+        .landing-page .main-cta {
+          position: relative;
+          padding: 16px 32px;
+          padding-left: 40px;
+          background-color: var(--brand-red);
+          border: 2px solid #000;
+          clip-path: polygon(10% 0, 100% 0, 100% 100%, 10% 100%, 0 50%);
+          color: #000;
+          font-size: 20px;
+          font-weight: 900;
+          cursor: pointer;
+          box-shadow: 0 10px 30px rgba(255, 59, 48, 0.3);
+          font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
           transition: all 0.2s;
         }
 
-        .landing-page .feature-card:hover {
+        .landing-page .main-cta:hover {
           transform: translateY(-2px);
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+          box-shadow: 0 15px 40px rgba(255, 59, 48, 0.4);
         }
 
-        .landing-page .feature-card h3 {
-          font-size: 0.9rem;
+        .landing-page .main-cta:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
+        }
+
+        .landing-page .zip-tie {
+          position: absolute;
+          left: 15px;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #000;
+          border: 2px solid var(--off-white);
+          z-index: 3;
+        }
+
+        .landing-page .cta-content {
+          position: relative;
+          z-index: 2;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .landing-page .cta-arrow {
+          background: #000;
+          color: var(--brand-red);
+          padding: 2px 6px;
+          font-size: 12px;
+        }
+
+        /* Features Section */
+        .landing-page .features-section {
+          margin-bottom: 100px;
+          width: 100%;
+          position: relative;
+        }
+
+        .landing-page .section-label {
+          font-family: monospace;
+          color: var(--off-white);
+          margin-bottom: 20px;
+          font-weight: 700;
+          font-size: 12px;
+          letter-spacing: 2px;
+        }
+
+        /* Marquee */
+        .landing-page .marquee-mask {
+          width: 100%;
+          overflow: hidden;
+          padding: 20px 0;
+          mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+          -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+        }
+
+        .landing-page .marquee-track {
+          display: flex;
+          gap: 16px;
+          width: max-content;
+          animation: marquee 30s linear infinite;
+        }
+
+        @keyframes marquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-33.33%); }
+        }
+
+        /* Feature Card */
+        .landing-page .feature-card {
+          width: 240px;
+          min-width: 240px;
+          height: 320px;
+          min-height: 320px;
+          background: var(--glass-bg);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          border: 1px solid var(--glass-border);
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+          border-radius: 24px;
+          padding: 24px;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          position: relative;
+          overflow: hidden;
+          transition: all 0.3s ease;
+        }
+
+        .landing-page .feature-card::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+        }
+
+        .landing-page .feature-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+        }
+
+        .landing-page .card-icon {
+          width: 48px;
+          height: 48px;
+          background-color: #000;
+          border: 2px solid var(--brand-red);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 16px;
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow: 0 4px 12px rgba(255, 59, 48, 0.2);
+          padding: 8px;
+        }
+
+        .landing-page .card-icon img {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          filter: grayscale(100%) contrast(120%) opacity(0.8);
+          transition: filter 0.3s ease;
+        }
+
+        .landing-page .feature-card:hover .card-icon img {
+          filter: none;
+        }
+
+        .landing-page .card-icon img.apple-pay-logo {
+          filter: invert(1) opacity(0.7);
+        }
+
+        .landing-page .feature-card:hover .card-icon img.apple-pay-logo {
+          filter: invert(1) opacity(1);
+        }
+
+        .landing-page .card-title {
+          font-size: 16px;
+          font-weight: 900;
+          margin-bottom: 12px;
+          color: var(--off-white);
+          background-color: var(--brand-red);
+          padding: 4px 8px;
+          display: inline-block;
+          border-radius: 4px;
+        }
+
+        .landing-page .card-body {
+          font-size: 12px;
+          color: var(--off-white);
+          line-height: 1.4;
+          font-family: monospace;
           font-weight: 600;
-          color: var(--text-main);
-          margin: 10px 0 4px;
-        }
-
-        .landing-page .feature-card p {
-          font-size: 0.8rem;
-          color: var(--text-muted);
+          text-transform: uppercase;
         }
 
         /* === MOBILE RESPONSIVE === */
         @media (max-width: 768px) {
+          .landing-page .master-container {
+            width: 92%;
+          }
+
+          .landing-page .navbar {
+            padding: 20px 0;
+            padding-top: calc(20px + env(safe-area-inset-top, 0px));
+            align-items: center;
+          }
+
+          .landing-page .logo {
+            font-size: 22px;
+          }
+
+          .landing-page .sign-in-btn {
+            padding: 10px 16px;
+            font-size: 10px;
+          }
+
+          .landing-page .hero {
+            padding-top: 50px;
+            margin-bottom: 80px;
+          }
+
           .landing-page .hero-title {
-            font-size: 2.8rem;
+            font-size: 48px;
+            letter-spacing: -2px;
+            margin-bottom: 24px;
           }
 
-          .landing-page .subtitle {
-            font-size: 1rem;
+          .landing-page .title-line.speculate {
+            border-bottom-width: 4px;
+            padding: 0 6px;
           }
 
-          .landing-page .features-grid {
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
+          .landing-page .subheading {
+            font-size: 12px;
+            padding: 12px;
+            margin-bottom: 32px;
+            gap: 8px;
+          }
+
+          .landing-page .def-label {
+            font-size: 8px;
+          }
+
+          .landing-page .main-cta {
+            font-size: 14px;
+            padding: 14px 24px;
+            padding-left: 32px;
+          }
+
+          .landing-page .zip-tie {
+            left: 12px;
+            width: 6px;
+            height: 6px;
+          }
+
+          .landing-page .cta-arrow {
+            font-size: 10px;
+            padding: 2px 4px;
+          }
+
+          .landing-page .features-section {
+            margin-bottom: 60px;
+          }
+
+          .landing-page .section-label {
+            font-size: 10px;
           }
 
           .landing-page .feature-card {
-            padding: 14px;
+            width: 200px;
+            min-width: 200px;
+            height: 280px;
+            min-height: 280px;
+            padding: 20px;
           }
 
-          .landing-page .feature-card h3 {
-            font-size: 0.85rem;
+          .landing-page .card-icon {
+            width: 40px;
+            height: 40px;
+            padding: 6px;
           }
 
-          .landing-page .feature-card p {
-            font-size: 0.75rem;
+          .landing-page .card-title {
+            font-size: 13px;
+            padding: 3px 6px;
+          }
+
+          .landing-page .card-body {
+            font-size: 11px;
+          }
+
+          .landing-page .marquee-track {
+            animation-duration: 25s;
+          }
+        }
+
+        /* Extra small screens */
+        @media (max-width: 480px) {
+          .landing-page .hero-title {
+            font-size: 38px;
+            letter-spacing: -1.5px;
+          }
+
+          .landing-page .subheading {
+            font-size: 11px;
+            flex-direction: column;
+            gap: 8px;
+          }
+
+          .landing-page .main-cta {
+            font-size: 12px;
+            padding: 12px 20px;
+            padding-left: 28px;
+          }
+
+          .landing-page .feature-card {
+            width: 180px;
+            min-width: 180px;
+            height: 260px;
+            min-height: 260px;
+            padding: 16px;
+          }
+
+          .landing-page .card-title {
+            font-size: 12px;
+          }
+
+          .landing-page .card-body {
+            font-size: 10px;
           }
         }
       `}</style>
