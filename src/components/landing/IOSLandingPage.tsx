@@ -53,7 +53,7 @@ const AnimatedLogo = () => {
     ]
 
     return (
-        <div style={{ position: "relative", width: 300, height: 160, display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: 60 }}>
+        <div style={{ position: "relative", width: 300, height: 160, display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: 30 }}>
             {papers.map((color, i) => {
                 const isTopPaper = i === papers.length - 1;
                 const isWhite = color === colors.offWhite;
@@ -93,7 +93,15 @@ const AnimatedLogo = () => {
                                     fontStyle: "italic",
                                     lineHeight: 1,
                                     marginTop: -6,
-                                    textShadow: `0 0 15px ${colors.brandRed}, 0 0 30px ${colors.brandRed}`
+                                    textShadow: `
+                                        -2px -2px 0 ${colors.brightWhite},
+                                        2px -2px 0 ${colors.brightWhite},
+                                        -2px 2px 0 ${colors.brightWhite},
+                                        2px 2px 0 ${colors.brightWhite},
+                                        0 0 20px ${colors.brandRed},
+                                        0 0 40px ${colors.brandRed}
+                                    `,
+                                    WebkitTextStroke: `2px ${colors.brightWhite}`,
                                 }}
                             >
                                 BANDS
@@ -260,7 +268,7 @@ export default function IOSLandingPage() {
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 2.3, duration: 0.6 }}
-                    style={{ marginTop: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}
+                    style={{ marginTop: 30, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}
                 >
                     <motion.button
                         style={{
@@ -274,15 +282,15 @@ export default function IOSLandingPage() {
                         whileTap={{ scale: 0.98 }}
                     >
                         <div style={zipTieStyle}></div>
-                        <span style={{ position: "relative", zIndex: 2, display: "flex", alignItems: "center", gap: 12 }}>
-                            <span style={{ background: colors.black, color: colors.brandRed, padding: "4px 8px", fontSize: 14 }}>→</span>
+                        <span style={{ position: "relative", zIndex: 2, display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ background: colors.black, color: colors.brandRed, padding: "2px 4px", fontSize: 10 }}>→</span>
                             {isLoggingIn ? (
-                                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <Loader2 className="w-3 h-3 animate-spin" />
                                     CONNECTING...
                                 </span>
                             ) : (
-                                'SIGN IN WITH EMAIL'
+                                'SIGN IN'
                             )}
                         </span>
                     </motion.button>
@@ -298,14 +306,18 @@ export default function IOSLandingPage() {
 const pageBackgroundStyle: React.CSSProperties = {
     width: "100%",
     height: "100vh",
-    minHeight: "100dvh",
+    maxHeight: "100vh",
     backgroundColor: colors.black,
     color: colors.offWhite,
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    position: "relative",
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     overflow: "hidden",
     fontFamily: industrialFontStack,
     textTransform: "uppercase",
@@ -398,32 +410,32 @@ const marqueeMaskStyle: React.CSSProperties = {
     WebkitMaskImage: "linear-gradient(to right, transparent, black 10%, black 90%, transparent)",
 }
 
-// CTA BUTTON
+// CTA BUTTON - compact for mobile
 const mainCtaHangtagStyle: React.CSSProperties = {
     position: "relative",
-    padding: "20px 40px",
+    padding: "10px 20px",
     backgroundColor: colors.brandRed,
-    border: `2px solid ${colors.black}`,
-    boxShadow: `0 0 0 2px ${colors.black}, 0 0 0 4px ${colors.brightWhite}, 0 10px 40px rgba(255, 59, 48, 0.5)`,
-    clipPath: "polygon(10% 0, 100% 0, 100% 80%, 90% 100%, 0 100%, 0 20%)",
-    paddingLeft: "50px",
+    border: `1px solid ${colors.black}`,
+    boxShadow: `0 0 0 1px ${colors.black}, 0 0 0 2px ${colors.brightWhite}, 0 5px 20px rgba(255, 59, 48, 0.4)`,
+    clipPath: "polygon(8% 0, 100% 0, 100% 80%, 92% 100%, 0 100%, 0 20%)",
+    paddingLeft: "28px",
     color: colors.black,
-    fontSize: "20px",
+    fontSize: "12px",
     fontWeight: 900,
     fontFamily: industrialFontStack,
-    letterSpacing: "1px",
+    letterSpacing: "0.5px",
     transition: "all 0.2s ease-in-out"
 }
 
 const zipTieStyle: React.CSSProperties = {
     position: "absolute",
-    left: "20px",
+    left: "12px",
     top: "50%",
     transform: "translateY(-50%)",
-    width: "10px",
-    height: "10px",
+    width: "6px",
+    height: "6px",
     borderRadius: "50%",
     background: colors.black,
-    border: `2px solid ${colors.brightWhite}`,
+    border: `1px solid ${colors.brightWhite}`,
     zIndex: 3,
 }
