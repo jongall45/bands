@@ -2,21 +2,21 @@
 
 /**
  * Privy Providers for "Fomo-Style" No-Prompt Experience
- * 
+ *
  * This is the ROOT provider setup for your Next.js app.
- * 
+ *
  * Configuration:
  * - PrivyProvider: Core authentication + embedded wallets
  * - SmartWalletsProvider: Account Abstraction support
  * - WagmiProvider: React hooks for blockchain queries
- * 
+ *
  * IMPORTANT DASHBOARD SETTINGS (do this first!):
  * 1. Embedded wallets → Customization → "Require user confirmation" = OFF
  * 2. Embedded wallets → Smart wallets → Enable
  * 3. Embedded wallets → Gas sponsorship → Enable + select chains
  */
 
-import { ReactNode } from 'react'
+import { ReactNode, useState, useEffect } from 'react'
 import { PrivyProvider as BasePrivyProvider } from '@privy-io/react-auth'
 import { AppUrlListener } from '@/components/capacitor/AppUrlListener'
 import { SmartWalletsProvider } from '@privy-io/react-auth/smart-wallets'
@@ -32,7 +32,10 @@ import { arbitrum, base, polygon } from 'viem/chains'
 // Your Privy App ID (from Dashboard)
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID || ''
 
-// Detect if running in Capacitor native app
+/**
+ * Detect if running in Capacitor native app
+ * This check must happen on client-side only
+ */
 const isCapacitorNative = (): boolean => {
   if (typeof window === 'undefined') return false
   return !!(window as any).Capacitor?.isNativePlatform?.()
@@ -128,13 +131,13 @@ interface PrivyProvidersProps {
 
 /**
  * Root providers for Privy + Smart Wallets + Wagmi
- * 
+ *
  * Wrap your app with this at the root level:
- * 
+ *
  * ```tsx
  * // app/layout.tsx
  * import { PrivyProviders } from '@/lib/privy/providers'
- * 
+ *
  * export default function RootLayout({ children }) {
  *   return (
  *     <html>
@@ -149,21 +152,46 @@ interface PrivyProvidersProps {
  * ```
  */
 export function PrivyProviders({ children }: PrivyProvidersProps) {
+  // Use state to detect Capacitor environment after hydration
+  // This ensures we don't have SSR/client mismatch issues
+  const [isNative, setIsNative] = useState(false)
+  const [isReady, setIsReady] = useState(false)
+
+  useEffect(() => {
+    // Check if we're in a Capacitor native app
+    const native = isCapacitorNative()
+    setIsNative(native)
+    setIsReady(true)
+
+    if (native) {
+      console.log('[PrivyProviders] Running in Capacitor native app - enabling customOAuthRedirectUrl')
+    }
+  }, [])
+
   if (!PRIVY_APP_ID) {
     console.error('❌ NEXT_PUBLIC_PRIVY_APP_ID is not set!')
     return <div>Missing Privy configuration</div>
   }
 
-  // For Capacitor apps, use customOAuthRedirectUrl to force OAuth in external browser
-  // This is required because Google blocks OAuth in embedded WebViews
-  const isNative = isCapacitorNative()
+  // Don't render until we've detected the environment
+  // This prevents hydration mismatches and ensures correct OAuth config
+  if (!isReady) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="animate-spin w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full" />
+      </div>
+    )
+  }
+
+  // For Capacitor apps, use customOAuthRedirectUrl to force OAuth redirect
+  // to our app after completing OAuth in the external browser
   const config = isNative
     ? { ...privyConfig, customOAuthRedirectUrl: 'https://www.bands.cash/redirect' }
     : privyConfig
 
   return (
     <>
-      {/* AppUrlListener handles OAuth deep link callbacks for Capacitor */}
+      {/* AppUrlListener handles OAuth interception and deep link callbacks for Capacitor */}
       <AppUrlListener />
       <BasePrivyProvider
         appId={PRIVY_APP_ID}

@@ -3,6 +3,22 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Webpack is the default in Next.js 16 - no need to disable Turbopack
   serverExternalPackages: ['pino', 'pino-pretty', 'thread-stream'],
+
+  // Headers for Apple App Site Association (Universal Links)
+  async headers() {
+    return [
+      {
+        source: '/.well-known/apple-app-site-association',
+        headers: [
+          {
+            key: 'Content-Type',
+            value: 'application/json',
+          },
+        ],
+      },
+    ]
+  },
+
   images: {
     // Allow external images from these domains for asset icons
     remotePatterns: [

@@ -1,0 +1,22 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "UKY4RV97LX.cash.bands.app",
+        "paths": [
+          "/redirect",
+          "/redirect/*",
+          "/dashboard",
+          "/dashboard/*",
+          "/*"
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "YOUR_TEAM_ID.cash.bands.app"
+    ]
+  }
+}
