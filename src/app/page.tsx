@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { Loader2 } from 'lucide-react'
 import { motion, useMotionValue, useMotionTemplate } from 'framer-motion'
+import IOSLandingPage from '@/components/landing/IOSLandingPage'
 
 // Feature card data
 const featureCardsData = [
@@ -119,8 +120,12 @@ function FlashlightCard({
 export default function Home() {
   const { isAuthenticated, address, isReady, login } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const hasNavigatedRef = useRef(false)
   const [isLoggingIn, setIsLoggingIn] = useState(false)
+
+  // Check if running in iOS app via query param
+  const isIOSApp = searchParams.get('app') === 'ios'
 
   // Global mouse tracking for red glow effect
   const mouseX = useMotionValue(0)
@@ -142,6 +147,11 @@ export default function Home() {
       router.replace('/dashboard')
     }
   }, [isAuthenticated, address, isReady, router])
+
+  // Show iOS-specific landing page for native app
+  if (isIOSApp) {
+    return <IOSLandingPage />
+  }
 
   const handleLogin = async () => {
     setIsLoggingIn(true)
