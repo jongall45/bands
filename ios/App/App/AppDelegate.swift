@@ -7,16 +7,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        print("[AppDelegate] Application launching...")
-
-        // Create window with our custom OAuth-intercepting view controller
-        window = UIWindow(frame: UIScreen.main.bounds)
-        let vc = OAuthWebViewController()
-        window?.rootViewController = vc
-        window?.makeKeyAndVisible()
-
-        print("[AppDelegate] Using OAuthWebViewController for OAuth interception")
-
+        // Use standard Capacitor view controller
+        // Privy handles OAuth via @capacitor/browser automatically
         return true
     }
 
@@ -36,12 +28,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-        print("[AppDelegate] Received URL: \(url.absoluteString)")
+        // Handle custom URL schemes
         return ApplicationDelegateProxy.shared.application(app, open: url, options: options)
     }
 
     func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
-        print("[AppDelegate] Continue user activity")
+        // Handle Universal Links - critical for OAuth callback
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
     }
 }
