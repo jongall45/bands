@@ -87,12 +87,12 @@ const getPrivyConfig = (isNative: boolean) => ({
     showWalletLoginFirst: false,
   },
 
-  // Login methods - all methods on all platforms
-  // Native OAuth is handled by ASWebAuthenticationSession via our NativeOAuth plugin
-  loginMethods: ['email', 'google', 'apple'] as ('email' | 'google' | 'apple')[],
-
-  // For native apps, set custom redirect URL for OAuth callback
-  ...(isNative && { customOAuthRedirectUrl: 'https://www.bands.cash/redirect' }),
+  // Login methods differ by platform:
+  // - Mobile (Capacitor): Email + Apple only (Google OAuth blocked in WebView)
+  // - Web: All methods available
+  loginMethods: isNative
+    ? (['email', 'apple'] as ('email' | 'apple')[])
+    : (['email', 'google', 'apple'] as ('email' | 'google' | 'apple')[]),
 
   // Embedded wallet configuration
   embeddedWallets: {
