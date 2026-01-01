@@ -147,8 +147,8 @@ interface DexScreenerChartProps {
 }
 
 const DexScreenerChart = memo(function DexScreenerChart({ chainId, pairAddress }: DexScreenerChartProps) {
-  // DexScreener embed URL with minimal UI - hide as much as possible
-  const embedUrl = `https://dexscreener.com/${chainId}/${pairAddress}?embed=1&loadChartSettings=0&trades=0&info=0&chartLeftToolbar=0&chartTopToolbar=0&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=60`
+  // DexScreener embed URL with minimal UI - hide as much as possible, default to daily timeframe
+  const embedUrl = `https://dexscreener.com/${chainId}/${pairAddress}?embed=1&loadChartSettings=0&trades=0&info=0&chartLeftToolbar=0&chartTopToolbar=0&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=1D`
 
   return (
     <iframe
@@ -294,7 +294,7 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
 
           <div className="relative z-10 p-4">
             {/* Search Bar */}
-            <div className="relative mb-4">
+            <div className={`relative ${selectedToken ? 'mb-4' : ''}`}>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
                 <input
@@ -364,8 +364,8 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
               )}
             </div>
 
-            {/* Selected Token Info or Placeholder */}
-            {selectedToken ? (
+            {/* Selected Token Info - Only show when token selected */}
+            {selectedToken && (
               <>
                 {/* Token Header */}
                 <div className="flex items-center justify-between mb-3">
@@ -504,17 +504,6 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
                   </button>
                 </div>
               </>
-            ) : (
-              /* Placeholder when no token selected */
-              <div className="text-center py-6">
-                <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-white/5 flex items-center justify-center">
-                  <Search className="w-5 h-5 text-white/20" />
-                </div>
-                <h3 className="text-white/60 font-semibold text-sm mb-1">Search for a Token</h3>
-                <p className="text-white/30 text-xs max-w-[200px] mx-auto">
-                  Enter a token name, symbol, or contract address to view charts and trading data
-                </p>
-              </div>
             )}
           </div>
         </div>
