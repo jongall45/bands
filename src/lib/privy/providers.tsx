@@ -78,7 +78,7 @@ const wagmiConfig = createConfig({
  * - embeddedWallets.createOnLogin: 'all-users' → Auto-create wallet
  * - embeddedWallets.showWalletUIs: false → Hide wallet modals by default
  */
-const privyConfig = {
+const getPrivyConfig = (isNative: boolean) => ({
   // Appearance
   appearance: {
     theme: 'dark' as const,
@@ -87,8 +87,11 @@ const privyConfig = {
     showWalletLoginFirst: false,
   },
 
-  // Login methods
-  loginMethods: ['email', 'google', 'apple'] as ('email' | 'google' | 'apple')[],
+  // Login methods - Use email only on mobile (Google OAuth blocked in WebView)
+  // On web, allow all methods
+  loginMethods: isNative
+    ? ['email'] as ('email')[]
+    : ['email', 'google', 'apple'] as ('email' | 'google' | 'apple')[],
 
   // Embedded wallet configuration
   embeddedWallets: {
@@ -119,7 +122,7 @@ const privyConfig = {
     termsAndConditionsUrl: 'https://bands.cash/terms',
     privacyPolicyUrl: 'https://bands.cash/privacy',
   },
-}
+})
 
 // ============================================
 // PROVIDERS COMPONENT
@@ -183,11 +186,10 @@ export function PrivyProviders({ children }: PrivyProvidersProps) {
     )
   }
 
-  // For Capacitor apps, use customOAuthRedirectUrl to force OAuth redirect
-  // to our app after completing OAuth in the external browser
-  const config = isNative
-    ? { ...privyConfig, customOAuthRedirectUrl: 'https://www.bands.cash/redirect' }
-    : privyConfig
+  // Get config based on platform
+  // On mobile: email-only login (Google OAuth blocked in WebView)
+  // On web: all login methods available
+  const config = getPrivyConfig(isNative)
 
   return (
     <>
