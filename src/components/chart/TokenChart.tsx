@@ -282,7 +282,7 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
     <div className={`relative ${className}`}>
       {/* Frosted glass container */}
       <div className="relative rounded-[24px] p-[1px] bg-gradient-to-br from-white/15 via-white/5 to-[#ef4444]/20">
-        <div className="bg-[#0a0a0a]/95 rounded-[23px] backdrop-blur-xl overflow-hidden">
+        <div className="bg-[#0a0a0a]/95 rounded-[23px] backdrop-blur-xl">
           {/* Noise texture */}
           <div
             className="absolute inset-0 pointer-events-none opacity-30 mix-blend-overlay"
