@@ -3,7 +3,7 @@
     "apps": [],
     "details": [
       {
-        "appID": "YOUR_TEAM_ID.cash.bands.app",
+        "appID": "UKY4RV97LX.cash.bands.app",
         "paths": [
           "/redirect",
           "/redirect/*",
