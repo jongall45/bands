@@ -294,7 +294,7 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
 
           <div className="relative z-10 p-4">
             {/* Search Bar */}
-            <div className={`relative ${selectedToken ? 'mb-4' : ''}`}>
+            <div className={`relative ${selectedToken && !(showResults && (searchResults.length > 0 || isSearching)) ? 'mb-4' : ''}`}>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
                 <input
@@ -321,9 +321,11 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
                 )}
               </div>
 
-              {/* Search Results Dropdown */}
-              {showResults && (searchResults.length > 0 || isSearching) && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-[#141414] border border-white/10 rounded-xl overflow-hidden z-50 max-h-[300px] overflow-y-auto">
+            </div>
+
+            {/* Search Results - Inline (pushes content down) */}
+            {showResults && (searchResults.length > 0 || isSearching) && (
+              <div className={`mt-2 bg-[#141414] border border-white/10 rounded-xl overflow-hidden max-h-[300px] overflow-y-auto ${selectedToken ? 'mb-4' : ''}`}>
                   {isSearching ? (
                     <div className="p-4 flex items-center justify-center gap-2 text-white/50">
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -362,7 +364,6 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
                   )}
                 </div>
               )}
-            </div>
 
             {/* Selected Token Info - Only show when token selected */}
             {selectedToken && (
