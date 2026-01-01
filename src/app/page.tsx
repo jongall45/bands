@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
-import { InstallPrompt } from '@/components/pwa/InstallPrompt'
 import { Loader2 } from 'lucide-react'
 import { motion, useMotionValue, useMotionTemplate } from 'framer-motion'
 
@@ -147,11 +146,6 @@ export default function Home() {
 
   return (
     <div className="landing-page">
-      {/* Grid Background */}
-      <div className="grid-background" />
-      {/* Crosshair Overlay */}
-      <div className="crosshair-overlay" />
-
       {/* Master Container */}
       <div className="master-container">
         {/* Navigation */}
@@ -269,9 +263,6 @@ export default function Home() {
         </motion.section>
       </div>
 
-      {/* PWA Install Prompt */}
-      <InstallPrompt />
-
       <style jsx global>{`
         .landing-page {
           --brand-red: #FF3B30;
@@ -291,36 +282,6 @@ export default function Home() {
           letter-spacing: 1px;
           overflow-x: hidden;
           position: relative;
-        }
-
-        /* Grid Background */
-        .landing-page .grid-background {
-          position: fixed;
-          inset: 0;
-          background-image:
-            linear-gradient(var(--tape-grey) 1px, transparent 1px),
-            linear-gradient(90deg, var(--tape-grey) 1px, transparent 1px),
-            linear-gradient(rgba(255, 59, 48, 0.05) 2px, transparent 2px),
-            linear-gradient(90deg, rgba(255, 59, 48, 0.05) 2px, transparent 2px);
-          background-size: 50px 50px, 50px 50px, 250px 250px, 250px 250px;
-          z-index: 0;
-          pointer-events: none;
-        }
-
-        /* Crosshair Overlay */
-        .landing-page .crosshair-overlay {
-          position: fixed;
-          inset: 0;
-          background-image:
-            radial-gradient(circle at center, var(--brand-red) 2px, transparent 2px),
-            linear-gradient(to right, transparent 49%, var(--tape-grey) 49%, var(--tape-grey) 51%, transparent 51%),
-            linear-gradient(to bottom, transparent 49%, var(--tape-grey) 49%, var(--tape-grey) 51%, transparent 51%);
-          background-size: 100% 100%;
-          background-position: center;
-          background-repeat: no-repeat;
-          opacity: 0.3;
-          z-index: 0;
-          pointer-events: none;
         }
 
         /* Master Container */

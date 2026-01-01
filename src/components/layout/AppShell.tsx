@@ -3,7 +3,6 @@
 import { usePlatform } from '@/hooks/usePlatform'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { SidebarNav } from '@/components/ui/SidebarNav'
-import { InstallPrompt } from '@/components/pwa/InstallPrompt'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -48,9 +47,6 @@ export function AppShell({ children, hideNav = false }: AppShellProps) {
 
       {/* Bottom Navigation - Mobile only */}
       {!hideNav && <BottomNav />}
-
-      {/* PWA Install Prompt - Web only (not in Capacitor) */}
-      {!isCapacitor && <InstallPrompt />}
     </div>
   )
 }
@@ -72,12 +68,12 @@ export function AppContent({ children, className = '', fullWidth = false }: AppC
   return (
     <div
       className={`
-        px-4 py-4
+        px-4 py-4 mx-auto
         ${showDesktopUI
           ? fullWidth
             ? 'w-full'
-            : 'max-w-[600px]'  // Desktop: wider than mobile but still compact
-          : 'max-w-[430px] mx-auto'  // Mobile: same as before
+            : 'max-w-[480px]'  // Desktop: compact centered
+          : 'max-w-[400px]'    // Mobile: smaller
         }
         ${className}
       `}
