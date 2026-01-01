@@ -3,10 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
-import { usePlatform } from '@/hooks/usePlatform'
 import { Loader2 } from 'lucide-react'
 import { motion, useMotionValue, useMotionTemplate } from 'framer-motion'
-import IOSLandingPage from '@/components/landing/IOSLandingPage'
 
 // Feature card data
 const featureCardsData = [
@@ -120,7 +118,6 @@ function FlashlightCard({
 
 export default function Home() {
   const { isAuthenticated, address, isReady, login } = useAuth()
-  const { isCapacitor, isIOS } = usePlatform()
   const router = useRouter()
   const hasNavigatedRef = useRef(false)
   const [isLoggingIn, setIsLoggingIn] = useState(false)
@@ -145,11 +142,6 @@ export default function Home() {
       router.replace('/dashboard')
     }
   }, [isAuthenticated, address, isReady, router])
-
-  // Show iOS-specific landing page for native iOS app
-  if (isCapacitor && isIOS) {
-    return <IOSLandingPage />
-  }
 
   const handleLogin = async () => {
     setIsLoggingIn(true)
