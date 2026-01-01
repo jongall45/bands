@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { InstallPrompt } from '@/components/pwa/InstallPrompt'
-import { Loader2, Mail } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
+import { motion, useMotionValue, useMotionTemplate } from 'framer-motion'
 
 // Feature card data
 const featureCardsData = [
@@ -30,6 +31,91 @@ const featureCardsData = [
     isApplePay: true,
   },
 ]
+
+// Animation variants
+const staggerContainer = {
+  hidden: { opacity: 1 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.1, delayChildren: 0.3 },
+  },
+}
+
+const scrollReveal = {
+  hidden: { opacity: 0, y: 50, filter: "blur(5px)" },
+  visible: {
+    opacity: 1,
+    y: 0,
+    filter: "blur(0px)",
+    transition: { duration: 0.8, ease: "easeOut" as const },
+  },
+}
+
+// SplitText component for character-by-character animation
+function SplitText({ children, className = "" }: { children: string; className?: string }) {
+  return (
+    <span className={className} style={{ display: "inline-block" }}>
+      {children.split("").map((char, i) => (
+        <motion.span
+          key={i}
+          style={{ display: "inline-block" }}
+          variants={{
+            hidden: { y: "100%", opacity: 0 },
+            visible: { y: 0, opacity: 1 },
+          }}
+          transition={{ duration: 0.5, ease: [0.2, 0.65, 0.3, 0.9] }}
+        >
+          {char === " " ? "\u00A0" : char}
+        </motion.span>
+      ))}
+    </span>
+  )
+}
+
+// FlashlightCard with mouse-following glow effect
+function FlashlightCard({
+  children,
+  className = "",
+  glowColor = "rgba(255, 59, 48, 0.15)"
+}: {
+  children: React.ReactNode
+  className?: string
+  glowColor?: string
+}) {
+  const mouseX = useMotionValue(0)
+  const mouseY = useMotionValue(0)
+  const [isHovered, setIsHovered] = useState(false)
+
+  function handleMouseMove(e: React.MouseEvent<HTMLDivElement>) {
+    const { left, top } = e.currentTarget.getBoundingClientRect()
+    mouseX.set(e.clientX - left)
+    mouseY.set(e.clientY - top)
+  }
+
+  return (
+    <div
+      className={`feature-card ${className}`}
+      onMouseMove={handleMouseMove}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      {/* Flashlight glow effect */}
+      <motion.div
+        className="flashlight-glow"
+        style={{
+          background: useMotionTemplate`radial-gradient(600px circle at ${mouseX}px ${mouseY}px, ${glowColor}, transparent 40%)`,
+          opacity: isHovered ? 1 : 0,
+        }}
+      />
+      {/* Top edge highlight */}
+      <div className="top-highlight" />
+      {/* Content */}
+      <div className="card-content">
+        {children}
+      </div>
+    </div>
+  )
+}
 
 export default function Home() {
   const { isAuthenticated, address, isReady, login } = useAuth()
@@ -69,27 +155,65 @@ export default function Home() {
       {/* Master Container */}
       <div className="master-container">
         {/* Navigation */}
-        <nav className="navbar">
+        <motion.nav
+          className="navbar"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+        >
           <div className="logo">BANDS</div>
-          <button className="sign-in-btn" onClick={handleLogin} disabled={!isReady || isLoggingIn}>
+          <motion.button
+            className="sign-in-btn"
+            onClick={handleLogin}
+            disabled={!isReady || isLoggingIn}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
             {isLoggingIn ? '[ ... ]' : '[ SIGN IN ]'}
-          </button>
-        </nav>
+          </motion.button>
+        </motion.nav>
 
         {/* Hero Section */}
-        <main className="hero">
+        <motion.main
+          className="hero"
+          initial="hidden"
+          animate="visible"
+          variants={staggerContainer}
+        >
           <h1 className="hero-title">
-            <span className="title-line">SPEND.</span>
-            <span className="title-line">SAVE.</span>
-            <span className="title-line speculate">SPECULATE.</span>
+            <div style={{ overflow: "hidden" }}>
+              <SplitText>SPEND.</SplitText>
+            </div>
+            <div style={{ overflow: "hidden" }}>
+              <SplitText>SAVE.</SplitText>
+            </div>
+            <div style={{ overflow: "hidden", marginTop: 10 }}>
+              <motion.span
+                className="speculate"
+                variants={{
+                  hidden: { y: "100%", opacity: 0 },
+                  visible: { y: 0, opacity: 1 },
+                }}
+                transition={{ duration: 0.6, ease: [0.2, 0.65, 0.3, 0.9], delay: 0.4 }}
+              >
+                SPECULATE.
+              </motion.span>
+            </div>
           </h1>
 
-          <div className="subheading">
+          <motion.div className="subheading" variants={scrollReveal}>
             <span className="def-label">DEF:</span>
             <span className="def-text">THE STABLECOIN NEOBANK UTILITY DESIGNED FOR DEGENS.</span>
-          </div>
+          </motion.div>
 
-          <button className="main-cta" onClick={handleLogin} disabled={!isReady || isLoggingIn}>
+          <motion.button
+            className="main-cta"
+            onClick={handleLogin}
+            disabled={!isReady || isLoggingIn}
+            variants={scrollReveal}
+            whileHover={{ y: -4, boxShadow: "0 20px 40px rgba(255, 59, 48, 0.4)" }}
+            whileTap={{ scale: 0.98 }}
+          >
             <span className="zip-tie" />
             <span className="cta-content">
               <span className="cta-arrow">→</span>
@@ -102,18 +226,34 @@ export default function Home() {
                 <>SIGN IN WITH EMAIL</>
               )}
             </span>
-          </button>
-        </main>
+          </motion.button>
+        </motion.main>
 
         {/* Features Section */}
-        <section className="features-section">
-          <div className="section-label">(FEATURES)</div>
+        <motion.section
+          className="features-section"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-100px" }}
+          variants={staggerContainer}
+        >
+          <motion.div className="section-label" variants={scrollReveal}>
+            (FEATURES)
+          </motion.div>
 
           <div className="marquee-mask">
-            <div className="marquee-track">
+            <motion.div
+              className="marquee-track"
+              animate={{ x: ["0%", "-33.33%"] }}
+              transition={{
+                duration: 25,
+                repeat: Infinity,
+                ease: "linear",
+              }}
+            >
               {marqueeCards.map((card, i) => (
-                <div key={i} className="feature-card">
-                  <div className="card-icon">
+                <FlashlightCard key={i}>
+                  <div className={`card-icon ${card.isApplePay ? 'apple-pay' : ''}`}>
                     <img
                       src={card.logo}
                       alt={card.title}
@@ -122,11 +262,11 @@ export default function Home() {
                   </div>
                   <h3 className="card-title">{card.title}</h3>
                   <p className="card-body">{card.body}</p>
-                </div>
+                </FlashlightCard>
               ))}
-            </div>
+            </motion.div>
           </div>
-        </section>
+        </motion.section>
       </div>
 
       {/* PWA Install Prompt */}
@@ -224,7 +364,7 @@ export default function Home() {
           font-family: monospace;
           border-radius: 4px;
           backdrop-filter: blur(4px);
-          transition: all 0.2s;
+          transition: background-color 0.2s;
         }
 
         .landing-page .sign-in-btn:hover {
@@ -256,18 +396,13 @@ export default function Home() {
           color: var(--off-white);
         }
 
-        .landing-page .title-line {
-          display: block;
-        }
-
-        .landing-page .title-line.speculate {
+        .landing-page .speculate {
           color: var(--brand-red);
           text-shadow: 4px 4px 0px #000, -2px -2px 10px var(--brand-red);
           border-bottom: 6px solid var(--brand-red);
           padding: 0 10px;
           display: inline-block;
           transform: rotate(-2deg);
-          margin-top: 10px;
         }
 
         /* Subheading */
@@ -317,12 +452,7 @@ export default function Home() {
           cursor: pointer;
           box-shadow: 0 10px 30px rgba(255, 59, 48, 0.3);
           font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-          transition: all 0.2s;
-        }
-
-        .landing-page .main-cta:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 15px 40px rgba(255, 59, 48, 0.4);
+          text-transform: uppercase;
         }
 
         .landing-page .main-cta:disabled {
@@ -387,12 +517,6 @@ export default function Home() {
           display: flex;
           gap: 16px;
           width: max-content;
-          animation: marquee 30s linear infinite;
-        }
-
-        @keyframes marquee {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-33.33%); }
         }
 
         /* Feature Card */
@@ -407,28 +531,43 @@ export default function Home() {
           border: 1px solid var(--glass-border);
           box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
           border-radius: 24px;
-          padding: 24px;
-          display: flex;
-          flex-direction: column;
-          align-items: flex-start;
           position: relative;
           overflow: hidden;
-          transition: all 0.3s ease;
+          transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
 
-        .landing-page .feature-card::before {
-          content: '';
+        .landing-page .feature-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+        }
+
+        .landing-page .feature-card .flashlight-glow {
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          pointer-events: none;
+          z-index: 1;
+          transition: opacity 0.3s ease;
+        }
+
+        .landing-page .feature-card .top-highlight {
           position: absolute;
           top: 0;
           left: 0;
           right: 0;
           height: 1px;
           background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+          z-index: 2;
         }
 
-        .landing-page .feature-card:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+        .landing-page .feature-card .card-content {
+          position: relative;
+          z-index: 3;
+          padding: 24px;
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
         }
 
         .landing-page .card-icon {
@@ -475,6 +614,7 @@ export default function Home() {
           padding: 4px 8px;
           display: inline-block;
           border-radius: 4px;
+          text-transform: uppercase;
         }
 
         .landing-page .card-body {
@@ -518,7 +658,7 @@ export default function Home() {
             margin-bottom: 24px;
           }
 
-          .landing-page .title-line.speculate {
+          .landing-page .speculate {
             border-bottom-width: 4px;
             padding: 0 6px;
           }
@@ -564,6 +704,9 @@ export default function Home() {
             min-width: 200px;
             height: 280px;
             min-height: 280px;
+          }
+
+          .landing-page .feature-card .card-content {
             padding: 20px;
           }
 
@@ -580,10 +723,6 @@ export default function Home() {
 
           .landing-page .card-body {
             font-size: 11px;
-          }
-
-          .landing-page .marquee-track {
-            animation-duration: 25s;
           }
         }
 
@@ -611,6 +750,9 @@ export default function Home() {
             min-width: 180px;
             height: 260px;
             min-height: 260px;
+          }
+
+          .landing-page .feature-card .card-content {
             padding: 16px;
           }
 
