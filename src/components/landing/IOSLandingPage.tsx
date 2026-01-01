@@ -214,13 +214,13 @@ export default function IOSLandingPage() {
     }, [isAuthenticated, address, isReady, router])
 
     const handleLogin = async () => {
+        if (!isReady) return
         setIsLoggingIn(true)
         try {
-            login()
+            await login()
         } catch (error) {
             console.error('Login error:', error)
-        } finally {
-            setTimeout(() => setIsLoggingIn(false), 1000)
+            setIsLoggingIn(false)
         }
     }
 
@@ -271,15 +271,20 @@ export default function IOSLandingPage() {
                     style={{ marginTop: 30, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}
                 >
                     <motion.button
+                        type="button"
                         style={{
                             ...mainCtaHangtagStyle,
                             opacity: !isReady || isLoggingIn ? 0.7 : 1,
                             cursor: !isReady || isLoggingIn ? 'not-allowed' : 'pointer',
+                            WebkitTapHighlightColor: 'transparent',
                         }}
                         onClick={handleLogin}
+                        onTouchEnd={(e) => {
+                            e.preventDefault()
+                            handleLogin()
+                        }}
                         disabled={!isReady || isLoggingIn}
-                        whileHover={{ x: 2, scale: 1.02, boxShadow: `0 0 0 2px ${colors.black}, 0 0 0 4px ${colors.brightWhite}, 0 15px 50px rgba(255, 59, 48, 0.6)` }}
-                        whileTap={{ scale: 0.98 }}
+                        whileTap={{ scale: 0.95 }}
                     >
                         <div style={zipTieStyle}></div>
                         <span style={{ position: "relative", zIndex: 2, display: "flex", alignItems: "center", gap: 8 }}>
