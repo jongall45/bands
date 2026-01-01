@@ -2,17 +2,16 @@
 
 import { useEffect, useRef } from 'react'
 import { App } from '@capacitor/app'
-import { Browser } from '@capacitor/browser'
+import { Capacitor } from '@capacitor/core'
 
-// OAuth domains that should open in SFSafariViewController
+// OAuth domains that should use native ASWebAuthenticationSession
 const OAUTH_DOMAINS = [
   'accounts.google.com',
   'appleid.apple.com',
-  'auth.privy.io',
 ]
 
 /**
- * Check if a URL is an OAuth domain that should open externally
+ * Check if a URL is an OAuth domain
  */
 function isOAuthDomain(url: string): boolean {
   try {
@@ -26,52 +25,90 @@ function isOAuthDomain(url: string): boolean {
 }
 
 /**
- * Open URL in SFSafariViewController (external browser sheet)
+ * Open OAuth URL using native ASWebAuthenticationSession
+ * This is the Apple-approved way that Google allows
  */
-async function openInExternalBrowser(url: string): Promise<boolean> {
+async function openNativeOAuth(url: string): Promise<string | null> {
   try {
-    console.log('[AppUrlListener] Opening in SFSafariViewController:', url)
-    await Browser.open({ url, presentationStyle: 'popover' })
-    return true
-  } catch (err) {
-    console.error('[AppUrlListener] Failed to open browser:', err)
-    return false
+    // Dynamically import to avoid issues on web
+    const NativeOAuth = (await import('@/lib/capacitor/native-oauth')).default
+    console.log('[OAuth] Starting native ASWebAuthenticationSession:', url)
+
+    const result = await NativeOAuth.startOAuth({
+      url,
+      callbackScheme: 'bands'
+    })
+
+    console.log('[OAuth] Native OAuth completed:', result.url)
+    return result.url
+  } catch (error) {
+    console.error('[OAuth] Native OAuth failed:', error)
+    return null
   }
 }
 
-// Flag to track if we're in Capacitor native environment
-let isCapacitorNative = false
+/**
+ * Handle OAuth callback URL - pass params to current page for Privy to process
+ */
+function handleOAuthCallback(callbackUrl: string) {
+  try {
+    const url = new URL(callbackUrl)
+    const params = url.searchParams
 
-// Store original functions to restore later
+    // Check for Privy OAuth params
+    if (params.has('privy_oauth_code') &&
+        params.has('privy_oauth_state') &&
+        params.has('privy_oauth_provider')) {
+      console.log('[OAuth] Passing OAuth params to Privy')
+
+      // Pass params to current page for Privy to process
+      const currentUrl = new URL(window.location.href)
+      currentUrl.search = url.search
+      window.location.assign(currentUrl.toString())
+    }
+  } catch (error) {
+    console.error('[OAuth] Failed to handle callback:', error)
+  }
+}
+
+// Track if overrides are installed
+let overridesInstalled = false
 let originalWindowOpen: typeof window.open | null = null
-let isOverrideSetup = false
 
 /**
- * Set up all overrides IMMEDIATELY (not in useEffect)
- * This ensures they're in place before Privy loads
+ * Install OAuth interception at module load time
  */
-function setupOverrides() {
+function installOAuthInterception() {
   if (typeof window === 'undefined') return
-  if (isOverrideSetup) return // Already set up
+  if (overridesInstalled) return
 
-  isCapacitorNative = !!(window as any).Capacitor?.isNativePlatform?.()
-  if (!isCapacitorNative) return
+  // Check if we're in Capacitor native
+  const isNative = typeof (window as any).Capacitor !== 'undefined' &&
+                   (window as any).Capacitor.isNativePlatform?.()
+  if (!isNative) return
 
-  isOverrideSetup = true
-  console.log('[AppUrlListener] Setting up OAuth interception overrides')
+  overridesInstalled = true
+  console.log('[OAuth] Installing native OAuth interception')
 
-  // 1. Override window.open
+  // Override window.open to intercept OAuth URLs
   originalWindowOpen = window.open
   window.open = function(url?: string | URL, target?: string, features?: string): Window | null {
     const urlStr = url?.toString() || ''
 
     if (urlStr && isOAuthDomain(urlStr)) {
-      console.log('[AppUrlListener] Intercepted window.open to OAuth domain:', urlStr)
-      openInExternalBrowser(urlStr)
-      // Return a mock window object to prevent Privy from thinking the popup failed
+      console.log('[OAuth] Intercepted window.open:', urlStr)
+
+      // Start native OAuth flow
+      openNativeOAuth(urlStr).then(callbackUrl => {
+        if (callbackUrl) {
+          handleOAuthCallback(callbackUrl)
+        }
+      })
+
+      // Return mock window to prevent errors
       return {
         closed: false,
-        close: () => { Browser.close().catch(() => {}) },
+        close: () => {},
         focus: () => {},
         blur: () => {},
         postMessage: () => {},
@@ -82,163 +119,102 @@ function setupOverrides() {
     return originalWindowOpen!.call(window, url, target, features)
   }
 
-  // 2. Override location.assign and location.replace
+  // Override location.assign for OAuth URLs
   const originalAssign = window.location.assign.bind(window.location)
-  const originalReplace = window.location.replace.bind(window.location)
-
   window.location.assign = function(url: string | URL) {
     const urlStr = url.toString()
     if (isOAuthDomain(urlStr)) {
-      console.log('[AppUrlListener] Intercepted location.assign to OAuth domain:', urlStr)
-      openInExternalBrowser(urlStr)
+      console.log('[OAuth] Intercepted location.assign:', urlStr)
+      openNativeOAuth(urlStr).then(callbackUrl => {
+        if (callbackUrl) {
+          handleOAuthCallback(callbackUrl)
+        }
+      })
       return
     }
     return originalAssign(url)
   }
-
-  window.location.replace = function(url: string | URL) {
-    const urlStr = url.toString()
-    if (isOAuthDomain(urlStr)) {
-      console.log('[AppUrlListener] Intercepted location.replace to OAuth domain:', urlStr)
-      openInExternalBrowser(urlStr)
-      return
-    }
-    return originalReplace(url)
-  }
-
-  // 3. Try to intercept location.href setter (may not work in all browsers)
-  try {
-    const locationDescriptor = Object.getOwnPropertyDescriptor(window, 'location')
-    if (locationDescriptor && locationDescriptor.configurable !== false) {
-      // Can't directly override location.href, but we can use a proxy approach
-      console.log('[AppUrlListener] Note: location.href override not possible, relying on other methods')
-    }
-  } catch (e) {
-    // Ignore - location properties are usually non-configurable
-  }
 }
 
-// Run the override setup immediately when this module loads
-setupOverrides()
+// Install immediately when module loads
+installOAuthInterception()
 
 /**
- * Handles OAuth for Capacitor apps:
- * 1. Intercepts window.open calls → opens OAuth in SFSafariViewController
- * 2. Intercepts OAuth link clicks → opens in SFSafariViewController
- * 3. Watches for OAuth iframes → redirects to SFSafariViewController
- * 4. Listens for OAuth deep link callbacks → passes params back to web app
+ * Handles OAuth for Capacitor apps using native ASWebAuthenticationSession
  *
- * This component must be rendered BEFORE PrivyProvider.
+ * This component:
+ * 1. Intercepts OAuth URLs (window.open, location.assign, iframes)
+ * 2. Opens them in ASWebAuthenticationSession (system browser sheet)
+ * 3. Handles the callback and passes OAuth params to Privy
  */
 export function AppUrlListener() {
-  const mutationObserverRef = useRef<MutationObserver | null>(null)
+  const observerRef = useRef<MutationObserver | null>(null)
 
   useEffect(() => {
-    // Ensure overrides are set up (in case module-level didn't run)
-    setupOverrides()
-
-    // Only set up in Capacitor environment
     if (typeof window === 'undefined') return
-    if (!(window as any).Capacitor?.isNativePlatform?.()) return
+    if (!Capacitor.isNativePlatform()) return
 
-    console.log('[AppUrlListener] Initializing OAuth handlers')
+    // Ensure overrides are installed
+    installOAuthInterception()
 
-    // 1. Set up deep link listener for OAuth callbacks
+    console.log('[OAuth] Initializing OAuth handlers')
+
+    // Set up deep link listener for OAuth callbacks (backup)
     const setupDeepLinkListener = async () => {
-      try {
-        await App.addListener('appUrlOpen', (event) => {
-          console.log('[AppUrlListener] Received deep link:', event.url)
-          try {
-            const deepLinkUrl = new URL(event.url)
-
-            // Check if this is a Privy OAuth callback
-            // Supports both custom scheme (bands://oauth/callback?...) and Universal Links
-            const hasOAuthParams =
-              deepLinkUrl.searchParams.has('privy_oauth_code') &&
-              deepLinkUrl.searchParams.has('privy_oauth_state') &&
-              deepLinkUrl.searchParams.has('privy_oauth_provider')
-
-            if (hasOAuthParams) {
-              console.log('[AppUrlListener] Processing OAuth callback from:', deepLinkUrl.protocol)
-
-              // Close the SFSafariViewController
-              Browser.close().catch((err) => {
-                console.log('[AppUrlListener] Browser.close() result:', err)
-              })
-
-              // Pass the OAuth params to the current page
-              // This allows Privy to complete the authentication
-              const currentUrl = new URL(window.location.href)
-              currentUrl.search = deepLinkUrl.search
-              console.log('[AppUrlListener] Redirecting to:', currentUrl.toString())
-              window.location.assign(currentUrl.toString())
-            }
-          } catch (error) {
-            console.error('[AppUrlListener] Failed to parse deep link URL:', error)
-          }
-        })
-      } catch (error) {
-        console.error('[AppUrlListener] Failed to set up app URL listener:', error)
-      }
+      await App.addListener('appUrlOpen', (event) => {
+        console.log('[OAuth] Received deep link:', event.url)
+        handleOAuthCallback(event.url)
+      })
     }
 
-    // 2. Intercept OAuth link clicks to open in SFSafariViewController
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-      const anchor = target.closest('a')
-
-      if (!anchor?.href) return
-
-      if (isOAuthDomain(anchor.href)) {
-        console.log('[AppUrlListener] Intercepted click to OAuth domain:', anchor.href)
-        e.preventDefault()
-        e.stopPropagation()
-        openInExternalBrowser(anchor.href)
-      }
-    }
-
-    // 3. Watch for OAuth iframes being added to the DOM
+    // Watch for OAuth iframes and intercept them
     const setupIframeObserver = () => {
-      mutationObserverRef.current = new MutationObserver((mutations) => {
+      observerRef.current = new MutationObserver((mutations) => {
         for (const mutation of mutations) {
           for (const node of mutation.addedNodes) {
             if (node instanceof HTMLIFrameElement) {
-              const src = node.src || node.getAttribute('src') || ''
+              const src = node.src || ''
               if (isOAuthDomain(src)) {
-                console.log('[AppUrlListener] Intercepted OAuth iframe:', src)
-                // Remove the iframe and open in external browser instead
+                console.log('[OAuth] Intercepted iframe:', src)
                 node.remove()
-                openInExternalBrowser(src)
+                openNativeOAuth(src).then(callbackUrl => {
+                  if (callbackUrl) {
+                    handleOAuthCallback(callbackUrl)
+                  }
+                })
               }
             }
           }
         }
       })
 
-      mutationObserverRef.current.observe(document.body, {
+      observerRef.current.observe(document.body, {
         childList: true,
         subtree: true,
       })
     }
 
-    // 4. Intercept form submissions to OAuth domains
-    const handleSubmit = (e: SubmitEvent) => {
-      const form = e.target as HTMLFormElement
-      const action = form.action || ''
+    // Intercept click events on OAuth links
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      const anchor = target.closest('a')
+      if (!anchor?.href) return
 
-      if (isOAuthDomain(action)) {
-        console.log('[AppUrlListener] Intercepted form submit to OAuth domain:', action)
+      if (isOAuthDomain(anchor.href)) {
+        console.log('[OAuth] Intercepted click:', anchor.href)
         e.preventDefault()
         e.stopPropagation()
-        openInExternalBrowser(action)
+        openNativeOAuth(anchor.href).then(callbackUrl => {
+          if (callbackUrl) {
+            handleOAuthCallback(callbackUrl)
+          }
+        })
       }
     }
 
     setupDeepLinkListener()
     document.addEventListener('click', handleClick, true)
-    document.addEventListener('submit', handleSubmit, true)
 
-    // Wait for body to be available before setting up observer
     if (document.body) {
       setupIframeObserver()
     } else {
@@ -248,13 +224,9 @@ export function AppUrlListener() {
     return () => {
       App.removeAllListeners()
       document.removeEventListener('click', handleClick, true)
-      document.removeEventListener('submit', handleSubmit, true)
-      mutationObserverRef.current?.disconnect()
-
-      // Restore original window.open
+      observerRef.current?.disconnect()
       if (originalWindowOpen) {
         window.open = originalWindowOpen
-        originalWindowOpen = null
       }
     }
   }, [])
