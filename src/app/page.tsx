@@ -122,6 +122,19 @@ export default function Home() {
   const hasNavigatedRef = useRef(false)
   const [isLoggingIn, setIsLoggingIn] = useState(false)
 
+  // Global mouse tracking for red glow effect
+  const mouseX = useMotionValue(0)
+  const mouseY = useMotionValue(0)
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      mouseX.set(e.clientX)
+      mouseY.set(e.clientY)
+    }
+    window.addEventListener('mousemove', handleMouseMove)
+    return () => window.removeEventListener('mousemove', handleMouseMove)
+  }, [mouseX, mouseY])
+
   // Redirect to dashboard when connected
   useEffect(() => {
     if (isReady && isAuthenticated && address && !hasNavigatedRef.current) {
@@ -146,6 +159,17 @@ export default function Home() {
 
   return (
     <div className="landing-page">
+      {/* Subtle Grid Background */}
+      <div className="grid-background" />
+
+      {/* Mouse-following Red Glow */}
+      <motion.div
+        className="mouse-glow"
+        style={{
+          background: useMotionTemplate`radial-gradient(800px circle at ${mouseX}px ${mouseY}px, rgba(255, 59, 48, 0.08), transparent 40%)`,
+        }}
+      />
+
       {/* Master Container */}
       <div className="master-container">
         {/* Navigation */}
@@ -282,6 +306,27 @@ export default function Home() {
           letter-spacing: 1px;
           overflow-x: hidden;
           position: relative;
+        }
+
+        /* Subtle Grid Background */
+        .landing-page .grid-background {
+          position: fixed;
+          inset: 0;
+          background-image:
+            linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+          background-size: 50px 50px;
+          z-index: 0;
+          pointer-events: none;
+        }
+
+        /* Mouse-following Red Glow */
+        .landing-page .mouse-glow {
+          position: fixed;
+          inset: 0;
+          z-index: 1;
+          pointer-events: none;
+          transition: opacity 0.3s ease;
         }
 
         /* Master Container */
