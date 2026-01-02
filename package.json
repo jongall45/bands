@@ -16,6 +16,7 @@
     "@capacitor/browser": "^8.0.0",
     "@capacitor/cli": "^8.0.0",
     "@capacitor/core": "^8.0.0",
+    "@capacitor/haptics": "^8.0.0",
     "@capacitor/ios": "^8.0.0",
     "@coinbase/cbpay-js": "^2.4.0",
     "@coinbase/cdp-sdk": "^1.40.1",
