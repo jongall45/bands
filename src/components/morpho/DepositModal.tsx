@@ -101,7 +101,10 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
       />
 
       {/* Modal */}
-      <div className="relative z-10 w-full max-w-[430px] bg-[#0a0a0a] border border-white/[0.1] rounded-t-3xl sm:rounded-3xl p-6 max-h-[90vh] overflow-y-auto">
+      <div
+        className="relative z-10 w-full max-w-[430px] bg-[#0a0a0a] border border-white/[0.1] rounded-t-3xl sm:rounded-3xl p-6 max-h-[85vh] overflow-y-auto"
+        style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))' }}
+      >
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-white font-semibold text-lg">Deposit to {vault.name}</h2>

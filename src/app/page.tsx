@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Loader2 } from 'lucide-react'
 import { motion, useMotionValue, useMotionTemplate } from 'framer-motion'
 import IOSLandingPage from '@/components/landing/IOSLandingPage'
+import { LogoInline } from '@/components/ui/Logo'
 
 // Feature card data
 const featureCardsData = [
@@ -189,7 +190,7 @@ export default function Home() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: "easeOut" }}
         >
-          <div className="logo">BANDS</div>
+          <div className="logo"><LogoInline size="md" /></div>
           <motion.button
             className="sign-in-btn"
             onClick={handleLogin}
@@ -367,10 +368,10 @@ export default function Home() {
         }
 
         .landing-page .logo {
-          font-weight: 900;
-          font-size: 28px;
-          letter-spacing: -1px;
-          color: var(--brand-red);
+          display: flex;
+          align-items: center;
+          color: white;
+          text-transform: none;
         }
 
         .landing-page .sign-in-btn {

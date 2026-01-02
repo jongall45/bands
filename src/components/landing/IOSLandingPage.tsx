@@ -22,7 +22,7 @@ const industrialFontStack = '"Helvetica Neue", Helvetica, Arial, sans-serif'
 const noisePattern = `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.04'/%3E%3C/svg%3E")`
 
 // --- ANIMATED LOGO COMPONENT ---
-const AnimatedLogo = ({ onAnimationComplete }: { onAnimationComplete?: () => void }) => {
+const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete?: () => void; onCardLand?: () => void }) => {
     const paperVariants = {
         hidden: {
             y: -800,
@@ -45,17 +45,18 @@ const AnimatedLogo = ({ onAnimationComplete }: { onAnimationComplete?: () => voi
         }),
     }
 
+    // Cards: alternating white and red, ending with red card on top showing branding
     const papers = [
-        colors.brandRed, colors.offWhite,
-        colors.brandRed, colors.offWhite,
-        colors.brandRed, colors.offWhite
+        colors.offWhite, colors.brandRed,
+        colors.offWhite, colors.brandRed,
+        colors.offWhite, colors.brandRed
     ]
 
     return (
         <div style={{ position: "relative", width: 300, height: 160, display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
             {papers.map((color, i) => {
                 const isTopPaper = i === papers.length - 1;
-                const isWhite = color === colors.offWhite;
+                const isRed = color === colors.brandRed;
 
                 return (
                     <motion.div
@@ -64,13 +65,19 @@ const AnimatedLogo = ({ onAnimationComplete }: { onAnimationComplete?: () => voi
                         variants={paperVariants}
                         initial="hidden"
                         animate="visible"
-                        onAnimationComplete={isTopPaper ? onAnimationComplete : undefined}
+                        onAnimationComplete={() => {
+                            // Haptic feedback when each card lands
+                            onCardLand?.()
+                            if (isTopPaper) {
+                                onAnimationComplete?.()
+                            }
+                        }}
                         style={{
                             position: "absolute",
                             width: 280,
                             height: 120,
                             backgroundColor: color,
-                            border: isWhite ? `1px solid ${colors.brightWhite}` : `1px solid rgba(255,255,255,0.1)`,
+                            border: isRed ? `1px solid rgba(255,255,255,0.2)` : `1px solid ${colors.brightWhite}`,
                             boxShadow: "0 20px 40px rgba(0,0,0,0.6)",
                             zIndex: i,
                             borderRadius: "4px",
@@ -80,24 +87,44 @@ const AnimatedLogo = ({ onAnimationComplete }: { onAnimationComplete?: () => voi
                         }}
                     >
                         {isTopPaper && (
-                            <motion.span
+                            <motion.div
                                 initial={{ opacity: 0, filter: "blur(10px)" }}
                                 animate={{ opacity: 1, filter: "blur(0px)" }}
                                 transition={{ delay: 1.5, duration: 0.4 }}
                                 style={{
-                                    fontWeight: 900,
-                                    fontSize: "64px",
-                                    letterSpacing: "-4px",
-                                    color: colors.brandRed,
-                                    fontFamily: industrialFontStack,
-                                    fontStyle: "italic",
-                                    lineHeight: 1,
-                                    marginTop: -6,
-                                    textShadow: `4px 4px 0px #000, -2px -2px 10px ${colors.brandRed}`,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 12,
                                 }}
                             >
-                                BANDS
-                            </motion.span>
+                                <div style={{
+                                    width: 48,
+                                    height: 48,
+                                    background: colors.offWhite,
+                                    borderRadius: 12,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                                }}>
+                                    <span style={{
+                                        fontWeight: 900,
+                                        fontSize: 28,
+                                        color: colors.brandRed,
+                                        fontFamily: industrialFontStack,
+                                    }}>$</span>
+                                </div>
+                                <span style={{
+                                    fontWeight: 800,
+                                    fontSize: 42,
+                                    letterSpacing: "-2px",
+                                    color: colors.offWhite,
+                                    fontFamily: industrialFontStack,
+                                    textShadow: `2px 2px 0px rgba(0,0,0,0.5)`,
+                                }}>
+                                    bands
+                                </span>
+                            </motion.div>
                         )}
                     </motion.div>
                 )
@@ -221,6 +248,11 @@ export default function IOSLandingPage() {
         }
     }, [isReady, isAuthenticated, hasOAuthParams])
 
+    // Haptic on each card landing
+    const handleCardLand = () => {
+        haptics.impact('medium')
+    }
+
     // Haptic on logo animation complete
     const handleLogoComplete = () => {
         haptics.impact('heavy')
@@ -268,7 +300,7 @@ export default function IOSLandingPage() {
             <div style={masterContainerStyle}>
 
                 {/* 1. ANIMATED LOGO */}
-                <AnimatedLogo onAnimationComplete={handleLogoComplete} />
+                <AnimatedLogo onAnimationComplete={handleLogoComplete} onCardLand={handleCardLand} />
 
                 {/* 2. COMPACT FEATURE MARQUEE */}
                 <motion.div
@@ -436,22 +468,23 @@ const marqueeMaskStyle: React.CSSProperties = {
     WebkitMaskImage: "linear-gradient(to right, transparent, black 10%, black 90%, transparent)",
 }
 
-// CTA BUTTON - larger for mobile
+// CTA BUTTON - larger and wider for mobile
 const mainCtaHangtagStyle: React.CSSProperties = {
     position: "relative",
-    padding: "18px 36px",
+    padding: "20px 60px",
     backgroundColor: colors.brandRed,
     border: `2px solid ${colors.black}`,
     boxShadow: `0 0 0 2px ${colors.black}, 0 0 0 4px ${colors.brightWhite}, 0 10px 30px rgba(255, 59, 48, 0.5)`,
-    clipPath: "polygon(8% 0, 100% 0, 100% 80%, 92% 100%, 0 100%, 0 20%)",
-    paddingLeft: "48px",
+    clipPath: "polygon(5% 0, 100% 0, 100% 80%, 95% 100%, 0 100%, 0 20%)",
+    paddingLeft: "56px",
     color: colors.black,
-    fontSize: "18px",
+    fontSize: "20px",
     fontWeight: 900,
     fontFamily: industrialFontStack,
-    letterSpacing: "1px",
+    letterSpacing: "2px",
     WebkitTapHighlightColor: 'transparent',
     cursor: 'pointer',
+    minWidth: "280px",
 }
 
 const zipTieStyle: React.CSSProperties = {

@@ -22,11 +22,7 @@ type FlowStep = 'amount' | 'confirm' | 'processing' | 'started'
 
 export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: OnrampModalProps) {
   const { address, refetchBalances } = useAuth()
-  const { fundWallet } = useFundWallet({
-    onUserExited: (data) => {
-      console.log('[OnrampModal] Privy onUserExited fired:', JSON.stringify(data))
-    },
-  })
+  const { fundWallet } = useFundWallet()
   const [amount, setAmount] = useState(initialAmount || '50')
   const [step, setStep] = useState<FlowStep>('amount')
   const [error, setError] = useState<string | null>(null)
@@ -166,9 +162,6 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
 
     try {
       // Use Privy's fundWallet which handles MoonPay integration
-      // On iOS Capacitor, our native PopupWebViewController intercepts
-      // any new window requests and opens them in SFSafariViewController
-      console.log('[OnrampModal] Calling fundWallet with address:', address, 'amount:', amount)
       await fundWallet({
         address,
         options: {

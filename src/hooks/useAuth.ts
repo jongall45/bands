@@ -141,6 +141,7 @@ export function useAuth() {
     // Solana
     solanaAddress: solana.solanaAddress,
     hasSolanaWallet: solana.hasSolanaWallet,
+    solanaSplTokens: solana.splTokens, // All Solana SPL tokens with balances
     solana, // Full Solana hook for advanced usage
 
     // Wallets
