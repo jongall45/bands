@@ -38,10 +38,17 @@ export function AppUrlListener() {
           ) {
             console.log('[AppUrlListener] OAuth callback detected, passing to Privy')
 
-            // Pass OAuth params to current page for Privy to process
-            const currentUrl = new URL(window.location.href)
-            currentUrl.search = deepLinkUrl.search
-            window.location.assign(currentUrl.toString())
+            // Navigate to root URL with OAuth params (avoid redirect loop)
+            // Preserve ?app=ios for platform detection
+            const targetUrl = new URL('/', window.location.origin)
+            targetUrl.searchParams.set('app', 'ios')
+            // Copy OAuth params
+            deepLinkUrl.searchParams.forEach((value, key) => {
+              targetUrl.searchParams.set(key, value)
+            })
+
+            console.log('[AppUrlListener] Navigating to:', targetUrl.toString())
+            window.location.replace(targetUrl.toString())
           }
         } catch (error) {
           console.error('[AppUrlListener] Failed to parse deep link URL:', error)
