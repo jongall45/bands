@@ -94,6 +94,9 @@ const getPrivyConfig = (isNative: boolean) => ({
     ? (['email', 'apple'] as ('email' | 'apple')[])
     : (['email', 'google', 'apple'] as ('email' | 'google' | 'apple')[]),
 
+  // For native apps, set custom redirect URL for OAuth callback
+  ...(isNative && { customOAuthRedirectUrl: 'https://www.bands.cash/redirect' }),
+
   // Embedded wallet configuration
   embeddedWallets: {
     ethereum: {
