@@ -10,6 +10,7 @@ import { base, arbitrum, optimism, mainnet, polygon, zora, blast } from 'viem/ch
 import { PWALayout } from '@/components/layout/PWALayout'
 import { ErrorBoundary } from './ErrorBoundary'
 import { AppUrlListener } from '@/components/capacitor/AppUrlListener'
+import { WindowOpenHandler } from '@/components/capacitor/WindowOpenHandler'
 import { createSolanaRpc, createSolanaRpcSubscriptions } from '@solana/kit'
 
 // Helius RPC for reliable Solana transactions (avoids rate-limited public RPC)
@@ -93,6 +94,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ErrorBoundary>
       <AppUrlListener />
+      <WindowOpenHandler />
       <PrivyProvider
         appId={privyAppId}
         config={{
