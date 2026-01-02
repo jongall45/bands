@@ -34,13 +34,74 @@ export function WindowOpenHandler() {
     window.open = (url?: string | URL, target?: string, features?: string): Window | null => {
       console.log('[WindowOpenHandler] window.open called with:', { url: url?.toString(), target, features })
       const urlString = url?.toString()
-      if (!urlString || !urlString.startsWith('http')) {
-        console.log('[WindowOpenHandler] Ignoring non-http URL')
+
+      // If URL provided, open directly in Safari
+      if (urlString && urlString.startsWith('http')) {
+        console.log('[WindowOpenHandler] Opening URL directly in Safari:', urlString)
+        Browser.open({ url: urlString, presentationStyle: 'popover' })
         return null
       }
-      console.log('[WindowOpenHandler] Opening in Safari:', urlString)
-      Browser.open({ url: urlString, presentationStyle: 'popover' })
-      return null
+
+      // Privy calls window.open() WITHOUT a URL first, then sets popup.location.href later
+      // We need to return a fake Window object that captures the URL assignment
+      console.log('[WindowOpenHandler] Creating proxy Window to capture URL assignment')
+
+      const proxyWindow = {
+        closed: false,
+        close: () => {
+          console.log('[WindowOpenHandler] Proxy window close() called')
+          proxyWindow.closed = true
+        },
+        focus: () => { console.log('[WindowOpenHandler] Proxy window focus() called') },
+        blur: () => {},
+        postMessage: () => {},
+        // This is the key - capture location assignments
+        location: {
+          _href: '',
+          get href() { return this._href },
+          set href(url: string) {
+            console.log('[WindowOpenHandler] Proxy location.href SET to:', url)
+            if (url && url.startsWith('http')) {
+              Browser.open({ url, presentationStyle: 'popover', toolbarColor: '#000000' })
+            }
+          },
+          assign: (url: string) => {
+            console.log('[WindowOpenHandler] Proxy location.assign called with:', url)
+            if (url && url.startsWith('http')) {
+              Browser.open({ url, presentationStyle: 'popover', toolbarColor: '#000000' })
+            }
+          },
+          replace: (url: string) => {
+            console.log('[WindowOpenHandler] Proxy location.replace called with:', url)
+            if (url && url.startsWith('http')) {
+              Browser.open({ url, presentationStyle: 'popover', toolbarColor: '#000000' })
+            }
+          },
+          reload: () => {},
+          toString: () => proxyWindow.location._href,
+        },
+        document: {
+          write: (content: string) => {
+            console.log('[WindowOpenHandler] Proxy document.write called:', content.substring(0, 100))
+          },
+          writeln: (content: string) => {
+            console.log('[WindowOpenHandler] Proxy document.writeln called:', content.substring(0, 100))
+          },
+          close: () => {},
+          open: () => {},
+        },
+        opener: window,
+        parent: window,
+        self: null as any,
+        window: null as any,
+        top: null as any,
+        name: target || '',
+      }
+      proxyWindow.self = proxyWindow
+      proxyWindow.window = proxyWindow
+      proxyWindow.top = proxyWindow
+
+      return proxyWindow as unknown as Window
     }
 
     // MutationObserver to watch for ALL DOM changes (debug mode)
