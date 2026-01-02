@@ -22,6 +22,8 @@ const config: CapacitorConfig = {
       'accounts.google.com',
       '*.apple.com',
       'appleid.apple.com',
+      '*.moonpay.com',
+      'buy.moonpay.com',
     ],
   },
 

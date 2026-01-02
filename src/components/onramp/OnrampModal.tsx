@@ -6,6 +6,7 @@ import { useFundWallet } from '@privy-io/react-auth'
 import { X, ChevronDown, ChevronUp, Zap, CreditCard, ExternalLink } from 'lucide-react'
 import { base } from 'viem/chains'
 import haptics from '@/lib/haptics'
+import { BROWSER_CLOSED_EVENT } from '@/components/capacitor/WindowOpenHandler'
 
 interface OnrampModalProps {
   isOpen: boolean
@@ -88,6 +89,25 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
       document.body.style.overflow = ''
     }
   }, [isOpen])
+
+  // Listen for browser close event (Capacitor) to refetch balances
+  useEffect(() => {
+    const handleBrowserClosed = () => {
+      console.log('[OnrampModal] Browser closed, refetching balances')
+      if (isMountedRef.current) {
+        refetchBalances()
+        // If in processing or started state, stay in started state
+        if (step === 'processing') {
+          setStep('started')
+        }
+      }
+    }
+
+    window.addEventListener(BROWSER_CLOSED_EVENT, handleBrowserClosed)
+    return () => {
+      window.removeEventListener(BROWSER_CLOSED_EVENT, handleBrowserClosed)
+    }
+  }, [refetchBalances, step])
 
   // Handle amount change with typing detection
   const handleAmountChange = useCallback((value: string) => {
