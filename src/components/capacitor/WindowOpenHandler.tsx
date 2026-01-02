@@ -19,7 +19,7 @@ export function WindowOpenHandler() {
     const isCapacitor = !!(window as any).Capacitor?.isNativePlatform?.()
     if (!isCapacitor) return
 
-    console.log('[WindowOpenHandler] Setting up iframe interceptor for Capacitor')
+    console.log('[WindowOpenHandler] Setting up comprehensive interceptors for Capacitor')
 
     // Store original window.open
     const originalWindowOpen = window.open.bind(window)
@@ -30,43 +30,53 @@ export function WindowOpenHandler() {
       window.dispatchEvent(new CustomEvent(BROWSER_CLOSED_EVENT))
     })
 
-    // Override window.open to use Capacitor Browser
+    // Override window.open to use Capacitor Browser - log ALL calls
     window.open = (url?: string | URL, target?: string, features?: string): Window | null => {
+      console.log('[WindowOpenHandler] window.open called with:', { url: url?.toString(), target, features })
       const urlString = url?.toString()
       if (!urlString || !urlString.startsWith('http')) {
+        console.log('[WindowOpenHandler] Ignoring non-http URL')
         return null
       }
-      console.log('[WindowOpenHandler] Intercepted window.open:', urlString)
+      console.log('[WindowOpenHandler] Opening in Safari:', urlString)
       Browser.open({ url: urlString, presentationStyle: 'popover' })
       return null
     }
 
-    // MutationObserver to watch for iframe additions (Privy/MoonPay uses iframes)
+    // MutationObserver to watch for ALL DOM changes (debug mode)
     const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
+          if (node instanceof HTMLElement) {
+            // Log any element with privy, moonpay, or modal in its class/id
+            const className = node.className?.toString?.() || ''
+            const id = node.id || ''
+            const tagName = node.tagName?.toLowerCase() || ''
+
+            if (className.includes('privy') || id.includes('privy') ||
+                className.includes('modal') || className.includes('Modal') ||
+                className.includes('moonpay') || id.includes('moonpay')) {
+              console.log('[WindowOpenHandler] Privy/Modal element detected:', {
+                tag: tagName,
+                id,
+                className: className.substring(0, 100),
+                innerHTML: node.innerHTML?.substring(0, 200)
+              })
+            }
+          }
+
           if (node instanceof HTMLIFrameElement) {
             const src = node.src || node.getAttribute('src') || ''
-            console.log('[WindowOpenHandler] Iframe detected, src:', src)
+            console.log('[WindowOpenHandler] Iframe detected:', {
+              src,
+              id: node.id,
+              className: node.className,
+              name: node.name
+            })
 
             // Check if this is a MoonPay iframe
-            if (src.includes('moonpay.com') || src.includes('buy.moonpay')) {
-              console.log('[WindowOpenHandler] MoonPay iframe detected! Opening in Safari:', src)
-
-              // Remove the iframe so it doesn't try to load in WebView
-              node.remove()
-
-              // Open in Safari
-              Browser.open({
-                url: src,
-                presentationStyle: 'popover',
-                toolbarColor: '#000000'
-              })
-            }
-
-            // Also check for Privy funding URLs
-            if (src.includes('privy.io') && (src.includes('fund') || src.includes('moonpay'))) {
-              console.log('[WindowOpenHandler] Privy funding iframe detected! Opening in Safari:', src)
+            if (src && (src.includes('moonpay.com') || src.includes('buy.moonpay'))) {
+              console.log('[WindowOpenHandler] MoonPay iframe! Opening in Safari:', src)
               node.remove()
               Browser.open({
                 url: src,
@@ -74,18 +84,48 @@ export function WindowOpenHandler() {
                 toolbarColor: '#000000'
               })
             }
+
+            // Check for Privy funding URLs
+            if (src && src.includes('privy.io') && (src.includes('fund') || src.includes('moonpay'))) {
+              console.log('[WindowOpenHandler] Privy funding iframe! Opening in Safari:', src)
+              node.remove()
+              Browser.open({
+                url: src,
+                presentationStyle: 'popover',
+                toolbarColor: '#000000'
+              })
+            }
+
+            // Watch for src changes on iframes (Privy might set src after adding)
+            const srcObserver = new MutationObserver(() => {
+              const newSrc = node.src || node.getAttribute('src') || ''
+              if (newSrc && newSrc !== src) {
+                console.log('[WindowOpenHandler] Iframe src changed to:', newSrc)
+                if (newSrc.includes('moonpay.com') || newSrc.includes('buy.moonpay')) {
+                  console.log('[WindowOpenHandler] MoonPay detected on src change! Opening:', newSrc)
+                  node.remove()
+                  srcObserver.disconnect()
+                  Browser.open({
+                    url: newSrc,
+                    presentationStyle: 'popover',
+                    toolbarColor: '#000000'
+                  })
+                }
+              }
+            })
+            srcObserver.observe(node, { attributes: true, attributeFilter: ['src'] })
           }
         }
       }
     })
 
-    // Start observing the entire document for iframe additions
-    observer.observe(document.body, {
+    // Watch entire document, not just body
+    observer.observe(document.documentElement, {
       childList: true,
       subtree: true,
     })
 
-    console.log('[WindowOpenHandler] Iframe observer active')
+    console.log('[WindowOpenHandler] Observers active on document.documentElement')
 
     // Cleanup on unmount
     return () => {

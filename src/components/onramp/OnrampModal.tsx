@@ -22,7 +22,11 @@ type FlowStep = 'amount' | 'confirm' | 'processing' | 'started'
 
 export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: OnrampModalProps) {
   const { address, refetchBalances } = useAuth()
-  const { fundWallet } = useFundWallet()
+  const { fundWallet } = useFundWallet({
+    onUserExited: (data) => {
+      console.log('[OnrampModal] Privy onUserExited fired:', JSON.stringify(data))
+    },
+  })
   const [amount, setAmount] = useState(initialAmount || '50')
   const [step, setStep] = useState<FlowStep>('amount')
   const [error, setError] = useState<string | null>(null)
