@@ -93,7 +93,7 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/80 backdrop-blur-sm z-0"
@@ -101,10 +101,10 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
       />
 
       {/* Modal */}
-      <div className="relative z-10 w-full max-w-[430px] bg-[#0a0a0a] border border-white/[0.1] rounded-t-3xl sm:rounded-3xl p-6 max-h-[90vh] overflow-y-auto">
+      <div className="relative z-10 w-full max-w-[430px] bg-[#0a0a0a] border border-white/[0.1] rounded-3xl p-5 sm:p-6 max-h-[85vh] overflow-y-auto" style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}>
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-white font-semibold text-lg">Deposit to {vault.name}</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-white font-semibold text-base sm:text-lg">Deposit to {vault.name}</h2>
           <button
             onClick={handleClose}
             className="p-2 hover:bg-white/[0.05] rounded-full transition-colors"
@@ -127,7 +127,7 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
         ) : (
           <>
             {/* Amount Input */}
-            <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4 mb-4">
+            <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-3 sm:p-4 mb-3">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-white/40 text-sm">Amount</span>
                 <button
@@ -158,7 +158,7 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
             </div>
 
             {/* APY Info */}
-            <div className="bg-green-500/10 border border-green-500/20 rounded-2xl p-4 mb-4">
+            <div className="bg-green-500/10 border border-green-500/20 rounded-2xl p-3 sm:p-4 mb-3">
               <div className="flex items-center gap-2 mb-3">
                 <TrendingUp className="w-5 h-5 text-green-400" />
                 <span className="text-green-400 font-semibold">{apyPercent.toFixed(2)}% APY</span>
@@ -195,7 +195,7 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
             )}
 
             {/* Info Notice */}
-            <div className="flex items-start gap-2 mb-4">
+            <div className="flex items-start gap-2 mb-3">
               <AlertCircle className="w-4 h-4 text-white/30 mt-0.5 flex-shrink-0" />
               <p className="text-white/30 text-xs">
                 Deposits earn variable yield from overcollateralized lending.

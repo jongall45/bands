@@ -189,7 +189,10 @@ export default function Home() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: "easeOut" }}
         >
-          <div className="logo">BANDS</div>
+          <div className="logo">
+            <span className="logo-icon">$</span>
+            <span className="logo-text">bands</span>
+          </div>
           <motion.button
             className="sign-in-btn"
             onClick={handleLogin}
@@ -367,10 +370,30 @@ export default function Home() {
         }
 
         .landing-page .logo {
-          font-weight: 900;
-          font-size: 28px;
-          letter-spacing: -1px;
-          color: var(--brand-red);
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .landing-page .logo-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 36px;
+          height: 36px;
+          background: var(--brand-red);
+          border-radius: 10px;
+          color: white;
+          font-weight: 800;
+          font-size: 20px;
+        }
+
+        .landing-page .logo-text {
+          font-weight: 700;
+          font-size: 24px;
+          letter-spacing: -0.5px;
+          color: var(--off-white);
+          text-transform: lowercase;
         }
 
         .landing-page .sign-in-btn {
@@ -658,8 +681,14 @@ export default function Home() {
             align-items: center;
           }
 
-          .landing-page .logo {
-            font-size: 22px;
+          .landing-page .logo-icon {
+            width: 28px;
+            height: 28px;
+            font-size: 16px;
+          }
+
+          .landing-page .logo-text {
+            font-size: 20px;
           }
 
           .landing-page .sign-in-btn {

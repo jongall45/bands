@@ -154,10 +154,13 @@ export default function Dashboard() {
     }
   }, [isSuccess, refetchBalance, refetchPortfolio, queryClient])
 
-  // Calculate Solana value (approximate - SOL ~$180, USDC = $1)
-  const solValueUsd = parseFloat(balances.sol || '0') * 180 // Approximate SOL price
-  const usdcSolanaValueUsd = parseFloat(balances.usdcSolana || '0')
-  const solanaTotal = solValueUsd + usdcSolanaValueUsd
+  // Calculate Solana total from all SPL tokens (includes SOL, USDC, and all other tokens)
+  const solanaTotal = useMemo(() => {
+    if (!splTokens || splTokens.length === 0) return 0
+    return splTokens.reduce((total, token) => {
+      return total + (token.balanceUsd || 0)
+    }, 0)
+  }, [splTokens])
 
   // Use portfolio total if available, fallback to USDC balance, add Solana
   const evmTotal = portfolio?.totalValueUsd || 0

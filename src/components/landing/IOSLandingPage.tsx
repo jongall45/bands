@@ -22,7 +22,7 @@ const industrialFontStack = '"Helvetica Neue", Helvetica, Arial, sans-serif'
 const noisePattern = `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.04'/%3E%3C/svg%3E")`
 
 // --- ANIMATED LOGO COMPONENT ---
-const AnimatedLogo = ({ onAnimationComplete }: { onAnimationComplete?: () => void }) => {
+const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete?: () => void; onCardLand?: (index: number) => void }) => {
     const paperVariants = {
         hidden: {
             y: -800,
@@ -45,63 +45,100 @@ const AnimatedLogo = ({ onAnimationComplete }: { onAnimationComplete?: () => voi
         }),
     }
 
+    // Changed: Last card is now red instead of white
     const papers = [
         colors.brandRed, colors.offWhite,
         colors.brandRed, colors.offWhite,
-        colors.brandRed, colors.offWhite
+        colors.brandRed, colors.brandRed
     ]
 
     return (
-        <div style={{ position: "relative", width: 300, height: 160, display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
-            {papers.map((color, i) => {
-                const isTopPaper = i === papers.length - 1;
-                const isWhite = color === colors.offWhite;
+        <div style={{ position: "relative", width: 300, height: 200, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
+            {/* $ Logo centered above cards */}
+            <motion.div
+                initial={{ opacity: 0, scale: 0.5 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 1.3, duration: 0.4, type: "spring" }}
+                style={{
+                    position: "absolute",
+                    top: -10,
+                    zIndex: 10,
+                    width: 48,
+                    height: 48,
+                    backgroundColor: colors.brandRed,
+                    borderRadius: 12,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 8px 24px rgba(255, 59, 48, 0.4)',
+                }}
+            >
+                <span style={{
+                    color: colors.brightWhite,
+                    fontSize: 28,
+                    fontWeight: 800,
+                    fontFamily: industrialFontStack,
+                }}>$</span>
+            </motion.div>
 
-                return (
-                    <motion.div
-                        key={i}
-                        custom={i}
-                        variants={paperVariants}
-                        initial="hidden"
-                        animate="visible"
-                        onAnimationComplete={isTopPaper ? onAnimationComplete : undefined}
-                        style={{
-                            position: "absolute",
-                            width: 280,
-                            height: 120,
-                            backgroundColor: color,
-                            border: isWhite ? `1px solid ${colors.brightWhite}` : `1px solid rgba(255,255,255,0.1)`,
-                            boxShadow: "0 20px 40px rgba(0,0,0,0.6)",
-                            zIndex: i,
-                            borderRadius: "4px",
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                        }}
-                    >
-                        {isTopPaper && (
-                            <motion.span
-                                initial={{ opacity: 0, filter: "blur(10px)" }}
-                                animate={{ opacity: 1, filter: "blur(0px)" }}
-                                transition={{ delay: 1.5, duration: 0.4 }}
-                                style={{
-                                    fontWeight: 900,
-                                    fontSize: "64px",
-                                    letterSpacing: "-4px",
-                                    color: colors.brandRed,
-                                    fontFamily: industrialFontStack,
-                                    fontStyle: "italic",
-                                    lineHeight: 1,
-                                    marginTop: -6,
-                                    textShadow: `4px 4px 0px #000, -2px -2px 10px ${colors.brandRed}`,
-                                }}
-                            >
-                                BANDS
-                            </motion.span>
-                        )}
-                    </motion.div>
-                )
-            })}
+            {/* Cards container - positioned lower to make room for $ logo */}
+            <div style={{ position: "relative", width: 280, height: 120, marginTop: 40 }}>
+                {papers.map((color, i) => {
+                    const isTopPaper = i === papers.length - 1;
+                    const isRed = color === colors.brandRed;
+
+                    return (
+                        <motion.div
+                            key={i}
+                            custom={i}
+                            variants={paperVariants}
+                            initial="hidden"
+                            animate="visible"
+                            onAnimationComplete={() => {
+                                onCardLand?.(i)
+                                if (isTopPaper) onAnimationComplete?.()
+                            }}
+                            style={{
+                                position: "absolute",
+                                width: 280,
+                                height: 120,
+                                backgroundColor: color,
+                                border: isRed ? `1px solid rgba(255,255,255,0.1)` : `1px solid ${colors.brightWhite}`,
+                                boxShadow: "0 20px 40px rgba(0,0,0,0.6)",
+                                zIndex: i,
+                                borderRadius: "4px",
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}
+                        >
+                            {isTopPaper && (
+                                <motion.div
+                                    initial={{ opacity: 0, filter: "blur(10px)" }}
+                                    animate={{ opacity: 1, filter: "blur(0px)" }}
+                                    transition={{ delay: 1.5, duration: 0.4 }}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 10,
+                                    }}
+                                >
+                                    <span style={{
+                                        fontWeight: 700,
+                                        fontSize: "48px",
+                                        letterSpacing: "-2px",
+                                        color: colors.brightWhite,
+                                        fontFamily: industrialFontStack,
+                                        lineHeight: 1,
+                                    }}>
+                                        bands
+                                    </span>
+                                </motion.div>
+                            )}
+                        </motion.div>
+                    )
+                })}
+            </div>
         </div>
     )
 }
@@ -221,12 +258,18 @@ export default function IOSLandingPage() {
         }
     }, [isReady, isAuthenticated, hasOAuthParams])
 
+    // Haptic feedback for each card landing
+    const handleCardLand = (index: number) => {
+        // Stronger haptic for each card impact
+        haptics.impact('heavy')
+    }
+
     // Haptic on logo animation complete
     const handleLogoComplete = () => {
         haptics.impact('heavy')
     }
 
-    const handleLogin = () => {
+    const handleLogin = (method?: 'apple' | 'email') => {
         if (!isReady) return
         haptics.buttonPress()
         login()
@@ -268,7 +311,7 @@ export default function IOSLandingPage() {
             <div style={masterContainerStyle}>
 
                 {/* 1. ANIMATED LOGO */}
-                <AnimatedLogo onAnimationComplete={handleLogoComplete} />
+                <AnimatedLogo onAnimationComplete={handleLogoComplete} onCardLand={handleCardLand} />
 
                 {/* 2. COMPACT FEATURE MARQUEE */}
                 <motion.div
@@ -299,28 +342,74 @@ export default function IOSLandingPage() {
                     </div>
                 </motion.div>
 
-                {/* 3. CTA SECTION */}
+                {/* 3. CTA SECTION - Two Sign In Buttons */}
                 <motion.div
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 2.3, duration: 0.6 }}
-                    style={{ marginTop: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}
+                    style={{ marginTop: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', gap: 12, maxWidth: 280 }}
                 >
+                    {/* Apple Sign In Button - White */}
                     <motion.button
                         type="button"
                         style={{
-                            ...mainCtaHangtagStyle,
+                            width: '100%',
+                            padding: '14px 24px',
+                            backgroundColor: colors.brightWhite,
+                            border: 'none',
+                            borderRadius: 12,
+                            color: colors.black,
+                            fontSize: 16,
+                            fontWeight: 600,
+                            fontFamily: industrialFontStack,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 10,
+                            cursor: 'pointer',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                             opacity: !isReady ? 0.7 : 1,
                         }}
-                        onClick={handleLogin}
+                        onClick={() => handleLogin('apple')}
                         disabled={!isReady}
-                        whileTap={{ scale: 0.92 }}
+                        whileTap={{ scale: 0.96 }}
                     >
-                        <div style={zipTieStyle}></div>
-                        <span style={{ position: "relative", zIndex: 2, display: "flex", alignItems: "center", gap: 10 }}>
-                            <span style={{ background: colors.black, color: colors.brandRed, padding: "4px 8px", fontSize: 14 }}>→</span>
-                            SIGN IN
-                        </span>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                        </svg>
+                        Sign in with Apple
+                    </motion.button>
+
+                    {/* Email Sign In Button - Black/Dark */}
+                    <motion.button
+                        type="button"
+                        style={{
+                            width: '100%',
+                            padding: '14px 24px',
+                            backgroundColor: colors.black,
+                            border: `1px solid ${colors.tapeGrey}`,
+                            borderRadius: 12,
+                            color: colors.brightWhite,
+                            fontSize: 16,
+                            fontWeight: 600,
+                            fontFamily: industrialFontStack,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 10,
+                            cursor: 'pointer',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                            opacity: !isReady ? 0.7 : 1,
+                        }}
+                        onClick={() => handleLogin('email')}
+                        disabled={!isReady}
+                        whileTap={{ scale: 0.96 }}
+                    >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="2" y="4" width="20" height="16" rx="2"/>
+                            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                        </svg>
+                        Sign in with Email
                     </motion.button>
                 </motion.div>
 
@@ -436,33 +525,3 @@ const marqueeMaskStyle: React.CSSProperties = {
     WebkitMaskImage: "linear-gradient(to right, transparent, black 10%, black 90%, transparent)",
 }
 
-// CTA BUTTON - larger for mobile
-const mainCtaHangtagStyle: React.CSSProperties = {
-    position: "relative",
-    padding: "18px 36px",
-    backgroundColor: colors.brandRed,
-    border: `2px solid ${colors.black}`,
-    boxShadow: `0 0 0 2px ${colors.black}, 0 0 0 4px ${colors.brightWhite}, 0 10px 30px rgba(255, 59, 48, 0.5)`,
-    clipPath: "polygon(8% 0, 100% 0, 100% 80%, 92% 100%, 0 100%, 0 20%)",
-    paddingLeft: "48px",
-    color: colors.black,
-    fontSize: "18px",
-    fontWeight: 900,
-    fontFamily: industrialFontStack,
-    letterSpacing: "1px",
-    WebkitTapHighlightColor: 'transparent',
-    cursor: 'pointer',
-}
-
-const zipTieStyle: React.CSSProperties = {
-    position: "absolute",
-    left: "18px",
-    top: "50%",
-    transform: "translateY(-50%)",
-    width: "10px",
-    height: "10px",
-    borderRadius: "50%",
-    background: colors.black,
-    border: `2px solid ${colors.brightWhite}`,
-    zIndex: 3,
-}
