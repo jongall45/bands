@@ -60,15 +60,17 @@ interface AppContentProps {
   className?: string
   /** Full width (no max-width constraint) */
   fullWidth?: boolean
+  /** Skip top padding (use when header is sticky/fixed) */
+  noTopPadding?: boolean
 }
 
-export function AppContent({ children, className = '', fullWidth = false }: AppContentProps) {
+export function AppContent({ children, className = '', fullWidth = false, noTopPadding = false }: AppContentProps) {
   const { showDesktopUI } = usePlatform()
 
   return (
     <div
       className={`
-        px-4 py-4 mx-auto
+        px-4 mx-auto
         ${showDesktopUI
           ? fullWidth
             ? 'w-full'
@@ -78,7 +80,8 @@ export function AppContent({ children, className = '', fullWidth = false }: AppC
         ${className}
       `}
       style={{
-        paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))',
+        paddingTop: noTopPadding ? '8px' : 'calc(16px + env(safe-area-inset-top, 0px))',
+        paddingBottom: '16px',
       }}
     >
       {children}
