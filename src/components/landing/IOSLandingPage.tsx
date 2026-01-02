@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from "react"
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { useAuth } from "@/hooks/useAuth"
@@ -195,21 +195,33 @@ export default function IOSLandingPage() {
     const { isAuthenticated, address, isReady, login } = useAuth()
     const router = useRouter()
     const hasNavigatedRef = useRef(false)
+    const [showContent, setShowContent] = useState(false)
 
-    // Haptic feedback on page load
-    useEffect(() => {
-        haptics.impact('medium')
-    }, [])
+    // Check if OAuth params are in URL (processing login)
+    const hasOAuthParams = typeof window !== 'undefined' &&
+        window.location.search.includes('privy_oauth_code')
 
     // Redirect to dashboard when connected
     useEffect(() => {
         if (isReady && isAuthenticated && address && !hasNavigatedRef.current) {
             hasNavigatedRef.current = true
-            router.replace('/dashboard')
+            router.replace('/dashboard?app=ios')
         }
     }, [isAuthenticated, address, isReady, router])
 
-    // Haptic on page load (when logo animation completes)
+    // Only show content after checking auth state
+    useEffect(() => {
+        if (isReady && !isAuthenticated && !hasOAuthParams) {
+            // Small delay to ensure we're not about to redirect
+            const timer = setTimeout(() => {
+                setShowContent(true)
+                haptics.impact('medium')
+            }, 100)
+            return () => clearTimeout(timer)
+        }
+    }, [isReady, isAuthenticated, hasOAuthParams])
+
+    // Haptic on logo animation complete
     const handleLogoComplete = () => {
         haptics.impact('heavy')
     }
@@ -218,6 +230,34 @@ export default function IOSLandingPage() {
         if (!isReady) return
         haptics.buttonPress()
         login()
+    }
+
+    // Show loading while checking auth, processing OAuth, or already authenticated
+    if (!isReady || hasOAuthParams || (isAuthenticated && address) || !showContent) {
+        return (
+            <div style={{
+                ...pageBackgroundStyle,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+            }}>
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{
+                        width: 40,
+                        height: 40,
+                        border: '3px solid rgba(255, 59, 48, 0.3)',
+                        borderTopColor: colors.brandRed,
+                        borderRadius: '50%',
+                        animation: 'spin 1s linear infinite',
+                        margin: '0 auto 16px',
+                    }} />
+                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                    <p style={{ color: colors.offWhite, fontSize: 14, fontFamily: industrialFontStack }}>
+                        {hasOAuthParams ? 'COMPLETING LOGIN...' : 'LOADING...'}
+                    </p>
+                </div>
+            </div>
+        )
     }
 
     return (

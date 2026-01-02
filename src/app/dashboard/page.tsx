@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useWaitForTransactionReceipt } from 'wagmi'
 import { useReadContract } from 'wagmi'
 import { useQueryClient } from '@tanstack/react-query'
@@ -41,7 +41,12 @@ export default function Dashboard() {
   const { isAuthenticated, isConnected, address, isSmartWalletReady, logout, getClientForChain, isReady, solanaAddress, hasSolanaWallet, balances } = useAuth()
   const { sendTransaction, getConnection, fetchBalances: fetchSolanaBalances, splTokens } = useSolanaAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const queryClient = useQueryClient()
+
+  // Check if running in iOS app
+  const isIOSApp = searchParams.get('app') === 'ios' ||
+    (typeof window !== 'undefined' && !!(window as any).Capacitor?.isNativePlatform?.())
   const [copied, setCopied] = useState(false)
   const [copiedSolana, setCopiedSolana] = useState(false)
   const [showSend, setShowSend] = useState(false)
@@ -124,9 +129,9 @@ export default function Dashboard() {
   useEffect(() => {
     if (isReady && !isAuthenticated && !hasNavigatedRef.current) {
       hasNavigatedRef.current = true
-      router.push('/')
+      router.push(isIOSApp ? '/?app=ios' : '/')
     }
-  }, [isAuthenticated, isReady, router])
+  }, [isAuthenticated, isReady, router, isIOSApp])
 
   useEffect(() => {
     if (isSuccess) {
@@ -423,7 +428,11 @@ export default function Dashboard() {
           <header className="flex items-center justify-between mb-4">
             <LogoInline size="sm" />
             <button
-              onClick={() => logout()}
+              onClick={async () => {
+                await logout()
+                // Explicitly redirect after logout to preserve iOS param
+                router.replace(isIOSApp ? '/?app=ios' : '/')
+              }}
               className="p-2 text-white/40 hover:text-white/70 transition-colors"
               title="Sign out"
             >
