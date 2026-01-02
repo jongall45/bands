@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from "react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { useAuth } from "@/hooks/useAuth"
@@ -195,30 +195,10 @@ export default function IOSLandingPage() {
     const { isAuthenticated, address, isReady, login } = useAuth()
     const router = useRouter()
     const hasNavigatedRef = useRef(false)
-    const containerRef = useRef<HTMLDivElement>(null)
 
     // Haptic feedback on page load
     useEffect(() => {
         haptics.impact('medium')
-    }, [])
-
-    // Prevent scrolling on the landing page only (not Privy modal)
-    useEffect(() => {
-        const container = containerRef.current
-        if (!container) return
-
-        const preventDefault = (e: TouchEvent) => {
-            // Only prevent scroll on our container, not on modals/overlays
-            if (container.contains(e.target as Node)) {
-                e.preventDefault()
-            }
-        }
-
-        container.addEventListener('touchmove', preventDefault, { passive: false })
-
-        return () => {
-            container.removeEventListener('touchmove', preventDefault)
-        }
     }, [])
 
     // Redirect to dashboard when connected
@@ -241,7 +221,7 @@ export default function IOSLandingPage() {
     }
 
     return (
-        <div ref={containerRef} style={pageBackgroundStyle}>
+        <div style={pageBackgroundStyle}>
             <div style={gridBackgroundStyle} />
             <div style={crosshairOverlayStyle} />
 
@@ -312,15 +292,16 @@ export default function IOSLandingPage() {
 // --- STYLES ---
 
 const pageBackgroundStyle: React.CSSProperties = {
+    position: "fixed",
+    inset: 0,
     width: "100%",
-    minHeight: "100dvh",
+    height: "100%",
     backgroundColor: colors.black,
     color: colors.offWhite,
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    position: "relative",
     overflow: "hidden",
     fontFamily: industrialFontStack,
     textTransform: "uppercase",
