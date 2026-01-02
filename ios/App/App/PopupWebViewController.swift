@@ -40,7 +40,16 @@ class PopupWebViewController: CAPBridgeViewController, WKUIDelegate {
             return nil
         }
 
-        print("[PopupWebViewController] Intercepted new window request: \(url.absoluteString)")
+        let urlString = url.absoluteString
+        print("[PopupWebViewController] Intercepted new window request: \(urlString)")
+
+        // Only handle HTTP and HTTPS URLs - SFSafariViewController only supports these
+        // Ignore javascript:, about:blank, data:, and other schemes
+        guard let scheme = url.scheme?.lowercased(),
+              (scheme == "http" || scheme == "https") else {
+            print("[PopupWebViewController] Ignoring non-HTTP URL scheme: \(url.scheme ?? "none")")
+            return nil
+        }
 
         // Open in SFSafariViewController (same as Capacitor's Browser plugin)
         // This allows Apple Pay, Sign in with Apple, and other auth flows to work
@@ -51,61 +60,6 @@ class PopupWebViewController: CAPBridgeViewController, WKUIDelegate {
         // Return nil to prevent WKWebView from creating a new web view
         // The URL is handled by SFSafariViewController instead
         return nil
-    }
-
-    /**
-     * Handle JavaScript alerts
-     */
-    func webView(_ webView: WKWebView,
-                 runJavaScriptAlertPanelWithMessage message: String,
-                 initiatedByFrame frame: WKFrameInfo,
-                 completionHandler: @escaping () -> Void) {
-
-        let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
-            completionHandler()
-        })
-        present(alert, animated: true, completion: nil)
-    }
-
-    /**
-     * Handle JavaScript confirm dialogs
-     */
-    func webView(_ webView: WKWebView,
-                 runJavaScriptConfirmPanelWithMessage message: String,
-                 initiatedByFrame frame: WKFrameInfo,
-                 completionHandler: @escaping (Bool) -> Void) {
-
-        let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
-            completionHandler(false)
-        })
-        alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
-            completionHandler(true)
-        })
-        present(alert, animated: true, completion: nil)
-    }
-
-    /**
-     * Handle JavaScript prompt dialogs
-     */
-    func webView(_ webView: WKWebView,
-                 runJavaScriptTextInputPanelWithPrompt prompt: String,
-                 defaultText: String?,
-                 initiatedByFrame frame: WKFrameInfo,
-                 completionHandler: @escaping (String?) -> Void) {
-
-        let alert = UIAlertController(title: nil, message: prompt, preferredStyle: .alert)
-        alert.addTextField { textField in
-            textField.text = defaultText
-        }
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
-            completionHandler(nil)
-        })
-        alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
-            completionHandler(alert.textFields?.first?.text)
-        })
-        present(alert, animated: true, completion: nil)
     }
 
     // MARK: - Safari View Controller
