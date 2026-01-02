@@ -243,58 +243,60 @@ export default function SavePage() {
                   </div>
                 </div>
 
-                {/* Expanded Content */}
-                <div className={`overflow-hidden transition-all duration-300 ${isSavingsExpanded ? 'max-h-[500px] opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
-                  {/* Positions List */}
-                  {positions && positions.length > 0 && (
-                    <div className="space-y-2 mb-4">
-                      {positions.map((position) => {
-                        const vault = vaults?.find(
-                          v => v.address.toLowerCase() === position.vault.address.toLowerCase()
-                        )
-                        if (!vault) return null
+                {/* Expanded Content - only render when expanded */}
+                {isSavingsExpanded && (
+                  <div className="mt-4">
+                    {/* Positions List */}
+                    {positions && positions.length > 0 && (
+                      <div className="space-y-2 mb-4">
+                        {positions.map((position) => {
+                          const vault = vaults?.find(
+                            v => v.address.toLowerCase() === position.vault.address.toLowerCase()
+                          )
+                          if (!vault) return null
 
-                        return (
-                          <div
-                            key={position.vault.address}
-                            className="bg-black/20 rounded-xl p-3 flex items-center justify-between"
-                          >
-                            <div className="flex items-center gap-2">
-                              <img src={USDC_LOGO} alt="USDC" className="w-6 h-6" />
-                              <div>
-                                <p className="text-white text-sm font-medium">{position.vault.name}</p>
-                                <p className="text-green-400 text-xs">{(vault.state.netApy * 100).toFixed(2)}% APY</p>
+                          return (
+                            <div
+                              key={position.vault.address}
+                              className="bg-black/20 rounded-xl p-3 flex items-center justify-between"
+                            >
+                              <div className="flex items-center gap-2">
+                                <img src={USDC_LOGO} alt="USDC" className="w-6 h-6" />
+                                <div>
+                                  <p className="text-white text-sm font-medium">{position.vault.name}</p>
+                                  <p className="text-green-400 text-xs">{(vault.state.netApy * 100).toFixed(2)}% APY</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-white font-semibold">${position.assetsUsd?.toFixed(2)}</span>
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleSelectVault(vault) }}
+                                    className="w-7 h-7 bg-[#FF3B30] rounded-lg flex items-center justify-center hover:bg-[#dc2626] transition-colors"
+                                  >
+                                    <Plus className="w-4 h-4 text-white" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleWithdraw(vault) }}
+                                    className="w-7 h-7 bg-white/10 rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors"
+                                  >
+                                    <Minus className="w-4 h-4 text-white" />
+                                  </button>
+                                </div>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-white font-semibold">${position.assetsUsd?.toFixed(2)}</span>
-                              <div className="flex gap-1">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleSelectVault(vault) }}
-                                  className="w-7 h-7 bg-[#FF3B30] rounded-lg flex items-center justify-center hover:bg-[#dc2626] transition-colors"
-                                >
-                                  <Plus className="w-4 h-4 text-white" />
-                                </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleWithdraw(vault) }}
-                                  className="w-7 h-7 bg-white/10 rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors"
-                                >
-                                  <Minus className="w-4 h-4 text-white" />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
+                          )
+                        })}
+                      </div>
+                    )}
 
-                  {/* Projection Chart */}
-                  <SavingsProjectionChart
-                    totalDeposited={totalDeposited}
-                    avgApy={avgApy}
-                  />
-                </div>
+                    {/* Projection Chart */}
+                    <SavingsProjectionChart
+                      totalDeposited={totalDeposited}
+                      avgApy={avgApy}
+                    />
+                  </div>
+                )}
               </div>
             </button>
           </div>
