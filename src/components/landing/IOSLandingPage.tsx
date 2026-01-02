@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { useAuth } from "@/hooks/useAuth"
-import { Loader2 } from "lucide-react"
 
 // --- STYLE CONSTANTS ---
 const colors = {
@@ -21,9 +20,16 @@ const colors = {
 const industrialFontStack = '"Helvetica Neue", Helvetica, Arial, sans-serif'
 const noisePattern = `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.04'/%3E%3C/svg%3E")`
 
+// Haptic feedback helper
+const triggerHaptic = (style: 'light' | 'medium' | 'heavy' = 'medium') => {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        const duration = style === 'light' ? 10 : style === 'medium' ? 25 : 50
+        navigator.vibrate(duration)
+    }
+}
 
 // --- ANIMATED LOGO COMPONENT ---
-const AnimatedLogo = () => {
+const AnimatedLogo = ({ onAnimationComplete }: { onAnimationComplete?: () => void }) => {
     const paperVariants = {
         hidden: {
             y: -800,
@@ -53,7 +59,7 @@ const AnimatedLogo = () => {
     ]
 
     return (
-        <div style={{ position: "relative", width: 300, height: 160, display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: 30 }}>
+        <div style={{ position: "relative", width: 300, height: 160, display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
             {papers.map((color, i) => {
                 const isTopPaper = i === papers.length - 1;
                 const isWhite = color === colors.offWhite;
@@ -65,6 +71,7 @@ const AnimatedLogo = () => {
                         variants={paperVariants}
                         initial="hidden"
                         animate="visible"
+                        onAnimationComplete={isTopPaper ? onAnimationComplete : undefined}
                         style={{
                             position: "absolute",
                             width: 280,
@@ -93,15 +100,7 @@ const AnimatedLogo = () => {
                                     fontStyle: "italic",
                                     lineHeight: 1,
                                     marginTop: -6,
-                                    textShadow: `
-                                        -2px -2px 0 ${colors.brightWhite},
-                                        2px -2px 0 ${colors.brightWhite},
-                                        -2px 2px 0 ${colors.brightWhite},
-                                        2px 2px 0 ${colors.brightWhite},
-                                        0 0 20px ${colors.brandRed},
-                                        0 0 40px ${colors.brandRed}
-                                    `,
-                                    WebkitTextStroke: `2px ${colors.brightWhite}`,
+                                    textShadow: `4px 4px 0px #000, -2px -2px 10px ${colors.brandRed}`,
                                 }}
                             >
                                 BANDS
@@ -203,7 +202,28 @@ export default function IOSLandingPage() {
     const { isAuthenticated, address, isReady, login } = useAuth()
     const router = useRouter()
     const hasNavigatedRef = useRef(false)
-    const [isLoggingIn, setIsLoggingIn] = useState(false)
+    const containerRef = useRef<HTMLDivElement>(null)
+
+    // Prevent all scrolling
+    useEffect(() => {
+        const preventDefault = (e: TouchEvent) => {
+            e.preventDefault()
+        }
+
+        document.body.style.overflow = 'hidden'
+        document.body.style.position = 'fixed'
+        document.body.style.width = '100%'
+        document.body.style.height = '100%'
+        document.addEventListener('touchmove', preventDefault, { passive: false })
+
+        return () => {
+            document.body.style.overflow = ''
+            document.body.style.position = ''
+            document.body.style.width = ''
+            document.body.style.height = ''
+            document.removeEventListener('touchmove', preventDefault)
+        }
+    }, [])
 
     // Redirect to dashboard when connected
     useEffect(() => {
@@ -213,26 +233,26 @@ export default function IOSLandingPage() {
         }
     }, [isAuthenticated, address, isReady, router])
 
-    const handleLogin = async () => {
-        setIsLoggingIn(true)
-        try {
-            login()
-        } catch (error) {
-            console.error('Login error:', error)
-        } finally {
-            setTimeout(() => setIsLoggingIn(false), 1000)
-        }
+    // Haptic on logo animation complete
+    const handleLogoComplete = () => {
+        triggerHaptic('medium')
+    }
+
+    const handleLogin = () => {
+        if (!isReady) return
+        triggerHaptic('heavy')
+        login()
     }
 
     return (
-        <div style={pageBackgroundStyle}>
+        <div ref={containerRef} style={pageBackgroundStyle}>
             <div style={gridBackgroundStyle} />
             <div style={crosshairOverlayStyle} />
 
             <div style={masterContainerStyle}>
 
                 {/* 1. ANIMATED LOGO */}
-                <AnimatedLogo />
+                <AnimatedLogo onAnimationComplete={handleLogoComplete} />
 
                 {/* 2. COMPACT FEATURE MARQUEE */}
                 <motion.div
@@ -247,7 +267,7 @@ export default function IOSLandingPage() {
                                 display: "flex",
                                 gap: "20px",
                                 width: "max-content",
-                                padding: "20px 0"
+                                padding: "10px 0"
                             }}
                             animate={{ x: ["0%", "-50%"] }}
                             transition={{
@@ -268,30 +288,22 @@ export default function IOSLandingPage() {
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 2.3, duration: 0.6 }}
-                    style={{ marginTop: 30, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}
+                    style={{ marginTop: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}
                 >
                     <motion.button
+                        type="button"
                         style={{
                             ...mainCtaHangtagStyle,
-                            opacity: !isReady || isLoggingIn ? 0.7 : 1,
-                            cursor: !isReady || isLoggingIn ? 'not-allowed' : 'pointer',
+                            opacity: !isReady ? 0.7 : 1,
                         }}
                         onClick={handleLogin}
-                        disabled={!isReady || isLoggingIn}
-                        whileHover={{ x: 2, scale: 1.02, boxShadow: `0 0 0 2px ${colors.black}, 0 0 0 4px ${colors.brightWhite}, 0 15px 50px rgba(255, 59, 48, 0.6)` }}
-                        whileTap={{ scale: 0.98 }}
+                        disabled={!isReady}
+                        whileTap={{ scale: 0.92 }}
                     >
                         <div style={zipTieStyle}></div>
-                        <span style={{ position: "relative", zIndex: 2, display: "flex", alignItems: "center", gap: 8 }}>
-                            <span style={{ background: colors.black, color: colors.brandRed, padding: "2px 4px", fontSize: 10 }}>→</span>
-                            {isLoggingIn ? (
-                                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                    CONNECTING...
-                                </span>
-                            ) : (
-                                'SIGN IN'
-                            )}
+                        <span style={{ position: "relative", zIndex: 2, display: "flex", alignItems: "center", gap: 10 }}>
+                            <span style={{ background: colors.black, color: colors.brandRed, padding: "4px 8px", fontSize: 14 }}>→</span>
+                            SIGN IN
                         </span>
                     </motion.button>
                 </motion.div>
@@ -304,9 +316,8 @@ export default function IOSLandingPage() {
 // --- STYLES ---
 
 const pageBackgroundStyle: React.CSSProperties = {
-    width: "100%",
+    width: "100vw",
     height: "100vh",
-    maxHeight: "100vh",
     backgroundColor: colors.black,
     color: colors.offWhite,
     display: "flex",
@@ -319,6 +330,7 @@ const pageBackgroundStyle: React.CSSProperties = {
     right: 0,
     bottom: 0,
     overflow: "hidden",
+    touchAction: "none",
     fontFamily: industrialFontStack,
     textTransform: "uppercase",
     letterSpacing: "1px",
@@ -329,12 +341,16 @@ const pageBackgroundStyle: React.CSSProperties = {
 const masterContainerStyle: React.CSSProperties = {
     width: "100%",
     maxWidth: "600px",
+    height: "100%",
+    maxHeight: "100%",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
+    justifyContent: "center",
     zIndex: 10,
     boxSizing: "border-box",
     padding: "20px",
+    overflow: "hidden",
 }
 
 const gridBackgroundStyle: React.CSSProperties = {
@@ -360,41 +376,41 @@ const crosshairOverlayStyle: React.CSSProperties = {
 
 // CARD STYLES
 const cardStyle: React.CSSProperties = {
-    width: "180px",
-    minWidth: "180px",
-    height: "220px",
-    padding: "24px",
+    width: "160px",
+    minWidth: "160px",
+    height: "180px",
+    padding: "20px",
     backgroundColor: "transparent",
 }
 
 const iconBoxStyle: React.CSSProperties = {
-    width: "44px",
-    height: "44px",
+    width: "40px",
+    height: "40px",
     backgroundColor: colors.black,
     border: `1px solid rgba(255,255,255,0.5)`,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: "16px",
+    marginBottom: "12px",
     borderRadius: "8px",
     boxShadow: `0 4px 12px rgba(0,0,0,0.4)`,
     padding: "6px",
 }
 
 const cardTitleStyle: React.CSSProperties = {
-    fontSize: "14px",
+    fontSize: "12px",
     fontWeight: 900,
-    marginBottom: "8px",
+    marginBottom: "6px",
     color: colors.offWhite,
     backgroundColor: colors.brandRed,
-    padding: "4px 8px",
+    padding: "3px 6px",
     borderRadius: "2px",
     display: "inline-block",
     boxShadow: `0 2px 4px rgba(0,0,0,0.3)`
 }
 
 const cardBodyStyle: React.CSSProperties = {
-    fontSize: "10px",
+    fontSize: "9px",
     color: colors.offWhite,
     lineHeight: "1.4",
     fontFamily: "monospace",
@@ -405,37 +421,38 @@ const cardBodyStyle: React.CSSProperties = {
 const marqueeMaskStyle: React.CSSProperties = {
     width: "100%",
     overflow: "hidden",
-    padding: "20px 0",
+    padding: "10px 0",
     maskImage: "linear-gradient(to right, transparent, black 10%, black 90%, transparent)",
     WebkitMaskImage: "linear-gradient(to right, transparent, black 10%, black 90%, transparent)",
 }
 
-// CTA BUTTON - compact for mobile
+// CTA BUTTON - larger for mobile
 const mainCtaHangtagStyle: React.CSSProperties = {
     position: "relative",
-    padding: "10px 20px",
+    padding: "18px 36px",
     backgroundColor: colors.brandRed,
-    border: `1px solid ${colors.black}`,
-    boxShadow: `0 0 0 1px ${colors.black}, 0 0 0 2px ${colors.brightWhite}, 0 5px 20px rgba(255, 59, 48, 0.4)`,
+    border: `2px solid ${colors.black}`,
+    boxShadow: `0 0 0 2px ${colors.black}, 0 0 0 4px ${colors.brightWhite}, 0 10px 30px rgba(255, 59, 48, 0.5)`,
     clipPath: "polygon(8% 0, 100% 0, 100% 80%, 92% 100%, 0 100%, 0 20%)",
-    paddingLeft: "28px",
+    paddingLeft: "48px",
     color: colors.black,
-    fontSize: "12px",
+    fontSize: "18px",
     fontWeight: 900,
     fontFamily: industrialFontStack,
-    letterSpacing: "0.5px",
-    transition: "all 0.2s ease-in-out"
+    letterSpacing: "1px",
+    WebkitTapHighlightColor: 'transparent',
+    cursor: 'pointer',
 }
 
 const zipTieStyle: React.CSSProperties = {
     position: "absolute",
-    left: "12px",
+    left: "18px",
     top: "50%",
     transform: "translateY(-50%)",
-    width: "6px",
-    height: "6px",
+    width: "10px",
+    height: "10px",
     borderRadius: "50%",
     background: colors.black,
-    border: `1px solid ${colors.brightWhite}`,
+    border: `2px solid ${colors.brightWhite}`,
     zIndex: 3,
 }
