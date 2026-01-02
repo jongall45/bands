@@ -202,24 +202,22 @@ export default function IOSLandingPage() {
         haptics.impact('medium')
     }, [])
 
-    // Prevent all scrolling
+    // Prevent scrolling on the landing page only (not Privy modal)
     useEffect(() => {
+        const container = containerRef.current
+        if (!container) return
+
         const preventDefault = (e: TouchEvent) => {
-            e.preventDefault()
+            // Only prevent scroll on our container, not on modals/overlays
+            if (container.contains(e.target as Node)) {
+                e.preventDefault()
+            }
         }
 
-        document.body.style.overflow = 'hidden'
-        document.body.style.position = 'fixed'
-        document.body.style.width = '100%'
-        document.body.style.height = '100%'
-        document.addEventListener('touchmove', preventDefault, { passive: false })
+        container.addEventListener('touchmove', preventDefault, { passive: false })
 
         return () => {
-            document.body.style.overflow = ''
-            document.body.style.position = ''
-            document.body.style.width = ''
-            document.body.style.height = ''
-            document.removeEventListener('touchmove', preventDefault)
+            container.removeEventListener('touchmove', preventDefault)
         }
     }, [])
 
@@ -314,21 +312,16 @@ export default function IOSLandingPage() {
 // --- STYLES ---
 
 const pageBackgroundStyle: React.CSSProperties = {
-    width: "100vw",
-    height: "100vh",
+    width: "100%",
+    minHeight: "100dvh",
     backgroundColor: colors.black,
     color: colors.offWhite,
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    position: "fixed",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    position: "relative",
     overflow: "hidden",
-    touchAction: "none",
     fontFamily: industrialFontStack,
     textTransform: "uppercase",
     letterSpacing: "1px",
@@ -339,8 +332,6 @@ const pageBackgroundStyle: React.CSSProperties = {
 const masterContainerStyle: React.CSSProperties = {
     width: "100%",
     maxWidth: "600px",
-    height: "100%",
-    maxHeight: "100%",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
@@ -348,7 +339,6 @@ const masterContainerStyle: React.CSSProperties = {
     zIndex: 10,
     boxSizing: "border-box",
     padding: "20px",
-    overflow: "hidden",
 }
 
 const gridBackgroundStyle: React.CSSProperties = {
