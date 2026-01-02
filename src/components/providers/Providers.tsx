@@ -9,12 +9,19 @@ import { http } from 'viem'
 import { base, arbitrum, optimism, mainnet, polygon, zora, blast } from 'viem/chains'
 import { PWALayout } from '@/components/layout/PWALayout'
 import { ErrorBoundary } from './ErrorBoundary'
+import { AppUrlListener } from '@/components/capacitor/AppUrlListener'
 import { createSolanaRpc, createSolanaRpcSubscriptions } from '@solana/kit'
 
 // Helius RPC for reliable Solana transactions (avoids rate-limited public RPC)
 const HELIUS_API_KEY = process.env.NEXT_PUBLIC_HELIUS_RPC_KEY || 'adfbe4d1-c717-41c2-8962-0723246cbeda'
 const HELIUS_RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
 const HELIUS_WSS_URL = `wss://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
+
+// Detect if running in Capacitor native app
+const isCapacitorNative = (): boolean => {
+  if (typeof window === 'undefined') return false
+  return !!(window as any).Capacitor?.isNativePlatform?.()
+}
 
 // Wagmi config for Privy - supports all chains for cross-chain swaps
 const wagmiConfig = createConfig({
@@ -40,12 +47,20 @@ export function Providers({ children }: { children: React.ReactNode }) {
     },
   }))
   const [mounted, setMounted] = useState(false)
+  const [isNative, setIsNative] = useState(false)
 
   const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID
 
   // Ensure we only render after mounting to avoid hydration issues
   useEffect(() => {
+    const native = isCapacitorNative()
+    setIsNative(native)
     setMounted(true)
+
+    console.log('[Providers] Platform detection:', {
+      isNative: native,
+      loginMethods: native ? ['email', 'apple'] : ['email', 'google', 'apple'],
+    })
   }, [])
 
   if (!mounted) {
@@ -66,6 +81,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <ErrorBoundary>
+      <AppUrlListener />
       <PrivyProvider
         appId={privyAppId}
         config={{
@@ -77,8 +93,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
             showWalletLoginFirst: false,
           },
 
-          // Login methods
-          loginMethods: ['email', 'google', 'apple'],
+          // Login methods differ by platform:
+          // - Mobile (Capacitor): Email + Apple only (Google OAuth blocked in WebView)
+          // - Web: All methods available
+          loginMethods: isNative
+            ? ['email', 'apple']
+            : ['email', 'google', 'apple'],
+
+          // For native apps, set custom redirect URL for OAuth callback
+          ...(isNative && { customOAuthRedirectUrl: 'https://www.bands.cash/redirect' }),
 
           // Embedded wallet config - creates EOA signer for smart wallet
           embeddedWallets: {
