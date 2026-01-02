@@ -135,6 +135,7 @@ export default function Home() {
           overflow: hidden;
           z-index: 0;
           filter: blur(60px);
+          pointer-events: none;
         }
 
         .landing-page .lava {
