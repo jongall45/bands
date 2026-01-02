@@ -164,13 +164,11 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
       // Use Privy's fundWallet which handles MoonPay integration
       // On iOS Capacitor, our native PopupWebViewController intercepts
       // any new window requests and opens them in SFSafariViewController
-      await fundWallet({
-        address,
-        options: {
-          chain: base,
-          amount: amount,
-          asset: 'USDC',
-        },
+      console.log('[OnrampModal] Calling fundWallet with address:', address, 'amount:', amount)
+      await fundWallet(address, {
+        chain: base,
+        amount: amount,
+        asset: 'USDC',
       })
 
       if (!isMountedRef.current) return
