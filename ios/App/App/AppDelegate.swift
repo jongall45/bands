@@ -7,8 +7,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Use standard Capacitor view controller
-        // Privy handles OAuth via @capacitor/browser automatically
+        // Uses OAuthWebViewController (set in Main.storyboard) which intercepts
+        // navigation to appleid.apple.com and handles OAuth via ASWebAuthenticationSession
         return true
     }
 
