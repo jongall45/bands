@@ -14,8 +14,8 @@ import {
   XCircle, Loader2, PiggyBank, TrendingUp,
   ArrowLeftRight, Zap, Globe, Repeat, Plus, ChevronDown, ArrowRight
 } from 'lucide-react'
-import { findSwapRecord, getSwapByHash } from '@/lib/swapHistory'
-import { findMorphoRecord } from '@/lib/morphoHistory'
+import { findSwapRecord, getSwapByHash, getSwapHistory } from '@/lib/swapHistory'
+import { findMorphoRecord, getMorphoHistory } from '@/lib/morphoHistory'
 
 // Extended transaction type that can include paired bridge info
 interface DisplayTransaction extends Transaction {
@@ -120,10 +120,113 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
 
   // Group bridge send/receive pairs into swap views - MUST be before any early returns
   const groupedTransactions = useMemo(() => {
-    if (!transactions || transactions.length === 0) return []
-
     const result: DisplayTransaction[] = []
     const usedHashes = new Set<string>()
+    const usedLocalRecordHashes = new Set<string>()
+
+    // STEP 1: Add recent local swap records that haven't been matched to Dune yet
+    // This ensures swaps appear IMMEDIATELY after completion, before Dune indexes them
+    const recentSwaps = getSwapHistory()
+    const now = Date.now()
+    const RECENT_WINDOW = 10 * 60 * 1000 // 10 minutes
+
+    for (const swapRecord of recentSwaps) {
+      // Only show recent swaps (within 10 minutes)
+      if (now - swapRecord.timestamp > RECENT_WINDOW) continue
+
+      // Check if this swap matches any Dune transaction (by timestamp proximity)
+      const matchedToDune = transactions?.some(tx => {
+        const timeDiff = Math.abs(tx.timestamp - swapRecord.timestamp)
+        return timeDiff < RECENT_WINDOW
+      })
+
+      // If not matched to Dune yet, show it directly from local storage
+      if (!matchedToDune) {
+        usedLocalRecordHashes.add(swapRecord.txHash)
+        const localSwapTx: DisplayTransaction = {
+          hash: swapRecord.txHash,
+          type: 'swap',
+          from: '',
+          to: '',
+          value: '0',
+          tokenSymbol: swapRecord.fromToken.symbol,
+          tokenDecimals: 6,
+          timestamp: swapRecord.timestamp,
+          status: 'success',
+          blockNumber: '0',
+          chainId: swapRecord.fromToken.chainId,
+          chainName: CHAIN_NAMES[swapRecord.fromToken.chainId] || 'Chain',
+          chainLogo: CHAIN_LOGOS[swapRecord.fromToken.chainId] || '',
+          isGroupedSwap: true,
+          appName: 'Relay',
+          appCategory: 'Bridge',
+          bridgePair: {
+            fromToken: {
+              symbol: swapRecord.fromToken.symbol,
+              amount: swapRecord.fromToken.amount,
+              logo: swapRecord.fromToken.logoURI || '',
+              chainId: swapRecord.fromToken.chainId,
+              chainName: CHAIN_NAMES[swapRecord.fromToken.chainId] || 'Chain',
+              chainLogo: CHAIN_LOGOS[swapRecord.fromToken.chainId] || '',
+            },
+            toToken: {
+              symbol: swapRecord.toToken.symbol,
+              amount: swapRecord.toToken.amount,
+              logo: swapRecord.toToken.logoURI || '',
+              chainId: swapRecord.toToken.chainId,
+              chainName: CHAIN_NAMES[swapRecord.toToken.chainId] || 'Chain',
+              chainLogo: CHAIN_LOGOS[swapRecord.toToken.chainId] || '',
+            }
+          }
+        }
+        result.push(localSwapTx)
+      }
+    }
+
+    // STEP 2: Add recent local Morpho records that haven't been matched to Dune yet
+    const recentMorpho = getMorphoHistory()
+    for (const morphoRecord of recentMorpho) {
+      if (now - morphoRecord.timestamp > RECENT_WINDOW) continue
+
+      const matchedToDune = transactions?.some(tx => {
+        const timeDiff = Math.abs(tx.timestamp - morphoRecord.timestamp)
+        return timeDiff < RECENT_WINDOW
+      })
+
+      if (!matchedToDune) {
+        usedLocalRecordHashes.add(morphoRecord.txHash)
+        const localMorphoTx: DisplayTransaction = {
+          hash: morphoRecord.txHash,
+          type: morphoRecord.type === 'deposit' ? 'vault_deposit' : 'vault_withdraw',
+          from: '',
+          to: morphoRecord.vaultAddress,
+          value: '0',
+          tokenSymbol: 'USDC',
+          tokenDecimals: 6,
+          tokenAmount: morphoRecord.amount,
+          timestamp: morphoRecord.timestamp,
+          status: 'success',
+          blockNumber: '0',
+          chainId: morphoRecord.chainId,
+          chainName: CHAIN_NAMES[morphoRecord.chainId] || 'Base',
+          chainLogo: CHAIN_LOGOS[morphoRecord.chainId] || '',
+          appName: 'Morpho',
+          appCategory: 'Lending',
+          vaultName: morphoRecord.vaultName,
+          token: {
+            symbol: 'USDC',
+            amount: morphoRecord.amount,
+            logoURI: USDC_LOGO,
+          }
+        }
+        result.push(localMorphoTx)
+      }
+    }
+
+    // STEP 3: Process Dune transactions and enrich with local data
+    if (!transactions || transactions.length === 0) {
+      return result.sort((a, b) => b.timestamp - a.timestamp)
+    }
 
     // Sort by timestamp descending
     const sorted = [...transactions].sort((a, b) => b.timestamp - a.timestamp)
@@ -131,14 +234,13 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
     for (const tx of sorted) {
       if (usedHashes.has(tx.hash)) continue
 
-      // First, check if we have a swap record from local storage for this transaction
-      // This handles cross-chain swaps to non-EVM chains (like Solana)
+      // Check if we have a swap record from local storage for this transaction
       // Use findSwapRecord which tries hash match first, then timestamp-based matching
-      // (needed for ERC-4337 where userOp hash differs from on-chain tx hash)
       const tokenHint = tx.token?.symbol || tx.tokenSymbol || undefined
       const swapRecord = tx.hash ? findSwapRecord(tx.hash, tx.timestamp, tokenHint) : null
-      if (swapRecord) {
+      if (swapRecord && !usedLocalRecordHashes.has(swapRecord.txHash)) {
         usedHashes.add(tx.hash)
+        usedLocalRecordHashes.add(swapRecord.txHash)
         const groupedTx: DisplayTransaction = {
           ...tx,
           isGroupedSwap: true,
@@ -168,10 +270,10 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
       }
 
       // Check for Morpho deposit/withdraw records from local storage
-      // (needed for ERC-4337 where userOp hash differs from on-chain tx hash)
       const morphoRecord = tx.hash ? findMorphoRecord(tx.hash, tx.timestamp) : null
-      if (morphoRecord) {
+      if (morphoRecord && !usedLocalRecordHashes.has(morphoRecord.txHash)) {
         usedHashes.add(tx.hash)
+        usedLocalRecordHashes.add(morphoRecord.txHash)
         const morphoTx: DisplayTransaction = {
           ...tx,
           type: morphoRecord.type === 'deposit' ? 'vault_deposit' : 'vault_withdraw',
