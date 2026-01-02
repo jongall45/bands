@@ -26,9 +26,9 @@ const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete
     // Track which cards have already triggered haptics
     const landedCardsRef = React.useRef<Set<number>>(new Set())
 
-    // Card dimensions - 2.5x smaller than before
-    const cardWidth = 160  // was 280
-    const cardHeight = 70  // was 120
+    // Card dimensions - smaller cards
+    const cardWidth = 130
+    const cardHeight = 55
 
     const paperVariants = {
         hidden: {
@@ -86,41 +86,39 @@ const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete
     }, [])
 
     return (
-        <div style={{ position: "relative", width: 200, height: 140, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
-            {/* $ Logo centered above cards */}
+        <div style={{ position: "relative", width: 180, height: 160, display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 12 }}>
+            {/* $ Logo centered above cards - positioned higher */}
             <motion.div
                 initial={{ opacity: 0, scale: 0.5 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: 0.8, duration: 0.4, type: "spring" }}
                 style={{
-                    position: "absolute",
-                    top: -5,
-                    zIndex: 10,
-                    width: 40,
-                    height: 40,
+                    width: 36,
+                    height: 36,
                     backgroundColor: colors.brandRed,
-                    borderRadius: 10,
+                    borderRadius: 9,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     boxShadow: '0 6px 20px rgba(255, 59, 48, 0.4)',
+                    marginBottom: 12,
                 }}
             >
                 <span style={{
                     color: colors.brightWhite,
-                    fontSize: 24,
+                    fontSize: 20,
                     fontWeight: 800,
                     fontFamily: industrialFontStack,
                 }}>$</span>
             </motion.div>
 
-            {/* Cards container - positioned lower to make room for $ logo */}
-            <div style={{ position: "relative", width: cardWidth, height: cardHeight + 30, marginTop: 30 }}>
+            {/* Cards container */}
+            <div style={{ position: "relative", width: cardWidth, height: cardHeight + 25 }}>
                 {papers.map((color, i) => {
                     const isTopPaper = i === papers.length - 1;
                     const isRed = color === colors.brandRed;
                     // Add vertical offset for visual stacking effect
-                    const yOffset = (papers.length - 1 - i) * 5;
+                    const yOffset = (papers.length - 1 - i) * 4;
 
                     return (
                         <motion.div
@@ -135,7 +133,7 @@ const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete
                                 height: cardHeight,
                                 backgroundColor: color,
                                 border: isRed ? `1px solid rgba(255,255,255,0.1)` : `1px solid ${colors.brightWhite}`,
-                                boxShadow: "0 12px 30px rgba(0,0,0,0.5)",
+                                boxShadow: "0 10px 25px rgba(0,0,0,0.5)",
                                 zIndex: i,
                                 borderRadius: "3px",
                                 display: 'flex',
@@ -157,7 +155,7 @@ const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete
                                 >
                                     <span style={{
                                         fontWeight: 700,
-                                        fontSize: "32px",
+                                        fontSize: "26px",
                                         letterSpacing: "-1px",
                                         color: colors.brightWhite,
                                         fontFamily: industrialFontStack,

@@ -308,12 +308,12 @@ const TokenModal: React.FC<TokenModalProps> = ({
   if (!isOpen) return null
 
   return (
-    <div 
-      className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+    <div
+      className="fixed inset-0 z-[999999] flex items-start sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4 pt-[60px] sm:pt-4"
       onClick={onClose}
     >
-      <div 
-        className="bg-[#0f0f0f] w-full max-w-[600px] h-[350px] rounded-[20px] shadow-2xl flex overflow-hidden border border-white/10"
+      <div
+        className="bg-[#0f0f0f] w-full max-w-[600px] h-[280px] sm:h-[350px] rounded-[20px] shadow-2xl flex overflow-hidden border border-white/10"
         onClick={e => e.stopPropagation()}
       >
         {/* SIDEBAR - Chain Selection */}

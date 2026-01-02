@@ -96,6 +96,9 @@ interface TransactionListProps {
   crossChain?: boolean
 }
 
+// Solana chain ID (Relay uses this)
+const SOLANA_CHAIN_ID = 792703809
+
 // Chain info helpers (outside component to avoid recreation)
 const CHAIN_LOGOS: Record<number, string> = {
   1: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
@@ -103,9 +106,10 @@ const CHAIN_LOGOS: Record<number, string> = {
   42161: 'https://assets.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg',
   10: 'https://assets.coingecko.com/coins/images/25244/small/Optimism.png',
   137: 'https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png',
+  [SOLANA_CHAIN_ID]: 'https://cryptologos.cc/logos/solana-sol-logo.png',
 }
 const CHAIN_NAMES: Record<number, string> = {
-  1: 'ETH', 8453: 'Base', 42161: 'ARB', 10: 'OP', 137: 'MATIC'
+  1: 'ETH', 8453: 'Base', 42161: 'ARB', 10: 'OP', 137: 'MATIC', [SOLANA_CHAIN_ID]: 'SOL'
 }
 
 export function TransactionList({ address, limit = 5, crossChain = true }: TransactionListProps) {
@@ -319,8 +323,21 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
 
   // Get display info based on transaction type
   const getDisplayInfo = () => {
+    // Helper to get token logo with fallback
+    const getTokenLogo = (symbol: string, address?: string, txChainId?: number) => {
+      if (symbol === 'USDC') return USDC_LOGO
+      if (symbol === 'ETH') return 'https://assets.coingecko.com/coins/images/279/small/ethereum.png'
+      if (symbol === 'SOL') return 'https://cryptologos.cc/logos/solana-sol-logo.png'
+      if (address && txChainId) return `https://api.sim.dune.com/beta/token/logo/${txChainId}/${address}`
+      return ''
+    }
+
     // Swap transaction
     if (isSwap && tx.swapFromToken && tx.swapToToken) {
+      const fromLogo = tx.swapFromToken.logoUri || getTokenLogo(tx.swapFromToken.symbol, undefined, chainId)
+      const toLogo = tx.swapToToken.logoUri || getTokenLogo(tx.swapToToken.symbol, undefined, chainId)
+      const chainLogo = CHAIN_LOGOS[chainId] || ''
+
       return {
         label: 'Swapped',
         sublabel: `${tx.swapFromToken.symbol} → ${tx.swapToToken.symbol}`,
@@ -329,10 +346,23 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
         amountColor: 'text-white',
         amountPrefix: '',
         customAmount: (
-          <div className="flex items-center gap-1">
-            <span className="text-white/60">-{tx.swapFromToken.amount}</span>
-            <ArrowLeftRight className="w-3 h-3 text-white/40" />
-            <span className="text-green-400">+{tx.swapToToken.amount}</span>
+          <div className="flex flex-col items-end gap-0.5">
+            <div className="flex items-center gap-1">
+              <span className="text-white/70 text-xs">-{tx.swapFromToken.amount}</span>
+              <div className="relative w-4 h-4 flex-shrink-0">
+                <img src={fromLogo} alt={tx.swapFromToken.symbol} className="w-4 h-4 rounded-full bg-white/10" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                {chainId !== 8453 && chainLogo && <img src={chainLogo} alt="" className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-black/50" />}
+              </div>
+              <span className="text-white/50 text-[10px]">{tx.swapFromToken.symbol}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-green-400 text-xs">+{tx.swapToToken.amount}</span>
+              <div className="relative w-4 h-4 flex-shrink-0">
+                <img src={toLogo} alt={tx.swapToToken.symbol} className="w-4 h-4 rounded-full bg-white/10" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                {chainId !== 8453 && chainLogo && <img src={chainLogo} alt="" className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-black/50" />}
+              </div>
+              <span className="text-green-400/70 text-[10px]">{tx.swapToToken.symbol}</span>
+            </div>
           </div>
         ),
       }
@@ -459,66 +489,92 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
         
         // Token with chain badge component - smaller sizes for better UI fit
         const TokenWithChainBadge = ({
-          tokenImg, tokenAlt, chainImg, chainAlt, size = 'sm'
+          tokenImg, tokenAlt, chainImg, chainAlt, size = 'sm', showSymbol = false
         }: {
-          tokenImg: string; tokenAlt: string; chainImg: string; chainAlt: string; size?: 'xs' | 'sm' | 'md' | 'lg'
-        }) => (
-          <div className={`relative ${size === 'xs' ? 'w-3.5 h-3.5' : size === 'sm' ? 'w-4 h-4' : size === 'md' ? 'w-5 h-5' : 'w-6 h-6'} flex-shrink-0`}>
-            <img
-              src={tokenImg}
-              alt={tokenAlt}
-              className={`${size === 'xs' ? 'w-3.5 h-3.5' : size === 'sm' ? 'w-4 h-4' : size === 'md' ? 'w-5 h-5' : 'w-6 h-6'} rounded-full`}
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-            />
-            {chainImg && (
+          tokenImg: string; tokenAlt: string; chainImg: string; chainAlt: string; size?: 'xs' | 'sm' | 'md' | 'lg'; showSymbol?: boolean
+        }) => {
+          const sizeClasses = {
+            xs: 'w-3.5 h-3.5',
+            sm: 'w-4 h-4',
+            md: 'w-5 h-5',
+            lg: 'w-6 h-6',
+          }
+          const badgeClasses = {
+            xs: '-bottom-0.5 -right-0.5 w-1.5 h-1.5',
+            sm: '-bottom-0.5 -right-0.5 w-2 h-2',
+            md: '-bottom-0.5 -right-0.5 w-2.5 h-2.5',
+            lg: '-bottom-1 -right-1 w-3 h-3',
+          }
+          return (
+            <div className={`relative ${sizeClasses[size]} flex-shrink-0`}>
               <img
-                src={chainImg}
-                alt={chainAlt}
-                className={`absolute ${size === 'xs' ? '-bottom-0.5 -right-0.5 w-1.5 h-1.5' : size === 'sm' ? '-bottom-0.5 -right-0.5 w-2 h-2' : '-bottom-0.5 -right-0.5 w-2.5 h-2.5'} rounded-full border border-black/50`}
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                src={tokenImg}
+                alt={tokenAlt}
+                className={`${sizeClasses[size]} rounded-full bg-white/10`}
+                onError={(e) => {
+                  // Replace with a placeholder showing the first letter
+                  const parent = (e.target as HTMLImageElement).parentElement
+                  if (parent && !parent.querySelector('.token-fallback')) {
+                    (e.target as HTMLImageElement).style.display = 'none'
+                    const fallback = document.createElement('div')
+                    fallback.className = `token-fallback ${sizeClasses[size]} rounded-full bg-white/20 flex items-center justify-center text-[8px] font-bold text-white/70`
+                    fallback.textContent = tokenAlt.charAt(0).toUpperCase()
+                    parent.appendChild(fallback)
+                  }
+                }}
               />
-            )}
-          </div>
-        )
+              {chainImg && (
+                <img
+                  src={chainImg}
+                  alt={chainAlt}
+                  className={`absolute ${badgeClasses[size]} rounded-full border border-black/50`}
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                />
+              )}
+            </div>
+          )
+        }
         
         // GROUPED SWAP: Show both sides of the cross-chain swap
         if (isGroupedSwap && tx.bridgePair) {
           const { fromToken, toToken } = tx.bridgePair
           const fromAmount = formatBridgeAmount(fromToken.amount)
           const toAmount = formatBridgeAmount(toToken.amount)
-          
+
           return {
-            label: tx.appName || 'Bridge',
-            sublabel: `${fromToken.chainName} → ${toToken.chainName}`,
-            icon: isRelay ? (
+            label: 'Relay',
+            sublabel: 'Cross-chain Swap',
+            icon: (
               <img src={RELAY_LOGO} alt="Relay" className="w-5 h-5 rounded-full object-cover" />
-            ) : <Globe className="w-5 h-5 text-blue-400" />,
-            iconBg: isRelay ? 'bg-[#7B3FE4]/20' : 'bg-blue-500/10',
+            ),
+            iconBg: 'bg-[#7B3FE4]/20',
             amountColor: 'text-white',
             amountPrefix: '',
             customAmount: (
               <div className="flex flex-col items-end gap-0.5">
                 {/* From token - what you sold */}
                 <div className="flex items-center gap-1">
-                  <span className="text-white">-{fromAmount}</span>
-                  <TokenWithChainBadge 
-                    tokenImg={fromToken.logo} 
+                  <span className="text-white/70 text-xs">-{fromAmount}</span>
+                  <TokenWithChainBadge
+                    tokenImg={fromToken.logo}
                     tokenAlt={fromToken.symbol}
                     chainImg={fromToken.chainLogo}
                     chainAlt={fromToken.chainName}
                     size="sm"
                   />
+                  <span className="text-white/50 text-[10px]">{fromToken.symbol}</span>
                 </div>
                 {/* To token - what you received */}
                 <div className="flex items-center gap-1 text-[11px]">
                   <span className="text-green-400">+{toAmount}</span>
-                  <TokenWithChainBadge 
-                    tokenImg={toToken.logo} 
+                  <TokenWithChainBadge
+                    tokenImg={toToken.logo}
                     tokenAlt={toToken.symbol}
                     chainImg={toToken.chainLogo}
                     chainAlt={toToken.chainName}
                     size="sm"
                   />
+                  <span className="text-green-400/70 text-[10px]">{toToken.symbol}</span>
                 </div>
               </div>
             ),
@@ -578,16 +634,16 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
           const toToken = swapRecord.toToken
           const fromChainLogo = CHAIN_LOGOS[fromToken.chainId] || ''
           const toChainLogo = CHAIN_LOGOS[toToken.chainId] || ''
-          const fromChainName = chainNames[fromToken.chainId] || 'Chain'
-          const toChainName = chainNames[toToken.chainId] || 'Chain'
-          
+          const fromChainName = CHAIN_NAMES[fromToken.chainId] || 'Chain'
+          const toChainName = CHAIN_NAMES[toToken.chainId] || 'Chain'
+
           return {
-            label: tx.appName || 'Relay',
+            label: 'Relay',
             sublabel: 'Cross-chain Swap',
-            icon: isRelay ? (
+            icon: (
               <img src={RELAY_LOGO} alt="Relay" className="w-5 h-5 rounded-full object-cover" />
-            ) : <Globe className="w-5 h-5 text-blue-400" />,
-            iconBg: isRelay ? 'bg-[#7B3FE4]/20' : 'bg-blue-500/10',
+            ),
+            iconBg: 'bg-[#7B3FE4]/20',
             amountColor: 'text-green-400',
             amountPrefix: '+',
             customAmount: (
@@ -597,26 +653,28 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
                   <span className="text-green-400">
                     +{parseFloat(toToken.amount).toFixed(toToken.symbol === 'USDC' ? 2 : 6)}
                   </span>
-                  <TokenWithChainBadge 
-                    tokenImg={toToken.logoURI || destTokenLogo} 
+                  <TokenWithChainBadge
+                    tokenImg={toToken.logoURI || destTokenLogo}
                     tokenAlt={toToken.symbol}
                     chainImg={toChainLogo}
                     chainAlt={toChainName}
                     size="sm"
                   />
+                  <span className="text-green-400/70 text-[10px]">{toToken.symbol}</span>
                 </div>
                 {/* What you sent (white/gray, below) */}
                 <div className="flex items-center gap-1 text-[11px]">
                   <span className="text-white/70">
                     -{parseFloat(fromToken.amount).toFixed(fromToken.symbol === 'USDC' ? 2 : 6)}
                   </span>
-                  <TokenWithChainBadge 
-                    tokenImg={fromToken.logoURI || tokenLogo} 
+                  <TokenWithChainBadge
+                    tokenImg={fromToken.logoURI || tokenLogo}
                     tokenAlt={fromToken.symbol}
                     chainImg={fromChainLogo}
                     chainAlt={fromChainName}
                     size="sm"
                   />
+                  <span className="text-white/50 text-[10px]">{fromToken.symbol}</span>
                 </div>
               </div>
             ),
@@ -625,7 +683,7 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
         
         // Fallback: No swap history, show what Dune gave us
         return {
-          label: tx.appName || 'Bridge',
+          label: isRelay ? 'Relay' : (tx.appName || 'Bridge'),
           sublabel: isSending ? 'Cross-chain Swap' : `Bridge · ${chainName}`,
           icon: isRelay ? (
             <img src={RELAY_LOGO} alt="Relay" className="w-5 h-5 rounded-full object-cover" />
@@ -637,29 +695,30 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
             <div className="flex flex-col items-end gap-0.5">
               {/* What you sent/received */}
               <div className="flex items-center gap-1">
-                <span className={isSending ? 'text-white' : 'text-green-400'}>
+                <span className={isSending ? 'text-white/70 text-xs' : 'text-green-400 text-xs'}>
                   {isSending ? '-' : '+'}{displayAmount}
                 </span>
-                <TokenWithChainBadge 
-                  tokenImg={tokenLogo} 
+                <TokenWithChainBadge
+                  tokenImg={tokenLogo}
                   tokenAlt={tokenSymbol}
                   chainImg={chainLogo}
                   chainAlt={chainName}
                   size="sm"
                 />
+                <span className={isSending ? 'text-white/50 text-[10px]' : 'text-green-400/70 text-[10px]'}>{tokenSymbol}</span>
               </div>
               {/* What you're getting (for sends) - show destination token */}
               {isSending && (
                 <div className="flex items-center gap-1 text-[11px]">
                   <span className="text-green-400">→</span>
-                  <TokenWithChainBadge 
-                    tokenImg={destTokenLogo} 
+                  <TokenWithChainBadge
+                    tokenImg={destTokenLogo}
                     tokenAlt={destToken}
                     chainImg={destChainLogo}
                     chainAlt={destChain}
                     size="sm"
                   />
-                  <span className="text-green-400">{destToken}</span>
+                  <span className="text-green-400/70 text-[10px]">{destToken}</span>
                 </div>
               )}
             </div>
