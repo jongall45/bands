@@ -165,10 +165,13 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
       // On iOS Capacitor, our native PopupWebViewController intercepts
       // any new window requests and opens them in SFSafariViewController
       console.log('[OnrampModal] Calling fundWallet with address:', address, 'amount:', amount)
-      await fundWallet(address, {
-        chain: base,
-        amount: amount,
-        asset: 'USDC',
+      await fundWallet({
+        address,
+        options: {
+          chain: base,
+          amount: amount,
+          asset: 'USDC',
+        },
       })
 
       if (!isMountedRef.current) return
