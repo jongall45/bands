@@ -46,7 +46,34 @@ export function WindowOpenHandler() {
       // We need to return a fake Window object that captures the URL assignment
       console.log('[WindowOpenHandler] Creating proxy Window to capture URL assignment')
 
-      const proxyWindow = {
+      // Helper to open URL in Safari
+      const openInSafari = (url: string) => {
+        console.log('[WindowOpenHandler] >>> OPENING IN SAFARI:', url)
+        Browser.open({ url, presentationStyle: 'popover', toolbarColor: '#000000' })
+      }
+
+      // Helper to extract URLs from HTML content
+      const extractAndOpenUrls = (content: string) => {
+        // Look for MoonPay URLs in the content
+        const moonpayMatch = content.match(/https:\/\/[^"'\s]*moonpay[^"'\s]*/i)
+        if (moonpayMatch) {
+          console.log('[WindowOpenHandler] Found MoonPay URL in content:', moonpayMatch[0])
+          openInSafari(moonpayMatch[0])
+          return true
+        }
+        // Look for any redirect URLs
+        const redirectMatch = content.match(/(?:href|src|url|location)\s*[=:]\s*["']?(https:\/\/[^"'\s>]+)/i)
+        if (redirectMatch) {
+          console.log('[WindowOpenHandler] Found redirect URL in content:', redirectMatch[1])
+          if (redirectMatch[1].includes('moonpay') || redirectMatch[1].includes('privy')) {
+            openInSafari(redirectMatch[1])
+            return true
+          }
+        }
+        return false
+      }
+
+      const proxyWindow: any = {
         closed: false,
         close: () => {
           console.log('[WindowOpenHandler] Proxy window close() called')
@@ -54,41 +81,82 @@ export function WindowOpenHandler() {
         },
         focus: () => { console.log('[WindowOpenHandler] Proxy window focus() called') },
         blur: () => {},
-        postMessage: () => {},
-        // This is the key - capture location assignments
-        location: {
-          _href: '',
-          get href() { return this._href },
-          set href(url: string) {
-            console.log('[WindowOpenHandler] Proxy location.href SET to:', url)
-            if (url && url.startsWith('http')) {
-              Browser.open({ url, presentationStyle: 'popover', toolbarColor: '#000000' })
-            }
-          },
-          assign: (url: string) => {
-            console.log('[WindowOpenHandler] Proxy location.assign called with:', url)
-            if (url && url.startsWith('http')) {
-              Browser.open({ url, presentationStyle: 'popover', toolbarColor: '#000000' })
-            }
-          },
-          replace: (url: string) => {
-            console.log('[WindowOpenHandler] Proxy location.replace called with:', url)
-            if (url && url.startsWith('http')) {
-              Browser.open({ url, presentationStyle: 'popover', toolbarColor: '#000000' })
-            }
-          },
-          reload: () => {},
-          toString: () => proxyWindow.location._href,
+        postMessage: (msg: any, origin: any) => {
+          console.log('[WindowOpenHandler] Proxy postMessage called:', { msg, origin })
         },
+        // Capture location assignments - multiple ways
+        location: new Proxy({
+          _href: 'about:blank',
+          _hash: '',
+          _search: '',
+          _pathname: '/',
+          _host: '',
+          _hostname: '',
+          _port: '',
+          _protocol: 'about:',
+          _origin: 'null',
+        }, {
+          get(target, prop) {
+            console.log('[WindowOpenHandler] Proxy location GET:', prop)
+            if (prop === 'href') return target._href
+            if (prop === 'assign' || prop === 'replace') {
+              return (url: string) => {
+                console.log(`[WindowOpenHandler] Proxy location.${prop} called:`, url)
+                if (url && url.startsWith('http')) openInSafari(url)
+              }
+            }
+            if (prop === 'reload') return () => {}
+            if (prop === 'toString') return () => target._href
+            return (target as any)[`_${String(prop)}`] || ''
+          },
+          set(target, prop, value) {
+            console.log('[WindowOpenHandler] Proxy location SET:', prop, '=', value)
+            if (prop === 'href' || prop === '_href') {
+              target._href = value
+              if (value && value.startsWith('http')) openInSafari(value)
+            }
+            return true
+          }
+        }),
         document: {
           write: (content: string) => {
-            console.log('[WindowOpenHandler] Proxy document.write called:', content.substring(0, 100))
+            console.log('[WindowOpenHandler] Proxy document.write called, length:', content.length)
+            console.log('[WindowOpenHandler] document.write content preview:', content.substring(0, 500))
+            extractAndOpenUrls(content)
           },
           writeln: (content: string) => {
-            console.log('[WindowOpenHandler] Proxy document.writeln called:', content.substring(0, 100))
+            console.log('[WindowOpenHandler] Proxy document.writeln called, length:', content.length)
+            extractAndOpenUrls(content)
           },
-          close: () => {},
-          open: () => {},
+          close: () => { console.log('[WindowOpenHandler] Proxy document.close() called') },
+          open: () => { console.log('[WindowOpenHandler] Proxy document.open() called') },
+          // Add location on document too
+          get location() {
+            console.log('[WindowOpenHandler] Proxy document.location GET')
+            return proxyWindow.location
+          },
+          set location(url: string) {
+            console.log('[WindowOpenHandler] Proxy document.location SET:', url)
+            if (url && url.startsWith('http')) openInSafari(url)
+          },
+          body: {
+            innerHTML: '',
+            appendChild: (el: any) => {
+              console.log('[WindowOpenHandler] Proxy body.appendChild called:', el?.tagName, el?.src || el?.href)
+              if (el?.src?.startsWith('http')) openInSafari(el.src)
+              if (el?.href?.startsWith('http')) openInSafari(el.href)
+            }
+          },
+          head: { appendChild: () => {} },
+          createElement: (tag: string) => {
+            console.log('[WindowOpenHandler] Proxy document.createElement:', tag)
+            return { tagName: tag }
+          },
+        },
+        // Add navigation property (some libs use this)
+        navigate: (url: string) => {
+          console.log('[WindowOpenHandler] Proxy navigate() called:', url)
+          if (url && url.startsWith('http')) openInSafari(url)
         },
         opener: window,
         parent: window,
@@ -96,12 +164,41 @@ export function WindowOpenHandler() {
         window: null as any,
         top: null as any,
         name: target || '',
+        // Add eval to catch dynamic code execution
+        eval: (code: string) => {
+          console.log('[WindowOpenHandler] Proxy eval called:', code.substring(0, 200))
+          extractAndOpenUrls(code)
+        },
       }
       proxyWindow.self = proxyWindow
       proxyWindow.window = proxyWindow
       proxyWindow.top = proxyWindow
 
-      return proxyWindow as unknown as Window
+      // Wrap in Proxy to catch ANY property access/set
+      const finalProxy = new Proxy(proxyWindow, {
+        get(target, prop) {
+          if (prop === 'location' || prop === 'document' || prop === 'closed' ||
+              prop === 'close' || prop === 'focus' || prop === 'self' ||
+              prop === 'window' || prop === 'top' || prop === 'opener' ||
+              prop === 'parent' || prop === 'name' || prop === 'postMessage' ||
+              prop === 'blur' || prop === 'navigate' || prop === 'eval') {
+            return target[prop]
+          }
+          console.log('[WindowOpenHandler] Proxy GET unknown prop:', prop)
+          return target[prop]
+        },
+        set(target, prop, value) {
+          console.log('[WindowOpenHandler] Proxy SET:', prop, '=',
+            typeof value === 'string' ? value.substring(0, 200) : typeof value)
+          if (prop === 'location' && typeof value === 'string' && value.startsWith('http')) {
+            openInSafari(value)
+          }
+          target[prop] = value
+          return true
+        }
+      })
+
+      return finalProxy as unknown as Window
     }
 
     // MutationObserver to watch for ALL DOM changes (debug mode)
