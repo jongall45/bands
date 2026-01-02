@@ -323,19 +323,30 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
 
   // Get display info based on transaction type
   const getDisplayInfo = () => {
-    // Helper to get token logo with fallback
-    const getTokenLogo = (symbol: string, address?: string, txChainId?: number) => {
-      if (symbol === 'USDC') return USDC_LOGO
-      if (symbol === 'ETH') return 'https://assets.coingecko.com/coins/images/279/small/ethereum.png'
-      if (symbol === 'SOL') return 'https://cryptologos.cc/logos/solana-sol-logo.png'
-      if (address && txChainId) return `https://api.sim.dune.com/beta/token/logo/${txChainId}/${address}`
+    // Helper to get token logo with multiple fallbacks
+    const getTokenLogo = (symbol: string, address?: string, txChainId?: number, providedLogo?: string) => {
+      // First try provided logo from API
+      if (providedLogo && providedLogo.length > 0) return providedLogo
+      // Well-known tokens
+      if (symbol === 'USDC' || symbol === 'USDC.e') return USDC_LOGO
+      if (symbol === 'USDT') return 'https://assets.coingecko.com/coins/images/325/small/Tether.png'
+      if (symbol === 'ETH' || symbol === 'WETH') return 'https://assets.coingecko.com/coins/images/279/small/ethereum.png'
+      if (symbol === 'SOL' || symbol === 'WSOL') return 'https://cryptologos.cc/logos/solana-sol-logo.png'
+      if (symbol === 'DAI') return 'https://assets.coingecko.com/coins/images/9956/small/dai-multi-collateral-mcd.png'
+      if (symbol === 'ARB') return 'https://assets.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg'
+      if (symbol === 'OP') return 'https://assets.coingecko.com/coins/images/25244/small/Optimism.png'
+      if (symbol === 'MATIC' || symbol === 'POL') return 'https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png'
+      // Fallback to Dune's logo API if we have address
+      if (address && txChainId && txChainId !== SOLANA_CHAIN_ID) {
+        return `https://api.sim.dune.com/beta/token/logo/${txChainId}/${address}`
+      }
       return ''
     }
 
     // Swap transaction
     if (isSwap && tx.swapFromToken && tx.swapToToken) {
-      const fromLogo = tx.swapFromToken.logoUri || getTokenLogo(tx.swapFromToken.symbol, undefined, chainId)
-      const toLogo = tx.swapToToken.logoUri || getTokenLogo(tx.swapToToken.symbol, undefined, chainId)
+      const fromLogo = getTokenLogo(tx.swapFromToken.symbol, undefined, chainId, tx.swapFromToken.logoUri)
+      const toLogo = getTokenLogo(tx.swapToToken.symbol, undefined, chainId, tx.swapToToken.logoUri)
       const chainLogo = CHAIN_LOGOS[chainId] || ''
 
       return {
@@ -804,9 +815,8 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
         tx.from?.toLowerCase().includes('moonpay') ||
         (counterparty && counterparty.toLowerCase().includes('moonpay'))
 
-      const tokenLogo = tx.tokenLogoUri ||
-        (tx.tokenSymbol === 'USDC' ? USDC_LOGO : `https://api.sim.dune.com/beta/token/logo/${chainId}/${tx.tokenAddress}`)
-      const chainLogo = CHAIN_LOGOS[chainId] || CHAIN_LOGOS[8453]
+      const tokenLogo = getTokenLogo(tx.tokenSymbol, tx.tokenAddress, chainId, tx.tokenLogoUri || tx.token?.logoURI || tx.token?.logo)
+      const chainLogo = CHAIN_LOGOS[chainId] || ''
 
       return {
         label: isMoonPay ? 'Purchased' : 'Received',
@@ -819,62 +829,73 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
           />
         ) : (
-          <img
-            src={tokenLogo}
-            alt={tx.tokenSymbol}
-            className="w-5 h-5 rounded-full"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none'
-            }}
-          />
+          <div className="relative w-5 h-5">
+            <img
+              src={tokenLogo}
+              alt={tx.tokenSymbol}
+              className="w-5 h-5 rounded-full bg-white/10"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none'
+              }}
+            />
+            {chainLogo && (
+              <img src={chainLogo} alt={CHAIN_NAMES[chainId]} className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-black/50" />
+            )}
+          </div>
         ),
         iconBg: isMoonPay ? 'bg-purple-500/10' : 'bg-green-500/10',
         amountColor: 'text-green-400',
         amountPrefix: '+',
         customAmount: (
           <div className="flex items-center gap-1">
-            <span className="text-green-400">+{amount}</span>
-            <div className="relative w-4 h-4">
-              <img src={tokenLogo} alt={tx.tokenSymbol} className="w-4 h-4 rounded-full" />
-              {chainId !== 8453 && (
+            <span className="text-green-400 text-xs">+{amount}</span>
+            <div className="relative w-4 h-4 flex-shrink-0">
+              <img src={tokenLogo} alt={tx.tokenSymbol} className="w-4 h-4 rounded-full bg-white/10" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+              {chainLogo && (
                 <img src={chainLogo} alt={CHAIN_NAMES[chainId]} className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-black/50" />
               )}
             </div>
+            <span className="text-green-400/70 text-[10px]">{tx.tokenSymbol}</span>
           </div>
         ),
       }
     }
 
     // Default: Send - show token logo with chain badge
-    const tokenLogo = tx.tokenLogoUri ||
-      (tx.tokenSymbol === 'USDC' ? USDC_LOGO : `https://api.sim.dune.com/beta/token/logo/${chainId}/${tx.tokenAddress}`)
-    const chainLogo = CHAIN_LOGOS[chainId] || CHAIN_LOGOS[8453]
+    const tokenLogo = getTokenLogo(tx.tokenSymbol, tx.tokenAddress, chainId, tx.tokenLogoUri || tx.token?.logoURI || tx.token?.logo)
+    const chainLogo = CHAIN_LOGOS[chainId] || ''
 
     return {
       label: 'Sent',
       sublabel: `To ${shortenAddress(counterparty)}`,
       icon: (
-        <img
-          src={tokenLogo}
-          alt={tx.tokenSymbol}
-          className="w-5 h-5 rounded-full"
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = 'none'
-          }}
-        />
+        <div className="relative w-5 h-5">
+          <img
+            src={tokenLogo}
+            alt={tx.tokenSymbol}
+            className="w-5 h-5 rounded-full bg-white/10"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none'
+            }}
+          />
+          {chainLogo && (
+            <img src={chainLogo} alt={CHAIN_NAMES[chainId]} className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-black/50" />
+          )}
+        </div>
       ),
       iconBg: 'bg-white/[0.05]',
       amountColor: 'text-white',
       amountPrefix: '-',
       customAmount: (
         <div className="flex items-center gap-1">
-          <span className="text-white">-{amount}</span>
-          <div className="relative w-4 h-4">
-            <img src={tokenLogo} alt={tx.tokenSymbol} className="w-4 h-4 rounded-full" />
-            {chainId !== 8453 && (
+          <span className="text-white/70 text-xs">-{amount}</span>
+          <div className="relative w-4 h-4 flex-shrink-0">
+            <img src={tokenLogo} alt={tx.tokenSymbol} className="w-4 h-4 rounded-full bg-white/10" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+            {chainLogo && (
               <img src={chainLogo} alt={CHAIN_NAMES[chainId]} className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-black/50" />
             )}
           </div>
+          <span className="text-white/50 text-[10px]">{tx.tokenSymbol}</span>
         </div>
       ),
     }
