@@ -13,15 +13,27 @@ const KNOWN_APPS: Record<string, { name: string; category: string }> = {
   // Bridge - Relay (multiple chains and solvers)
   '0xa5f565650890fba1824ee0f21ebbbf660a179934': { name: 'Relay', category: 'Bridge' },
   '0xe5c7b4865d7f2b08faadf3f6d392e6d6fa7b903c': { name: 'Relay', category: 'Bridge' },
-  '0xf70da97812cb96acdf810712aa562db8dfa3dbef': { name: 'Relay', category: 'Bridge' }, // Relay Solver (confirmed from user tx)
+  '0xf70da97812cb96acdf810712aa562db8dfa3dbef': { name: 'Relay', category: 'Bridge' },
   '0xa2a276640bd6b8a9e73f08f36a44c1d51d05e2c8': { name: 'Relay', category: 'Bridge' },
   '0x00000000f3f57102a8f2f6b7cf34a33ca3c33c0f': { name: 'Relay', category: 'Bridge' },
+  '0x2e4e54eb7f7a7d1ca04f45413a3ac60a4f8e0f29': { name: 'Relay', category: 'Bridge' },
+  '0xc30141b657f4216252dc59af2e7cdb9d8792e1b0': { name: 'Relay', category: 'Bridge' },
   // Other bridges
   '0x3a23f943181408eac424116af7b7790c94cb97a5': { name: 'Socket', category: 'Bridge' },
   '0x2ddf16ba6d0180e5357d5e170ef1917a01b41fc0': { name: 'Across', category: 'Bridge' },
 
-  // Lending
+  // MoonPay - Onramp service (multiple sender addresses)
+  '0x8216874887415e2650d12d53ff53516f04a74fd7': { name: 'MoonPay', category: 'Onramp' },
+  '0xca7d782d1d1e0bfca59a5d2c80e5e2d62b7f7a8e': { name: 'MoonPay', category: 'Onramp' },
+  '0x151b381058f91cf871e7ea1ee83c45326f61e96d': { name: 'MoonPay', category: 'Onramp' },
+  '0xd782ccbe67efabb5d5e6e00a5bfe4cdd3f95ae40': { name: 'MoonPay', category: 'Onramp' },
+  '0x6bf1fbe22f2d4a8ba4ef43bc5ad0e7eb77f4e684': { name: 'MoonPay', category: 'Onramp' },
+
+  // Lending - Morpho
   '0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb': { name: 'Morpho', category: 'Lending' },
+  '0x8793cf302b8ffd655ab97bd1c695dbd967807e8e': { name: 'Morpho', category: 'Lending' }, // Morpho Blue
+  '0x38989bba00bdf8181f4082995b3deae96163ac5d': { name: 'Morpho', category: 'Lending' }, // Steakhouse USDC Vault on Base
+  '0xc1256ae5ff1cf2719d4937adb3bbcce84e61dfb': { name: 'Morpho', category: 'Lending' },
   '0xa17581a9e3356d9a858b789d68b4d866e593ae94': { name: 'Compound', category: 'Lending' },
   '0x78d0677032a35c63d142a48a2037048871212a8c': { name: 'Aave', category: 'Lending' },
 
@@ -31,7 +43,6 @@ const KNOWN_APPS: Record<string, { name: string; category: string }> = {
   '0x240d7e71df23c0ee3d46cfbe6eb838cdc8432d5e': { name: 'Ostium', category: 'Perps' },
   '0xf1d292c10a4f5c5d11ae8c2f22f7a2c2d9b53f43': { name: 'Ostium', category: 'Perps' },
   '0xe8ce7e7c6a654df45d764f80dc6e99afdb52d2c6': { name: 'Ostium', category: 'Perps' },
-  // Ostium Trading Storage - receives USDC deposits for trades
   '0x68494ace6d88d3fb22ebc6c57d62f0ab54d5c2e1': { name: 'Ostium', category: 'Perps' },
   '0xccd5891083a8acd2074690f65d3024e7d13d66e7': { name: 'Ostium', category: 'Perps' },
 

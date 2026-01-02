@@ -120,16 +120,49 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
   // Group bridge send/receive pairs into swap views - MUST be before any early returns
   const groupedTransactions = useMemo(() => {
     if (!transactions || transactions.length === 0) return []
-    
+
     const result: DisplayTransaction[] = []
     const usedHashes = new Set<string>()
-    
+
     // Sort by timestamp descending
     const sorted = [...transactions].sort((a, b) => b.timestamp - a.timestamp)
-    
+
     for (const tx of sorted) {
       if (usedHashes.has(tx.hash)) continue
-      
+
+      // First, check if we have a swap record from local storage for this transaction
+      // This handles cross-chain swaps to non-EVM chains (like Solana)
+      const swapRecord = tx.hash ? getSwapByHash(tx.hash) : null
+      if (swapRecord) {
+        usedHashes.add(tx.hash)
+        const groupedTx: DisplayTransaction = {
+          ...tx,
+          isGroupedSwap: true,
+          appName: 'Relay',
+          appCategory: 'Bridge',
+          bridgePair: {
+            fromToken: {
+              symbol: swapRecord.fromToken.symbol,
+              amount: swapRecord.fromToken.amount,
+              logo: swapRecord.fromToken.logoURI || '',
+              chainId: swapRecord.fromToken.chainId,
+              chainName: CHAIN_NAMES[swapRecord.fromToken.chainId] || 'Chain',
+              chainLogo: CHAIN_LOGOS[swapRecord.fromToken.chainId] || '',
+            },
+            toToken: {
+              symbol: swapRecord.toToken.symbol,
+              amount: swapRecord.toToken.amount,
+              logo: swapRecord.toToken.logoURI || '',
+              chainId: swapRecord.toToken.chainId,
+              chainName: CHAIN_NAMES[swapRecord.toToken.chainId] || 'Chain',
+              chainLogo: CHAIN_LOGOS[swapRecord.toToken.chainId] || '',
+            }
+          }
+        }
+        result.push(groupedTx)
+        continue
+      }
+
       // Check if this is a Bridge send (outgoing) - more flexible matching
       const isBridgeSend = (
         (tx.appCategory === 'Bridge' && (tx.direction === 'out' || tx.type === 'send')) ||
@@ -551,6 +584,9 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
           const { fromToken, toToken } = tx.bridgePair
           const fromAmount = formatBridgeAmount(fromToken.amount)
           const toAmount = formatBridgeAmount(toToken.amount)
+          // Use getTokenLogo for better fallbacks
+          const fromLogo = getTokenLogo(fromToken.symbol, undefined, fromToken.chainId, fromToken.logo)
+          const toLogo = getTokenLogo(toToken.symbol, undefined, toToken.chainId, toToken.logo)
 
           return {
             label: 'Relay',
@@ -567,7 +603,7 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
                 <div className="flex items-center gap-1">
                   <span className="text-white/70 text-xs">-{fromAmount}</span>
                   <TokenWithChainBadge
-                    tokenImg={fromToken.logo}
+                    tokenImg={fromLogo}
                     tokenAlt={fromToken.symbol}
                     chainImg={fromToken.chainLogo}
                     chainAlt={fromToken.chainName}
@@ -579,7 +615,7 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
                 <div className="flex items-center gap-1 text-[11px]">
                   <span className="text-green-400">+{toAmount}</span>
                   <TokenWithChainBadge
-                    tokenImg={toToken.logo}
+                    tokenImg={toLogo}
                     tokenAlt={toToken.symbol}
                     chainImg={toToken.chainLogo}
                     chainAlt={toToken.chainName}
@@ -811,9 +847,10 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
 
     // Receive - show token logo with chain badge, check for MoonPay
     if (isReceive) {
-      const isMoonPay = tx.appName?.toLowerCase().includes('moonpay') ||
-        tx.from?.toLowerCase().includes('moonpay') ||
-        (counterparty && counterparty.toLowerCase().includes('moonpay'))
+      // Check for MoonPay via appName (from API), appCategory, or address patterns
+      const isMoonPay = tx.appName === 'MoonPay' ||
+        tx.appCategory === 'Onramp' ||
+        tx.from?.toLowerCase().includes('moonpay')
 
       const tokenLogo = getTokenLogo(tx.tokenSymbol, tx.tokenAddress, chainId, tx.tokenLogoUri || tx.token?.logoURI || tx.token?.logo)
       const chainLogo = CHAIN_LOGOS[chainId] || ''
