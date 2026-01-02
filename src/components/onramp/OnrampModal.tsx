@@ -148,8 +148,8 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
   }, [amountNum])
 
   // Initiate MoonPay funding via Privy
-  // Using Privy's fundWallet on all platforms - it handles MoonPay integration
-  // and will open in a popup/new tab which works in both web and Capacitor WebView
+  // Privy's fundWallet handles MoonPay integration including API credentials
+  // On iOS, PopupWebViewController intercepts new window requests and opens in Safari
   const handleConfirmPay = useCallback(async () => {
     if (!address) {
       setError('Please connect your wallet')
@@ -162,7 +162,8 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
 
     try {
       // Use Privy's fundWallet which handles MoonPay integration
-      // On mobile, this will open MoonPay in a new browser tab/popup
+      // On iOS Capacitor, our native PopupWebViewController intercepts
+      // any new window requests and opens them in SFSafariViewController
       await fundWallet({
         address,
         options: {
