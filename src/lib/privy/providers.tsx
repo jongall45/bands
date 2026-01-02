@@ -170,9 +170,14 @@ export function PrivyProviders({ children }: PrivyProvidersProps) {
     setIsNative(native)
     setIsReady(true)
 
-    if (native) {
-      console.log('[PrivyProviders] Running in Capacitor native app - enabling customOAuthRedirectUrl')
-    }
+    // Debug logging for OAuth troubleshooting
+    console.log('[PrivyProviders] Platform detection:', {
+      isNative: native,
+      hasCapacitor: typeof (window as any).Capacitor !== 'undefined',
+      isNativePlatform: (window as any).Capacitor?.isNativePlatform?.(),
+      loginMethods: native ? ['email', 'apple'] : ['email', 'google', 'apple'],
+      customOAuthRedirectUrl: native ? 'https://www.bands.cash/redirect' : 'not set',
+    })
   }, [])
 
   if (!PRIVY_APP_ID) {
