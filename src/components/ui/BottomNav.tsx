@@ -7,7 +7,7 @@ import haptics from '@/lib/haptics'
 
 const navItems = [
   { href: '/dashboard', icon: Home, label: 'Home' },
-  { href: '/save', icon: PiggyBank, label: 'Save' },
+  { href: '/save', icon: PiggyBank, label: 'Earn' },
   { href: '/swap', icon: ArrowUpDown, label: 'Swap' },
   // Trade (Polymarket/Ostium) hidden for US regulatory compliance - code preserved in /app/speculate/
   { href: '/settings', icon: Settings, label: 'Settings' },

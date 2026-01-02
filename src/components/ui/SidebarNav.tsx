@@ -8,7 +8,7 @@ import { LogoInline } from './Logo'
 
 const navItems = [
   { href: '/dashboard', icon: Home, label: 'Home' },
-  { href: '/save', icon: PiggyBank, label: 'Save' },
+  { href: '/save', icon: PiggyBank, label: 'Earn' },
   { href: '/swap', icon: ArrowUpDown, label: 'Swap' },
   { href: '/settings', icon: Settings, label: 'Settings' },
 ]
