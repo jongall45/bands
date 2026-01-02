@@ -6,6 +6,7 @@ import { X, Loader2, TrendingUp, AlertCircle, Check } from 'lucide-react'
 import { useMorphoActions } from '@/hooks/useMorphoActions'
 import { useVaultBalance } from '@/hooks/useMorphoVaults'
 import { calculateProjectedEarnings, type MorphoVault } from '@/lib/morpho/api'
+import haptics from '@/lib/haptics'
 
 interface DepositModalProps {
   vault: MorphoVault
@@ -60,6 +61,7 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
   const yearlyEarnings = calculateProjectedEarnings(amountNum, apyPercent, 365)
 
   const handleMax = () => {
+    haptics.buttonTap()
     if (usdcBalance) {
       setAmount(usdcBalance.formatted)
     }
@@ -67,13 +69,21 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
 
   const handleDeposit = async () => {
     if (!amount || parseFloat(amount) <= 0) return
+    haptics.buttonPress()
     setError(null)
     try {
       await deposit(amount)
+      haptics.success()
     } catch (err) {
+      haptics.error()
       // Error is already handled by onError callback
       console.error('Deposit failed:', err)
     }
+  }
+
+  const handleClose = () => {
+    haptics.buttonTap()
+    onClose()
   }
 
   // Check if deposit is possible
@@ -87,7 +97,7 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/80 backdrop-blur-sm z-0"
-        onClick={onClose}
+        onClick={handleClose}
       />
 
       {/* Modal */}
@@ -95,8 +105,8 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-white font-semibold text-lg">Deposit to {vault.name}</h2>
-          <button 
-            onClick={onClose}
+          <button
+            onClick={handleClose}
             className="p-2 hover:bg-white/[0.05] rounded-full transition-colors"
           >
             <X className="w-5 h-5 text-white/60" />

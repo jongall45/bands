@@ -4,6 +4,7 @@ import { useAccount, useDisconnect } from 'wagmi'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useRef } from 'react'
 import { LogOut, ExternalLink, Copy, Check, Shield, Smartphone, Key, AlertTriangle, Loader2, Wallet, Globe } from 'lucide-react'
+import { LogoInline } from '@/components/ui/Logo'
 import { AppShell, AppContent } from '@/components/layout/AppShell'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
@@ -38,12 +39,14 @@ function WalletCard({
   const [showExportWarning, setShowExportWarning] = useState(false)
 
   const copyAddress = () => {
+    haptics.buttonTap()
     navigator.clipboard.writeText(address)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
   const handleExportClick = () => {
+    haptics.buttonPress()
     if (showExportWarning && onExport) {
       onExport()
       setShowExportWarning(false)
@@ -202,17 +205,25 @@ export default function SettingsPage() {
 
   return (
     <AppShell>
-      <div className="settings-page">
+      <div className="settings-page page-transition">
         {/* Grid Background */}
         <div className="grid-background" />
         <div className="crosshair-overlay" />
 
-        <AppContent>
-          {/* Header */}
-          <header className="settings-header">
-            <h1 className="settings-title">SETTINGS</h1>
-            <p className="settings-subtitle">Manage your wallets</p>
-          </header>
+        {/* Sticky Header - consistent branding */}
+        <header
+          className="sticky top-0 z-40 bg-[#050505]/95 backdrop-blur-sm border-b border-white/[0.04]"
+          style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+        >
+          <div className="flex items-center justify-between px-4 py-2.5">
+            <LogoInline size="sm" />
+            <div className="text-right">
+              <h1 className="text-white font-semibold text-sm">Settings</h1>
+            </div>
+          </div>
+        </header>
+
+        <AppContent noTopPadding>
 
           <div className="settings-content">
             {/* Section Label */}

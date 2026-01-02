@@ -445,24 +445,26 @@ export default function Dashboard() {
 
   return (
     <AppShell>
-      <IndustrialPage>
-        {/* Sticky Header */}
+      <IndustrialPage className="page-transition">
+        {/* Sticky Header - flush to top with safe area handled */}
         <header
-          className="sticky top-0 z-40 flex items-center justify-between px-4 py-3 bg-[#050505]/95 backdrop-blur-xl border-b border-white/[0.04]"
-          style={{ paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))' }}
+          className="sticky top-0 z-40 bg-[#050505] border-b border-white/[0.04]"
+          style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
         >
-          <LogoInline size="sm" />
-          <button
-            onClick={async () => {
-              haptics.buttonPress()
-              await logout()
-              router.replace(isIOSApp ? '/?app=ios' : '/')
-            }}
-            className="p-2 text-white/40 hover:text-white/70 transition-colors"
-            title="Sign out"
-          >
-            <LogOut className="w-5 h-5" strokeWidth={1.5} />
-          </button>
+          <div className="flex items-center justify-between px-4 py-2.5">
+            <LogoInline size="sm" />
+            <button
+              onClick={async () => {
+                haptics.buttonPress()
+                await logout()
+                router.replace(isIOSApp ? '/?app=ios' : '/')
+              }}
+              className="p-2 text-white/40 hover:text-white/70 transition-colors -mr-2"
+              title="Sign out"
+            >
+              <LogOut className="w-5 h-5" strokeWidth={1.5} />
+            </button>
+          </div>
         </header>
 
         <PullToRefresh onRefresh={handleRefresh}>

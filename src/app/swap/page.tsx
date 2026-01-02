@@ -133,15 +133,21 @@ export default function SwapPage() {
 
   return (
     <AppShell>
-      <IndustrialPage className="swap-page-wrapper" data-swap-state={swapState}>
-        <AppContent>
-          <header className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-white font-extrabold text-xl" style={{ fontWeight: 800 }}>Swap & Bridge</h1>
-              <p className="text-white/50 text-sm">Trade tokens across chains</p>
-            </div>
+      <IndustrialPage className="swap-page-wrapper page-transition" data-swap-state={swapState}>
+        {/* Sticky Header - consistent branding */}
+        <header
+          className="sticky top-0 z-40 bg-[#050505] border-b border-white/[0.04]"
+          style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+        >
+          <div className="flex items-center justify-between px-4 py-2.5">
             <LogoInline size="sm" />
-          </header>
+            <div className="text-right">
+              <h1 className="text-white font-semibold text-sm">Swap</h1>
+            </div>
+          </div>
+        </header>
+
+        <AppContent noTopPadding>
 
           <div className="space-y-4">
           {/* Token Search & Chart */}

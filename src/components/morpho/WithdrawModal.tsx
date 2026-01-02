@@ -6,6 +6,7 @@ import { X, Loader2, AlertCircle, Check, ArrowDown } from 'lucide-react'
 import { useMorphoActions } from '@/hooks/useMorphoActions'
 import { useVaultBalance, usePreviewRedeem } from '@/hooks/useMorphoVaults'
 import type { MorphoVault } from '@/lib/morpho/api'
+import haptics from '@/lib/haptics'
 
 interface WithdrawModalProps {
   vault: MorphoVault
@@ -32,6 +33,7 @@ export function WithdrawModal({ vault, isOpen, onClose, onSuccess }: WithdrawMod
   const { withdraw, isLoading } = useMorphoActions({
     vaultAddress: vault.address as `0x${string}`,
     onSuccess: () => {
+      haptics.success()
       setIsSuccess(true)
       setTimeout(() => {
         onSuccess?.()
@@ -40,11 +42,25 @@ export function WithdrawModal({ vault, isOpen, onClose, onSuccess }: WithdrawMod
         setPercentage(100)
       }, 2000)
     },
+    onError: () => {
+      haptics.error()
+    },
   })
 
   const handleWithdraw = async () => {
     if (sharesToWithdraw <= BigInt(0)) return
+    haptics.buttonPress()
     await withdraw(sharesToWithdraw)
+  }
+
+  const handleClose = () => {
+    haptics.buttonTap()
+    onClose()
+  }
+
+  const handlePercentageChange = (value: number) => {
+    haptics.selection()
+    setPercentage(value)
   }
 
   const canWithdraw = sharesToWithdraw > BigInt(0)
@@ -54,9 +70,9 @@ export function WithdrawModal({ vault, isOpen, onClose, onSuccess }: WithdrawMod
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
       {/* Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-        onClick={onClose}
+        onClick={handleClose}
       />
 
       {/* Modal */}
@@ -64,8 +80,8 @@ export function WithdrawModal({ vault, isOpen, onClose, onSuccess }: WithdrawMod
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-white font-semibold text-lg">Withdraw from {vault.name}</h2>
-          <button 
-            onClick={onClose}
+          <button
+            onClick={handleClose}
             className="p-2 hover:bg-white/[0.05] rounded-full transition-colors"
           >
             <X className="w-5 h-5 text-white/60" />

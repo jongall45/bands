@@ -2,6 +2,7 @@
 
 import { TrendingUp, Shield, Plus } from 'lucide-react'
 import type { MorphoVault } from '@/lib/morpho/api'
+import haptics from '@/lib/haptics'
 
 // USDC Logo URL
 const USDC_LOGO = 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png'
@@ -21,10 +22,15 @@ export function VaultCard({ vault, userBalance, onSelect }: VaultCardProps) {
   const tvlFormatted = (vault.state.totalAssetsUsd / 1_000_000).toFixed(2)
   const hasPosition = userBalance && userBalance.assets > BigInt(0)
 
+  const handleSelect = () => {
+    haptics.buttonPress()
+    onSelect(vault)
+  }
+
   return (
     <div className="relative rounded-2xl p-[1px] bg-gradient-to-br from-white/10 via-transparent to-[#FF3B30]/20 transition-all hover:from-white/15 hover:to-[#FF3B30]/30">
       <button
-        onClick={() => onSelect(vault)}
+        onClick={handleSelect}
         className="w-full bg-[#0a0a0a]/90 hover:bg-[#0a0a0a]/80 rounded-2xl p-4 transition-all text-left group backdrop-blur-sm"
       >
         <div className="flex items-start justify-between mb-3">

@@ -182,16 +182,21 @@ export default function SavePage() {
 
   return (
     <AppShell>
-      <IndustrialPage>
-        <AppContent>
-          {/* Header */}
-          <header className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-white font-extrabold text-xl" style={{ fontWeight: 800 }}>Yield Vaults</h1>
-              <p className="text-white/50 text-sm">Earn yield on your USDC</p>
-            </div>
+      <IndustrialPage className="page-transition">
+        {/* Sticky Header */}
+        <header
+          className="sticky top-0 z-40 bg-[#050505] border-b border-white/[0.04]"
+          style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+        >
+          <div className="flex items-center justify-between px-4 py-2.5">
             <LogoInline size="sm" />
-          </header>
+            <div className="text-right">
+              <h1 className="text-white font-semibold text-sm">Earn</h1>
+            </div>
+          </div>
+        </header>
+
+        <AppContent noTopPadding>
 
           {/* Combined Your Savings Card - Only show if user has deposits */}
           {totalDeposited > 0 && (
