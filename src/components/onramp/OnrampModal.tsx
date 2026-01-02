@@ -6,28 +6,7 @@ import { useFundWallet } from '@privy-io/react-auth'
 import { X, ChevronDown, ChevronUp, Zap, CreditCard, ExternalLink } from 'lucide-react'
 import { base } from 'viem/chains'
 import haptics from '@/lib/haptics'
-import { Browser } from '@capacitor/browser'
 import { BROWSER_CLOSED_EVENT } from '@/components/capacitor/WindowOpenHandler'
-
-// Check if running in Capacitor native app
-const isCapacitorNative = (): boolean => {
-  if (typeof window === 'undefined') return false
-  return !!(window as any).Capacitor?.isNativePlatform?.()
-}
-
-// Build MoonPay URL for direct access (opens in Safari, not WebView)
-// When opened directly in Safari, MoonPay handles auth natively
-const buildMoonPayUrl = (walletAddress: string, amount: string): string => {
-  const params = new URLSearchParams({
-    currencyCode: 'usdc_base',
-    walletAddress: walletAddress,
-    baseCurrencyAmount: amount,
-    theme: 'dark',
-    colorCode: 'ef4444',
-    // Don't pass apiKey - MoonPay will prompt user to sign in/up directly
-  })
-  return `https://buy.moonpay.com/?${params.toString()}`
-}
 
 interface OnrampModalProps {
   isOpen: boolean
@@ -168,9 +147,9 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
     setStep('confirm')
   }, [amountNum])
 
-  // Initiate MoonPay funding
-  // For Capacitor: Open MoonPay directly in Safari (bypasses iframe blocking)
-  // For Web: Use Privy's fundWallet which handles popup/iframe
+  // Initiate MoonPay funding via Privy
+  // Privy's fundWallet handles MoonPay integration including API credentials
+  // On iOS, PopupWebViewController intercepts new window requests and opens in Safari
   const handleConfirmPay = useCallback(async () => {
     if (!address) {
       setError('Please connect your wallet')
@@ -182,28 +161,9 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
     haptics.buttonPress()
 
     try {
-      // For Capacitor native apps: Open MoonPay directly in system Safari
-      // This bypasses the iframe/popup blocking in iOS WebView
-      // MoonPay will handle user authentication natively in Safari
-      if (isCapacitorNative()) {
-        const moonPayUrl = buildMoonPayUrl(address, amount)
-        console.log('[OnrampModal] Opening MoonPay in Safari:', moonPayUrl)
-
-        await Browser.open({
-          url: moonPayUrl,
-          presentationStyle: 'popover', // Slides up from bottom like native iOS
-          toolbarColor: '#000000',
-        })
-
-        if (!isMountedRef.current) return
-        setStep('started')
-        haptics.impact('light')
-
-        // Balance refresh happens via BROWSER_CLOSED_EVENT listener
-        return
-      }
-
-      // For web: Use Privy's fundWallet which handles MoonPay integration
+      // Use Privy's fundWallet which handles MoonPay integration
+      // On iOS Capacitor, our native PopupWebViewController intercepts
+      // any new window requests and opens them in SFSafariViewController
       await fundWallet({
         address,
         options: {
