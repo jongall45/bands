@@ -555,10 +555,18 @@ export function useUserTokens(walletAddress: string | undefined) {
 
 // Solana signing function type (from Privy)
 // Note: Privy's signAndSendTransaction returns signature as Uint8Array
+// Options include skipPreflight to bypass simulation that can fail with error -32002
+export interface SolanaSignAndSendOptions {
+  skipPreflight?: boolean
+  maxRetries?: number
+  preflightCommitment?: 'processed' | 'confirmed' | 'finalized'
+}
+
 export interface SolanaSigningOptions {
   signAndSendTransaction?: (params: {
     transaction: Uint8Array
     wallet: any
+    options?: SolanaSignAndSendOptions
   }) => Promise<{ signature: Uint8Array | string }>
   solanaWallet?: any
 }
@@ -1109,6 +1117,10 @@ export function useRelaySwap(
             const result = await solanaSigningOptions.signAndSendTransaction({
               transaction: serializedTx,
               wallet: solanaSigningOptions.solanaWallet,
+              options: {
+                skipPreflight: true, // Skip preflight to avoid -32002 errors
+                maxRetries: 3,
+              },
             })
 
             lastTxSignature = toSignatureString(result.signature)
@@ -1265,6 +1277,10 @@ export function useRelaySwap(
             const result = await solanaSigningOptions.signAndSendTransaction({
               transaction: serializedTx,
               wallet: solanaSigningOptions.solanaWallet,
+              options: {
+                skipPreflight: true, // Skip preflight to avoid -32002 errors
+                maxRetries: 3,
+              },
             })
 
             lastTxSignature = toSignatureString(result.signature)
@@ -1882,6 +1898,10 @@ export function useRelaySwap(
             const result = await solanaSigningOptions.signAndSendTransaction({
               transaction: serializedTx,
               wallet: solanaSigningOptions.solanaWallet,
+              options: {
+                skipPreflight: true, // Skip preflight to avoid -32002 errors
+                maxRetries: 3,
+              },
             })
             const sigString = toSignatureString(result.signature)
             lastTxHash = sigString
