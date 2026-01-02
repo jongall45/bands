@@ -15,6 +15,7 @@ import { SavingsProjectionChart } from '@/components/morpho/SavingsProjectionCha
 import { LogoInline } from '@/components/ui/Logo'
 import { AppShell, AppContent } from '@/components/layout/AppShell'
 import { IndustrialPage, GlassCard, GlassButton, GlassInner } from '@/components/ui/IndustrialGlass'
+import { PullToRefresh } from '@/components/ui/PullToRefresh'
 import { useAuth } from '@/hooks/useAuth'
 import haptics from '@/lib/haptics'
 
@@ -83,10 +84,13 @@ export default function SavePage() {
     }, 5000)
   }, [queryClient, refetchVaults, refetchPositions, refetchBalances])
 
-  // Simple refetch all data
-  const refetch = async () => {
+  // Simple refetch all data (used by pull-to-refresh)
+  const handleRefresh = useCallback(async () => {
+    haptics.buttonTap()
+    await queryClient.invalidateQueries({ queryKey: ['user-vault-positions'] })
+    refetchBalances()
     await Promise.all([refetchVaults(), refetchPositions()])
-  }
+  }, [queryClient, refetchVaults, refetchPositions, refetchBalances])
 
   // Calculate total deposited
   const totalDeposited = positions?.reduce((sum, pos) => sum + (pos.assetsUsd || 0), 0) || 0
@@ -200,7 +204,8 @@ export default function SavePage() {
         {/* Spacer for fixed header */}
         <div style={{ height: 'calc(52px + env(safe-area-inset-top, 0px))' }} />
 
-        <AppContent noTopPadding>
+        <PullToRefresh onRefresh={handleRefresh}>
+          <AppContent noTopPadding>
 
           {/* Combined Your Savings Card - Only show if user has deposits */}
           {totalDeposited > 0 && (
@@ -473,7 +478,8 @@ export default function SavePage() {
               onSuccess={refetchAfterTransaction}
             />
           )}
-        </AppContent>
+          </AppContent>
+        </PullToRefresh>
       </IndustrialPage>
     </AppShell>
   )

@@ -23,6 +23,9 @@ const noisePattern = `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns
 
 // --- ANIMATED LOGO COMPONENT ---
 const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete?: () => void; onCardLand?: (index: number) => void }) => {
+    // Track which cards have already triggered haptics
+    const landedCardsRef = React.useRef<Set<number>>(new Set())
+
     const paperVariants = {
         hidden: {
             y: -800,
@@ -33,10 +36,11 @@ const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete
         visible: (i: number) => ({
             y: 0,
             opacity: 1,
-            rotate: i % 2 === 0 ? Math.random() * 3 + 1 : -(Math.random() * 3 + 1),
+            // More aggressive rotation and offset for visual stagger
+            rotate: (i % 2 === 0 ? 1 : -1) * (4 + i * 1.5),
             scale: 1,
             transition: {
-                delay: 0.2 + (i * 0.12),
+                delay: 0.2 + (i * 0.15),
                 duration: 0.8,
                 type: "spring" as const,
                 stiffness: 120,
@@ -51,6 +55,17 @@ const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete
         colors.brandRed, colors.offWhite,
         colors.brandRed, colors.brandRed
     ]
+
+    const handleCardAnimationComplete = (index: number, isTopPaper: boolean) => {
+        // Only trigger haptic once per card
+        if (!landedCardsRef.current.has(index)) {
+            landedCardsRef.current.add(index)
+            onCardLand?.(index)
+        }
+        if (isTopPaper) {
+            onAnimationComplete?.()
+        }
+    }
 
     return (
         <div style={{ position: "relative", width: 300, height: 200, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
@@ -82,10 +97,12 @@ const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete
             </motion.div>
 
             {/* Cards container - positioned lower to make room for $ logo */}
-            <div style={{ position: "relative", width: 280, height: 120, marginTop: 40 }}>
+            <div style={{ position: "relative", width: 280, height: 140, marginTop: 40 }}>
                 {papers.map((color, i) => {
                     const isTopPaper = i === papers.length - 1;
                     const isRed = color === colors.brandRed;
+                    // Add vertical offset for visual stacking effect
+                    const yOffset = (papers.length - 1 - i) * 8;
 
                     return (
                         <motion.div
@@ -94,10 +111,7 @@ const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete
                             variants={paperVariants}
                             initial="hidden"
                             animate="visible"
-                            onAnimationComplete={() => {
-                                onCardLand?.(i)
-                                if (isTopPaper) onAnimationComplete?.()
-                            }}
+                            onAnimationComplete={() => handleCardAnimationComplete(i, isTopPaper)}
                             style={{
                                 position: "absolute",
                                 width: 280,
@@ -109,7 +123,8 @@ const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete
                                 borderRadius: "4px",
                                 display: 'flex',
                                 alignItems: 'center',
-                                justifyContent: 'center'
+                                justifyContent: 'center',
+                                top: yOffset,
                             }}
                         >
                             {isTopPaper && (
@@ -130,6 +145,7 @@ const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete
                                         color: colors.brightWhite,
                                         fontFamily: industrialFontStack,
                                         lineHeight: 1,
+                                        textTransform: 'lowercase',
                                     }}>
                                         bands
                                     </span>
