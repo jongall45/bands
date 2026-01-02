@@ -147,8 +147,8 @@ interface DexScreenerChartProps {
 }
 
 const DexScreenerChart = memo(function DexScreenerChart({ chainId, pairAddress }: DexScreenerChartProps) {
-  // DexScreener embed URL with minimal UI - hide as much as possible
-  const embedUrl = `https://dexscreener.com/${chainId}/${pairAddress}?embed=1&loadChartSettings=0&trades=0&info=0&chartLeftToolbar=0&chartTopToolbar=0&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=60`
+  // DexScreener embed URL with minimal UI - hide as much as possible, default to daily timeframe
+  const embedUrl = `https://dexscreener.com/${chainId}/${pairAddress}?embed=1&loadChartSettings=0&trades=0&info=0&chartLeftToolbar=0&chartTopToolbar=0&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=1D`
 
   return (
     <iframe
@@ -282,7 +282,7 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
     <div className={`relative ${className}`}>
       {/* Frosted glass container */}
       <div className="relative rounded-[24px] p-[1px] bg-gradient-to-br from-white/15 via-white/5 to-[#ef4444]/20">
-        <div className="bg-[#0a0a0a]/95 rounded-[23px] backdrop-blur-xl overflow-hidden">
+        <div className="bg-[#0a0a0a]/95 rounded-[23px] backdrop-blur-xl">
           {/* Noise texture */}
           <div
             className="absolute inset-0 pointer-events-none opacity-30 mix-blend-overlay"
@@ -294,7 +294,7 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
 
           <div className="relative z-10 p-4">
             {/* Search Bar */}
-            <div className="relative mb-4">
+            <div className={`relative ${selectedToken && !(showResults && (searchResults.length > 0 || isSearching)) ? 'mb-4' : ''}`}>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
                 <input
@@ -321,9 +321,11 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
                 )}
               </div>
 
-              {/* Search Results Dropdown */}
-              {showResults && (searchResults.length > 0 || isSearching) && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-[#141414] border border-white/10 rounded-xl overflow-hidden z-50 max-h-[300px] overflow-y-auto">
+            </div>
+
+            {/* Search Results - Inline (pushes content down) */}
+            {showResults && (searchResults.length > 0 || isSearching) && (
+              <div className={`mt-2 bg-[#141414] border border-white/10 rounded-xl overflow-hidden max-h-[300px] overflow-y-auto ${selectedToken ? 'mb-4' : ''}`}>
                   {isSearching ? (
                     <div className="p-4 flex items-center justify-center gap-2 text-white/50">
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -362,10 +364,9 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
                   )}
                 </div>
               )}
-            </div>
 
-            {/* Selected Token Info or Placeholder */}
-            {selectedToken ? (
+            {/* Selected Token Info - Only show when token selected */}
+            {selectedToken && (
               <>
                 {/* Token Header */}
                 <div className="flex items-center justify-between mb-3">
@@ -504,17 +505,6 @@ export function TokenChart({ onBuy, onSell, defaultToken, className = '' }: Toke
                   </button>
                 </div>
               </>
-            ) : (
-              /* Placeholder when no token selected */
-              <div className="text-center py-6">
-                <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-white/5 flex items-center justify-center">
-                  <Search className="w-5 h-5 text-white/20" />
-                </div>
-                <h3 className="text-white/60 font-semibold text-sm mb-1">Search for a Token</h3>
-                <p className="text-white/30 text-xs max-w-[200px] mx-auto">
-                  Enter a token name, symbol, or contract address to view charts and trading data
-                </p>
-              </div>
             )}
           </div>
         </div>

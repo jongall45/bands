@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useWallets, usePrivy } from '@privy-io/react-auth'
-import { Repeat, RefreshCw, ChevronUp, ChevronDown } from 'lucide-react'
+import { Repeat, RefreshCw } from 'lucide-react'
 import { CustomSwapWidget } from '@/components/relay/CustomSwapWidget'
 import type { SwapState } from '@/components/relay/useRelaySwap'
 import { LogoInline } from '@/components/ui/Logo'
@@ -29,7 +29,6 @@ export default function SwapPage() {
   const { wallets } = useWallets()
   const { ready, authenticated } = usePrivy()
   const [swapState, setSwapState] = useState<SwapState>('idle')
-  const [showChart, setShowChart] = useState(true)
   const [selectedBuyToken, setSelectedBuyToken] = useState<{
     address: string
     symbol: string
@@ -136,28 +135,11 @@ export default function SwapPage() {
           </header>
 
           <div className="space-y-4">
-          {/* Chart Section - Collapsible */}
-          <div>
-            <button
-              onClick={() => setShowChart(!showChart)}
-              className="w-full flex items-center justify-between px-4 py-2 mb-2 rounded-xl bg-white/5 hover:bg-white/8 transition-colors"
-            >
-              <span className="text-white/60 text-sm font-medium">Search Token</span>
-              {showChart ? (
-                <ChevronUp className="w-4 h-4 text-white/40" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-white/40" />
-              )}
-            </button>
-
-            {showChart && (
-              <TokenChart
-                onBuy={handleChartBuy}
-                onSell={handleChartSell}
-                className="mb-4"
-              />
-            )}
-          </div>
+          {/* Token Search & Chart */}
+          <TokenChart
+            onBuy={handleChartBuy}
+            onSell={handleChartSell}
+          />
 
           {/* Swap Widget Container with Glass Border */}
           <div className="relative rounded-[28px] p-[2px] bg-gradient-to-br from-white/20 via-white/5 to-[#FF3B30]/20">

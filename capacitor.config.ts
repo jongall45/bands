@@ -9,7 +9,8 @@ const config: CapacitorConfig = {
   // Change to your staging URL for testing: 'https://bands-staging.vercel.app'
   server: {
     // Use www version - site redirects bands.cash → www.bands.cash
-    url: 'https://www.bands.cash',
+    // Add ?app=ios so the web app can detect it's running in the native app
+    url: 'https://www.bands.cash?app=ios',
     cleartext: false,
     // CRITICAL: Allow navigation to these domains to prevent Safari redirect
     allowNavigation: [
