@@ -16,6 +16,7 @@ import { LogoInline } from '@/components/ui/Logo'
 import { AppShell, AppContent } from '@/components/layout/AppShell'
 import { IndustrialPage, GlassCard, GlassButton, GlassInner } from '@/components/ui/IndustrialGlass'
 import { useAuth } from '@/hooks/useAuth'
+import haptics from '@/lib/haptics'
 
 // USDC Logo URL
 const USDC_LOGO = 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png'
@@ -41,6 +42,14 @@ export default function SavePage() {
       router.push('/')
     }
   }, [isAuthenticated, isReady, router])
+
+  // Enable scrolling for this page on iOS
+  useEffect(() => {
+    document.body.classList.add('allow-scroll')
+    return () => {
+      document.body.classList.remove('allow-scroll')
+    }
+  }, [])
 
   // Fetch vaults for selected chain
   const { data: vaults, isLoading: vaultsLoading, refetch: refetchVaults } = useMorphoVaults(selectedChainId)

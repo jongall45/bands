@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useFundWallet } from '@privy-io/react-auth'
-import { X, ChevronDown, ChevronUp, Zap, Check, CreditCard } from 'lucide-react'
+import { X, ChevronDown, ChevronUp, Zap, CreditCard, ExternalLink } from 'lucide-react'
 import { base } from 'viem/chains'
+import haptics from '@/lib/haptics'
 
 interface OnrampModalProps {
   isOpen: boolean
@@ -16,7 +17,7 @@ interface OnrampModalProps {
 const PRESET_AMOUNTS = [25, 50, 100, 250]
 const FEE_RATE = 0.025 // 2.5% MoonPay fee estimate
 
-type FlowStep = 'amount' | 'confirm' | 'processing' | 'success'
+type FlowStep = 'amount' | 'confirm' | 'processing' | 'started'
 
 export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: OnrampModalProps) {
   const { address, refetchBalances } = useAuth()
@@ -104,6 +105,7 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
 
   // Preset amount selection
   const handlePresetSelect = useCallback((preset: number) => {
+    haptics.selection()
     setAmount(preset.toString())
     setError(null)
     setIsTyping(false)
@@ -113,12 +115,15 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
   const handleContinue = useCallback(() => {
     if (amountNum < 5) {
       setError('Minimum amount is $5')
+      haptics.warning()
       return
     }
     if (amountNum > 2000) {
       setError('Maximum amount is $2,000')
+      haptics.warning()
       return
     }
+    haptics.buttonPress()
     setStep('confirm')
   }, [amountNum])
 
@@ -126,13 +131,16 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
   const handleConfirmPay = useCallback(async () => {
     if (!address) {
       setError('Please connect your wallet')
+      haptics.error()
       return
     }
 
     setStep('processing')
+    haptics.buttonPress()
 
     try {
       // Call Privy's fundWallet which opens MoonPay
+      // Note: This resolves when MoonPay modal OPENS, not when payment completes
       await fundWallet({
         address,
         options: {
@@ -145,14 +153,13 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
       // Check if component is still mounted before updating state
       if (!isMountedRef.current) return
 
-      // MoonPay flow completed - show success
-      setStep('success')
+      // MoonPay modal opened - show "started" state
+      // We can't know if payment actually completed, so don't show success
+      setStep('started')
+      haptics.impact('light')
 
-      // Clear any existing timeouts before setting new ones
+      // Refetch balances periodically to check for new funds
       if (balanceTimeoutRef.current) clearTimeout(balanceTimeoutRef.current)
-      if (dismissTimeoutRef.current) clearTimeout(dismissTimeoutRef.current)
-
-      // Refetch balances after a delay to allow for processing
       balanceTimeoutRef.current = setTimeout(() => {
         if (isMountedRef.current) {
           try {
@@ -161,15 +168,7 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
             console.error('Failed to refetch balances:', e)
           }
         }
-      }, 2000)
-
-      // Auto-dismiss after delay
-      dismissTimeoutRef.current = setTimeout(() => {
-        if (isMountedRef.current) {
-          onSuccess?.()
-          onClose()
-        }
-      }, 3000)
+      }, 5000)
     } catch (err) {
       console.error('Fund wallet error:', err)
       // Check if component is still mounted before updating state
@@ -177,8 +176,9 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
       // User may have closed the MoonPay modal - go back to confirm
       setError(err instanceof Error ? err.message : 'Payment cancelled or failed')
       setStep('confirm')
+      haptics.error()
     }
-  }, [address, amount, fundWallet, refetchBalances, onSuccess, onClose])
+  }, [address, amount, fundWallet, refetchBalances])
 
   // Back navigation
   const handleBack = useCallback(() => {
@@ -219,19 +219,25 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
             <div className="flex items-center gap-3">
               {step === 'confirm' && (
                 <button
-                  onClick={handleBack}
+                  onClick={() => {
+                    haptics.buttonTap()
+                    handleBack()
+                  }}
                   className="p-1 -ml-1 text-white/40 hover:text-white/60 transition-colors"
                 >
                   <ChevronDown className="w-5 h-5 rotate-90" />
                 </button>
               )}
               <h2 className="text-white/90 font-semibold text-[17px]">
-                {step === 'success' ? '' : 'Add Money'}
+                {step === 'started' ? '' : 'Add Money'}
               </h2>
             </div>
-            {step !== 'success' && step !== 'processing' && (
+            {step !== 'processing' && (
               <button
-                onClick={onClose}
+                onClick={() => {
+                  haptics.buttonTap()
+                  onClose()
+                }}
                 className="p-2 -mr-2 text-white/30 hover:text-white/50 transition-colors"
               >
                 <X className="w-5 h-5" />
@@ -420,29 +426,42 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
             </div>
           )}
 
-          {/* Step: Success - Optimistic */}
-          {step === 'success' && (
+          {/* Step: Started - Payment window opened */}
+          {step === 'started' && (
             <div className="px-6 pb-8 pt-4">
-              <div className="flex flex-col items-center justify-center py-8">
-                {/* Success animation */}
-                <div className="relative mb-6">
-                  <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center">
-                    <div className="w-16 h-16 bg-emerald-500/30 rounded-full flex items-center justify-center animate-pulse">
-                      <Check className="w-8 h-8 text-emerald-400" strokeWidth={3} />
-                    </div>
+              <div className="flex flex-col items-center justify-center py-6">
+                {/* Info icon */}
+                <div className="relative mb-5">
+                  <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center">
+                    <ExternalLink className="w-7 h-7 text-blue-400" strokeWidth={2} />
                   </div>
-                  {/* Ripple effect */}
-                  <div className="absolute inset-0 rounded-full border-2 border-emerald-400/30 animate-ping" />
                 </div>
 
-                <p className="text-white/50 text-sm mb-1">Adding to your balance</p>
-                <p className="text-white text-2xl font-bold mb-1">
-                  +${amountNum.toFixed(2)} <span className="text-[#ef4444]">USDC</span>
+                <p className="text-white text-lg font-semibold mb-2">Payment Window Opened</p>
+                <p className="text-white/50 text-sm text-center mb-1">
+                  Complete your payment in the MoonPay window.
                 </p>
-                <p className="text-emerald-400/80 text-xs flex items-center gap-1">
-                  <Zap className="w-3 h-3" />
-                  Arriving instantly
+                <p className="text-white/40 text-xs text-center mb-6">
+                  Your balance will update automatically once payment is confirmed.
                 </p>
+
+                {/* Done button to close modal */}
+                <button
+                  onClick={() => {
+                    haptics.buttonTap()
+                    refetchBalances()
+                    onClose()
+                  }}
+                  className="
+                    w-full py-3.5 rounded-2xl font-semibold text-[15px]
+                    bg-white/[0.08] text-white
+                    border border-white/[0.1]
+                    transition-all duration-150 active:scale-[0.98]
+                    hover:bg-white/[0.12]
+                  "
+                >
+                  Done
+                </button>
               </div>
             </div>
           )}

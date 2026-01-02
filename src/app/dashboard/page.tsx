@@ -23,6 +23,7 @@ import { LogoInline } from '@/components/ui/Logo'
 import { TransactionList } from '@/components/ui/TransactionList'
 import { AppShell, AppContent } from '@/components/layout/AppShell'
 import { IndustrialPage, GlassCard, GlassButton, GlassInner, TechBadge, SectionHeader } from '@/components/ui/IndustrialGlass'
+import haptics from '@/lib/haptics'
 
 // Solana chain ID (used for Relay API, but we use 'solana' as a special case for native transfers)
 const SOLANA_CHAIN_ID = 792703809
@@ -133,6 +134,14 @@ export default function Dashboard() {
     }
   }, [isAuthenticated, isReady, router, isIOSApp])
 
+  // Enable scrolling for dashboard on iOS (pages with content that scrolls)
+  useEffect(() => {
+    document.body.classList.add('allow-scroll')
+    return () => {
+      document.body.classList.remove('allow-scroll')
+    }
+  }, [])
+
   useEffect(() => {
     if (isSuccess) {
       setShowSend(false)
@@ -170,6 +179,7 @@ export default function Dashboard() {
 
   // Refresh all balances including Solana
   const handleRefresh = useCallback(() => {
+    haptics.buttonTap()
     refetchBalance()
     refetchPortfolio()
     fetchSolanaBalances()
@@ -182,16 +192,20 @@ export default function Dashboard() {
 
   const copyAddress = useCallback(() => {
     if (address) {
+      haptics.buttonTap()
       navigator.clipboard.writeText(address)
       setCopied(true)
+      haptics.success()
       setTimeout(() => setCopied(false), 2000)
     }
   }, [address])
 
   const copySolanaAddress = useCallback(() => {
     if (solanaAddress) {
+      haptics.buttonTap()
       navigator.clipboard.writeText(solanaAddress)
       setCopiedSolana(true)
+      haptics.success()
       setTimeout(() => setCopiedSolana(false), 2000)
     }
   }, [solanaAddress])
@@ -241,16 +255,19 @@ export default function Dashboard() {
     if (selectedChain.isSolana) {
       if (!isValidSolanaAddress(sendTo)) {
         setAddressError('Invalid Solana address format')
+        haptics.error()
         return
       }
     } else {
       if (!address) return
       if (!isAddress(sendTo)) {
         setAddressError('Invalid address format')
+        haptics.error()
         return
       }
     }
 
+    haptics.buttonPress()
     setIsSending(true)
     setSendError(null)
 
@@ -327,6 +344,7 @@ export default function Dashboard() {
         setTimeout(() => fetchSolanaBalances(), 2000)
 
         // Close modal and reset
+        haptics.success()
         setShowSend(false)
         setSendTo('')
         setSendAmount('')
@@ -385,10 +403,12 @@ export default function Dashboard() {
 
       setTxHash(hash)
       setTxChainId(chainConfig.id)
+      haptics.success()
       console.log('Transaction sent via smart wallet:', hash)
     } catch (error) {
       console.error('Send transaction error:', error)
       setSendError(error instanceof Error ? error.message : 'Transaction failed')
+      haptics.error()
     } finally {
       setIsSending(false)
     }
