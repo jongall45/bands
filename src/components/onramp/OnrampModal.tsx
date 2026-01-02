@@ -6,27 +6,6 @@ import { useFundWallet } from '@privy-io/react-auth'
 import { X, ChevronDown, ChevronUp, Zap, CreditCard, ExternalLink } from 'lucide-react'
 import { base } from 'viem/chains'
 import haptics from '@/lib/haptics'
-import { Browser } from '@capacitor/browser'
-
-// Check if running in Capacitor
-const isCapacitorNative = (): boolean => {
-  if (typeof window === 'undefined') return false
-  return !!(window as any).Capacitor?.isNativePlatform?.()
-}
-
-// MoonPay widget URL builder
-const getMoonPayUrl = (address: string, amount: string): string => {
-  const apiKey = process.env.NEXT_PUBLIC_MOONPAY_API_KEY || 'pk_live_yourkey'
-  const params = new URLSearchParams({
-    apiKey,
-    currencyCode: 'usdc_base',
-    walletAddress: address,
-    baseCurrencyAmount: amount,
-    colorCode: '#ef4444',
-    showWalletAddressForm: 'false',
-  })
-  return `https://buy.moonpay.com?${params.toString()}`
-}
 
 interface OnrampModalProps {
   isOpen: boolean
@@ -148,7 +127,9 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
     setStep('confirm')
   }, [amountNum])
 
-  // Initiate MoonPay funding
+  // Initiate MoonPay funding via Privy
+  // Using Privy's fundWallet on all platforms - it handles MoonPay integration
+  // and will open in a popup/new tab which works in both web and Capacitor WebView
   const handleConfirmPay = useCallback(async () => {
     if (!address) {
       setError('Please connect your wallet')
@@ -160,35 +141,8 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
     haptics.buttonPress()
 
     try {
-      // For Capacitor native apps, open MoonPay in system browser
-      // Privy's fundWallet uses iframes which are blocked in WebView
-      if (isCapacitorNative()) {
-        const moonPayUrl = getMoonPayUrl(address, amount)
-        await Browser.open({ url: moonPayUrl })
-
-        // Show started state immediately
-        if (!isMountedRef.current) return
-        setStep('started')
-        haptics.impact('light')
-
-        // Set up balance refresh when browser closes
-        Browser.addListener('browserFinished', () => {
-          if (isMountedRef.current) {
-            refetchBalances()
-          }
-        })
-
-        // Also refetch after delay
-        if (balanceTimeoutRef.current) clearTimeout(balanceTimeoutRef.current)
-        balanceTimeoutRef.current = setTimeout(() => {
-          if (isMountedRef.current) {
-            refetchBalances()
-          }
-        }, 5000)
-        return
-      }
-
-      // For web, use Privy's fundWallet which opens MoonPay modal
+      // Use Privy's fundWallet which handles MoonPay integration
+      // On mobile, this will open MoonPay in a new browser tab/popup
       await fundWallet({
         address,
         options: {
@@ -202,6 +156,7 @@ export function OnrampModal({ isOpen, onClose, onSuccess, initialAmount }: Onram
       setStep('started')
       haptics.impact('light')
 
+      // Refetch balances after delay to catch the deposit
       if (balanceTimeoutRef.current) clearTimeout(balanceTimeoutRef.current)
       balanceTimeoutRef.current = setTimeout(() => {
         if (isMountedRef.current) {
