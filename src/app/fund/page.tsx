@@ -79,7 +79,7 @@ export default function FundPage() {
   if (!address) return null
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-black page-transition">
       <div className="max-w-[430px] mx-auto relative z-10 pb-24">
         {/* Header */}
         <header

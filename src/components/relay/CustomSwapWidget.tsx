@@ -6,6 +6,7 @@ import { useRelaySwap, useUserTokens, SUPPORTED_CHAINS, COMMON_TOKENS, SOLANA_CH
 import TokenModal from './TokenModal'
 import { saveSwapRecord } from '@/lib/swapHistory'
 import { useSolanaAuth } from '@/hooks/useSolanaAuth'
+import haptics from '@/lib/haptics'
 
 // ============================================
 // TYPES
@@ -313,6 +314,7 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken, 
 
   // Swap tokens
   const handleSwapTokens = () => {
+    haptics.buttonTap()
     const temp = fromToken
     setFromToken(toToken)
     setToToken(temp)
@@ -321,31 +323,37 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken, 
 
   // Handle token selection
   const handleFromTokenSelect = (token: Token) => {
+    haptics.selection()
     setFromToken(token)
     setSellAmount('')
   }
 
   const handleToTokenSelect = (token: Token) => {
+    haptics.selection()
     setToToken(token)
   }
 
   // Execute swap
   const handleSwap = async () => {
     if (!isConnected) {
+      haptics.buttonTap()
       login()
       return
     }
 
     if (!quote) return
 
+    haptics.buttonPress()
     const result = await executeSwap(fromToken, toToken)
     if (result) {
+      haptics.success()
       // Success handled in useEffect
     }
   }
 
   // Close success modal
   const handleCloseSuccess = () => {
+    haptics.buttonTap()
     setShowSuccess(false)
     reset()
     setSellAmount('')
