@@ -233,8 +233,7 @@ export default function Home() {
           </h1>
 
           <motion.div className="subheading" variants={scrollReveal}>
-            <span className="def-label">DEF:</span>
-            <span className="def-text">THE STABLECOIN NEOBANK UTILITY DESIGNED FOR DEGENS.</span>
+            <span className="def-text">STABLECOIN NEOBANK DESIGNED FOR DEGENS.</span>
           </motion.div>
 
           <motion.button
