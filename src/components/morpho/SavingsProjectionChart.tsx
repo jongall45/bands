@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef, useCallback } from 'react'
 import { TrendingUp } from 'lucide-react'
 
 interface SavingsProjectionChartProps {
@@ -10,6 +10,7 @@ interface SavingsProjectionChartProps {
 
 export function SavingsProjectionChart({ totalDeposited, avgApy }: SavingsProjectionChartProps) {
   const [hoveredPoint, setHoveredPoint] = useState<number | null>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
 
   // Generate projection data for 12 months
   const projectionData = useMemo(() => {
@@ -75,6 +76,29 @@ export function SavingsProjectionChart({ totalDeposited, avgApy }: SavingsProjec
     return { x, y, ...d }
   }
 
+  // Handle touch interaction for mobile
+  const handleTouch = useCallback((e: React.TouchEvent) => {
+    e.stopPropagation()
+    if (!svgRef.current) return
+
+    const rect = svgRef.current.getBoundingClientRect()
+    const touch = e.touches[0]
+    const x = touch.clientX - rect.left
+    const relativeX = (x - padding.left) / innerWidth
+
+    // Find the closest point
+    const pointIndex = Math.round(relativeX * 12)
+    if (pointIndex >= 0 && pointIndex <= 12) {
+      setHoveredPoint(pointIndex)
+    }
+  }, [innerWidth])
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    e.stopPropagation()
+    // Keep the point selected for a moment, then clear
+    setTimeout(() => setHoveredPoint(null), 1500)
+  }, [])
+
   if (totalDeposited <= 0) return null
 
   return (
@@ -95,13 +119,17 @@ export function SavingsProjectionChart({ totalDeposited, avgApy }: SavingsProjec
       </div>
 
       {/* Interactive Chart */}
-      <div className="relative">
+      <div className="relative" style={{ touchAction: 'none' }}>
         <svg
+          ref={svgRef}
           width={chartWidth}
           height={chartHeight}
           className="w-full"
           viewBox={`0 0 ${chartWidth} ${chartHeight}`}
           onMouseLeave={() => setHoveredPoint(null)}
+          onTouchStart={handleTouch}
+          onTouchMove={handleTouch}
+          onTouchEnd={handleTouchEnd}
         >
           {/* Grid lines */}
           {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => (
