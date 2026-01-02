@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { useAuth } from "@/hooks/useAuth"
+import haptics from "@/lib/haptics"
 
 // --- STYLE CONSTANTS ---
 const colors = {
@@ -19,14 +20,6 @@ const colors = {
 
 const industrialFontStack = '"Helvetica Neue", Helvetica, Arial, sans-serif'
 const noisePattern = `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.04'/%3E%3C/svg%3E")`
-
-// Haptic feedback helper
-const triggerHaptic = (style: 'light' | 'medium' | 'heavy' = 'medium') => {
-    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-        const duration = style === 'light' ? 10 : style === 'medium' ? 25 : 50
-        navigator.vibrate(duration)
-    }
-}
 
 // --- ANIMATED LOGO COMPONENT ---
 const AnimatedLogo = ({ onAnimationComplete }: { onAnimationComplete?: () => void }) => {
@@ -204,6 +197,11 @@ export default function IOSLandingPage() {
     const hasNavigatedRef = useRef(false)
     const containerRef = useRef<HTMLDivElement>(null)
 
+    // Haptic feedback on page load
+    useEffect(() => {
+        haptics.impact('medium')
+    }, [])
+
     // Prevent all scrolling
     useEffect(() => {
         const preventDefault = (e: TouchEvent) => {
@@ -233,14 +231,14 @@ export default function IOSLandingPage() {
         }
     }, [isAuthenticated, address, isReady, router])
 
-    // Haptic on logo animation complete
+    // Haptic on page load (when logo animation completes)
     const handleLogoComplete = () => {
-        triggerHaptic('medium')
+        haptics.impact('heavy')
     }
 
     const handleLogin = () => {
         if (!isReady) return
-        triggerHaptic('heavy')
+        haptics.buttonPress()
         login()
     }
 
