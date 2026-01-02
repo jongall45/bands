@@ -183,18 +183,22 @@ export default function SavePage() {
   return (
     <AppShell>
       <IndustrialPage className="page-transition">
-        {/* Sticky Header */}
+        {/* Fixed Header - stays at top during scroll */}
         <header
-          className="sticky top-0 z-40 bg-[#050505] border-b border-white/[0.04]"
+          className="fixed top-0 left-0 right-0 z-50 bg-[#050505]/95 backdrop-blur-md border-b border-white/[0.04]"
           style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
         >
-          <div className="flex items-center justify-between px-4 py-2.5">
+          <div className="flex items-center justify-between px-4 py-2.5 max-w-[480px] mx-auto">
             <LogoInline size="sm" />
             <div className="text-right">
-              <h1 className="text-white font-semibold text-sm">Earn</h1>
+              <h1 className="text-white font-extrabold text-base" style={{ fontWeight: 800 }}>Earn</h1>
+              <p className="text-white/50 text-xs">Deposit & earn yield</p>
             </div>
           </div>
         </header>
+
+        {/* Spacer for fixed header */}
+        <div style={{ height: 'calc(52px + env(safe-area-inset-top, 0px))' }} />
 
         <AppContent noTopPadding>
 
