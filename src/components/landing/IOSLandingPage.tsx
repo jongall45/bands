@@ -86,8 +86,8 @@ const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete
     }, [])
 
     return (
-        <div style={{ position: "relative", width: 180, height: 160, display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 12 }}>
-            {/* $ Logo centered above cards - positioned higher */}
+        <div style={{ position: "relative", width: 180, height: 220, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            {/* $ Logo - positioned higher at the top */}
             <motion.div
                 initial={{ opacity: 0, scale: 0.5 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -101,7 +101,7 @@ const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete
                     alignItems: 'center',
                     justifyContent: 'center',
                     boxShadow: '0 6px 20px rgba(255, 59, 48, 0.4)',
-                    marginBottom: 12,
+                    marginBottom: 'auto', // Push to top
                 }}
             >
                 <span style={{
@@ -112,8 +112,8 @@ const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete
                 }}>$</span>
             </motion.div>
 
-            {/* Cards container */}
-            <div style={{ position: "relative", width: cardWidth, height: cardHeight + 25 }}>
+            {/* Cards container - centered in the remaining space */}
+            <div style={{ position: "relative", width: cardWidth, height: cardHeight + 25, marginTop: 'auto', marginBottom: 20 }}>
                 {papers.map((color, i) => {
                     const isTopPaper = i === papers.length - 1;
                     const isRed = color === colors.brandRed;
