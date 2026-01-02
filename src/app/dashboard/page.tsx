@@ -23,6 +23,7 @@ import { LogoInline } from '@/components/ui/Logo'
 import { TransactionList } from '@/components/ui/TransactionList'
 import { AppShell, AppContent } from '@/components/layout/AppShell'
 import { IndustrialPage, GlassCard, GlassButton, GlassInner, TechBadge, SectionHeader } from '@/components/ui/IndustrialGlass'
+import { PullToRefresh } from '@/components/ui/PullToRefresh'
 import haptics from '@/lib/haptics'
 
 // Solana chain ID (used for Relay API, but we use 'solana' as a special case for native transfers)
@@ -178,11 +179,13 @@ export default function Dashboard() {
     : 0
 
   // Refresh all balances including Solana
-  const handleRefresh = useCallback(() => {
+  const handleRefresh = useCallback(async () => {
     haptics.buttonTap()
-    refetchBalance()
-    refetchPortfolio()
-    fetchSolanaBalances()
+    await Promise.all([
+      refetchBalance(),
+      refetchPortfolio(),
+      fetchSolanaBalances(),
+    ])
   }, [refetchBalance, refetchPortfolio, fetchSolanaBalances])
 
   // Get unique chains in portfolio
@@ -443,25 +446,29 @@ export default function Dashboard() {
   return (
     <AppShell>
       <IndustrialPage>
-        <AppContent>
-          {/* Header */}
-          <header className="flex items-center justify-between mb-4">
-            <LogoInline size="sm" />
-            <button
-              onClick={async () => {
-                await logout()
-                // Explicitly redirect after logout to preserve iOS param
-                router.replace(isIOSApp ? '/?app=ios' : '/')
-              }}
-              className="p-2 text-white/40 hover:text-white/70 transition-colors"
-              title="Sign out"
-            >
-              <LogOut className="w-5 h-5" strokeWidth={1.5} />
-            </button>
-          </header>
+        {/* Sticky Header */}
+        <header
+          className="sticky top-0 z-40 flex items-center justify-between px-4 py-3 bg-[#050505]/95 backdrop-blur-xl border-b border-white/[0.04]"
+          style={{ paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))' }}
+        >
+          <LogoInline size="sm" />
+          <button
+            onClick={async () => {
+              haptics.buttonPress()
+              await logout()
+              router.replace(isIOSApp ? '/?app=ios' : '/')
+            }}
+            className="p-2 text-white/40 hover:text-white/70 transition-colors"
+            title="Sign out"
+          >
+            <LogOut className="w-5 h-5" strokeWidth={1.5} />
+          </button>
+        </header>
 
-          {/* Main Content */}
-          <div className="flex-1 flex flex-col w-full">
+        <PullToRefresh onRefresh={handleRefresh}>
+          <AppContent noTopPadding>
+            {/* Main Content */}
+            <div className="flex-1 flex flex-col w-full">
 
         {/* Balance Card */}
         <GlassCard variant="redAccent" className="mb-4">
@@ -705,7 +712,8 @@ export default function Dashboard() {
             </GlassCard>
 
           </div>
-        </AppContent>
+          </AppContent>
+        </PullToRefresh>
 
         {/* Send Modal */}
       <Modal isOpen={showSend} onClose={() => !isSending && !isConfirming && setShowSend(false)} title="Send">
