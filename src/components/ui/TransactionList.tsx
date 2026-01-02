@@ -32,6 +32,15 @@ const OSTIUM_LOGO = 'https://media.licdn.com/dms/image/v2/D4E0BAQEvzvW_jYImMw/co
 // Relay logo URL
 const RELAY_LOGO = 'https://pbs.twimg.com/profile_images/1960334543052816384/ejODKCzq_400x400.jpg'
 
+// MoonPay logo URL
+const MOONPAY_LOGO = 'https://pbs.twimg.com/profile_images/1590337672533123072/wnWsv7B6_400x400.jpg'
+
+// Morpho logo URL
+const MORPHO_LOGO = 'https://pbs.twimg.com/profile_images/1930600293915410432/dgTU7UNU_400x400.jpg'
+
+// USDC logo URL
+const USDC_LOGO = 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png'
+
 // Ostium trade details interface
 interface OstiumTradeDetails {
   type: 'open' | 'close' | 'unknown'
@@ -685,10 +694,23 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
       return {
         label: 'Deposited',
         sublabel: tx.vaultName || 'Morpho Vault',
-        icon: <PiggyBank className="w-5 h-5 text-[#ef4444]" />,
-        iconBg: 'bg-[#ef4444]/10',
+        icon: (
+          <img
+            src={MORPHO_LOGO}
+            alt="Morpho"
+            className="w-5 h-5 rounded-full"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+          />
+        ),
+        iconBg: 'bg-[#2470ff]/10',
         amountColor: 'text-white',
         amountPrefix: '-',
+        customAmount: (
+          <div className="flex items-center gap-1">
+            <span className="text-white">-{amount}</span>
+            <img src={USDC_LOGO} alt="USDC" className="w-4 h-4 rounded-full" />
+          </div>
+        ),
       }
     }
 
@@ -697,55 +719,105 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
       return {
         label: 'Withdrew',
         sublabel: tx.vaultName || 'Morpho Vault',
-        icon: <PiggyBank className="w-5 h-5 text-green-400" />,
+        icon: (
+          <img
+            src={MORPHO_LOGO}
+            alt="Morpho"
+            className="w-5 h-5 rounded-full"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+          />
+        ),
         iconBg: 'bg-green-500/10',
         amountColor: 'text-green-400',
         amountPrefix: '+',
+        customAmount: (
+          <div className="flex items-center gap-1">
+            <span className="text-green-400">+{amount}</span>
+            <img src={USDC_LOGO} alt="USDC" className="w-4 h-4 rounded-full" />
+          </div>
+        ),
       }
     }
 
-    // Receive - show token logo
+    // Receive - show token logo with chain badge, check for MoonPay
     if (isReceive) {
-      const tokenLogo = tx.tokenLogoUri || `https://api.sim.dune.com/beta/token/logo/${chainId}/${tx.tokenAddress}`
+      const isMoonPay = tx.appName?.toLowerCase().includes('moonpay') ||
+        tx.from?.toLowerCase().includes('moonpay') ||
+        (counterparty && counterparty.toLowerCase().includes('moonpay'))
+
+      const tokenLogo = tx.tokenLogoUri ||
+        (tx.tokenSymbol === 'USDC' ? USDC_LOGO : `https://api.sim.dune.com/beta/token/logo/${chainId}/${tx.tokenAddress}`)
+      const chainLogo = CHAIN_LOGOS[chainId] || CHAIN_LOGOS[8453]
+
       return {
-        label: 'Received',
-        sublabel: `From ${shortenAddress(counterparty)}`,
-        icon: tx.tokenLogoUri ? (
+        label: isMoonPay ? 'Purchased' : 'Received',
+        sublabel: isMoonPay ? 'via MoonPay' : `From ${shortenAddress(counterparty)}`,
+        icon: isMoonPay ? (
+          <img
+            src={MOONPAY_LOGO}
+            alt="MoonPay"
+            className="w-5 h-5 rounded-full"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+          />
+        ) : (
           <img
             src={tokenLogo}
             alt={tx.tokenSymbol}
             className="w-5 h-5 rounded-full"
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = 'none'
-              ;(e.target as HTMLImageElement).parentElement!.innerHTML = '<svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>'
             }}
           />
-        ) : <ArrowDownLeft className="w-5 h-5 text-green-400" />,
-        iconBg: 'bg-green-500/10',
+        ),
+        iconBg: isMoonPay ? 'bg-purple-500/10' : 'bg-green-500/10',
         amountColor: 'text-green-400',
         amountPrefix: '+',
+        customAmount: (
+          <div className="flex items-center gap-1">
+            <span className="text-green-400">+{amount}</span>
+            <div className="relative w-4 h-4">
+              <img src={tokenLogo} alt={tx.tokenSymbol} className="w-4 h-4 rounded-full" />
+              {chainId !== 8453 && (
+                <img src={chainLogo} alt={CHAIN_NAMES[chainId]} className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-black/50" />
+              )}
+            </div>
+          </div>
+        ),
       }
     }
 
-    // Default: Send - show token logo
-    const tokenLogo = tx.tokenLogoUri || `https://api.sim.dune.com/beta/token/logo/${chainId}/${tx.tokenAddress}`
+    // Default: Send - show token logo with chain badge
+    const tokenLogo = tx.tokenLogoUri ||
+      (tx.tokenSymbol === 'USDC' ? USDC_LOGO : `https://api.sim.dune.com/beta/token/logo/${chainId}/${tx.tokenAddress}`)
+    const chainLogo = CHAIN_LOGOS[chainId] || CHAIN_LOGOS[8453]
+
     return {
       label: 'Sent',
       sublabel: `To ${shortenAddress(counterparty)}`,
-      icon: tx.tokenLogoUri ? (
+      icon: (
         <img
           src={tokenLogo}
           alt={tx.tokenSymbol}
           className="w-5 h-5 rounded-full"
           onError={(e) => {
             (e.target as HTMLImageElement).style.display = 'none'
-            ;(e.target as HTMLImageElement).parentElement!.innerHTML = '<svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>'
           }}
         />
-      ) : <ArrowUpRight className="w-5 h-5 text-gray-400" />,
+      ),
       iconBg: 'bg-white/[0.05]',
       amountColor: 'text-white',
       amountPrefix: '-',
+      customAmount: (
+        <div className="flex items-center gap-1">
+          <span className="text-white">-{amount}</span>
+          <div className="relative w-4 h-4">
+            <img src={tokenLogo} alt={tx.tokenSymbol} className="w-4 h-4 rounded-full" />
+            {chainId !== 8453 && (
+              <img src={chainLogo} alt={CHAIN_NAMES[chainId]} className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-black/50" />
+            )}
+          </div>
+        </div>
+      ),
     }
   }
 

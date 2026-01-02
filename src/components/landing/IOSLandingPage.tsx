@@ -26,25 +26,29 @@ const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete
     // Track which cards have already triggered haptics
     const landedCardsRef = React.useRef<Set<number>>(new Set())
 
+    // Card dimensions - 2.5x smaller than before
+    const cardWidth = 160  // was 280
+    const cardHeight = 70  // was 120
+
     const paperVariants = {
         hidden: {
-            y: -800,
+            y: -600,
             opacity: 0,
-            rotate: Math.random() * 90 - 45,
+            rotate: Math.random() * 60 - 30,
             scale: 0.8
         },
         visible: (i: number) => ({
             y: 0,
             opacity: 1,
             // More aggressive rotation and offset for visual stagger
-            rotate: (i % 2 === 0 ? 1 : -1) * (4 + i * 1.5),
+            rotate: (i % 2 === 0 ? 1 : -1) * (3 + i * 1.2),
             scale: 1,
             transition: {
-                delay: 0.2 + (i * 0.15),
-                duration: 0.8,
+                delay: 0.1 + (i * 0.1),  // Faster start, 1 second earlier overall
+                duration: 0.6,
                 type: "spring" as const,
-                stiffness: 120,
-                damping: 18,
+                stiffness: 150,
+                damping: 16,
             },
         }),
     }
@@ -56,53 +60,67 @@ const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete
         colors.brandRed, colors.brandRed
     ]
 
-    const handleCardAnimationComplete = (index: number, isTopPaper: boolean) => {
-        // Only trigger haptic once per card
-        if (!landedCardsRef.current.has(index)) {
-            landedCardsRef.current.add(index)
-            onCardLand?.(index)
-        }
-        if (isTopPaper) {
+    // Trigger haptics DURING the fall animation (midpoint of fall)
+    React.useEffect(() => {
+        papers.forEach((_, i) => {
+            const delay = 0.1 + (i * 0.1)  // Match the animation delay
+            const hapticTiming = (delay + 0.25) * 1000  // Trigger at 250ms into the 600ms animation (during fall)
+
+            const timer = setTimeout(() => {
+                if (!landedCardsRef.current.has(i)) {
+                    landedCardsRef.current.add(i)
+                    onCardLand?.(i)
+                }
+            }, hapticTiming)
+
+            return () => clearTimeout(timer)
+        })
+
+        // Trigger onAnimationComplete after all cards
+        const totalDuration = (0.1 + (papers.length - 1) * 0.1 + 0.6) * 1000
+        const completeTimer = setTimeout(() => {
             onAnimationComplete?.()
-        }
-    }
+        }, totalDuration)
+
+        return () => clearTimeout(completeTimer)
+    }, [])
 
     return (
-        <div style={{ position: "relative", width: 300, height: 200, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
+        <div style={{ position: "relative", width: 200, height: 140, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
             {/* $ Logo centered above cards */}
             <motion.div
                 initial={{ opacity: 0, scale: 0.5 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 1.3, duration: 0.4, type: "spring" }}
+                transition={{ delay: 0.8, duration: 0.4, type: "spring" }}
                 style={{
                     position: "absolute",
-                    top: -10,
+                    top: -5,
                     zIndex: 10,
-                    width: 48,
-                    height: 48,
+                    width: 40,
+                    height: 40,
                     backgroundColor: colors.brandRed,
-                    borderRadius: 12,
+                    borderRadius: 10,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    boxShadow: '0 8px 24px rgba(255, 59, 48, 0.4)',
+                    boxShadow: '0 6px 20px rgba(255, 59, 48, 0.4)',
                 }}
             >
                 <span style={{
                     color: colors.brightWhite,
-                    fontSize: 28,
+                    fontSize: 24,
                     fontWeight: 800,
                     fontFamily: industrialFontStack,
                 }}>$</span>
             </motion.div>
 
             {/* Cards container - positioned lower to make room for $ logo */}
-            <div style={{ position: "relative", width: 280, height: 140, marginTop: 40 }}>
+            <div style={{ position: "relative", width: cardWidth, height: cardHeight + 30, marginTop: 30 }}>
                 {papers.map((color, i) => {
                     const isTopPaper = i === papers.length - 1;
                     const isRed = color === colors.brandRed;
                     // Add vertical offset for visual stacking effect
-                    const yOffset = (papers.length - 1 - i) * 8;
+                    const yOffset = (papers.length - 1 - i) * 5;
 
                     return (
                         <motion.div
@@ -111,16 +129,15 @@ const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete
                             variants={paperVariants}
                             initial="hidden"
                             animate="visible"
-                            onAnimationComplete={() => handleCardAnimationComplete(i, isTopPaper)}
                             style={{
                                 position: "absolute",
-                                width: 280,
-                                height: 120,
+                                width: cardWidth,
+                                height: cardHeight,
                                 backgroundColor: color,
                                 border: isRed ? `1px solid rgba(255,255,255,0.1)` : `1px solid ${colors.brightWhite}`,
-                                boxShadow: "0 20px 40px rgba(0,0,0,0.6)",
+                                boxShadow: "0 12px 30px rgba(0,0,0,0.5)",
                                 zIndex: i,
-                                borderRadius: "4px",
+                                borderRadius: "3px",
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
@@ -129,19 +146,19 @@ const AnimatedLogo = ({ onAnimationComplete, onCardLand }: { onAnimationComplete
                         >
                             {isTopPaper && (
                                 <motion.div
-                                    initial={{ opacity: 0, filter: "blur(10px)" }}
+                                    initial={{ opacity: 0, filter: "blur(8px)" }}
                                     animate={{ opacity: 1, filter: "blur(0px)" }}
-                                    transition={{ delay: 1.5, duration: 0.4 }}
+                                    transition={{ delay: 1.0, duration: 0.3 }}
                                     style={{
                                         display: 'flex',
                                         alignItems: 'center',
-                                        gap: 10,
+                                        gap: 6,
                                     }}
                                 >
                                     <span style={{
                                         fontWeight: 700,
-                                        fontSize: "48px",
-                                        letterSpacing: "-2px",
+                                        fontSize: "32px",
+                                        letterSpacing: "-1px",
                                         color: colors.brightWhite,
                                         fontFamily: industrialFontStack,
                                         lineHeight: 1,
