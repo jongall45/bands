@@ -10,6 +10,7 @@ import { LogoInline } from '@/components/ui/Logo'
 import { AppShell, AppContent } from '@/components/layout/AppShell'
 import { IndustrialPage, GlassCard, TechBadge } from '@/components/ui/IndustrialGlass'
 import { TokenChart } from '@/components/chart/TokenChart'
+import haptics from '@/lib/haptics'
 
 // Solana chain ID for Relay API
 const SOLANA_CHAIN_ID = 792703809
@@ -54,6 +55,14 @@ export default function SwapPage() {
       router.push('/')
     }
   }, [authenticated, ready, router])
+
+  // Enable scrolling for this page on iOS
+  useEffect(() => {
+    document.body.classList.add('allow-scroll')
+    return () => {
+      document.body.classList.remove('allow-scroll')
+    }
+  }, [])
 
   // Cleanup body class on unmount
   useEffect(() => {

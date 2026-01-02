@@ -57,10 +57,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
     setIsNative(native)
     setMounted(true)
 
+    // Add Capacitor-specific body class for iOS native styling
+    if (native) {
+      document.body.classList.add('capacitor-ios')
+      // Add allow-scroll class for pages that need scrolling
+      // (will be managed per-page via useEffect)
+    }
+
     console.log('[Providers] Platform detection:', {
       isNative: native,
       loginMethods: native ? ['email', 'apple'] : ['email', 'google', 'apple'],
     })
+
+    return () => {
+      document.body.classList.remove('capacitor-ios')
+    }
   }, [])
 
   if (!mounted) {

@@ -7,6 +7,7 @@ import { ArrowLeft, Copy, Check, QrCode, CreditCard, Zap } from 'lucide-react'
 import Link from 'next/link'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { OnrampModal } from '@/components/onramp/OnrampModal'
+import haptics from '@/lib/haptics'
 
 // USDC Logo component
 const USDCLogo = ({ className = "w-8 h-8" }: { className?: string }) => (
@@ -42,12 +43,27 @@ export default function FundPage() {
     }
   }, [isAuthenticated, isReady, router])
 
+  // Enable scrolling for this page on iOS
+  useEffect(() => {
+    document.body.classList.add('allow-scroll')
+    return () => {
+      document.body.classList.remove('allow-scroll')
+    }
+  }, [])
+
   const copyAddress = () => {
     if (address) {
+      haptics.buttonTap()
       navigator.clipboard.writeText(address)
       setCopied(true)
+      haptics.success()
       setTimeout(() => setCopied(false), 2000)
     }
+  }
+
+  const handleBuyWithCard = () => {
+    haptics.buttonPress()
+    setShowOnrampModal(true)
   }
 
   // Show loading spinner while auth is initializing or not authenticated
@@ -97,7 +113,7 @@ export default function FundPage() {
 
             {/* Option 1: Buy with Card */}
             <button
-              onClick={() => setShowOnrampModal(true)}
+              onClick={handleBuyWithCard}
               className="relative w-full flex items-center justify-between p-4 bg-[#ef4444]/10 hover:bg-[#ef4444]/15 border border-[#ef4444]/20 rounded-xl mb-3 transition-all active:scale-[0.99] group"
             >
               <div className="text-left">

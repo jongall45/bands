@@ -8,6 +8,7 @@ import { AppShell, AppContent } from '@/components/layout/AppShell'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { useSolanaAuth } from '@/hooks/useSolanaAuth'
+import haptics from '@/lib/haptics'
 
 // Wallet Card Component
 function WalletCard({
@@ -142,7 +143,16 @@ export default function SettingsPage() {
     }
   }, [authenticated, ready, router])
 
+  // Enable scrolling for this page on iOS
+  useEffect(() => {
+    document.body.classList.add('allow-scroll')
+    return () => {
+      document.body.classList.remove('allow-scroll')
+    }
+  }, [])
+
   const handleDisconnect = async () => {
+    haptics.buttonPress()
     try {
       await logout()
     } catch (e) {

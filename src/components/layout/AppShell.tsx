@@ -38,8 +38,8 @@ export function AppShell({ children, hideNav = false }: AppShellProps) {
       <main
         className="min-h-screen"
         style={{
-          // Add padding for bottom nav on mobile
-          paddingBottom: hideNav ? 0 : 'calc(80px + env(safe-area-inset-bottom, 0px))',
+          // Add padding for bottom nav on mobile (tab bar ~56px + safe area)
+          paddingBottom: hideNav ? 0 : 'calc(60px + env(safe-area-inset-bottom, 0px))',
         }}
       >
         {children}
