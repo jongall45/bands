@@ -308,6 +308,8 @@ const pageBackgroundStyle: React.CSSProperties = {
     letterSpacing: "1px",
     paddingTop: "env(safe-area-inset-top, 0px)",
     paddingBottom: "env(safe-area-inset-bottom, 0px)",
+    zIndex: 0,
+    isolation: "isolate",
 }
 
 const masterContainerStyle: React.CSSProperties = {
@@ -317,7 +319,6 @@ const masterContainerStyle: React.CSSProperties = {
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 10,
     boxSizing: "border-box",
     padding: "20px",
 }
