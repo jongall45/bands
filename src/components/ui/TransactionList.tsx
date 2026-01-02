@@ -14,7 +14,8 @@ import {
   XCircle, Loader2, PiggyBank, TrendingUp,
   ArrowLeftRight, Zap, Globe, Repeat, Plus, ChevronDown, ArrowRight
 } from 'lucide-react'
-import { getSwapByHash } from '@/lib/swapHistory'
+import { findSwapRecord, getSwapByHash } from '@/lib/swapHistory'
+import { findMorphoRecord } from '@/lib/morphoHistory'
 
 // Extended transaction type that can include paired bridge info
 interface DisplayTransaction extends Transaction {
@@ -132,7 +133,10 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
 
       // First, check if we have a swap record from local storage for this transaction
       // This handles cross-chain swaps to non-EVM chains (like Solana)
-      const swapRecord = tx.hash ? getSwapByHash(tx.hash) : null
+      // Use findSwapRecord which tries hash match first, then timestamp-based matching
+      // (needed for ERC-4337 where userOp hash differs from on-chain tx hash)
+      const tokenHint = tx.token?.symbol || tx.tokenSymbol || undefined
+      const swapRecord = tx.hash ? findSwapRecord(tx.hash, tx.timestamp, tokenHint) : null
       if (swapRecord) {
         usedHashes.add(tx.hash)
         const groupedTx: DisplayTransaction = {
@@ -160,6 +164,29 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
           }
         }
         result.push(groupedTx)
+        continue
+      }
+
+      // Check for Morpho deposit/withdraw records from local storage
+      // (needed for ERC-4337 where userOp hash differs from on-chain tx hash)
+      const morphoRecord = tx.hash ? findMorphoRecord(tx.hash, tx.timestamp) : null
+      if (morphoRecord) {
+        usedHashes.add(tx.hash)
+        const morphoTx: DisplayTransaction = {
+          ...tx,
+          type: morphoRecord.type === 'deposit' ? 'vault_deposit' : 'vault_withdraw',
+          appName: 'Morpho',
+          appCategory: 'Lending',
+          vaultName: morphoRecord.vaultName,
+          tokenAmount: morphoRecord.amount,
+          tokenSymbol: 'USDC',
+          token: {
+            symbol: 'USDC',
+            amount: morphoRecord.amount,
+            logoURI: USDC_LOGO,
+          }
+        }
+        result.push(morphoTx)
         continue
       }
 

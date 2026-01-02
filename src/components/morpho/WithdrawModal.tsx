@@ -6,7 +6,9 @@ import { X, Loader2, AlertCircle, Check, ArrowDown } from 'lucide-react'
 import { useMorphoActions } from '@/hooks/useMorphoActions'
 import { useVaultBalance, usePreviewRedeem } from '@/hooks/useMorphoVaults'
 import type { MorphoVault } from '@/lib/morpho/api'
+import { saveMorphoRecord } from '@/lib/morphoHistory'
 import haptics from '@/lib/haptics'
+import { base } from 'viem/chains'
 
 interface WithdrawModalProps {
   vault: MorphoVault
@@ -32,9 +34,20 @@ export function WithdrawModal({ vault, isOpen, onClose, onSuccess }: WithdrawMod
   // Withdraw action
   const { withdraw, isLoading } = useMorphoActions({
     vaultAddress: vault.address as `0x${string}`,
-    onSuccess: () => {
+    onSuccess: (txHash) => {
       haptics.success()
       setIsSuccess(true)
+      // Save Morpho record for Recent Activity display
+      // (needed for ERC-4337 transactions where hash matching may differ)
+      saveMorphoRecord({
+        txHash,
+        timestamp: Date.now(),
+        type: 'withdraw',
+        vaultAddress: vault.address,
+        vaultName: vault.name,
+        amount: assetsFormatted,
+        chainId: base.id,
+      })
       setTimeout(() => {
         onSuccess?.()
         onClose()

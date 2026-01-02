@@ -6,7 +6,9 @@ import { X, Loader2, TrendingUp, AlertCircle, Check } from 'lucide-react'
 import { useMorphoActions } from '@/hooks/useMorphoActions'
 import { useVaultBalance } from '@/hooks/useMorphoVaults'
 import { calculateProjectedEarnings, type MorphoVault } from '@/lib/morpho/api'
+import { saveMorphoRecord } from '@/lib/morphoHistory'
 import haptics from '@/lib/haptics'
+import { base } from 'viem/chains'
 
 interface DepositModalProps {
   vault: MorphoVault
@@ -37,9 +39,20 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
   // Deposit action
   const { deposit, isLoading } = useMorphoActions({
     vaultAddress: vault.address as `0x${string}`,
-    onSuccess: () => {
+    onSuccess: (txHash) => {
       setIsSuccess(true)
       setError(null)
+      // Save Morpho record for Recent Activity display
+      // (needed for ERC-4337 transactions where hash matching may differ)
+      saveMorphoRecord({
+        txHash,
+        timestamp: Date.now(),
+        type: 'deposit',
+        vaultAddress: vault.address,
+        vaultName: vault.name,
+        amount,
+        chainId: base.id,
+      })
       // Call onSuccess immediately to trigger refetch
       onSuccess?.()
       setTimeout(() => {

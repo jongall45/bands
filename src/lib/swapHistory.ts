@@ -67,6 +67,55 @@ export function getSwapByHash(txHash: string): SwapRecord | undefined {
 }
 
 /**
+ * Get swap record by timestamp and optionally token symbol
+ * This is needed for ERC-4337 transactions where the userOp hash differs from on-chain tx hash
+ * @param timestamp - Transaction timestamp in milliseconds
+ * @param tokenSymbol - Optional token symbol to match (fromToken symbol)
+ * @param windowMs - Time window in milliseconds (default 5 minutes)
+ */
+export function getSwapByTimestamp(
+  timestamp: number,
+  tokenSymbol?: string,
+  windowMs: number = 5 * 60 * 1000
+): SwapRecord | undefined {
+  const history = getSwapHistory()
+
+  // Find swaps within the time window
+  const candidates = history.filter(r => {
+    const timeDiff = Math.abs(r.timestamp - timestamp)
+    if (timeDiff > windowMs) return false
+    // If token symbol provided, match on it
+    if (tokenSymbol) {
+      return r.fromToken.symbol.toUpperCase() === tokenSymbol.toUpperCase()
+    }
+    return true
+  })
+
+  // Return the closest match by timestamp
+  if (candidates.length === 0) return undefined
+  return candidates.sort((a, b) =>
+    Math.abs(a.timestamp - timestamp) - Math.abs(b.timestamp - timestamp)
+  )[0]
+}
+
+/**
+ * Get swap record by either hash or timestamp (with token symbol hint)
+ * Tries hash first, falls back to timestamp matching
+ */
+export function findSwapRecord(
+  txHash: string,
+  timestamp: number,
+  tokenSymbol?: string
+): SwapRecord | undefined {
+  // Try hash match first
+  const byHash = getSwapByHash(txHash)
+  if (byHash) return byHash
+
+  // Fall back to timestamp matching for ERC-4337 transactions
+  return getSwapByTimestamp(timestamp, tokenSymbol)
+}
+
+/**
  * Clear all swap history
  */
 export function clearSwapHistory(): void {
