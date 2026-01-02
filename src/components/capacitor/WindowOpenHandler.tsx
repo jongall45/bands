@@ -7,22 +7,19 @@ import { Browser } from '@capacitor/browser'
 export const BROWSER_CLOSED_EVENT = 'capacitor-browser-closed'
 
 /**
- * WindowOpenHandler - Patches window.open for Capacitor native apps
+ * WindowOpenHandler - Intercepts popups AND iframes for Capacitor native apps
  *
- * iOS WebView (WKWebView) blocks window.open() calls by default.
- * This component intercepts those calls and uses Capacitor's Browser plugin
- * to open URLs in the native Safari browser instead.
- *
- * This is essential for:
- * - Privy's fundWallet (MoonPay) which opens in a popup
- * - OAuth flows that need external browser
- * - Any third-party integrations using window.open
+ * Privy's fundWallet doesn't use window.open - it creates an IFRAME with MoonPay.
+ * We use MutationObserver to watch for iframe creation, grab the MoonPay URL,
+ * and open it in Safari where Apple Pay actually works.
  */
 export function WindowOpenHandler() {
   useEffect(() => {
     // Only run in Capacitor native environment
     const isCapacitor = !!(window as any).Capacitor?.isNativePlatform?.()
     if (!isCapacitor) return
+
+    console.log('[WindowOpenHandler] Setting up iframe interceptor for Capacitor')
 
     // Store original window.open
     const originalWindowOpen = window.open.bind(window)
@@ -34,47 +31,70 @@ export function WindowOpenHandler() {
     })
 
     // Override window.open to use Capacitor Browser
-    window.open = (
-      url?: string | URL,
-      target?: string,
-      features?: string
-    ): Window | null => {
+    window.open = (url?: string | URL, target?: string, features?: string): Window | null => {
       const urlString = url?.toString()
-
-      // If no URL, fall back to original behavior
-      if (!urlString) {
-        return originalWindowOpen(url, target, features)
+      if (!urlString || !urlString.startsWith('http')) {
+        return null
       }
-
       console.log('[WindowOpenHandler] Intercepted window.open:', urlString)
-
-      // Open URL using Capacitor Browser plugin (native Safari)
-      Browser.open({
-        url: urlString,
-        presentationStyle: 'popover', // iOS: slides up from bottom like native
-        toolbarColor: '#000000',
-      }).then(() => {
-        console.log('[WindowOpenHandler] Successfully opened in native browser')
-      }).catch((err) => {
-        console.error('[WindowOpenHandler] Failed to open URL:', err)
-        // Fallback: try original window.open
-        originalWindowOpen(url, target, features)
-      })
-
-      // Return null since we're handling this externally
-      // Some code may check the return value, but MoonPay/Privy don't require it
+      Browser.open({ url: urlString, presentationStyle: 'popover' })
       return null
     }
 
-    console.log('[WindowOpenHandler] Patched window.open for Capacitor')
+    // MutationObserver to watch for iframe additions (Privy/MoonPay uses iframes)
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node instanceof HTMLIFrameElement) {
+            const src = node.src || node.getAttribute('src') || ''
+            console.log('[WindowOpenHandler] Iframe detected, src:', src)
+
+            // Check if this is a MoonPay iframe
+            if (src.includes('moonpay.com') || src.includes('buy.moonpay')) {
+              console.log('[WindowOpenHandler] MoonPay iframe detected! Opening in Safari:', src)
+
+              // Remove the iframe so it doesn't try to load in WebView
+              node.remove()
+
+              // Open in Safari
+              Browser.open({
+                url: src,
+                presentationStyle: 'popover',
+                toolbarColor: '#000000'
+              })
+            }
+
+            // Also check for Privy funding URLs
+            if (src.includes('privy.io') && (src.includes('fund') || src.includes('moonpay'))) {
+              console.log('[WindowOpenHandler] Privy funding iframe detected! Opening in Safari:', src)
+              node.remove()
+              Browser.open({
+                url: src,
+                presentationStyle: 'popover',
+                toolbarColor: '#000000'
+              })
+            }
+          }
+        }
+      }
+    })
+
+    // Start observing the entire document for iframe additions
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    })
+
+    console.log('[WindowOpenHandler] Iframe observer active')
 
     // Cleanup on unmount
     return () => {
       window.open = originalWindowOpen
+      observer.disconnect()
       browserFinishedListener.then(handle => handle.remove())
-      console.log('[WindowOpenHandler] Restored original window.open')
+      console.log('[WindowOpenHandler] Cleaned up interceptors')
     }
   }, [])
 
-  return null // This component doesn't render anything
+  return null
 }
