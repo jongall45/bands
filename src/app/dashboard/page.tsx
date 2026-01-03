@@ -449,9 +449,9 @@ export default function Dashboard() {
   return (
     <AppShell>
       <IndustrialPage className="page-transition">
-        {/* Fixed Header - stays at top during scroll */}
+        {/* Fixed Header - stays at top during scroll (mobile only, desktop has sidebar) */}
         <header
-          className="fixed top-0 left-0 right-0 z-50 bg-[#050505]/95 backdrop-blur-md border-b border-white/[0.04]"
+          className="fixed top-0 left-0 right-0 z-50 bg-[#050505]/95 backdrop-blur-md border-b border-white/[0.04] md:hidden"
           style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
         >
           <div className="flex items-center justify-between px-4 py-2.5 max-w-[480px] mx-auto">
@@ -470,8 +470,8 @@ export default function Dashboard() {
           </div>
         </header>
 
-        {/* Spacer for fixed header */}
-        <div style={{ height: 'calc(44px + env(safe-area-inset-top, 0px))' }} />
+        {/* Spacer for fixed header (mobile only) */}
+        <div className="md:hidden" style={{ height: 'calc(44px + env(safe-area-inset-top, 0px))' }} />
 
         <PullToRefresh onRefresh={handleRefresh}>
           <AppContent noTopPadding>
