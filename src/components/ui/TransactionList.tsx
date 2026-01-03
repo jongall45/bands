@@ -100,17 +100,14 @@ interface TransactionListProps {
 // Solana chain ID (Relay uses this)
 const SOLANA_CHAIN_ID = 792703809
 
-// Chain info helpers (outside component to avoid recreation)
-const CHAIN_LOGOS: Record<number, string> = {
-  1: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
-  8453: 'https://avatars.githubusercontent.com/u/108554348?s=200&v=4',
-  42161: 'https://assets.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg',
-  10: 'https://assets.coingecko.com/coins/images/25244/small/Optimism.png',
-  137: 'https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png',
-  [SOLANA_CHAIN_ID]: 'https://cryptologos.cc/logos/solana-sol-logo.png',
-}
+// Chain name helpers (logos come from CHAIN_CONFIG import)
 const CHAIN_NAMES: Record<number, string> = {
   1: 'ETH', 8453: 'Base', 42161: 'ARB', 10: 'OP', 137: 'MATIC', [SOLANA_CHAIN_ID]: 'SOL'
+}
+
+// Helper to get chain logo from CHAIN_CONFIG
+const getChainLogo = (chainId: number): string => {
+  return CHAIN_CONFIG[chainId]?.logo || ''
 }
 
 export function TransactionList({ address, limit = 5, crossChain = true }: TransactionListProps) {
@@ -163,7 +160,7 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
         blockNumber: '0',
         chainId: swapRecord.fromToken.chainId,
         chainName: CHAIN_NAMES[swapRecord.fromToken.chainId] || 'Chain',
-        chainLogo: CHAIN_LOGOS[swapRecord.fromToken.chainId] || '',
+        chainLogo: getChainLogo(swapRecord.fromToken.chainId) || '',
         isGroupedSwap: true,
         appName: 'Relay',
         appCategory: 'Bridge',
@@ -174,7 +171,7 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
             logo: swapRecord.fromToken.logoURI || '',
             chainId: swapRecord.fromToken.chainId,
             chainName: CHAIN_NAMES[swapRecord.fromToken.chainId] || 'Chain',
-            chainLogo: CHAIN_LOGOS[swapRecord.fromToken.chainId] || '',
+            chainLogo: getChainLogo(swapRecord.fromToken.chainId) || '',
           },
           toToken: {
             symbol: swapRecord.toToken.symbol,
@@ -182,7 +179,7 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
             logo: swapRecord.toToken.logoURI || '',
             chainId: swapRecord.toToken.chainId,
             chainName: CHAIN_NAMES[swapRecord.toToken.chainId] || 'Chain',
-            chainLogo: CHAIN_LOGOS[swapRecord.toToken.chainId] || '',
+            chainLogo: getChainLogo(swapRecord.toToken.chainId) || '',
           }
         }
       }
@@ -210,7 +207,7 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
         blockNumber: '0',
         chainId: morphoRecord.chainId,
         chainName: CHAIN_NAMES[morphoRecord.chainId] || 'Base',
-        chainLogo: CHAIN_LOGOS[morphoRecord.chainId] || '',
+        chainLogo: getChainLogo(morphoRecord.chainId) || '',
         appName: 'Morpho',
         appCategory: 'Lending',
         vaultName: morphoRecord.vaultName,
@@ -302,7 +299,7 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
                    sendToken?.symbol === 'ETH' ? 'https://assets.coingecko.com/coins/images/279/small/ethereum.png' : ''),
                 chainId: sendChainId,
                 chainName: CHAIN_NAMES[sendChainId] || 'Chain',
-                chainLogo: CHAIN_LOGOS[sendChainId] || '',
+                chainLogo: getChainLogo(sendChainId) || '',
               },
               toToken: {
                 symbol: receiveToken?.symbol || matchingReceive.tokenSymbol || 'Unknown',
@@ -312,7 +309,7 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
                    receiveToken?.symbol === 'ETH' ? 'https://assets.coingecko.com/coins/images/279/small/ethereum.png' : ''),
                 chainId: receiveChainId,
                 chainName: CHAIN_NAMES[receiveChainId] || 'Chain',
-                chainLogo: CHAIN_LOGOS[receiveChainId] || '',
+                chainLogo: getChainLogo(receiveChainId) || '',
               }
             }
           }
@@ -556,7 +553,7 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
     if (isSwap && tx.swapFromToken && tx.swapToToken) {
       const fromLogo = getTokenLogo(tx.swapFromToken.symbol, undefined, chainId, tx.swapFromToken.logoUri)
       const toLogo = getTokenLogo(tx.swapToToken.symbol, undefined, chainId, tx.swapToToken.logoUri)
-      const chainLogo = CHAIN_LOGOS[chainId] || ''
+      const chainLogo = getChainLogo(chainId) || ''
 
       return {
         label: 'Swapped',
@@ -839,10 +836,10 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
         const destChain = txChainId === 42161 ? 'Base' : txChainId === 8453 ? 'ARB' : 'ETH'
         const destToken = tokenSymbol === 'USDC' ? 'ETH' : 'USDC'
         const destChainLogo = txChainId === 42161 
-          ? CHAIN_LOGOS[8453] // ARB -> Base
+          ? getChainLogo(8453) // ARB -> Base
           : txChainId === 8453 
-            ? CHAIN_LOGOS[42161] // Base -> ARB
-            : CHAIN_LOGOS[1]
+            ? getChainLogo(42161) // Base -> ARB
+            : getChainLogo(1)
         const destTokenLogo = destToken === 'ETH' 
           ? 'https://assets.coingecko.com/coins/images/279/small/ethereum.png'
           : 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png'
@@ -855,8 +852,8 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
         if (swapRecord) {
           const fromToken = swapRecord.fromToken
           const toToken = swapRecord.toToken
-          const fromChainLogo = CHAIN_LOGOS[fromToken.chainId] || ''
-          const toChainLogo = CHAIN_LOGOS[toToken.chainId] || ''
+          const fromChainLogo = getChainLogo(fromToken.chainId) || ''
+          const toChainLogo = getChainLogo(toToken.chainId) || ''
           const fromChainName = CHAIN_NAMES[fromToken.chainId] || 'Chain'
           const toChainName = CHAIN_NAMES[toToken.chainId] || 'Chain'
 
@@ -1029,7 +1026,7 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
         tx.from?.toLowerCase().includes('moonpay')
 
       const tokenLogo = getTokenLogo(tx.tokenSymbol, tx.tokenAddress, chainId, tx.tokenLogoUri || tx.token?.logoURI || tx.token?.logo)
-      const chainLogo = CHAIN_LOGOS[chainId] || ''
+      const chainLogo = getChainLogo(chainId) || ''
 
       return {
         label: isMoonPay ? 'Purchased' : 'Received',
@@ -1076,7 +1073,7 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
 
     // Default: Send - show token logo with chain badge
     const tokenLogo = getTokenLogo(tx.tokenSymbol, tx.tokenAddress, chainId, tx.tokenLogoUri || tx.token?.logoURI || tx.token?.logo)
-    const chainLogo = CHAIN_LOGOS[chainId] || ''
+    const chainLogo = getChainLogo(chainId) || ''
 
     return {
       label: 'Sent',
