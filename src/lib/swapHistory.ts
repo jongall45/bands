@@ -30,12 +30,6 @@ const MAX_RECORDS = 50 // Keep last 50 swaps
 export function saveSwapRecord(record: SwapRecord): void {
   if (typeof window === 'undefined') return
 
-  // Debug: Log chainIds to diagnose Solana vs Base issue
-  console.log('[SwapHistory] Saving swap:', {
-    from: `${record.fromToken.symbol} on chain ${record.fromToken.chainId}`,
-    to: `${record.toToken.symbol} on chain ${record.toToken.chainId}`,
-  })
-
   try {
     const existing = getSwapHistory()
     // Add new record at the beginning

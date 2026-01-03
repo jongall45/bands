@@ -49,6 +49,11 @@ export const CHAIN_CONFIG: Record<number, { name: string; logo: string; explorer
     logo: 'https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png',
     explorer: 'https://polygonscan.com',
   },
+  792703809: {
+    name: 'Solana',
+    logo: 'https://cryptologos.cc/logos/solana-sol-logo.png',
+    explorer: 'https://solscan.io',
+  },
 }
 
 // Default chain IDs for portfolio
