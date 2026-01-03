@@ -135,9 +135,11 @@ export default function SwapPage() {
       <IndustrialPage className="swap-page-wrapper page-transition" data-swap-state={swapState}>
         {/* Fixed Header - stays at top during scroll */}
         <header
-          className="fixed top-0 left-0 right-0 z-50 bg-[#050505]/95 backdrop-blur-md border-b border-white/[0.04]"
+          className="fixed top-0 left-0 right-0 z-50 bg-[#050505] border-b border-white/[0.04]"
           style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
         >
+          {/* Background extension for iOS overscroll */}
+          <div className="absolute inset-x-0 bottom-full h-[200px] bg-[#050505]" />
           <div className="flex items-center justify-center px-4 py-2.5 max-w-[480px] mx-auto">
             <div className="text-center">
               <h1 className="text-white font-extrabold text-base" style={{ fontWeight: 800 }}>Swap & Bridge</h1>

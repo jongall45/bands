@@ -1848,8 +1848,21 @@ export function useRelaySwap(
         return swapResult
       } catch (err: any) {
         console.error('[useRelaySwap] EVM → Solana swap error:', err)
-        if (err.message?.includes('rejected') || err.message?.includes('denied')) {
+        const errorMsg = err.message || ''
+
+        if (errorMsg.includes('rejected') || errorMsg.includes('denied')) {
           setError('Transaction rejected')
+        } else if (errorMsg.includes('UserOperation reverted') || errorMsg.includes('callGasLimit')) {
+          // This error typically means the swap route failed simulation
+          // For non-standard tokens, suggest a workaround
+          const isStablecoin = ['USDC', 'USDT', 'DAI', 'USDC.e'].includes(fromToken.symbol)
+          if (!isStablecoin) {
+            setError(`Cross-chain swap failed for ${fromToken.symbol}. Try swapping to USDC first, then bridge USDC to Solana.`)
+          } else {
+            setError('Swap simulation failed - try a smaller amount or refresh the quote')
+          }
+        } else if (errorMsg.includes('insufficient') || errorMsg.includes('balance')) {
+          setError('Insufficient balance for swap + gas fees')
         } else {
           setError(err.message || 'EVM → Solana swap failed')
         }
