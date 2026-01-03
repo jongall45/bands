@@ -451,9 +451,11 @@ export default function Dashboard() {
       <IndustrialPage className="page-transition">
         {/* Fixed Header - stays at top during scroll (mobile only, desktop has sidebar) */}
         <header
-          className="fixed top-0 left-0 right-0 z-50 bg-[#050505]/95 backdrop-blur-md border-b border-white/[0.04] md:hidden"
+          className="fixed top-0 left-0 right-0 z-50 bg-[#050505] border-b border-white/[0.04] md:hidden"
           style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
         >
+          {/* Background extension for iOS overscroll */}
+          <div className="absolute inset-x-0 bottom-full h-[200px] bg-[#050505]" />
           <div className="flex items-center justify-between px-4 py-2.5 max-w-[480px] mx-auto">
             <LogoInline size="sm" />
             <button
@@ -995,8 +997,8 @@ export default function Dashboard() {
 
             <p className="text-white/40 text-xs mb-3">Share your address to receive tokens</p>
 
-            <GlassInner className="mb-4 px-4 py-3">
-              <p className="font-mono text-sm text-white/70 break-all leading-relaxed">
+            <GlassInner className="mb-4 px-3 py-2.5">
+              <p className="font-mono text-[11px] text-white/70 text-center truncate">
                 {receiveWallet === 'evm' ? address : solanaAddress}
               </p>
             </GlassInner>

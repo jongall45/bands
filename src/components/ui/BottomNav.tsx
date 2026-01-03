@@ -24,11 +24,13 @@ export function BottomNav() {
 
   return (
     <div
-      className="fixed bottom-0 left-0 right-0 z-50 bg-[#0a0a0a]/95 backdrop-blur-xl border-t border-white/[0.06]"
+      className="fixed bottom-0 left-0 right-0 z-50 bg-[#0a0a0a] border-t border-white/[0.06]"
       style={{
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
       }}
     >
+      {/* Background extension for iOS overscroll at bottom */}
+      <div className="absolute inset-x-0 top-full h-[200px] bg-[#0a0a0a]" />
       <nav className="flex items-stretch justify-around">
         {navItems.map(({ href, icon: Icon, label }) => {
           const isActive = pathname === href || pathname?.startsWith(href + '/')
