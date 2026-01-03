@@ -121,176 +121,109 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
   // Group bridge send/receive pairs into swap views - MUST be before any early returns
   const groupedTransactions = useMemo(() => {
     const result: DisplayTransaction[] = []
-    const usedHashes = new Set<string>()
-    const usedLocalRecordHashes = new Set<string>()
+    const usedTimestamps = new Set<number>() // Track timestamps to avoid duplicates with Dune
 
-    // STEP 1: Add recent local swap records that haven't been matched to Dune yet
-    // This ensures swaps appear IMMEDIATELY after completion, before Dune indexes them
+    // STEP 1: Show local swap records directly - we have all the data, no need to wait
     const recentSwaps = getSwapHistory()
     const now = Date.now()
-    const RECENT_WINDOW = 10 * 60 * 1000 // 10 minutes
+    const RECENT_WINDOW = 10 * 60 * 1000 // Show local records for 10 minutes
 
     for (const swapRecord of recentSwaps) {
-      // Only show recent swaps (within 10 minutes)
       if (now - swapRecord.timestamp > RECENT_WINDOW) continue
 
-      // Check if this swap matches any Dune transaction (by timestamp proximity)
-      const matchedToDune = transactions?.some(tx => {
-        const timeDiff = Math.abs(tx.timestamp - swapRecord.timestamp)
-        return timeDiff < RECENT_WINDOW
-      })
+      // Mark timestamp (rounded to minute) so we skip duplicate Dune entries
+      usedTimestamps.add(Math.floor(swapRecord.timestamp / 60000))
 
-      // If not matched to Dune yet, show it directly from local storage
-      if (!matchedToDune) {
-        usedLocalRecordHashes.add(swapRecord.txHash)
-        const localSwapTx: DisplayTransaction = {
-          hash: swapRecord.txHash,
-          type: 'swap',
-          from: '',
-          to: '',
-          value: '0',
-          tokenSymbol: swapRecord.fromToken.symbol,
-          tokenDecimals: 6,
-          timestamp: swapRecord.timestamp,
-          status: 'success',
-          blockNumber: '0',
-          chainId: swapRecord.fromToken.chainId,
-          chainName: CHAIN_NAMES[swapRecord.fromToken.chainId] || 'Chain',
-          chainLogo: CHAIN_LOGOS[swapRecord.fromToken.chainId] || '',
-          isGroupedSwap: true,
-          appName: 'Relay',
-          appCategory: 'Bridge',
-          bridgePair: {
-            fromToken: {
-              symbol: swapRecord.fromToken.symbol,
-              amount: swapRecord.fromToken.amount,
-              logo: swapRecord.fromToken.logoURI || '',
-              chainId: swapRecord.fromToken.chainId,
-              chainName: CHAIN_NAMES[swapRecord.fromToken.chainId] || 'Chain',
-              chainLogo: CHAIN_LOGOS[swapRecord.fromToken.chainId] || '',
-            },
-            toToken: {
-              symbol: swapRecord.toToken.symbol,
-              amount: swapRecord.toToken.amount,
-              logo: swapRecord.toToken.logoURI || '',
-              chainId: swapRecord.toToken.chainId,
-              chainName: CHAIN_NAMES[swapRecord.toToken.chainId] || 'Chain',
-              chainLogo: CHAIN_LOGOS[swapRecord.toToken.chainId] || '',
-            }
+      result.push({
+        hash: swapRecord.txHash,
+        type: 'swap',
+        from: '',
+        to: '',
+        value: '0',
+        tokenSymbol: swapRecord.fromToken.symbol,
+        tokenDecimals: 6,
+        timestamp: swapRecord.timestamp,
+        status: 'success',
+        blockNumber: '0',
+        chainId: swapRecord.fromToken.chainId,
+        chainName: CHAIN_NAMES[swapRecord.fromToken.chainId] || 'Chain',
+        chainLogo: CHAIN_LOGOS[swapRecord.fromToken.chainId] || '',
+        isGroupedSwap: true,
+        appName: 'Relay',
+        appCategory: 'Bridge',
+        bridgePair: {
+          fromToken: {
+            symbol: swapRecord.fromToken.symbol,
+            amount: swapRecord.fromToken.amount,
+            logo: swapRecord.fromToken.logoURI || '',
+            chainId: swapRecord.fromToken.chainId,
+            chainName: CHAIN_NAMES[swapRecord.fromToken.chainId] || 'Chain',
+            chainLogo: CHAIN_LOGOS[swapRecord.fromToken.chainId] || '',
+          },
+          toToken: {
+            symbol: swapRecord.toToken.symbol,
+            amount: swapRecord.toToken.amount,
+            logo: swapRecord.toToken.logoURI || '',
+            chainId: swapRecord.toToken.chainId,
+            chainName: CHAIN_NAMES[swapRecord.toToken.chainId] || 'Chain',
+            chainLogo: CHAIN_LOGOS[swapRecord.toToken.chainId] || '',
           }
         }
-        result.push(localSwapTx)
-      }
+      })
     }
 
-    // STEP 2: Add recent local Morpho records that haven't been matched to Dune yet
+    // STEP 2: Show local Morpho records directly
     const recentMorpho = getMorphoHistory()
     for (const morphoRecord of recentMorpho) {
       if (now - morphoRecord.timestamp > RECENT_WINDOW) continue
 
-      const matchedToDune = transactions?.some(tx => {
-        const timeDiff = Math.abs(tx.timestamp - morphoRecord.timestamp)
-        return timeDiff < RECENT_WINDOW
-      })
+      usedTimestamps.add(Math.floor(morphoRecord.timestamp / 60000))
 
-      if (!matchedToDune) {
-        usedLocalRecordHashes.add(morphoRecord.txHash)
-        const localMorphoTx: DisplayTransaction = {
-          hash: morphoRecord.txHash,
-          type: morphoRecord.type === 'deposit' ? 'vault_deposit' : 'vault_withdraw',
-          from: '',
-          to: morphoRecord.vaultAddress,
-          value: '0',
-          tokenSymbol: 'USDC',
-          tokenDecimals: 6,
-          tokenAmount: morphoRecord.amount,
-          timestamp: morphoRecord.timestamp,
-          status: 'success',
-          blockNumber: '0',
-          chainId: morphoRecord.chainId,
-          chainName: CHAIN_NAMES[morphoRecord.chainId] || 'Base',
-          chainLogo: CHAIN_LOGOS[morphoRecord.chainId] || '',
-          appName: 'Morpho',
-          appCategory: 'Lending',
-          vaultName: morphoRecord.vaultName,
-          token: {
-            symbol: 'USDC',
-            amount: morphoRecord.amount,
-            logoURI: USDC_LOGO,
-          }
+      result.push({
+        hash: morphoRecord.txHash,
+        type: morphoRecord.type === 'deposit' ? 'vault_deposit' : 'vault_withdraw',
+        from: '',
+        to: morphoRecord.vaultAddress,
+        value: '0',
+        tokenSymbol: 'USDC',
+        tokenDecimals: 6,
+        tokenAmount: morphoRecord.amount,
+        timestamp: morphoRecord.timestamp,
+        status: 'success',
+        blockNumber: '0',
+        chainId: morphoRecord.chainId,
+        chainName: CHAIN_NAMES[morphoRecord.chainId] || 'Base',
+        chainLogo: CHAIN_LOGOS[morphoRecord.chainId] || '',
+        appName: 'Morpho',
+        appCategory: 'Lending',
+        vaultName: morphoRecord.vaultName,
+        token: {
+          symbol: 'USDC',
+          amount: morphoRecord.amount,
+          logoURI: USDC_LOGO,
         }
-        result.push(localMorphoTx)
-      }
+      })
     }
 
-    // STEP 3: Process Dune transactions and enrich with local data
+    // STEP 3: Add older Dune transactions, skipping any that overlap with local records
     if (!transactions || transactions.length === 0) {
       return result.sort((a, b) => b.timestamp - a.timestamp)
     }
 
-    // Sort by timestamp descending
     const sorted = [...transactions].sort((a, b) => b.timestamp - a.timestamp)
+    const usedHashes = new Set<string>()
 
     for (const tx of sorted) {
       if (usedHashes.has(tx.hash)) continue
 
-      // Check if we have a swap record from local storage for this transaction
-      // Use findSwapRecord which tries hash match first, then timestamp-based matching
-      const tokenHint = tx.token?.symbol || tx.tokenSymbol || undefined
-      const swapRecord = tx.hash ? findSwapRecord(tx.hash, tx.timestamp, tokenHint) : null
-      if (swapRecord && !usedLocalRecordHashes.has(swapRecord.txHash)) {
+      // Skip if this overlaps with a local record we already added
+      const txMinute = Math.floor(tx.timestamp / 60000)
+      if (usedTimestamps.has(txMinute)) {
         usedHashes.add(tx.hash)
-        usedLocalRecordHashes.add(swapRecord.txHash)
-        const groupedTx: DisplayTransaction = {
-          ...tx,
-          isGroupedSwap: true,
-          appName: 'Relay',
-          appCategory: 'Bridge',
-          bridgePair: {
-            fromToken: {
-              symbol: swapRecord.fromToken.symbol,
-              amount: swapRecord.fromToken.amount,
-              logo: swapRecord.fromToken.logoURI || '',
-              chainId: swapRecord.fromToken.chainId,
-              chainName: CHAIN_NAMES[swapRecord.fromToken.chainId] || 'Chain',
-              chainLogo: CHAIN_LOGOS[swapRecord.fromToken.chainId] || '',
-            },
-            toToken: {
-              symbol: swapRecord.toToken.symbol,
-              amount: swapRecord.toToken.amount,
-              logo: swapRecord.toToken.logoURI || '',
-              chainId: swapRecord.toToken.chainId,
-              chainName: CHAIN_NAMES[swapRecord.toToken.chainId] || 'Chain',
-              chainLogo: CHAIN_LOGOS[swapRecord.toToken.chainId] || '',
-            }
-          }
-        }
-        result.push(groupedTx)
         continue
       }
 
-      // Check for Morpho deposit/withdraw records from local storage
-      const morphoRecord = tx.hash ? findMorphoRecord(tx.hash, tx.timestamp) : null
-      if (morphoRecord && !usedLocalRecordHashes.has(morphoRecord.txHash)) {
-        usedHashes.add(tx.hash)
-        usedLocalRecordHashes.add(morphoRecord.txHash)
-        const morphoTx: DisplayTransaction = {
-          ...tx,
-          type: morphoRecord.type === 'deposit' ? 'vault_deposit' : 'vault_withdraw',
-          appName: 'Morpho',
-          appCategory: 'Lending',
-          vaultName: morphoRecord.vaultName,
-          tokenAmount: morphoRecord.amount,
-          tokenSymbol: 'USDC',
-          token: {
-            symbol: 'USDC',
-            amount: morphoRecord.amount,
-            logoURI: USDC_LOGO,
-          }
-        }
-        result.push(morphoTx)
-        continue
-      }
+      usedHashes.add(tx.hash)
 
       // Check if this is a Bridge send (outgoing) - more flexible matching
       const isBridgeSend = (
