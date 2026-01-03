@@ -1160,17 +1160,31 @@ export function useRelaySwap(
       return null
     }
 
-    // Check if quote is stale (older than 45 seconds)
+    // Quote freshness handling:
+    // - If quote is > 30 seconds old on mobile (or > 45 seconds on desktop), auto-refresh before executing
+    // - This prevents "UserOperation reverted" errors from stale quotes
     const quoteAge = Date.now() - quoteTimestamp
-    const MAX_QUOTE_AGE = 45 * 1000 // 45 seconds
-    if (quoteAge > MAX_QUOTE_AGE) {
-      setError('Quote expired - please refresh and try again')
-      setState('error')
-      return null
-    }
+    const MAX_QUOTE_AGE = 30 * 1000 // 30 seconds - more aggressive for mobile reliability
 
-    // Use a mutable reference to quote so we can update it after approval
     let currentQuote = quote
+
+    if (quoteAge > MAX_QUOTE_AGE) {
+      console.log('[useRelaySwap] Quote is stale (' + Math.round(quoteAge / 1000) + 's old), auto-refreshing...')
+      setState('fetching_quote')
+
+      // Re-fetch the quote with current tokens and amount
+      const freshQuote = await fetchQuote(fromToken, toToken, quote.fromAmount)
+
+      if (!freshQuote) {
+        setError('Failed to refresh quote - please try again')
+        setState('error')
+        return null
+      }
+
+      // Update the current quote reference
+      currentQuote = freshQuote
+      console.log('[useRelaySwap] Quote refreshed successfully')
+    }
 
     // Check if this is a Solana-only swap (both origin and destination are Solana)
     const isSolanaOrigin = fromToken.chainId === SOLANA_CHAIN_ID
@@ -1854,13 +1868,9 @@ export function useRelaySwap(
           setError('Transaction rejected')
         } else if (errorMsg.includes('UserOperation reverted') || errorMsg.includes('callGasLimit')) {
           // This error typically means the swap route failed simulation
-          // For non-standard tokens, suggest a workaround
-          const isStablecoin = ['USDC', 'USDT', 'DAI', 'USDC.e'].includes(fromToken.symbol)
-          if (!isStablecoin) {
-            setError(`Cross-chain swap failed for ${fromToken.symbol}. Try swapping to USDC first, then bridge USDC to Solana.`)
-          } else {
-            setError('Swap simulation failed - try a smaller amount or refresh the quote')
-          }
+          // On mobile, this is often due to timing issues - quote becomes stale
+          console.log('[useRelaySwap] EVM → Solana UserOperation reverted - likely stale data')
+          setError('Cross-chain swap failed - please try again. Quote may have expired.')
         } else if (errorMsg.includes('insufficient') || errorMsg.includes('balance')) {
           setError('Insufficient balance for swap + gas fees')
         } else {
@@ -2263,14 +2273,10 @@ export function useRelaySwap(
             if (txErr.message?.includes('UserOperation reverted during simulation') ||
                 txErr.message?.includes('callGasLimit')) {
               // This error typically means the swap would fail on-chain
-              // Common causes: stale quote, insufficient liquidity, token approval issues
-              // Check if it might be a token-specific issue
-              const tokenName = fromToken.symbol
-              const isKnownToken = ['USDC', 'USDT', 'ETH', 'WETH', 'DAI'].includes(tokenName)
-              if (!isKnownToken) {
-                throw new Error(`Swap failed for ${tokenName} - this token may have transfer restrictions or insufficient liquidity. Try swapping to a major token first.`)
-              }
-              throw new Error('Swap simulation failed - try a smaller amount or refresh the quote')
+              // Common causes: stale quote, insufficient liquidity, network congestion
+              // On mobile, this is often due to timing issues between quote and execution
+              console.log('[useRelaySwap] UserOperation reverted - likely stale data or liquidity issue')
+              throw new Error('Swap failed - please try again. If the issue persists, try a smaller amount.')
             }
             if (txErr.message?.includes('insufficient') || txErr.message?.includes('balance')) {
               throw new Error('Insufficient balance for swap + gas fees')
@@ -2314,7 +2320,7 @@ export function useRelaySwap(
       setState('error')
       return null
     }
-  }, [quote, quoteTimestamp, smartWalletAddress, smartWalletClient, getClientForChain, publicClient])
+  }, [quote, quoteTimestamp, smartWalletAddress, smartWalletClient, getClientForChain, publicClient, fetchQuote])
 
   // ============================================
   // RESET
