@@ -1718,8 +1718,48 @@ export function useRelaySwap(
               continue
             }
 
-            // Only handle manual approval if needed (no embedded approval)
-            if (isERC20Token && step.id !== 'approve' && !hasEmbeddedApproval) {
+            // Handle case where Relay returns an explicit approve step
+            // We skipped the approve step earlier, now batch it with the deposit
+            if (hasExplicitApproveStep && isERC20Token) {
+              console.log('[useRelaySwap] Using explicit approve step from Relay')
+
+              // Find the approve step we skipped
+              const approveStep = currentQuote.steps.find((s: any) => s.id === 'approve')
+              const approveItem = approveStep?.items?.[0]
+
+              if (approveItem?.data) {
+                const approveData = approveItem.data.data as `0x${string}`
+                const approveTo = approveItem.data.to as `0x${string}`
+
+                console.log('[useRelaySwap] Batching explicit approval with deposit:', {
+                  approveTo,
+                  depositTo: depositContractAddress,
+                })
+
+                // Batch approval + deposit into single UserOperation
+                const batchedTxHash = await chainClient.sendTransaction({
+                  calls: [
+                    {
+                      to: approveTo,
+                      data: approveData,
+                      value: BigInt(0),
+                    },
+                    {
+                      to: item.data.to as `0x${string}`,
+                      data: txData as `0x${string}`,
+                      value: item.data.value ? BigInt(item.data.value) : BigInt(0),
+                    },
+                  ],
+                })
+
+                console.log('[useRelaySwap] Batched approval+deposit sent:', batchedTxHash)
+                lastTxHash = batchedTxHash
+                continue
+              }
+            }
+
+            // Only handle manual approval if needed (no embedded approval, no explicit approve step)
+            if (isERC20Token && step.id !== 'approve' && !hasEmbeddedApproval && !hasExplicitApproveStep) {
               const approvalAmount = parseUnits(quote.fromAmount, fromToken.decimals)
               const hasAllowance = await checkAllowance(fromToken, depositContractAddress, approvalAmount)
 
