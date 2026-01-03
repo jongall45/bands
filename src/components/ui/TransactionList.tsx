@@ -143,13 +143,8 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
     const now = Date.now()
     const RECENT_WINDOW = 10 * 60 * 1000 // Show local records for 10 minutes
 
-    console.log('[TransactionList] Local swap records:', recentSwaps.length, recentSwaps)
-    console.log('[TransactionList] Current time:', now)
-
     for (const swapRecord of recentSwaps) {
       const age = now - swapRecord.timestamp
-      console.log('[TransactionList] Swap record age:', age, 'ms, within window:', age <= RECENT_WINDOW)
-
       if (age > RECENT_WINDOW) continue
 
       // Mark timestamp (rounded to minute) so we skip duplicate Dune entries
@@ -191,7 +186,6 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
           }
         }
       }
-      console.log('[TransactionList] Adding local swap to result:', localSwapTx)
       result.push(localSwapTx)
     }
 
@@ -336,10 +330,7 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
     }
 
     // Sort final result by timestamp (most recent first)
-    const sortedResult = result.sort((a, b) => b.timestamp - a.timestamp)
-    console.log('[TransactionList] Final result count:', sortedResult.length, 'Local swap count:', recentSwaps.filter(s => now - s.timestamp <= RECENT_WINDOW).length)
-
-    return sortedResult
+    return result.sort((a, b) => b.timestamp - a.timestamp)
   }, [transactions, localHistoryVersion])
 
   // Early returns AFTER hooks
@@ -464,6 +455,97 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
         return `https://api.sim.dune.com/beta/token/logo/${txChainId}/${address}`
       }
       return ''
+    }
+
+    // GROUPED SWAP - Check this FIRST, before any type-based checks
+    // This handles local swap records which have isGroupedSwap=true and bridgePair set
+    if (isGroupedSwap && tx.bridgePair) {
+      const { fromToken, toToken } = tx.bridgePair
+
+      // Format amount helper
+      const formatBridgeAmount = (amt: string) => {
+        const num = parseFloat(amt)
+        if (isNaN(num) || num === 0) return '0'
+        if (num < 0.0001) return num.toFixed(6)
+        if (num < 1) return num.toFixed(4)
+        if (num < 1000) return num.toFixed(2)
+        return num.toLocaleString(undefined, { maximumFractionDigits: 2 })
+      }
+
+      const fromAmount = formatBridgeAmount(fromToken.amount)
+      const toAmount = formatBridgeAmount(toToken.amount)
+      const fromLogo = getTokenLogo(fromToken.symbol, undefined, fromToken.chainId, fromToken.logo)
+      const toLogo = getTokenLogo(toToken.symbol, undefined, toToken.chainId, toToken.logo)
+
+      // Token with chain badge component
+      const TokenWithChainBadge = ({
+        tokenImg, tokenAlt, chainImg, chainAlt
+      }: {
+        tokenImg: string; tokenAlt: string; chainImg: string; chainAlt: string
+      }) => (
+        <div className="relative w-4 h-4 flex-shrink-0">
+          <img
+            src={tokenImg}
+            alt={tokenAlt}
+            className="w-4 h-4 rounded-full bg-white/10"
+            onError={(e) => {
+              const parent = (e.target as HTMLImageElement).parentElement
+              if (parent && !parent.querySelector('.token-fallback')) {
+                (e.target as HTMLImageElement).style.display = 'none'
+                const fallback = document.createElement('div')
+                fallback.className = 'token-fallback w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[8px] font-bold text-white/70'
+                fallback.textContent = tokenAlt.charAt(0).toUpperCase()
+                parent.appendChild(fallback)
+              }
+            }}
+          />
+          {chainImg && (
+            <img
+              src={chainImg}
+              alt={chainAlt}
+              className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-black/50"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+            />
+          )}
+        </div>
+      )
+
+      return {
+        label: 'Relay',
+        sublabel: 'Cross-chain Swap',
+        icon: (
+          <img src={RELAY_LOGO} alt="Relay" className="w-5 h-5 rounded-full object-cover" />
+        ),
+        iconBg: 'bg-[#7B3FE4]/20',
+        amountColor: 'text-white',
+        amountPrefix: '',
+        customAmount: (
+          <div className="flex flex-col items-end gap-0.5">
+            {/* From token - what you sold */}
+            <div className="flex items-center gap-1">
+              <span className="text-white/70 text-xs">-{fromAmount}</span>
+              <TokenWithChainBadge
+                tokenImg={fromLogo}
+                tokenAlt={fromToken.symbol}
+                chainImg={fromToken.chainLogo}
+                chainAlt={fromToken.chainName}
+              />
+              <span className="text-white/50 text-[10px]">{fromToken.symbol}</span>
+            </div>
+            {/* To token - what you received */}
+            <div className="flex items-center gap-1 text-[11px]">
+              <span className="text-green-400">+{toAmount}</span>
+              <TokenWithChainBadge
+                tokenImg={toLogo}
+                tokenAlt={toToken.symbol}
+                chainImg={toToken.chainLogo}
+                chainAlt={toToken.chainName}
+              />
+              <span className="text-green-400/70 text-[10px]">{toToken.symbol}</span>
+            </div>
+          </div>
+        ),
+      }
     }
 
     // Swap transaction
