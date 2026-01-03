@@ -106,15 +106,18 @@ export function DepositModal({ vault, isOpen, onClose, onSuccess }: DepositModal
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto"
+      style={{ paddingTop: 'calc(60px + env(safe-area-inset-top, 0px))' }}
+    >
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm z-0"
+        className="fixed inset-0 bg-black/80 backdrop-blur-sm z-0"
         onClick={handleClose}
       />
 
       {/* Modal */}
-      <div className="relative z-10 w-full max-w-[430px] bg-[#0a0a0a] border border-white/[0.1] rounded-3xl p-5 sm:p-6 max-h-[85vh] overflow-y-auto" style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+      <div className="relative z-10 w-full max-w-[430px] bg-[#0a0a0a] border border-white/[0.1] rounded-3xl p-5 sm:p-6 mb-20" style={{ marginBottom: 'max(80px, calc(80px + env(safe-area-inset-bottom, 0px)))' }}>
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-white font-semibold text-base sm:text-lg">Deposit to {vault.name}</h2>

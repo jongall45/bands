@@ -15,7 +15,7 @@ import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedT
 import { USDC_ADDRESS, USDC_DECIMALS, ERC20_ABI } from '@/lib/wagmi'
 import {
   ArrowUpRight, ArrowDownLeft, Copy, Check, LogOut,
-  Send, RefreshCw, ExternalLink, Plus, QrCode, Shield, ChevronDown, Coins
+  Send, RefreshCw, ExternalLink, Plus, QrCode, Shield, ChevronDown, Coins, Activity
 } from 'lucide-react'
 import Link from 'next/link'
 import { Modal } from '@/components/ui/Modal'
@@ -543,28 +543,28 @@ export default function Dashboard() {
           </div>
 
           {/* Wallet Addresses - Compact Row */}
-          <div className="flex items-center justify-center gap-3 mb-4">
+          <div className="flex items-center justify-center gap-2 mb-4 flex-wrap">
             {/* EVM Wallet */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/[0.03] rounded-xl border border-white/[0.06] hover:border-white/10 transition-colors">
+            <div className="flex items-center gap-1 px-2 py-1.5 bg-white/[0.03] rounded-xl border border-white/[0.06] hover:border-white/10 transition-colors max-w-[160px]">
               <img
                 src="https://cryptologos.cc/logos/ethereum-eth-logo.png"
                 alt="ETH"
-                className="w-4 h-4 rounded-full"
+                className="w-3.5 h-3.5 rounded-full flex-shrink-0"
               />
-              <span className="text-white/50 text-xs font-mono">
+              <span className="text-white/50 text-[10px] font-mono truncate min-w-0">
                 {address?.slice(0, 6)}...{address?.slice(-4)}
               </span>
               <a
                 href={`https://basescan.org/address/${address}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-white/30 hover:text-white/50 transition-colors"
+                className="text-white/30 hover:text-white/50 transition-colors flex-shrink-0"
               >
                 <ExternalLink className="w-3 h-3" />
               </a>
               <button
                 onClick={copyAddress}
-                className="text-white/30 hover:text-white/50 transition-colors"
+                className="text-white/30 hover:text-white/50 transition-colors flex-shrink-0"
               >
                 {copied ? (
                   <Check className="w-3 h-3 text-green-400" />
@@ -576,26 +576,26 @@ export default function Dashboard() {
 
             {/* Solana Wallet */}
             {hasSolanaWallet && solanaAddress && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/[0.03] rounded-xl border border-white/[0.06] hover:border-white/10 transition-colors">
+              <div className="flex items-center gap-1 px-2 py-1.5 bg-white/[0.03] rounded-xl border border-white/[0.06] hover:border-white/10 transition-colors max-w-[160px]">
                 <img
                   src="https://cryptologos.cc/logos/solana-sol-logo.png"
                   alt="SOL"
-                  className="w-4 h-4 rounded-full"
+                  className="w-3.5 h-3.5 rounded-full flex-shrink-0"
                 />
-                <span className="text-white/50 text-xs font-mono">
+                <span className="text-white/50 text-[10px] font-mono truncate min-w-0">
                   {solanaAddress?.slice(0, 4)}...{solanaAddress?.slice(-4)}
                 </span>
                 <a
                   href={`https://solscan.io/account/${solanaAddress}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-white/30 hover:text-white/50 transition-colors"
+                  className="text-white/30 hover:text-white/50 transition-colors flex-shrink-0"
                 >
                   <ExternalLink className="w-3 h-3" />
                 </a>
                 <button
                   onClick={copySolanaAddress}
-                  className="text-white/30 hover:text-white/50 transition-colors"
+                  className="text-white/30 hover:text-white/50 transition-colors flex-shrink-0"
                 >
                   {copiedSolana ? (
                     <Check className="w-3 h-3 text-green-400" />
@@ -717,7 +717,12 @@ export default function Dashboard() {
 
             {/* Recent Activity Card */}
             <GlassCard variant="redAccent">
-              <SectionHeader>Recent Activity</SectionHeader>
+              <SectionHeader>
+                <span className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-[#FF3B30]" />
+                  Recent Activity
+                </span>
+              </SectionHeader>
               <TransactionList address={address} limit={5} />
             </GlassCard>
 
