@@ -164,24 +164,30 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
         isGroupedSwap: true,
         appName: 'Relay',
         appCategory: 'Bridge',
-        bridgePair: {
-          fromToken: {
-            symbol: swapRecord.fromToken.symbol,
-            amount: swapRecord.fromToken.amount,
-            logo: swapRecord.fromToken.logoURI || '',
-            chainId: swapRecord.fromToken.chainId,
-            chainName: CHAIN_NAMES[swapRecord.fromToken.chainId] || 'Chain',
-            chainLogo: getChainLogo(swapRecord.fromToken.chainId) || '',
-          },
-          toToken: {
-            symbol: swapRecord.toToken.symbol,
-            amount: swapRecord.toToken.amount,
-            logo: swapRecord.toToken.logoURI || '',
-            chainId: swapRecord.toToken.chainId,
-            chainName: CHAIN_NAMES[swapRecord.toToken.chainId] || 'Chain',
-            chainLogo: getChainLogo(swapRecord.toToken.chainId) || '',
+        bridgePair: (() => {
+          const fromChainLogo = getChainLogo(swapRecord.fromToken.chainId)
+          const toChainLogo = getChainLogo(swapRecord.toToken.chainId)
+          console.log('[ChainBadge] fromToken chainId:', swapRecord.fromToken.chainId, 'logo:', fromChainLogo)
+          console.log('[ChainBadge] toToken chainId:', swapRecord.toToken.chainId, 'logo:', toChainLogo)
+          return {
+            fromToken: {
+              symbol: swapRecord.fromToken.symbol,
+              amount: swapRecord.fromToken.amount,
+              logo: swapRecord.fromToken.logoURI || '',
+              chainId: swapRecord.fromToken.chainId,
+              chainName: CHAIN_NAMES[swapRecord.fromToken.chainId] || 'Chain',
+              chainLogo: fromChainLogo || '',
+            },
+            toToken: {
+              symbol: swapRecord.toToken.symbol,
+              amount: swapRecord.toToken.amount,
+              logo: swapRecord.toToken.logoURI || '',
+              chainId: swapRecord.toToken.chainId,
+              chainName: CHAIN_NAMES[swapRecord.toToken.chainId] || 'Chain',
+              chainLogo: toChainLogo || '',
+            }
           }
-        }
+        })()
       }
       result.push(localSwapTx)
     }
@@ -483,7 +489,9 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
         tokenImg, tokenAlt, chainImg, chainAlt
       }: {
         tokenImg: string; tokenAlt: string; chainImg: string; chainAlt: string
-      }) => (
+      }) => {
+        console.log('[TokenWithChainBadge] chainImg:', chainImg, 'chainAlt:', chainAlt)
+        return (
         <div className="relative w-4 h-4 flex-shrink-0">
           <img
             src={tokenImg}
@@ -509,7 +517,7 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
             />
           )}
         </div>
-      )
+      )}
 
       return {
         label: 'Relay',
