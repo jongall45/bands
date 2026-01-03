@@ -725,25 +725,25 @@ export default function Dashboard() {
 
         {/* Send Modal */}
       <Modal isOpen={showSend} onClose={() => !isSending && !isConfirming && setShowSend(false)} title="Send">
-        <div className="space-y-5">
+        <div className="space-y-4">
           {/* Chain Selection */}
           <div>
-            <label className="block text-white/40 text-sm mb-2 font-medium">Network</label>
+            <label className="block text-white/40 text-xs mb-1.5 font-medium">Network</label>
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setShowChainSelect(!showChainSelect)}
-                className="w-full flex items-center justify-between px-4 py-3 bg-white/[0.03] rounded-2xl border border-white/[0.06] hover:border-white/20 transition-colors"
+                className="w-full flex items-center justify-between px-3 py-2.5 bg-white/[0.03] rounded-xl border border-white/[0.06] hover:border-white/20 transition-colors"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <img
                     src={selectedChain.logo}
                     alt={selectedChain.name}
-                    className="w-6 h-6 rounded-full"
+                    className="w-5 h-5 rounded-full"
                   />
-                  <span className="text-white font-medium">{selectedChain.name}</span>
+                  <span className="text-white font-medium text-sm">{selectedChain.name}</span>
                 </div>
-                <ChevronDown className={`w-5 h-5 text-white/40 transition-transform ${showChainSelect ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-4 h-4 text-white/40 transition-transform ${showChainSelect ? 'rotate-180' : ''}`} />
               </button>
 
               {showChainSelect && (
@@ -773,8 +773,8 @@ export default function Dashboard() {
           </div>
 
           <div>
-            <label className="block text-white/40 text-sm mb-2 font-medium">Recipient Address</label>
-            <div className={`bg-white/[0.03] rounded-2xl border transition-all ${addressError ? 'border-red-500/50' : 'border-white/[0.06] focus-within:border-white/20'}`}>
+            <label className="block text-white/40 text-xs mb-1.5 font-medium">Recipient Address</label>
+            <div className={`bg-white/[0.03] rounded-xl border transition-all ${addressError ? 'border-red-500/50' : 'border-white/[0.06] focus-within:border-white/20'}`}>
               <input
                 type="text"
                 value={sendTo}
@@ -784,41 +784,41 @@ export default function Dashboard() {
                 }}
                 placeholder={selectedChain.isSolana ? "Solana address..." : "0x..."}
                 disabled={isSending || isConfirming}
-                className="w-full bg-transparent px-5 py-4 text-white font-mono text-sm placeholder:text-white/30 focus:outline-none"
+                className="w-full bg-transparent px-3 py-2.5 text-white font-mono text-sm placeholder:text-white/30 focus:outline-none"
               />
             </div>
-            {addressError && <p className="mt-2 text-sm text-red-400">{addressError}</p>}
+            {addressError && <p className="mt-1.5 text-xs text-red-400">{addressError}</p>}
           </div>
 
           {/* Token Selection */}
           <div>
-            <label className="block text-white/40 text-sm mb-2 font-medium">Token</label>
+            <label className="block text-white/40 text-xs mb-1.5 font-medium">Token</label>
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setShowTokenSelect(!showTokenSelect)}
                 disabled={tokensOnSelectedChain.length === 0}
-                className="w-full flex items-center justify-between px-4 py-3 bg-white/[0.03] rounded-2xl border border-white/[0.06] hover:border-white/20 transition-colors disabled:opacity-50"
+                className="w-full flex items-center justify-between px-3 py-2.5 bg-white/[0.03] rounded-xl border border-white/[0.06] hover:border-white/20 transition-colors disabled:opacity-50"
               >
                 {selectedToken ? (
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     <img
                       src={selectedToken.logoURI}
                       alt={selectedToken.symbol}
-                      className="w-6 h-6 rounded-full"
+                      className="w-5 h-5 rounded-full"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png'
                       }}
                     />
                     <div className="text-left">
-                      <span className="text-white font-medium">{selectedToken.symbol}</span>
-                      <p className="text-white/40 text-xs">{formatTokenBalance(selectedToken.balance)} available</p>
+                      <span className="text-white font-medium text-sm">{selectedToken.symbol}</span>
+                      <p className="text-white/40 text-[10px]">{formatTokenBalance(selectedToken.balance)} available</p>
                     </div>
                   </div>
                 ) : (
-                  <span className="text-white/40">No tokens on {selectedChain.name}</span>
+                  <span className="text-white/40 text-sm">No tokens on {selectedChain.name}</span>
                 )}
-                <ChevronDown className={`w-5 h-5 text-white/40 transition-transform ${showTokenSelect ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-4 h-4 text-white/40 transition-transform ${showTokenSelect ? 'rotate-180' : ''}`} />
               </button>
 
               {showTokenSelect && tokensOnSelectedChain.length > 0 && (
@@ -862,12 +862,12 @@ export default function Dashboard() {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-white/40 text-sm font-medium">Amount</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-white/40 text-xs font-medium">Amount</label>
               <button onClick={setMaxAmount} disabled={!selectedToken} className="text-xs text-[#FF3B30] hover:text-[#D70015] font-semibold disabled:opacity-50">MAX</button>
             </div>
-            <GlassInner className="p-5">
-              <div className="flex items-center gap-4">
+            <GlassInner className="p-3">
+              <div className="flex items-center gap-3">
                 <input
                   type="text"
                   inputMode="decimal"
@@ -875,33 +875,23 @@ export default function Dashboard() {
                   onChange={(e) => setSendAmount(e.target.value)}
                   placeholder="0.00"
                   disabled={isSending || isConfirming || !selectedToken}
-                  className="flex-1 bg-transparent text-4xl font-semibold text-white placeholder:text-white/20 focus:outline-none disabled:opacity-50"
+                  className="flex-1 bg-transparent text-3xl font-semibold text-white placeholder:text-white/20 focus:outline-none disabled:opacity-50"
                 />
                 {selectedToken && (
-                  <div className="flex items-center gap-2 bg-white/[0.06] rounded-full px-4 py-2">
+                  <div className="flex items-center gap-1.5 bg-white/[0.06] rounded-full px-3 py-1.5">
                     <img
                       src={selectedToken.logoURI}
                       alt={selectedToken.symbol}
-                      className="w-6 h-6 rounded-full"
+                      className="w-5 h-5 rounded-full"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png'
                       }}
                     />
-                    <span className="text-white font-medium">{selectedToken.symbol}</span>
+                    <span className="text-white font-medium text-sm">{selectedToken.symbol}</span>
                   </div>
                 )}
               </div>
-              {selectedToken && sendAmount && parseFloat(sendAmount) > 0 && (
-                <p className="text-white/60 text-lg mt-2 font-medium">
-                  ≈ ${(() => {
-                    const tokenBalance = parseFloat(selectedToken.balance) || 0
-                    const pricePerToken = tokenBalance > 0 ? (selectedToken.balanceUsd || 0) / tokenBalance : 0
-                    const usdValue = parseFloat(sendAmount) * pricePerToken
-                    return usdValue < 0.01 ? '< 0.01' : usdValue.toFixed(2)
-                  })()}
-                </p>
-              )}
-              <p className="text-white/40 text-sm mt-2">
+              <p className="text-white/40 text-xs mt-2">
                 Balance: <span className="text-white/60">
                   {selectedToken ? `${formatTokenBalance(selectedToken.balance)} ${selectedToken.symbol}` : '$0.00'}
                 </span>
@@ -989,8 +979,8 @@ export default function Dashboard() {
               </div>
             )}
 
-            <GlassInner className="w-48 h-48 mx-auto mb-6 flex items-center justify-center p-2">
-              <div className="w-full h-full bg-white rounded-xl flex items-center justify-center p-2">
+            <GlassInner className="w-40 h-40 mx-auto mb-4 flex items-center justify-center p-2">
+              <div className="w-full h-full bg-white rounded-xl flex items-center justify-center p-1.5">
                 {(receiveWallet === 'evm' ? address : solanaAddress) ? (
                   <img
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${receiveWallet === 'evm' ? address : solanaAddress}&bgcolor=ffffff&color=111111`}
@@ -998,15 +988,15 @@ export default function Dashboard() {
                     className="w-full h-full"
                   />
                 ) : (
-                  <QrCode className="w-16 h-16 text-[#111]" />
+                  <QrCode className="w-12 h-12 text-[#111]" />
                 )}
               </div>
             </GlassInner>
 
-            <p className="text-white/40 text-sm mb-4">Share your address to receive tokens</p>
+            <p className="text-white/40 text-xs mb-3">Share your address to receive tokens</p>
 
-            <GlassInner className="mb-4">
-              <p className="font-mono text-xs text-white/60 break-all">
+            <GlassInner className="mb-4 px-4 py-3">
+              <p className="font-mono text-sm text-white/70 break-all leading-relaxed">
                 {receiveWallet === 'evm' ? address : solanaAddress}
               </p>
             </GlassInner>
@@ -1022,24 +1012,22 @@ export default function Dashboard() {
               Copy Address
             </GlassButton>
 
-            <div className="mt-5">
-              <p className="text-white/30 text-xs mb-3">
+            <div className="mt-4">
+              <p className="text-white/30 text-[10px] mb-2">
                 {receiveWallet === 'evm' ? 'Works on' : 'Solana Network'}
               </p>
-              <div className="flex items-center justify-center gap-2">
+              <div className="flex items-center justify-center gap-1.5">
                 {receiveWallet === 'evm' ? (
-                  SEND_CHAINS.map((chain) => (
-                    <div key={chain.id} className="flex flex-col items-center gap-1" title={chain.name}>
-                      <div className="w-8 h-8 bg-white/[0.05] rounded-full border border-white/[0.1] flex items-center justify-center">
-                        <img src={chain.logo} alt={chain.name} className="w-5 h-5 rounded-full" />
+                  SEND_CHAINS.filter(c => !c.isSolana).map((chain) => (
+                    <div key={chain.id} title={chain.name}>
+                      <div className="w-6 h-6 bg-white/[0.05] rounded-full border border-white/[0.1] flex items-center justify-center">
+                        <img src={chain.logo} alt={chain.name} className="w-4 h-4 rounded-full" />
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="w-8 h-8 bg-white/[0.05] rounded-full border border-white/[0.1] flex items-center justify-center">
-                      <img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="Solana" className="w-5 h-5 rounded-full" />
-                    </div>
+                  <div className="w-6 h-6 bg-white/[0.05] rounded-full border border-white/[0.1] flex items-center justify-center">
+                    <img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="Solana" className="w-4 h-4 rounded-full" />
                   </div>
                 )}
               </div>

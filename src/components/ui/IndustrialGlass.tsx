@@ -152,33 +152,46 @@ interface IndustrialPageProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 export const IndustrialPage = ({ children, className = "", ...props }: IndustrialPageProps) => (
-  <div
-    className={`min-h-screen w-full relative overflow-x-hidden ${className}`}
-    style={{
-      background: '#050505',
-      fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Helvetica Neue', sans-serif",
-    }}
-    {...props}
-  >
-    {/* Technical Grid Background */}
+  <>
+    {/* Fixed background that covers everything including overscroll */}
     <div
-      className="fixed inset-0 pointer-events-none z-0 opacity-100"
-      style={{ backgroundImage: gridBg }}
-    />
-
-    {/* Grain Texture Overlay */}
-    <div
-      className="fixed inset-0 pointer-events-none z-[10000] opacity-[0.06] mix-blend-overlay"
+      className="fixed inset-0 z-[-1]"
       style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`
+        background: '#050505',
+        // Extend background beyond viewport for overscroll
+        top: '-100vh',
+        bottom: '-100vh',
+        height: '300vh',
       }}
     />
+    <div
+      className={`min-h-screen w-full relative overflow-x-hidden ${className}`}
+      style={{
+        background: '#050505',
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Helvetica Neue', sans-serif",
+      }}
+      {...props}
+    >
+      {/* Technical Grid Background */}
+      <div
+        className="fixed inset-0 pointer-events-none z-0 opacity-100"
+        style={{ backgroundImage: gridBg }}
+      />
 
-    {/* Content */}
-    <div className="relative z-10">
-      {children}
+      {/* Grain Texture Overlay */}
+      <div
+        className="fixed inset-0 pointer-events-none z-[10000] opacity-[0.06] mix-blend-overlay"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`
+        }}
+      />
+
+      {/* Content */}
+      <div className="relative z-10">
+        {children}
+      </div>
     </div>
-  </div>
+  </>
 )
 
 // 6. SECTION HEADER (For section titles)
