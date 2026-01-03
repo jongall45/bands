@@ -138,7 +138,7 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
     // STEP 1: Show local swap records directly - we have all the data, no need to wait
     const recentSwaps = getSwapHistory()
     const now = Date.now()
-    const RECENT_WINDOW = 10 * 60 * 1000 // Show local records for 10 minutes
+    const RECENT_WINDOW = 24 * 60 * 60 * 1000 // Show local records for 24 hours
 
     for (const swapRecord of recentSwaps) {
       const age = now - swapRecord.timestamp
@@ -504,7 +504,7 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
             <img
               src={chainImg}
               alt={chainAlt}
-              className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-black/50"
+              className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-black/50"
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
             />
           )}
@@ -810,20 +810,10 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
           (tokenSymbol === 'USDC' ? 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png' :
            tokenSymbol === 'ETH' ? 'https://assets.coingecko.com/coins/images/279/small/ethereum.png' : '')
         
-        // Chain logos
-        const chainLogos: Record<number, string> = {
-          1: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
-          8453: 'https://raw.githubusercontent.com/base-org/brand-kit/main/logo/symbol/Base_Symbol_Blue.png',
-          42161: 'https://assets.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg',
-          10: 'https://assets.coingecko.com/coins/images/25244/small/Optimism.png',
-          137: 'https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png',
-        }
-        const chainNames: Record<number, string> = {
-          1: 'ETH', 8453: 'Base', 42161: 'ARB', 10: 'OP', 137: 'MATIC'
-        }
+        // Use centralized CHAIN_CONFIG for chain logos
         const txChainId = tx.chainId || 8453
-        const chainLogo = chainLogos[txChainId] || ''
-        const chainName = chainNames[txChainId] || 'Chain'
+        const chainLogo = getChainLogo(txChainId)
+        const chainName = CHAIN_NAMES[txChainId] || 'Chain'
         
         const displayAmount = formatBridgeAmount(tokenAmount)
         const numAmount = parseFloat(tokenAmount)
