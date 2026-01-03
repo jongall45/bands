@@ -81,15 +81,18 @@ export function WithdrawModal({ vault, isOpen, onClose, onSuccess }: WithdrawMod
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto"
+      style={{ paddingTop: 'calc(60px + env(safe-area-inset-top, 0px))' }}
+    >
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        className="fixed inset-0 bg-black/80 backdrop-blur-sm"
         onClick={handleClose}
       />
 
       {/* Modal */}
-      <div className="relative w-full max-w-[430px] bg-[#0a0a0a] border border-white/[0.1] rounded-t-3xl sm:rounded-3xl p-6">
+      <div className="relative w-full max-w-[430px] bg-[#0a0a0a] border border-white/[0.1] rounded-3xl p-6" style={{ marginBottom: 'max(80px, calc(80px + env(safe-area-inset-bottom, 0px)))' }}>
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-white font-semibold text-lg">Withdraw from {vault.name}</h2>
