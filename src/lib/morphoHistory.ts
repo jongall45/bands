@@ -32,7 +32,6 @@ export function saveMorphoRecord(record: MorphoRecord): void {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed))
     // Dispatch event so TransactionList can refresh
     window.dispatchEvent(new CustomEvent('morphoHistoryUpdated'))
-    console.log('[MorphoHistory] Saved record:', record)
   } catch (e) {
     console.error('Failed to save Morpho record:', e)
   }
