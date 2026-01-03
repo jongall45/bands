@@ -143,22 +143,28 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
     const now = Date.now()
     const RECENT_WINDOW = 10 * 60 * 1000 // Show local records for 10 minutes
 
+    console.log('[TransactionList] Local swap records:', recentSwaps.length, recentSwaps)
+    console.log('[TransactionList] Current time:', now)
+
     for (const swapRecord of recentSwaps) {
-      if (now - swapRecord.timestamp > RECENT_WINDOW) continue
+      const age = now - swapRecord.timestamp
+      console.log('[TransactionList] Swap record age:', age, 'ms, within window:', age <= RECENT_WINDOW)
+
+      if (age > RECENT_WINDOW) continue
 
       // Mark timestamp (rounded to minute) so we skip duplicate Dune entries
       usedTimestamps.add(Math.floor(swapRecord.timestamp / 60000))
 
-      result.push({
+      const localSwapTx = {
         hash: swapRecord.txHash,
-        type: 'swap',
+        type: 'swap' as const,
         from: '',
         to: '',
         value: '0',
         tokenSymbol: swapRecord.fromToken.symbol,
         tokenDecimals: 6,
         timestamp: swapRecord.timestamp,
-        status: 'success',
+        status: 'success' as const,
         blockNumber: '0',
         chainId: swapRecord.fromToken.chainId,
         chainName: CHAIN_NAMES[swapRecord.fromToken.chainId] || 'Chain',
@@ -184,7 +190,9 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
             chainLogo: CHAIN_LOGOS[swapRecord.toToken.chainId] || '',
           }
         }
-      })
+      }
+      console.log('[TransactionList] Adding local swap to result:', localSwapTx)
+      result.push(localSwapTx)
     }
 
     // STEP 2: Show local Morpho records directly
@@ -327,7 +335,11 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
       }
     }
 
-    return result
+    // Sort final result by timestamp (most recent first)
+    const sortedResult = result.sort((a, b) => b.timestamp - a.timestamp)
+    console.log('[TransactionList] Final result count:', sortedResult.length, 'Local swap count:', recentSwaps.filter(s => now - s.timestamp <= RECENT_WINDOW).length)
+
+    return sortedResult
   }, [transactions, localHistoryVersion])
 
   // Early returns AFTER hooks
@@ -359,7 +371,8 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
     )
   }
 
-  if (!transactions || transactions.length === 0) {
+  // Check if we have any transactions (local or from Dune)
+  if (groupedTransactions.length === 0) {
     return <EmptyState message="No transactions yet" submessage="Send or receive to get started" />
   }
 
