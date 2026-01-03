@@ -103,7 +103,7 @@ const SOLANA_CHAIN_ID = 792703809
 // Chain info helpers (outside component to avoid recreation)
 const CHAIN_LOGOS: Record<number, string> = {
   1: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
-  8453: 'https://assets.coingecko.com/asset_platforms/images/131/small/base.jpeg',
+  8453: 'https://raw.githubusercontent.com/base-org/brand-kit/001c0e9b40a67799ebe0418671ac4e02a0c683ce/logo/symbol/Base_Symbol_Blue.svg',
   42161: 'https://assets.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg',
   10: 'https://assets.coingecko.com/coins/images/25244/small/Optimism.png',
   137: 'https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png',
@@ -477,6 +477,10 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
       const fromLogo = getTokenLogo(fromToken.symbol, undefined, fromToken.chainId, fromToken.logo)
       const toLogo = getTokenLogo(toToken.symbol, undefined, toToken.chainId, toToken.logo)
 
+      // Determine if this is same-chain or cross-chain swap
+      const isSameChain = fromToken.chainId === toToken.chainId
+      const swapLabel = isSameChain ? 'Swap' : 'Cross-chain Swap'
+
       // Token with chain badge component
       const TokenWithChainBadge = ({
         tokenImg, tokenAlt, chainImg, chainAlt
@@ -512,7 +516,7 @@ function TransactionRow({ tx, userAddress }: { tx: DisplayTransaction; userAddre
 
       return {
         label: 'Relay',
-        sublabel: 'Cross-chain Swap',
+        sublabel: swapLabel,
         icon: (
           <img src={RELAY_LOGO} alt="Relay" className="w-5 h-5 rounded-full object-cover" />
         ),

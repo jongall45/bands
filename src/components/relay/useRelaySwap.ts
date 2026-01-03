@@ -646,6 +646,7 @@ export function useRelaySwap(
 
   const [state, setState] = useState<SwapState>('idle')
   const [quote, setQuote] = useState<Quote | null>(null)
+  const [quoteTimestamp, setQuoteTimestamp] = useState<number>(0) // Track when quote was fetched
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<SwapResult | null>(null)
 
@@ -1118,6 +1119,7 @@ export function useRelaySwap(
       }
 
       setQuote(quoteData)
+      setQuoteTimestamp(Date.now()) // Track when quote was fetched
       setState('idle')
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:690',message:'fetchQuote success exit',data:{quoteData:JSON.stringify(quoteData).substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
@@ -1155,6 +1157,15 @@ export function useRelaySwap(
 
     if (!quote || !quote.steps || quote.steps.length === 0) {
       setError('No quote available')
+      return null
+    }
+
+    // Check if quote is stale (older than 45 seconds)
+    const quoteAge = Date.now() - quoteTimestamp
+    const MAX_QUOTE_AGE = 45 * 1000 // 45 seconds
+    if (quoteAge > MAX_QUOTE_AGE) {
+      setError('Quote expired - please refresh and try again')
+      setState('error')
       return null
     }
 
@@ -2239,7 +2250,12 @@ export function useRelaySwap(
             console.error('[useRelaySwap] Transaction error:', txErr.message)
             if (txErr.message?.includes('UserOperation reverted during simulation') ||
                 txErr.message?.includes('callGasLimit')) {
-              throw new Error('Transaction simulation failed. Please try again.')
+              // This error typically means the swap would fail on-chain
+              // Common causes: stale quote, insufficient liquidity, token transfer restrictions
+              throw new Error('Swap simulation failed - try a smaller amount or refresh the quote')
+            }
+            if (txErr.message?.includes('insufficient') || txErr.message?.includes('balance')) {
+              throw new Error('Insufficient balance for swap + gas fees')
             }
             throw txErr
           }
@@ -2279,7 +2295,7 @@ export function useRelaySwap(
       setState('error')
       return null
     }
-  }, [quote, smartWalletAddress, smartWalletClient, getClientForChain, publicClient])
+  }, [quote, quoteTimestamp, smartWalletAddress, smartWalletClient, getClientForChain, publicClient])
 
   // ============================================
   // RESET
@@ -2287,6 +2303,7 @@ export function useRelaySwap(
   const reset = useCallback(() => {
     setState('idle')
     setQuote(null)
+    setQuoteTimestamp(0)
     setError(null)
     setResult(null)
   }, [])
