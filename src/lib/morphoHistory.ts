@@ -30,6 +30,8 @@ export function saveMorphoRecord(record: MorphoRecord): void {
     // Keep only the last MAX_RECORDS
     const trimmed = updated.slice(0, MAX_RECORDS)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed))
+    // Dispatch event so TransactionList can refresh
+    window.dispatchEvent(new CustomEvent('morphoHistoryUpdated'))
     console.log('[MorphoHistory] Saved record:', record)
   } catch (e) {
     console.error('Failed to save Morpho record:', e)

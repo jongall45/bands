@@ -116,9 +116,24 @@ const CHAIN_NAMES: Record<number, string> = {
 export function TransactionList({ address, limit = 5, crossChain = true }: TransactionListProps) {
   const { data: transactions, isLoading, isError, refetch } = useTransactionHistory(address, { crossChain })
   const [displayCount, setDisplayCount] = useState(limit)
-  
+  const [localHistoryVersion, setLocalHistoryVersion] = useState(0)
+
+  // Listen for local history updates (swap/morpho records saved)
+  useEffect(() => {
+    const handleSwapUpdate = () => setLocalHistoryVersion(v => v + 1)
+    const handleMorphoUpdate = () => setLocalHistoryVersion(v => v + 1)
+
+    window.addEventListener('swapHistoryUpdated', handleSwapUpdate)
+    window.addEventListener('morphoHistoryUpdated', handleMorphoUpdate)
+
+    return () => {
+      window.removeEventListener('swapHistoryUpdated', handleSwapUpdate)
+      window.removeEventListener('morphoHistoryUpdated', handleMorphoUpdate)
+    }
+  }, [])
 
   // Group bridge send/receive pairs into swap views - MUST be before any early returns
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const groupedTransactions = useMemo(() => {
     const result: DisplayTransaction[] = []
     const usedTimestamps = new Set<number>() // Track timestamps to avoid duplicates with Dune
@@ -311,9 +326,9 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
         result.push(tx as DisplayTransaction)
       }
     }
-    
+
     return result
-  }, [transactions])
+  }, [transactions, localHistoryVersion])
 
   // Early returns AFTER hooks
   if (!address) {
