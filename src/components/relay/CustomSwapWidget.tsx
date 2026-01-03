@@ -213,6 +213,11 @@ export function CustomSwapWidget({ onSuccess, onError, onStateChange, buyToken, 
         toAmount: result.toAmount,
       })
       // Save swap record for Recent Activity
+      // Debug: Log full token objects to diagnose chainId issue
+      console.log('[CustomSwapWidget] Swap result tokens:', {
+        fromToken: result.fromToken,
+        toToken: result.toToken,
+      })
       saveSwapRecord({
         txHash: result.txHash,
         timestamp: Date.now(),
