@@ -14,7 +14,8 @@ import {
   XCircle, Loader2, PiggyBank, TrendingUp,
   ArrowLeftRight, Zap, Globe, Repeat, Plus, ChevronDown, ArrowRight
 } from 'lucide-react'
-import { getSwapByHash } from '@/lib/swapHistory'
+import { findSwapRecord, getSwapByHash, getSwapHistory } from '@/lib/swapHistory'
+import { findMorphoRecord, getMorphoHistory } from '@/lib/morphoHistory'
 
 // Extended transaction type that can include paired bridge info
 interface DisplayTransaction extends Transaction {
@@ -119,49 +120,110 @@ export function TransactionList({ address, limit = 5, crossChain = true }: Trans
 
   // Group bridge send/receive pairs into swap views - MUST be before any early returns
   const groupedTransactions = useMemo(() => {
-    if (!transactions || transactions.length === 0) return []
-
     const result: DisplayTransaction[] = []
-    const usedHashes = new Set<string>()
+    const usedTimestamps = new Set<number>() // Track timestamps to avoid duplicates with Dune
 
-    // Sort by timestamp descending
+    // STEP 1: Show local swap records directly - we have all the data, no need to wait
+    const recentSwaps = getSwapHistory()
+    const now = Date.now()
+    const RECENT_WINDOW = 10 * 60 * 1000 // Show local records for 10 minutes
+
+    for (const swapRecord of recentSwaps) {
+      if (now - swapRecord.timestamp > RECENT_WINDOW) continue
+
+      // Mark timestamp (rounded to minute) so we skip duplicate Dune entries
+      usedTimestamps.add(Math.floor(swapRecord.timestamp / 60000))
+
+      result.push({
+        hash: swapRecord.txHash,
+        type: 'swap',
+        from: '',
+        to: '',
+        value: '0',
+        tokenSymbol: swapRecord.fromToken.symbol,
+        tokenDecimals: 6,
+        timestamp: swapRecord.timestamp,
+        status: 'success',
+        blockNumber: '0',
+        chainId: swapRecord.fromToken.chainId,
+        chainName: CHAIN_NAMES[swapRecord.fromToken.chainId] || 'Chain',
+        chainLogo: CHAIN_LOGOS[swapRecord.fromToken.chainId] || '',
+        isGroupedSwap: true,
+        appName: 'Relay',
+        appCategory: 'Bridge',
+        bridgePair: {
+          fromToken: {
+            symbol: swapRecord.fromToken.symbol,
+            amount: swapRecord.fromToken.amount,
+            logo: swapRecord.fromToken.logoURI || '',
+            chainId: swapRecord.fromToken.chainId,
+            chainName: CHAIN_NAMES[swapRecord.fromToken.chainId] || 'Chain',
+            chainLogo: CHAIN_LOGOS[swapRecord.fromToken.chainId] || '',
+          },
+          toToken: {
+            symbol: swapRecord.toToken.symbol,
+            amount: swapRecord.toToken.amount,
+            logo: swapRecord.toToken.logoURI || '',
+            chainId: swapRecord.toToken.chainId,
+            chainName: CHAIN_NAMES[swapRecord.toToken.chainId] || 'Chain',
+            chainLogo: CHAIN_LOGOS[swapRecord.toToken.chainId] || '',
+          }
+        }
+      })
+    }
+
+    // STEP 2: Show local Morpho records directly
+    const recentMorpho = getMorphoHistory()
+    for (const morphoRecord of recentMorpho) {
+      if (now - morphoRecord.timestamp > RECENT_WINDOW) continue
+
+      usedTimestamps.add(Math.floor(morphoRecord.timestamp / 60000))
+
+      result.push({
+        hash: morphoRecord.txHash,
+        type: morphoRecord.type === 'deposit' ? 'vault_deposit' : 'vault_withdraw',
+        from: '',
+        to: morphoRecord.vaultAddress,
+        value: '0',
+        tokenSymbol: 'USDC',
+        tokenDecimals: 6,
+        tokenAmount: morphoRecord.amount,
+        timestamp: morphoRecord.timestamp,
+        status: 'success',
+        blockNumber: '0',
+        chainId: morphoRecord.chainId,
+        chainName: CHAIN_NAMES[morphoRecord.chainId] || 'Base',
+        chainLogo: CHAIN_LOGOS[morphoRecord.chainId] || '',
+        appName: 'Morpho',
+        appCategory: 'Lending',
+        vaultName: morphoRecord.vaultName,
+        token: {
+          symbol: 'USDC',
+          amount: morphoRecord.amount,
+          logoURI: USDC_LOGO,
+        }
+      })
+    }
+
+    // STEP 3: Add older Dune transactions, skipping any that overlap with local records
+    if (!transactions || transactions.length === 0) {
+      return result.sort((a, b) => b.timestamp - a.timestamp)
+    }
+
     const sorted = [...transactions].sort((a, b) => b.timestamp - a.timestamp)
+    const usedHashes = new Set<string>()
 
     for (const tx of sorted) {
       if (usedHashes.has(tx.hash)) continue
 
-      // First, check if we have a swap record from local storage for this transaction
-      // This handles cross-chain swaps to non-EVM chains (like Solana)
-      const swapRecord = tx.hash ? getSwapByHash(tx.hash) : null
-      if (swapRecord) {
+      // Skip if this overlaps with a local record we already added
+      const txMinute = Math.floor(tx.timestamp / 60000)
+      if (usedTimestamps.has(txMinute)) {
         usedHashes.add(tx.hash)
-        const groupedTx: DisplayTransaction = {
-          ...tx,
-          isGroupedSwap: true,
-          appName: 'Relay',
-          appCategory: 'Bridge',
-          bridgePair: {
-            fromToken: {
-              symbol: swapRecord.fromToken.symbol,
-              amount: swapRecord.fromToken.amount,
-              logo: swapRecord.fromToken.logoURI || '',
-              chainId: swapRecord.fromToken.chainId,
-              chainName: CHAIN_NAMES[swapRecord.fromToken.chainId] || 'Chain',
-              chainLogo: CHAIN_LOGOS[swapRecord.fromToken.chainId] || '',
-            },
-            toToken: {
-              symbol: swapRecord.toToken.symbol,
-              amount: swapRecord.toToken.amount,
-              logo: swapRecord.toToken.logoURI || '',
-              chainId: swapRecord.toToken.chainId,
-              chainName: CHAIN_NAMES[swapRecord.toToken.chainId] || 'Chain',
-              chainLogo: CHAIN_LOGOS[swapRecord.toToken.chainId] || '',
-            }
-          }
-        }
-        result.push(groupedTx)
         continue
       }
+
+      usedHashes.add(tx.hash)
 
       // Check if this is a Bridge send (outgoing) - more flexible matching
       const isBridgeSend = (
