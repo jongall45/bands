@@ -49,19 +49,12 @@ export const config = {
 
 // Validate required config
 export function validateConfig(): void {
-  // Log credential status (safe - no secrets)
   const hasKey = !!config.builderApiKey
   const hasSecret = !!config.builderSecret
   const hasPass = !!config.builderPassphrase
-  const keyLen = config.builderApiKey.length
-  const secretLen = config.builderSecret.length
-  const passLen = config.builderPassphrase.length
-  
-  console.log(`[Config] Builder credentials: hasKey=${hasKey} hasSecret=${hasSecret} hasPass=${hasPass} keyLen=${keyLen} secretLen=${secretLen} passLen=${passLen}`)
-  console.log(`[Config] CLOB API: ${config.clobApi}`)
-  console.log(`[Config] Gamma API: ${config.gammaApi}`)
-  
-  if (!hasKey || !hasSecret || !hasPass) {
-    console.warn(`⚠️ Missing builder credentials - Builder attribution will be disabled`)
+
+  // Only log in development, never expose credential info in production
+  if (config.nodeEnv === 'development') {
+    console.log(`[Config] Builder credentials configured: ${hasKey && hasSecret && hasPass}`)
   }
 }

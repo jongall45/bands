@@ -61,12 +61,7 @@ export function addOptimisticPosition(position: Omit<OstiumPosition, 'index' | '
   }
   
   pendingPositions.push({ position: optimistic, txHash, addedAt: Date.now() })
-  
-  // #region agent log
-  // #endregion
-  
-  console.log('⚡ Added optimistic position:', position.symbol, '- pending count:', pendingPositions.length, '- hasQueryClient:', !!globalQueryClient)
-  
+
   // Force cache invalidation so any mounted component re-fetches
   invalidatePositionsCache()
 }
@@ -74,7 +69,6 @@ export function addOptimisticPosition(position: Omit<OstiumPosition, 'index' | '
 export function markPositionClosing(pairId: number, index: number) {
   const key = `${pairId}-${index}`
   closingPositions.add(key)
-  console.log('⚡ Marked position as closing:', key)
   invalidatePositionsCache()
   
   // Auto-clear after 30 seconds
@@ -133,12 +127,7 @@ export function useOstiumPositions() {
   // Merge real positions with optimistic pending positions
   const realPositions = query.data || []
   const pending = getValidPendingPositions()
-  
-  // #region agent log
-  if (pending.length > 0) {
-  }
-  // #endregion
-  
+
   // Filter out positions that are being closed (optimistic removal)
   const visibleRealPositions = realPositions.filter(p => !isPositionClosing(p.pairId, p.index))
   
