@@ -12,7 +12,6 @@ import { VaultCard } from '@/components/morpho/VaultCard'
 import { DepositModal } from '@/components/morpho/DepositModal'
 import { WithdrawModal } from '@/components/morpho/WithdrawModal'
 import { SavingsProjectionChart } from '@/components/morpho/SavingsProjectionChart'
-import { LogoInline } from '@/components/ui/Logo'
 import { AppShell, AppContent } from '@/components/layout/AppShell'
 import { IndustrialPage, GlassCard, GlassButton, GlassInner } from '@/components/ui/IndustrialGlass'
 import { PullToRefresh } from '@/components/ui/PullToRefresh'
@@ -192,9 +191,8 @@ export default function SavePage() {
           className="fixed top-0 left-0 right-0 z-50 bg-[#050505]/95 backdrop-blur-md border-b border-white/[0.04]"
           style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
         >
-          <div className="flex items-center justify-between px-4 py-2.5 max-w-[480px] mx-auto">
-            <LogoInline size="sm" />
-            <div className="text-right">
+          <div className="flex items-center justify-center px-4 py-2.5 max-w-[480px] mx-auto">
+            <div className="text-center">
               <h1 className="text-white font-extrabold text-base" style={{ fontWeight: 800 }}>Earn</h1>
               <p className="text-white/50 text-xs">Deposit & earn yield</p>
             </div>

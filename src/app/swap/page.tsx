@@ -6,7 +6,6 @@ import { useWallets, usePrivy } from '@privy-io/react-auth'
 import { Repeat, RefreshCw } from 'lucide-react'
 import { CustomSwapWidget } from '@/components/relay/CustomSwapWidget'
 import type { SwapState } from '@/components/relay/useRelaySwap'
-import { LogoInline } from '@/components/ui/Logo'
 import { AppShell, AppContent } from '@/components/layout/AppShell'
 import { IndustrialPage, GlassCard, TechBadge } from '@/components/ui/IndustrialGlass'
 import { TokenChart } from '@/components/chart/TokenChart'
@@ -139,9 +138,8 @@ export default function SwapPage() {
           className="fixed top-0 left-0 right-0 z-50 bg-[#050505]/95 backdrop-blur-md border-b border-white/[0.04]"
           style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
         >
-          <div className="flex items-center justify-between px-4 py-2.5 max-w-[480px] mx-auto">
-            <LogoInline size="sm" />
-            <div className="text-right">
+          <div className="flex items-center justify-center px-4 py-2.5 max-w-[480px] mx-auto">
+            <div className="text-center">
               <h1 className="text-white font-extrabold text-base" style={{ fontWeight: 800 }}>Swap & Bridge</h1>
               <p className="text-white/50 text-xs">Trade tokens across chains</p>
             </div>
