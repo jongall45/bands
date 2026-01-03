@@ -29,7 +29,7 @@ const MAX_RECORDS = 50 // Keep last 50 swaps
  */
 export function saveSwapRecord(record: SwapRecord): void {
   if (typeof window === 'undefined') return
-  
+
   try {
     const existing = getSwapHistory()
     // Add new record at the beginning
@@ -37,6 +37,8 @@ export function saveSwapRecord(record: SwapRecord): void {
     // Keep only the last MAX_RECORDS
     const trimmed = updated.slice(0, MAX_RECORDS)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed))
+    // Dispatch event so TransactionList can refresh
+    window.dispatchEvent(new CustomEvent('swapHistoryUpdated'))
   } catch (e) {
     console.error('Failed to save swap record:', e)
   }
