@@ -2042,43 +2042,32 @@ export function useRelaySwap(
             // So we must approve the DEPOSIT CONTRACT ADDRESS, not any internal router
             const depositContractAddress = depositItem.data.to as string
 
-            // Extract amount from embedded data or use quote amount
-            const txData = depositItem.data.data as string
-            let approvalAmount = parseUnits(quote.fromAmount, fromToken.decimals)
+            // Use MAX_UINT256 for approval to avoid precision issues and future swaps
+            const MAX_UINT256 = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
 
-            // Try to extract exact amount from embedded approval if present
-            if (txData && txData.includes(APPROVE_SELECTOR.slice(2))) {
-              const approveIndex = txData.indexOf(APPROVE_SELECTOR.slice(2))
-              const amountStart = approveIndex + APPROVE_SELECTOR.length - 2 + 64
-              const amountHex = txData.substring(amountStart, amountStart + 64)
-              if (amountHex && amountHex.length === 64) {
-                try {
-                  approvalAmount = BigInt('0x' + amountHex)
-                } catch {
-                  // Keep quote amount
-                }
-              }
-            }
+            // Calculate minimum required for allowance check
+            const minRequiredAmount = parseUnits(quote.fromAmount, fromToken.decimals)
 
             console.log('[useRelaySwap] Deposit contract approval check:', {
               depositContract: depositContractAddress,
-              approvalAmount: approvalAmount.toString(),
+              minRequiredAmount: minRequiredAmount.toString(),
               tokenAddress: fromToken.address,
             })
 
             // Check if we have allowance to the DEPOSIT CONTRACT
-            const hasAllowance = await checkAllowance(fromToken, depositContractAddress, approvalAmount)
+            const hasAllowance = await checkAllowance(fromToken, depositContractAddress, minRequiredAmount)
             console.log('[useRelaySwap] Allowance to deposit contract:', { hasAllowance, depositContractAddress })
 
             if (!hasAllowance) {
-              console.log(`[useRelaySwap] Token ${fromToken.symbol} needs approval to deposit contract`)
+              console.log(`[useRelaySwap] Token ${fromToken.symbol} needs approval to deposit contract - using MAX_UINT256`)
               setState('sending')
 
-              // Approve the DEPOSIT CONTRACT (it will do transferFrom then swap internally)
+              // Approve the DEPOSIT CONTRACT with MAX_UINT256 (same as CASE 1)
+              // This avoids issues with exact amount calculations and enables future swaps
               const approveData = encodeFunctionData({
                 abi: erc20Abi,
                 functionName: 'approve',
-                args: [depositContractAddress as `0x${string}`, approvalAmount],
+                args: [depositContractAddress as `0x${string}`, MAX_UINT256],
               })
 
               try {
@@ -2248,16 +2237,33 @@ export function useRelaySwap(
             // Don't wait for receipt - return success immediately
           } catch (txErr: any) {
             console.error('[useRelaySwap] Transaction error:', txErr.message)
+            // Log full error for debugging
+            console.error('[useRelaySwap] Full error:', JSON.stringify({
+              message: txErr.message,
+              code: txErr.code,
+              details: txErr.details,
+              to: txParams.to,
+              dataLength: txParams.data?.length,
+              value: txParams.value?.toString(),
+            }, null, 2))
+
             if (txErr.message?.includes('UserOperation reverted during simulation') ||
                 txErr.message?.includes('callGasLimit')) {
               // This error typically means the swap would fail on-chain
-              // Common causes: stale quote, insufficient liquidity, token transfer restrictions
+              // Common causes: stale quote, insufficient liquidity, token approval issues
+              // Check if it might be a token-specific issue
+              const tokenName = fromToken.symbol
+              const isKnownToken = ['USDC', 'USDT', 'ETH', 'WETH', 'DAI'].includes(tokenName)
+              if (!isKnownToken) {
+                throw new Error(`Swap failed for ${tokenName} - this token may have transfer restrictions or insufficient liquidity. Try swapping to a major token first.`)
+              }
               throw new Error('Swap simulation failed - try a smaller amount or refresh the quote')
             }
             if (txErr.message?.includes('insufficient') || txErr.message?.includes('balance')) {
               throw new Error('Insufficient balance for swap + gas fees')
             }
-            throw txErr
+            // Re-throw with more context
+            throw new Error(`Transaction failed: ${txErr.message?.slice(0, 100)}`)
           }
         }
       }
