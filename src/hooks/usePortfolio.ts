@@ -31,7 +31,7 @@ export const CHAIN_CONFIG: Record<number, { name: string; logo: string; explorer
   },
   8453: {
     name: 'Base',
-    logo: 'https://raw.githubusercontent.com/base-org/brand-kit/001c0e9b40a67799ebe0418671ac4e02a0c683ce/logo/symbol/Base_Symbol_Blue.svg',
+    logo: 'https://avatars.githubusercontent.com/u/108554348?s=200&v=4',
     explorer: 'https://basescan.org',
   },
   42161: {
