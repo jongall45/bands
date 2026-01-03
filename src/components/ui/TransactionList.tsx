@@ -103,7 +103,7 @@ const SOLANA_CHAIN_ID = 792703809
 // Chain info helpers (outside component to avoid recreation)
 const CHAIN_LOGOS: Record<number, string> = {
   1: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
-  8453: 'https://raw.githubusercontent.com/base-org/brand-kit/001c0e9b40a67799ebe0418671ac4e02a0c683ce/logo/symbol/Base_Symbol_Blue.svg',
+  8453: 'https://avatars.githubusercontent.com/u/108554348?s=200&v=4',
   42161: 'https://assets.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg',
   10: 'https://assets.coingecko.com/coins/images/25244/small/Optimism.png',
   137: 'https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png',
