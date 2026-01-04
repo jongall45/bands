@@ -32,13 +32,9 @@ async function gatewayFetch<T>(
   path: string,
   options?: RequestInit
 ): Promise<T> {
-  // Use requireGatewayUrl() which ensures https:// protocol
   const gatewayUrlWithProtocol = requireGatewayUrl()
   const url = `${gatewayUrlWithProtocol}${path}`
-  
-  // Log request (client-side)
-  console.log(`[Gateway] ${options?.method || 'GET'} ${url}`)
-  
+
   const response = await fetch(url, {
     ...options,
     headers: {
@@ -47,17 +43,14 @@ async function gatewayFetch<T>(
     },
     credentials: 'include',
   })
-  
+
   const data = await response.json() as T
-  
-  // Log response (client-side)
+
   if (!response.ok) {
-    console.error(`[Gateway] Error ${response.status}:`, (data as GatewayError).error || 'Unknown error')
     const error = (data as GatewayError).error || `HTTP ${response.status}`
     throw new Error(error)
   }
-  
-  console.log(`[Gateway] Success ${response.status}:`, path)
+
   return data
 }
 
@@ -105,35 +98,23 @@ export interface MarketStats {
 
 export async function getMarketStats(marketId: string, tokenId: string): Promise<MarketStats> {
   if (!tokenId) {
-    console.error('[getMarketStats] No tokenId provided!')
     return { bids: [], asks: [] }
   }
 
-  // Use local proxy to CLOB API
   const proxyUrl = `/api/polymarket/proxy/book?token_id=${encodeURIComponent(tokenId)}`
-  console.log('[getMarketStats] Fetching orderbook:', proxyUrl)
 
   try {
     const response = await fetch(proxyUrl, { cache: 'no-store' })
-    
+
     if (!response.ok) {
-      console.error('[getMarketStats] Proxy error:', response.status)
       return { bids: [], asks: [] }
     }
 
     const data = await response.json()
-    
+
     if (data.error) {
-      console.error('[getMarketStats] API error:', data.error)
       return { bids: [], asks: [] }
     }
-
-    console.log('[getMarketStats] Success:', {
-      bidsCount: data?.bids?.length || 0,
-      asksCount: data?.asks?.length || 0,
-      bestBid: data?.bids?.[0]?.price,
-      bestAsk: data?.asks?.[0]?.price,
-    })
 
     return {
       bids: data?.bids || [],
@@ -141,8 +122,7 @@ export async function getMarketStats(marketId: string, tokenId: string): Promise
       spread: data?.spread,
       midPrice: data?.mid,
     }
-  } catch (e) {
-    console.error('[getMarketStats] Fetch error:', e)
+  } catch {
     return { bids: [], asks: [] }
   }
 }
@@ -189,7 +169,7 @@ export interface OrderResult {
 
 /**
  * Submit a signed order to the gateway
- * 
+ *
  * The gateway will:
  * 1. Validate the order (maker=signer=owner for EOA mode)
  * 2. Look up cached user credentials OR derive them using l1Auth
@@ -197,14 +177,6 @@ export interface OrderResult {
  * 4. Return order ID on success
  */
 export async function submitOrder(submission: OrderSubmission): Promise<OrderResult> {
-  console.log('[Gateway] Submitting order:', {
-    owner: submission.owner.slice(0, 10),
-    maker: submission.order.maker?.slice(0, 10),
-    signer: submission.order.signer?.slice(0, 10),
-    signatureType: submission.order.signatureType,
-    hasL1Auth: !!submission.l1Auth,
-  })
-  
   return gatewayFetch<OrderResult>('/api/order', {
     method: 'POST',
     body: JSON.stringify(submission),
@@ -288,37 +260,29 @@ export interface CLOBPositionsResponse {
 
 /**
  * Fetch CLOB positions for a wallet
- * 
+ *
  * Uses our local positions endpoint which queries ERC-1155 balances.
  */
 export async function getCLOBPositions(address: string): Promise<CLOBPositionsResponse> {
   if (!address) {
-    console.warn('[getCLOBPositions] No address provided')
     return { positions: [] }
   }
 
-  // Use local positions endpoint (queries ERC-1155 balances)
   const url = `/api/polymarket/positions?address=${address}`
-  console.log('[getCLOBPositions] Fetching positions:', url)
 
   try {
     const response = await fetch(url, { cache: 'no-store' })
 
     if (!response.ok) {
-      console.error('[getCLOBPositions] Error:', response.status)
       return { positions: [] }
     }
 
     const data = await response.json()
-    
+
     if (data.error) {
-      console.error('[getCLOBPositions] API error:', data.error)
       return { positions: [] }
     }
 
-    console.log('[getCLOBPositions] Found', data.positions?.length || 0, 'positions')
-
-    // Map to expected format
     const positions: CLOBPosition[] = (data.positions || []).map((p: any) => ({
       asset: p.tokenId,
       market: p.conditionId,
@@ -334,8 +298,7 @@ export async function getCLOBPositions(address: string): Promise<CLOBPositionsRe
       positions,
       totalValue: data.totalValue,
     }
-  } catch (e) {
-    console.error('[getCLOBPositions] Fetch error:', e)
+  } catch {
     return { positions: [] }
   }
 }
@@ -363,19 +326,10 @@ export async function getPositions(address: string): Promise<Position[]> {
 // ============================================
 
 export async function checkGatewayHealth(): Promise<boolean> {
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:197',message:'Health check start',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
   try {
-    const result = await gatewayFetch<{ status: string }>('/health')
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:201',message:'Health check success',data:{status:result?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
+    await gatewayFetch<{ status: string }>('/health')
     return true
-  } catch (err: any) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gateway/client.ts:205',message:'Health check failed',data:{error:err?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
+  } catch {
     return false
   }
 }

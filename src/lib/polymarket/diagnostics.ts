@@ -156,20 +156,18 @@ export async function runPolymarketDiagnostics(
   try {
     // 0. Check native MATIC/POL balance (for gas)
     const maticBalance = await publicClient.getBalance({ address })
-    
+
     result.maticBalanceRaw = maticBalance.toString()
     result.maticBalance = formatUnits(maticBalance, 18)
     // Need at least 0.01 MATIC for gas (about $0.005)
     result.hasEnoughGas = maticBalance >= BigInt('10000000000000000') // 0.01 MATIC
-    
-    console.log(`⛽ MATIC Balance: ${result.maticBalance} (${result.hasEnoughGas ? '✅' : '❌ NEED GAS!'})`)
-    
+
     if (!result.hasEnoughGas) {
-      errors.push(`No MATIC for gas! Balance: ${result.maticBalance}. Send at least 0.1 MATIC to ${walletAddress}`)
+      errors.push(`Insufficient MATIC for gas`)
     }
-    
-  } catch (e) {
-    errors.push(`Failed to fetch MATIC balance: ${e}`)
+
+  } catch {
+    errors.push(`Failed to fetch MATIC balance`)
   }
   
   try {
@@ -181,37 +179,33 @@ export async function runPolymarketDiagnostics(
       functionName: 'balanceOf',
       args: [address],
     }) as bigint
-    
+
     result.usdcBalanceRaw = usdcBalance.toString()
     result.usdcBalance = formatUnits(usdcBalance, 6)
-    result.hasEnoughBalance = requiredUsdc 
+    result.hasEnoughBalance = requiredUsdc
       ? usdcBalance >= BigInt(Math.ceil(requiredUsdc * 1e6))
       : usdcBalance > BigInt(0)
-    
-    console.log(`💰 USDC.e Balance (Polymarket uses this!): ${result.usdcBalance} (${result.usdcBalanceRaw} raw)`)
-    
-  } catch (e) {
-    errors.push(`Failed to fetch USDC.e balance: ${e}`)
+
+  } catch {
+    errors.push(`Failed to fetch USDC.e balance`)
   }
   
   try {
-    // 2. Check native USDC balance (NOT used by Polymarket, but useful for debugging)
+    // 2. Check native USDC balance (NOT used by Polymarket)
     const nativeUsdcBalance = await publicClient.readContract({
       address: POLYGON_USDC_NATIVE,  // Native USDC (0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359)
       abi: ERC20_ABI,
       functionName: 'balanceOf',
       args: [address],
     }) as bigint
-    
-    result.usdcEBalance = formatUnits(nativeUsdcBalance, 6) // Repurposing this field for native USDC
-    
+
+    result.usdcEBalance = formatUnits(nativeUsdcBalance, 6)
+
     if (nativeUsdcBalance > BigInt(0)) {
-      console.warn(`⚠️ You have ${result.usdcEBalance} native USDC, but Polymarket requires USDC.e!`)
-      console.warn(`   To trade on Polymarket, you need to swap native USDC → USDC.e or bridge USDC from Ethereum`)
-      errors.push(`You have ${result.usdcEBalance} native USDC but Polymarket requires USDC.e. Need to swap or bridge.`)
+      errors.push(`Native USDC detected - Polymarket requires USDC.e`)
     }
-    
-  } catch (e) {
+
+  } catch {
     // Non-critical error
   }
   
@@ -231,14 +225,12 @@ export async function runPolymarketDiagnostics(
         functionName: 'allowance',
         args: [address, spender.address as `0x${string}`],
       }) as bigint
-      
+
       result.allowancesRaw[spender.name] = allowance.toString()
       result.allowances[spender.name] = formatUnits(allowance, 6)
-      
-      console.log(`🔓 USDC Allowance for ${spender.name}: ${result.allowances[spender.name]} (${allowance >= MIN_ALLOWANCE ? '✅' : '❌'})`)
-      
-    } catch (e) {
-      errors.push(`Failed to fetch allowance for ${spender.name}: ${e}`)
+
+    } catch {
+      errors.push(`Failed to fetch allowance for ${spender.name}`)
     }
   }
   
@@ -263,13 +255,11 @@ export async function runPolymarketDiagnostics(
         functionName: 'isApprovedForAll',
         args: [address, operator.address as `0x${string}`],
       }) as boolean
-      
+
       result.ctfApprovals[operator.name] = isApproved
-      
-      console.log(`🎫 CTF Approval for ${operator.name}: ${isApproved ? '✅' : '❌'}`)
-      
-    } catch (e) {
-      errors.push(`Failed to check CTF approval for ${operator.name}: ${e}`)
+
+    } catch {
+      errors.push(`Failed to check CTF approval for ${operator.name}`)
     }
   }
   
@@ -281,25 +271,11 @@ export async function runPolymarketDiagnostics(
   // 5. Summary
   result.canTrade = result.hasEnoughGas && result.hasEnoughBalance && result.hasAllUsdcAllowances
   result.errors = errors
-  
+
   if (requiredUsdc) {
     result.requiredUsdcForOrder = requiredUsdc.toFixed(6)
   }
-  
-  // Log summary
-  console.log('📊 Polymarket Diagnostics Summary:')
-  console.log(`   Address: ${walletAddress}`)
-  console.log(`   MATIC (gas): ${result.maticBalance} ${result.hasEnoughGas ? '✅' : '❌ NEED GAS!'}`)
-  console.log(`   USDC Balance: ${result.usdcBalance}`)
-  console.log(`   Has Enough Balance: ${result.hasEnoughBalance ? '✅' : '❌'}`)
-  console.log(`   Has All USDC Allowances: ${result.hasAllUsdcAllowances ? '✅' : '❌'}`)
-  console.log(`   Has All CTF Approvals: ${result.hasAllCtfApprovals ? '✅' : '❌'}`)
-  console.log(`   Can Trade: ${result.canTrade ? '✅' : '❌'}`)
-  
-  if (errors.length > 0) {
-    console.error('❌ Errors:', errors)
-  }
-  
+
   return result
 }
 

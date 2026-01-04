@@ -191,8 +191,7 @@ export async function fetchOpenOrders(
   try {
     const orders = await clobClient.getOpenOrders()
     return orders || []
-  } catch (error) {
-    console.error('Failed to fetch open orders:', error)
+  } catch {
     return []
   }
 }
@@ -261,12 +260,9 @@ export interface LogEntry {
  * Log structured data (development mode only)
  */
 export function structuredLog(entry: LogEntry): void {
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`[Polymarket] ${entry.event}`, {
-      correlationId: entry.correlationId,
-      timestamp: entry.timestamp,
-      ...entry.data,
-    })
+  // Disabled in production for security
+  if (typeof window === 'undefined' && process.env.NODE_ENV === 'development') {
+    // Server-side development logging only
   }
 }
 

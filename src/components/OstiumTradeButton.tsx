@@ -13,15 +13,11 @@ import { addTradeRecord } from '@/components/ostium/TradeHistory'
 import { addOptimisticPosition } from '@/hooks/useOstiumPositions'
 
 // Cross-validate price against Ostium's direct API
-// This ensures we're using the exact price format the protocol expects
-// Much more robust than hardcoded price ranges
 async function fetchAndValidatePrice(pairIndex: number): Promise<{ price: number; error?: string }> {
   const pair = OSTIUM_PAIRS.find(p => p.id === pairIndex)
   if (!pair) {
     return { price: 0, error: `Unknown pair index: ${pairIndex}` }
   }
-
-  console.log(`🔒 Cross-validating price for ${pair.symbol}...`)
 
   // Fetch from our API proxy
   let proxyPrice = 0
@@ -32,11 +28,10 @@ async function fetchAndValidatePrice(pairIndex: number): Promise<{ price: number
       const priceData = prices.find((p: any) => p.pairId === pairIndex)
       if (priceData?.mid && priceData.mid > 0) {
         proxyPrice = priceData.mid
-        console.log(`📊 Proxy API price: $${proxyPrice}`)
       }
     }
-  } catch (e) {
-    console.warn('Proxy price fetch failed:', e)
+  } catch {
+    // Silent fail, will try direct API
   }
 
   // Fetch directly from Ostium API for cross-validation
@@ -51,16 +46,15 @@ async function fetchAndValidatePrice(pairIndex: number): Promise<{ price: number
       const data = await directResponse.json()
       if (data?.mid && data.mid > 0) {
         directPrice = data.mid
-        console.log(`📊 Direct Ostium API price: $${directPrice}`)
       }
     }
-  } catch (e) {
-    console.warn('Direct price fetch failed:', e)
+  } catch {
+    // Silent fail
   }
 
   // Validate we got at least one price
   if (proxyPrice <= 0 && directPrice <= 0) {
-    return { price: 0, error: `Failed to fetch price for ${pair.symbol} from any source` }
+    return { price: 0, error: `Failed to fetch price for ${pair.symbol}` }
   }
 
   // If we have both prices, cross-validate them
@@ -69,26 +63,15 @@ async function fetchAndValidatePrice(pairIndex: number): Promise<{ price: number
     const avgPrice = (proxyPrice + directPrice) / 2
     const diffPercent = (priceDiff / avgPrice) * 100
 
-    console.log(`📊 Price difference: ${diffPercent.toFixed(2)}%`)
-
-    // Allow up to 1% difference (accounts for slight timing differences)
+    // Allow up to 1% difference - use direct Ostium price as authoritative
     if (diffPercent > 1) {
-      console.warn(`⚠️ Price sources disagree significantly!`)
-      console.warn(`   Proxy: $${proxyPrice}`)
-      console.warn(`   Direct: $${directPrice}`)
-      console.warn(`   Diff: ${diffPercent.toFixed(2)}%`)
-      // Use the direct Ostium price as it's authoritative
       return { price: directPrice }
     }
-
-    // Prices match - use direct Ostium price as authoritative
-    console.log(`✅ Prices cross-validated successfully`)
     return { price: directPrice }
   }
 
   // Only one price available - use whichever we got
   const finalPrice = directPrice > 0 ? directPrice : proxyPrice
-  console.log(`📊 Using single source price: $${finalPrice}`)
   return { price: finalPrice }
 }
 
@@ -171,8 +154,8 @@ export function OstiumTradeButton({
         if (results[1]?.result) {
           setAllowance(BigInt(results[1].result))
         }
-      } catch (e) {
-        console.error('Balance fetch failed:', e)
+      } catch {
+        // Silent fail - balance will be 0
       }
     }
 
@@ -187,7 +170,6 @@ export function OstiumTradeButton({
   // Reset price when pair changes - CRITICAL to prevent wrong prices
   useEffect(() => {
     if (currentPairIndexRef.current !== pairIndex) {
-      console.log(`🔄 Pair changed from ${currentPairIndexRef.current} to ${pairIndex} - resetting price`)
       setCurrentPrice(0) // Reset to 0 to force re-fetch
       currentPairIndexRef.current = pairIndex
     }
@@ -198,26 +180,22 @@ export function OstiumTradeButton({
     const fetchPrice = async () => {
       try {
         const response = await fetch('/api/ostium/prices')
-        if (!response.ok) throw new Error('Price fetch failed')
+        if (!response.ok) return
 
         const prices = await response.json()
         const priceData = prices.find((p: any) => p.pairId === pairIndex)
 
         // Only update if this is still the current pair (prevent race conditions)
         if (currentPairIndexRef.current !== pairIndex) {
-          console.log(`⚠️ Ignoring stale price update for pair ${pairIndex}`)
           return
         }
 
         if (priceData?.mid) {
           setCurrentPrice(priceData.mid)
-          console.log(`📊 Current ${priceData.symbol} price: $${priceData.mid}`)
         } else {
-          console.warn(`⚠️ No price data found for pair ${pairIndex}`)
           setCurrentPrice(0)
         }
-      } catch (e) {
-        console.error('Price fetch failed:', e)
+      } catch {
         setCurrentPrice(0)
       }
     }
@@ -235,19 +213,13 @@ export function OstiumTradeButton({
 
     setLoading(true)
     setError(null)
-    
-    // #region agent log
-    const tradeStartTime = Date.now()
-    // #endregion
 
     try {
       // FAST PATH: Use cached price (already refreshing every 5s)
-      // Skip expensive cross-validation for speed - Ostium oracle will validate anyway
       let freshPrice = currentPrice
-      
+
       // Only fetch if we have no cached price at all
       if (!freshPrice || freshPrice <= 0) {
-        console.log('⚡ No cached price, fetching...')
         const { price, error: priceError } = await fetchAndValidatePrice(pairIndex)
         if (priceError || price <= 0) {
           setError(priceError || 'Failed to fetch price. Please try again.')
@@ -257,48 +229,21 @@ export function OstiumTradeButton({
         freshPrice = price
         setCurrentPrice(freshPrice)
       }
-      
-      // #region agent log
-      // #endregion
-      
-      console.log('⚡ Using cached price:', freshPrice)
 
       // Switch to Arbitrum if needed
-      // #region agent log
-      const chainCheckStart = Date.now()
-      // #endregion
       const chainId = await client.getChainId()
-      // #region agent log
       if (chainId !== arbitrum.id) {
-        console.log('🔄 Switching to Arbitrum...')
         await client.switchChain({ id: arbitrum.id })
       }
 
-      console.log('╔═══════════════════════════════════════════╗')
-      console.log('║  SMART WALLET OSTIUM TRADE                ║')
-      console.log('╚═══════════════════════════════════════════╝')
-      console.log('Smart Wallet:', smartWalletAddress)
-      console.log('Pair:', pairSymbol, `(index: ${pairIndex})`)
-      console.log('Direction:', isLong ? 'LONG 🟢' : 'SHORT 🔴')
-      console.log('Collateral:', collateralUSDC, 'USDC')
-      console.log('Leverage:', leverage, 'x')
-      console.log('🔒 Fresh Price (validated):', freshPrice)
-
       // Calculate slippage (Ostium uses basis points, PERCENT_BASE = 10000)
       const slippageP = calculateSlippage(DEFAULT_SLIPPAGE_BPS)
-      console.log('📉 Slippage:', slippageP.toString(), `(${DEFAULT_SLIPPAGE_BPS} bps = ${DEFAULT_SLIPPAGE_BPS / 100}%)`)
 
       // Convert FRESH price to 18 decimal precision (PRECISION_18)
-      // Use string conversion to COMPLETELY avoid JavaScript floating point corruption
-      // The issue: BigInt(1e13) can corrupt large numbers due to floating point
-      const priceStr = freshPrice.toFixed(18).replace('.', '')  // "277730000000000000000" for 277.73
+      const priceStr = freshPrice.toFixed(18).replace('.', '')
       const openPriceWei = BigInt(priceStr)
-      console.log('📊 Price string:', priceStr)
-      console.log('📊 Open Price (18 dec):', openPriceWei.toString())
-      console.log('📊 Open Price check:', Number(openPriceWei) / 1e18)
 
       // Build trade struct - exact field order per ABI
-      // Verified from: https://github.com/0xOstium/smart-contracts-public/blob/main/src/interfaces/IOstiumTradingStorage.sol
       const leverageScaled = leverage * 100  // PRECISION_2: 10x = 1000
 
       const tradeStruct = {
@@ -315,28 +260,15 @@ export function OstiumTradeButton({
 
       // BuilderFee struct
       const builderFee = {
-        builder: zeroAddress,                   // address - no referrer
-        builderFee: 0,                          // uint32 - 0 bps
+        builder: zeroAddress,
+        builderFee: 0,
       }
-
-      console.log('📦 Trade struct:', {
-        collateral: tradeStruct.collateral.toString(),
-        openPrice: tradeStruct.openPrice.toString(),
-        tp: tradeStruct.tp.toString(),
-        sl: tradeStruct.sl.toString(),
-        trader: tradeStruct.trader,
-        leverage: tradeStruct.leverage,
-        pairIndex: tradeStruct.pairIndex,
-        index: tradeStruct.index,
-        buy: tradeStruct.buy,
-      })
 
       // Build calls array
       const calls: Array<{ to: `0x${string}`; data: `0x${string}`; value: bigint }> = []
 
       // Add approval if needed
       if (allowance < collateralWei) {
-        console.log('📝 Adding approval call...')
         calls.push({
           to: OSTIUM_CONTRACTS.USDC as `0x${string}`,
           data: encodeFunctionData({
@@ -348,56 +280,25 @@ export function OstiumTradeButton({
         })
       }
 
-      // Add openTrade call - using verified ABI from Ostium contract
-      console.log('📝 Adding openTrade call...')
+      // Add openTrade call
       const openTradeCalldata = encodeFunctionData({
         abi: OSTIUM_TRADING_ABI,
         functionName: 'openTrade',
         args: [
-          tradeStruct,      // Trade struct (array)
-          builderFee,       // BuilderFee struct (array)
-          ORDER_TYPE.MARKET,// uint8 orderType (0 = MARKET)
-          slippageP,        // uint256 slippage in basis points (50 = 0.5%)
+          tradeStruct,
+          builderFee,
+          ORDER_TYPE.MARKET,
+          slippageP,
         ],
       })
-
-      // Log the raw calldata for debugging
-      console.log('📋 Raw calldata length:', openTradeCalldata.length)
-      const ourSelector = openTradeCalldata.slice(0, 10)
-      const expectedSelector = '0x742088c0' // From successful Ostium tx on Arbiscan
-      console.log('📋 Our function selector:', ourSelector)
-      console.log('📋 Expected selector:', expectedSelector)
-      console.log('📋 Selector match:', ourSelector === expectedSelector ? '✅ YES' : '❌ NO - WRONG FUNCTION!')
-      // Parse the calldata to verify encoding
-      const calldataWithoutSelector = openTradeCalldata.slice(10)
-      console.log('📋 Encoded collateral (slot 0):', '0x' + calldataWithoutSelector.slice(0, 64))
-      console.log('📋 Encoded openPrice (slot 1):', '0x' + calldataWithoutSelector.slice(64, 128))
-      console.log('📋 openPrice as BigInt:', BigInt('0x' + calldataWithoutSelector.slice(64, 128)).toString())
-      console.log('📋 openPrice / 1e18:', Number(BigInt('0x' + calldataWithoutSelector.slice(64, 128))) / 1e18)
 
       calls.push({
         to: OSTIUM_CONTRACTS.TRADING as `0x${string}`,
         data: openTradeCalldata,
-        value: BigInt(0), // Function is nonpayable
+        value: BigInt(0),
       })
 
-      console.log('🚀 Sending batched transaction via smart wallet...')
-      console.log('Total calls:', calls.length)
-
-      // #region agent log
-      const sendTxStart = Date.now()
-      // #endregion
-
       const hash = await client.sendTransaction({ calls })
-
-      // #region agent log
-      // #endregion
-
-      console.log('✅ Transaction submitted:', hash)
-      console.log('🔗 Arbiscan:', `https://arbiscan.io/tx/${hash}`)
-
-      // #region agent log
-      // #endregion
 
       // ========== OPTIMISTIC UI ==========
       // Show success IMMEDIATELY after bundler accepts transaction
@@ -436,7 +337,6 @@ export function OstiumTradeButton({
       // ========== BACKGROUND CONFIRMATION ==========
       // Run verification in background - don't block the UI
       ;(async () => {
-        console.log('⏳ [Background] Waiting for transaction confirmation...')
         try {
           // Poll for transaction receipt
           let confirmed = false
@@ -456,9 +356,8 @@ export function OstiumTradeButton({
               const receiptResult = await receiptResponse.json()
               if (receiptResult.result?.blockNumber) {
                 confirmed = true
-                console.log('🟢 [Background] Transaction confirmed! Block:', parseInt(receiptResult.result.blockNumber, 16))
               }
-            } catch (e) {
+            } catch {
               // Continue polling
             }
           }
@@ -466,20 +365,19 @@ export function OstiumTradeButton({
           if (confirmed) {
             // Refresh positions after confirmation
             queryClient.invalidateQueries({ queryKey: ['ostium-positions'] })
-            
+
             // Wait for oracle callback then refresh again
             setTimeout(() => {
               queryClient.invalidateQueries({ queryKey: ['ostium-positions'] })
             }, 5000)
           }
-        } catch (e) {
-          console.log('⚠️ [Background] Verification error:', e)
+        } catch {
+          // Silent fail - background confirmation is not critical
         }
       })()
 
       onSuccess?.(hash)
     } catch (e: any) {
-      console.error('❌ Trade failed:', e)
       const errorMsg = e.shortMessage || e.message || 'Trade failed'
       setError(errorMsg)
       onError?.(errorMsg)
