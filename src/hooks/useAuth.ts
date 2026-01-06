@@ -8,6 +8,17 @@ import { base, arbitrum, polygon } from 'viem/chains'
 import { formatUnits } from 'viem'
 import { useSolanaAuth } from './useSolanaAuth'
 
+// TEMPORARY: Disable login on DESKTOP only while article is published
+// Mobile app (Capacitor) still allows login
+// Set to false to re-enable login everywhere
+const DESKTOP_LOGIN_DISABLED = true
+
+// Detect if running in Capacitor native app
+const isCapacitorNative = (): boolean => {
+  if (typeof window === 'undefined') return false
+  return !!(window as any).Capacitor?.isNativePlatform?.()
+}
+
 // USDC addresses
 const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
 const USDC_ARBITRUM = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'
@@ -121,6 +132,15 @@ export function useAuth() {
   // Get login method info
   const loginMethod = user?.linkedAccounts?.[0]?.type || null
   
+  // Check if login should be disabled (desktop only, mobile app allowed)
+  const isNative = isCapacitorNative()
+  const isLoginDisabled = DESKTOP_LOGIN_DISABLED && !isNative
+
+  // Wrapped login function that respects login disabled flag (desktop only)
+  const wrappedLogin = isLoginDisabled
+    ? () => { console.log('[useAuth] Login is temporarily disabled on desktop') }
+    : login
+
   return {
     // State
     isReady: ready,
@@ -128,6 +148,7 @@ export function useAuth() {
     isAuthenticated: authenticated,
     isConnected: authenticated && isConnected,
     isSmartWalletReady: !!smartWalletClient && !!smartWalletAddress,
+    isLoginDisabled, // Flag to indicate login is disabled (desktop only)
     user,
     address, // Smart wallet address (or EOA fallback)
     eoaAddress, // Original EOA address
@@ -174,7 +195,7 @@ export function useAuth() {
     },
 
     // Actions
-    login,
+    login: wrappedLogin,
     logout,
     switchToBase,
     switchToArbitrum,

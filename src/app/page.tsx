@@ -118,7 +118,7 @@ function FlashlightCard({
 }
 
 export default function Home() {
-  const { isAuthenticated, address, isReady, login } = useAuth()
+  const { isAuthenticated, address, isReady, login, isLoginDisabled } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
   const hasNavigatedRef = useRef(false)
@@ -196,11 +196,11 @@ export default function Home() {
           <motion.button
             className="sign-in-btn"
             onClick={handleLogin}
-            disabled={!isReady || isLoggingIn}
+            disabled={!isReady || isLoggingIn || isLoginDisabled}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
-            {isLoggingIn ? '[ ... ]' : '[ SIGN IN ]'}
+            {isLoginDisabled ? '[ COMING SOON ]' : isLoggingIn ? '[ ... ]' : '[ SIGN IN ]'}
           </motion.button>
         </motion.nav>
 
@@ -239,7 +239,7 @@ export default function Home() {
           <motion.button
             className="main-cta"
             onClick={handleLogin}
-            disabled={!isReady || isLoggingIn}
+            disabled={!isReady || isLoggingIn || isLoginDisabled}
             variants={scrollReveal}
             whileHover={{ y: -4, boxShadow: "0 20px 40px rgba(255, 59, 48, 0.4)" }}
             whileTap={{ scale: 0.98 }}
@@ -247,7 +247,9 @@ export default function Home() {
             <span className="zip-tie" />
             <span className="cta-content">
               <span className="cta-arrow">→</span>
-              {isLoggingIn ? (
+              {isLoginDisabled ? (
+                <>COMING SOON</>
+              ) : isLoggingIn ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
                   CONNECTING...
