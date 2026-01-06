@@ -1,6 +1,10 @@
 'use client'
 
 import { usePrivy, useWallets } from '@privy-io/react-auth'
+
+// TEMPORARY: Disable login while article is published
+// Set to false to re-enable login
+const LOGIN_DISABLED = true
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { useWallets as useSolanaWallets } from '@privy-io/react-auth/solana'
 import { useAccount, useBalance, useWalletClient, usePublicClient, useSwitchChain } from 'wagmi'
@@ -121,6 +125,11 @@ export function useAuth() {
   // Get login method info
   const loginMethod = user?.linkedAccounts?.[0]?.type || null
   
+  // Wrapped login function that respects LOGIN_DISABLED flag
+  const wrappedLogin = LOGIN_DISABLED
+    ? () => { console.log('[useAuth] Login is temporarily disabled') }
+    : login
+
   return {
     // State
     isReady: ready,
@@ -128,6 +137,7 @@ export function useAuth() {
     isAuthenticated: authenticated,
     isConnected: authenticated && isConnected,
     isSmartWalletReady: !!smartWalletClient && !!smartWalletAddress,
+    isLoginDisabled: LOGIN_DISABLED, // Flag to indicate login is disabled
     user,
     address, // Smart wallet address (or EOA fallback)
     eoaAddress, // Original EOA address
@@ -174,7 +184,7 @@ export function useAuth() {
     },
 
     // Actions
-    login,
+    login: wrappedLogin,
     logout,
     switchToBase,
     switchToArbitrum,
