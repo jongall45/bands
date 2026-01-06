@@ -171,8 +171,8 @@ const permit2Abi = [
   },
 ] as const
 
-// Helius RPC (premium) - uses env var or falls back to hardcoded key
-const HELIUS_API_KEY = process.env.NEXT_PUBLIC_HELIUS_RPC_KEY || 'adfbe4d1-c717-41c2-8962-0723246cbeda'
+// Helius RPC (premium) - set NEXT_PUBLIC_HELIUS_RPC_KEY in env
+const HELIUS_API_KEY = process.env.NEXT_PUBLIC_HELIUS_RPC_KEY || ''
 
 // Multiple Solana RPC endpoints for reliability (fallback order)
 const SOLANA_RPC_ENDPOINTS = [
@@ -868,7 +868,6 @@ export function useRelaySwap(
     amount: string,
   ): Promise<Quote | null> => {
     // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:548',message:'fetchQuote entry',data:{fromToken:fromToken.symbol,fromChainId:fromToken.chainId,fromAddress:fromToken.address,toToken:toToken.symbol,toChainId:toToken.chainId,toAddress:toToken.address,amount},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
     // #endregion
 
     // Get the appropriate wallet addresses based on chain
@@ -877,7 +876,6 @@ export function useRelaySwap(
 
     if (!originWallet) {
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:557',message:'No origin wallet',data:{fromChainId:fromToken.chainId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
       const chainName = fromToken.chainId === SOLANA_CHAIN_ID ? 'Solana' : 'EVM'
       setError(`${chainName} wallet not connected`)
@@ -886,7 +884,6 @@ export function useRelaySwap(
 
     if (!destinationWallet) {
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:563',message:'No destination wallet',data:{toChainId:toToken.chainId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
       const chainName = toToken.chainId === SOLANA_CHAIN_ID ? 'Solana' : 'EVM'
       setError(`${chainName} wallet not connected`)
@@ -896,7 +893,6 @@ export function useRelaySwap(
     const parsedAmount = parseFloat(amount)
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:570',message:'Invalid amount',data:{amount,parsedAmount},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
       setQuote(null)
       return null
@@ -1013,7 +1009,6 @@ export function useRelaySwap(
       }
 
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:610',message:'Before quote request',data:{isCrossChain,isSolanaDestination,isSolanaOrigin,requestBody,originCurrency,destinationCurrency,amountInWei,originWallet,destinationWallet},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
       // #endregion
 
       console.log('[useRelaySwap] Fetching quote:', {
@@ -1040,7 +1035,6 @@ export function useRelaySwap(
           })
 
           // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:632',message:'Quote response received',data:{status:response?.status,statusText:response?.statusText,ok:response?.ok,retry},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
           // #endregion
 
           // If we got a response (even error), break retry loop
@@ -1049,7 +1043,6 @@ export function useRelaySwap(
           lastError = fetchErr
           if (fetchErr.name === 'AbortError') throw fetchErr
           // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:637',message:'Quote fetch retry error',data:{retry,error:fetchErr.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
           // #endregion
           console.warn(`[useRelaySwap] Quote fetch attempt ${retry + 1} failed:`, fetchErr.message)
           await new Promise(resolve => setTimeout(resolve, Math.pow(2, retry) * 500))
@@ -1058,7 +1051,6 @@ export function useRelaySwap(
 
       if (!response) {
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:643',message:'No response after retries',data:{lastError:lastError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
         // #endregion
         throw lastError || new Error('Failed to fetch quote after retries')
       }
@@ -1068,7 +1060,6 @@ export function useRelaySwap(
         console.error('[useRelaySwap] Quote error:', errorText)
         
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:648',message:'Quote error response',data:{status:response.status,errorText:errorText.substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D'})}).catch(()=>{});
         // #endregion
         
         // Parse error message from Relay API
@@ -1076,12 +1067,10 @@ export function useRelaySwap(
           const errorData = JSON.parse(errorText)
           const message = errorData.message || 'Failed to get quote'
           // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:653',message:'Parsed error data',data:{errorData,message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D'})}).catch(()=>{});
           // #endregion
           throw new Error(message)
         } catch (parseErr) {
           // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:656',message:'Error parse failed',data:{parseErr:parseErr instanceof Error?parseErr.message:String(parseErr)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D'})}).catch(()=>{});
           // #endregion
           throw new Error('Failed to get quote')
         }
@@ -1091,7 +1080,6 @@ export function useRelaySwap(
       console.log('[useRelaySwap] Quote received:', data)
 
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:662',message:'Quote success',data:{requestId:data.requestId,stepsCount:data.steps?.length,hasDetails:!!data.details},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
       // #endregion
 
       // Parse quote data - Relay API returns USD values as strings, convert to numbers
@@ -1122,19 +1110,16 @@ export function useRelaySwap(
       setQuoteTimestamp(Date.now()) // Track when quote was fetched
       setState('idle')
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:690',message:'fetchQuote success exit',data:{quoteData:JSON.stringify(quoteData).substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
       // #endregion
       return quoteData
     } catch (err: any) {
       if (err.name === 'AbortError') {
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:694',message:'Request aborted',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
         // #endregion
         return null // Cancelled, ignore
       }
       console.error('[useRelaySwap] fetchQuote error:', err)
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:698',message:'fetchQuote error catch',data:{errorMessage:err.message,errorName:err.name,errorStack:err.stack?.substring(0,300)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D,E'})}).catch(()=>{});
       // #endregion
       setError(err.message || 'Failed to fetch quote')
       setState('error')
@@ -1152,7 +1137,6 @@ export function useRelaySwap(
   ): Promise<SwapResult | null> => {
     // #region agent log
     const executeStartTime = Date.now()
-    fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:774',message:'executeSwap entry',data:{stepsCount:quote?.steps?.length,fromToken:fromToken.symbol,toToken:toToken.symbol},timestamp:executeStartTime,sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
     // #endregion
 
     if (!quote || !quote.steps || quote.steps.length === 0) {
@@ -1194,7 +1178,6 @@ export function useRelaySwap(
     // For Solana-only swaps, use Privy's Solana signing
     if (isSolanaOnlySwap) {
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:820',message:'Solana-only swap detected',data:{fromToken:fromToken.symbol,toToken:toToken.symbol,stepsCount:quote.steps.length,hasSolanaWallet:!!solanaSigningOptions?.solanaWallet},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
       // #endregion
       console.log('[useRelaySwap] Solana-to-Solana swap - signing via Privy Solana wallet')
       console.log('[useRelaySwap] Quote steps:', JSON.stringify(quote.steps, null, 2))
@@ -1240,7 +1223,6 @@ export function useRelaySwap(
             if (isSolanaInstructionFormat(item.data)) {
               console.log('[useRelaySwap] Detected Solana instruction format - building transaction')
               // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:850',message:'Building Solana transaction from instructions',data:{stepId:step.id,hasInstructions:!!(item.data as any).instructions,hasSingleInstruction:!!(item.data as any).programId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
               // #endregion
 
               const transaction = await buildSolanaTransaction(item.data as RelaySolanaStepData, solanaWalletAddress)
@@ -1262,7 +1244,6 @@ export function useRelaySwap(
               }
 
               // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:850',message:'Decoding Solana transaction data',data:{stepId:step.id,txDataLength:txData.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
               // #endregion
 
               try {
@@ -1297,7 +1278,6 @@ export function useRelaySwap(
             lastTxSignature = toSignatureString(result.signature)
             console.log('[useRelaySwap] Solana transaction sent:', lastTxSignature)
             // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:880',message:'Solana transaction sent',data:{signature:lastTxSignature},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
             // #endregion
           }
         }
@@ -1328,7 +1308,6 @@ export function useRelaySwap(
       } catch (err: any) {
         console.error('[useRelaySwap] Solana swap error:', err)
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:900',message:'Solana swap error',data:{error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
         // #endregion
 
         if (err.message?.includes('rejected') || err.message?.includes('denied')) {
@@ -2180,14 +2159,12 @@ export function useRelaySwap(
         }
         // #region agent log
         const stepStartTime = Date.now()
-        fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:807',message:'Step start',data:{stepId:step.id,stepAction:step.action,itemsCount:step.items?.length,allStepIds:quote.steps.map(s=>s.id),fromToken:fromToken.symbol,toToken:toToken.symbol},timestamp:stepStartTime,sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
         // #endregion
         console.log('[useRelaySwap] Executing step:', step.id, step.action, 'kind:', step.kind)
         
         // Handle signature steps (permits) - these don't require transactions
         if (step.kind === 'signature') {
           // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:833',message:'Signature step detected - skipping transaction execution',data:{stepId:step.id,stepAction:step.action},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
           // #endregion
           console.warn('[useRelaySwap] Signature step (permit) detected but not yet implemented. Relay should handle this automatically.')
           // TODO: Implement signature step handling for permits (authorize1/authorize2)
@@ -2207,7 +2184,6 @@ export function useRelaySwap(
 
           if (isSolanaStep) {
             // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:1015',message:'Solana step detected - signing via Privy',data:{targetChainId,stepId:step.id,fromChainId:fromToken.chainId,toChainId:toToken.chainId,hasSolanaWallet:!!solanaSigningOptions?.solanaWallet},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'SOL'})}).catch(()=>{});
             // #endregion
             console.log('[useRelaySwap] Solana step detected - signing via Privy Solana wallet')
 
@@ -2263,12 +2239,10 @@ export function useRelaySwap(
           // Get chain-specific client to ensure correct bundler URL
           // #region agent log
           const getClientStartTime = Date.now()
-          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:810',message:'Before getClientForChain',data:{targetChainId},timestamp:getClientStartTime,sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
           // #endregion
           console.log('[useRelaySwap] Getting smart wallet client for chain:', targetChainId)
           const chainClient = await getClientForChain({ id: targetChainId })
           // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:812',message:'After getClientForChain',data:{targetChainId,elapsed:Date.now()-getClientStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
           // #endregion
 
           if (!chainClient) {
@@ -2330,7 +2304,6 @@ export function useRelaySwap(
       // Success!
       // #region agent log
       const totalElapsed = Date.now() - executeStartTime
-      fetch('http://127.0.0.1:7242/ingest/9c749bf6-c31a-4042-a8a0-35027deccab1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useRelaySwap.ts:895',message:'executeSwap success',data:{totalElapsed,txHash:lastTxHash},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
       // #endregion
         const swapResult: SwapResult = {
           txHash: lastTxHash || '',

@@ -21,8 +21,8 @@ export const SOLANA_TOKENS = {
   },
 } as const
 
-// Helius RPC (premium) - uses env var or falls back to hardcoded key
-const HELIUS_API_KEY = process.env.NEXT_PUBLIC_HELIUS_RPC_KEY || 'adfbe4d1-c717-41c2-8962-0723246cbeda'
+// Helius RPC (premium) - set NEXT_PUBLIC_HELIUS_RPC_KEY in env
+const HELIUS_API_KEY = process.env.NEXT_PUBLIC_HELIUS_RPC_KEY || ''
 
 // Multiple Solana RPC endpoints for reliability (fallback order)
 const SOLANA_RPC_ENDPOINTS = [

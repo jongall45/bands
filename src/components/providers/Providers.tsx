@@ -14,7 +14,7 @@ import { WindowOpenHandler } from '@/components/capacitor/WindowOpenHandler'
 import { createSolanaRpc, createSolanaRpcSubscriptions } from '@solana/kit'
 
 // Helius RPC for reliable Solana transactions (avoids rate-limited public RPC)
-const HELIUS_API_KEY = process.env.NEXT_PUBLIC_HELIUS_RPC_KEY || 'adfbe4d1-c717-41c2-8962-0723246cbeda'
+const HELIUS_API_KEY = process.env.NEXT_PUBLIC_HELIUS_RPC_KEY || ''
 const HELIUS_RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
 const HELIUS_WSS_URL = `wss://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
 
