@@ -196,11 +196,11 @@ export default function Home() {
           <motion.button
             className="sign-in-btn"
             onClick={handleLogin}
-            disabled={!isReady || isLoggingIn || isLoginDisabled}
+            disabled={!isReady || isLoggingIn}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
-            {isLoginDisabled ? '[ COMING SOON ]' : isLoggingIn ? '[ ... ]' : '[ SIGN IN ]'}
+            {isLoggingIn ? '[ ... ]' : '[ SIGN IN ]'}
           </motion.button>
         </motion.nav>
 
@@ -239,7 +239,7 @@ export default function Home() {
           <motion.button
             className="main-cta"
             onClick={handleLogin}
-            disabled={!isReady || isLoggingIn || isLoginDisabled}
+            disabled={!isReady || isLoggingIn}
             variants={scrollReveal}
             whileHover={{ y: -4, boxShadow: "0 20px 40px rgba(255, 59, 48, 0.4)" }}
             whileTap={{ scale: 0.98 }}
@@ -247,9 +247,7 @@ export default function Home() {
             <span className="zip-tie" />
             <span className="cta-content">
               <span className="cta-arrow">→</span>
-              {isLoginDisabled ? (
-                <>COMING SOON</>
-              ) : isLoggingIn ? (
+              {isLoggingIn ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
                   CONNECTING...
