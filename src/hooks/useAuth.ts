@@ -1,16 +1,23 @@
 'use client'
 
 import { usePrivy, useWallets } from '@privy-io/react-auth'
-
-// TEMPORARY: Disable login while article is published
-// Set to false to re-enable login
-const LOGIN_DISABLED = true
 import { useSmartWallets } from '@privy-io/react-auth/smart-wallets'
 import { useWallets as useSolanaWallets } from '@privy-io/react-auth/solana'
 import { useAccount, useBalance, useWalletClient, usePublicClient, useSwitchChain } from 'wagmi'
 import { base, arbitrum, polygon } from 'viem/chains'
 import { formatUnits } from 'viem'
 import { useSolanaAuth } from './useSolanaAuth'
+
+// TEMPORARY: Disable login on DESKTOP only while article is published
+// Mobile app (Capacitor) still allows login
+// Set to false to re-enable login everywhere
+const DESKTOP_LOGIN_DISABLED = true
+
+// Detect if running in Capacitor native app
+const isCapacitorNative = (): boolean => {
+  if (typeof window === 'undefined') return false
+  return !!(window as any).Capacitor?.isNativePlatform?.()
+}
 
 // USDC addresses
 const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
@@ -125,9 +132,13 @@ export function useAuth() {
   // Get login method info
   const loginMethod = user?.linkedAccounts?.[0]?.type || null
   
-  // Wrapped login function that respects LOGIN_DISABLED flag
-  const wrappedLogin = LOGIN_DISABLED
-    ? () => { console.log('[useAuth] Login is temporarily disabled') }
+  // Check if login should be disabled (desktop only, mobile app allowed)
+  const isNative = isCapacitorNative()
+  const isLoginDisabled = DESKTOP_LOGIN_DISABLED && !isNative
+
+  // Wrapped login function that respects login disabled flag (desktop only)
+  const wrappedLogin = isLoginDisabled
+    ? () => { console.log('[useAuth] Login is temporarily disabled on desktop') }
     : login
 
   return {
@@ -137,7 +148,7 @@ export function useAuth() {
     isAuthenticated: authenticated,
     isConnected: authenticated && isConnected,
     isSmartWalletReady: !!smartWalletClient && !!smartWalletAddress,
-    isLoginDisabled: LOGIN_DISABLED, // Flag to indicate login is disabled
+    isLoginDisabled, // Flag to indicate login is disabled (desktop only)
     user,
     address, // Smart wallet address (or EOA fallback)
     eoaAddress, // Original EOA address
