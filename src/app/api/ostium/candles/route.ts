@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { OSTIUM_PAIRS } from '@/lib/ostium/constants'
 
-// Alpha Vantage API key
-const ALPHA_VANTAGE_KEY = 'R9XABUUEVJM3AC66'
+// Alpha Vantage API key - get yours at https://www.alphavantage.co
+const ALPHA_VANTAGE_KEY = process.env.ALPHA_VANTAGE_API_KEY || ''
 
 // Timeframe configurations for CryptoCompare
 const TIMEFRAME_MAP: Record<string, { minutes: number; endpoint: string; aggregate: number }> = {

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { OSTIUM_PAIRS } from '@/lib/ostium/constants'
 
-// Finnhub API key
-const FINNHUB_API_KEY = 'd4sa32hr01qvsjbggn80d4sa32hr01qvsjbggn8g'
+// Finnhub API key - get yours at https://finnhub.io
+const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY || ''
 
 // Finnhub resolution mapping
 const RESOLUTION_MAP: Record<string, string> = {

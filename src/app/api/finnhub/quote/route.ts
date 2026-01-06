@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// Finnhub API key
-const FINNHUB_API_KEY = 'd4sa32hr01qvsjbggn80d4sa32hr01qvsjbggn8g'
+// Finnhub API key - get yours at https://finnhub.io
+const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY || ''
 
 // Symbol mapping (same as candles)
 const SYMBOL_MAP: Record<string, { finnhub: string; type: 'stock' | 'forex' | 'crypto' }> = {
